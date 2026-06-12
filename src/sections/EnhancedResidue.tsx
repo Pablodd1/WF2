@@ -161,22 +161,24 @@ export function EnhancedResidue({ records, onApprove, onEdit, onDelete }: Enhanc
       {/* Table */}
       <div className="bg-bg-card border border-border-default rounded-md overflow-hidden">
         {/* Table Header */}
-        <div className="grid grid-cols-[60px_120px_80px_100px_120px_80px_200px] gap-2 px-4 py-2 bg-bg-elevated border-b border-border-default text-[10px] font-bold uppercase tracking-wider text-text-muted">
-          <button onClick={() => handleSort('id')} className="text-left flex items-center">ID <SortIcon col="id" /></button>
-          <button onClick={() => handleSort('reference')} className="text-left flex items-center">Reference <SortIcon col="reference" /></button>
-          <button onClick={() => handleSort('price')} className="text-right flex items-center justify-end">Price <SortIcon col="price" /></button>
-          <span className="text-left">Flags</span>
-          <button onClick={() => handleSort('severity')} className="text-left flex items-center">Severity <SortIcon col="severity" /></button>
-          <button onClick={() => handleSort('confidence')} className="text-right flex items-center justify-end">Conf <SortIcon col="confidence" /></button>
-          <span className="text-right">Actions</span>
+        <div className="mobile-table-scroll">
+          <div className="grid grid-cols-[60px_120px_80px_120px_100px_80px_180px] gap-2 px-4 py-2 bg-bg-elevated border-b border-border-default text-[10px] font-bold uppercase tracking-wider text-text-muted min-w-[700px]">
+            <button onClick={() => handleSort('id')} className="text-left flex items-center">ID <SortIcon col="id" /></button>
+            <button onClick={() => handleSort('reference')} className="text-left flex items-center">Reference <SortIcon col="reference" /></button>
+            <button onClick={() => handleSort('price')} className="text-right flex items-center justify-end">Price <SortIcon col="price" /></button>
+            <span className="text-left">Flags</span>
+            <button onClick={() => handleSort('severity')} className="text-left flex items-center">Severity <SortIcon col="severity" /></button>
+            <button onClick={() => handleSort('confidence')} className="text-right flex items-center justify-end">Conf <SortIcon col="confidence" /></button>
+            <span className="text-right">Actions</span>
+          </div>
         </div>
 
         {/* Table Rows */}
-        <div className="max-h-[600px] overflow-y-auto">
+        <div className="max-h-[600px] overflow-y-auto mobile-table-scroll">
           {sorted.map((record) => (
             <div key={record.id}>
               <div
-                className="grid grid-cols-[60px_120px_80px_100px_120px_80px_200px] gap-2 px-4 py-2 border-b border-border-default/50 hover:bg-bg-elevated transition-colors items-center"
+                className="grid grid-cols-[60px_120px_80px_120px_100px_80px_180px] gap-2 px-4 py-2 border-b border-border-default/50 hover:bg-bg-elevated transition-colors items-center min-w-[700px]"
                 onClick={() => toggleRow(record.id)}
                 style={{ cursor: 'pointer' }}
               >

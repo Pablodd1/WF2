@@ -115,7 +115,7 @@ export function LiquidityTaxonomy() {
       </div>
 
       {/* Stats bar */}
-      <div className="grid grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         {[
           { label: 'Total Refs', value: stats.totalRefs, color: 'text-text-primary' },
           { label: 'Buyers (WTB)', value: stats.totalBuyers.toLocaleString(), color: 'text-info' },

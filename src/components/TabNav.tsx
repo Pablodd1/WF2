@@ -7,8 +7,8 @@ interface TabNavProps {
 
 export function TabNav({ totalProcessed }: TabNavProps) {
   return (
-    <div className="sticky top-14 z-40 bg-bg-card/95 backdrop-blur border-b border-border-default px-5">
-      <div className="flex items-center gap-1">
+    <div className="sticky top-14 z-40 bg-bg-card/95 backdrop-blur border-b border-border-default px-5 overflow-x-auto hide-scrollbar">
+      <div className="flex items-center gap-1 min-w-max">
         <NavLink
           to="/"
           end

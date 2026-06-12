@@ -53,7 +53,7 @@ export function WorkflowSidebar({ totalRecords, normalizedCount, residueCount, o
             initial={{ x: -220 }}
             animate={{ x: 0 }}
             exit={{ x: -220 }}
-            className="fixed left-0 top-14 bottom-0 w-[200px] bg-bg-card border-r border-border-default z-30 overflow-y-auto"
+            className="fixed left-0 top-14 bottom-0 w-[200px] bg-bg-card border-r border-border-default z-30 overflow-y-auto hidden md:block"
           >
             <div className="p-3">
               <h3 className="text-[10px] font-bold uppercase tracking-[0.1em] text-gold-primary mb-3">
