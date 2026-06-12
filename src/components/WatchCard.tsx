@@ -68,6 +68,12 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
             boxShadow: `0 0 8px ${statusColor}40`,
           }}
         />
+        {/* Image Confirmed badge */}
+        {record.imageConfirmed && (
+          <span className="absolute top-2 left-2 bg-success/90 text-black text-[8px] font-bold px-1.5 py-0.5 rounded">
+            IMG ✓
+          </span>
+        )}
       </div>
 
       {/* Top row: BrandBadge + ConditionBadge left, ConfidenceRing right */}

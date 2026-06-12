@@ -70,7 +70,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-002",
@@ -90,7 +98,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 99,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [],
     "timestamp": "2026-06-08T09:00:00Z",
     "mlPredictedPrice": 23233,
@@ -143,7 +151,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-003",
@@ -216,7 +230,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-004",
@@ -236,7 +258,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 99,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [],
     "timestamp": "2026-06-08T09:00:00Z",
     "mlPredictedPrice": 51203,
@@ -289,7 +311,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-005",
@@ -362,7 +390,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-006",
@@ -435,7 +471,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-007",
@@ -508,7 +552,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-008",
@@ -581,7 +633,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-009",
@@ -654,7 +714,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-010",
@@ -727,7 +795,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c3ca3037788_front_image.jpg",
-    "imageCount": 3
+    "imageCount": 3,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-011",
@@ -800,7 +876,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-012",
@@ -820,7 +904,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 99,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [],
     "timestamp": "2026-06-08T09:00:00Z",
     "mlPredictedPrice": 170801,
@@ -873,7 +957,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-013",
@@ -946,7 +1036,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce24bda34a2_front_image.jpg",
-    "imageCount": 24
+    "imageCount": 24,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-014",
@@ -1019,7 +1117,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce24bda34a2_front_image.jpg",
-    "imageCount": 24
+    "imageCount": 24,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-015",
@@ -1039,7 +1145,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 99,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [],
     "timestamp": "2026-06-08T09:00:00Z",
     "mlPredictedPrice": 353636,
@@ -1092,7 +1198,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true
   },
   {
     "id": "PP-016",
@@ -1112,7 +1225,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 99,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [],
     "timestamp": "2026-06-08T09:00:00Z",
     "mlPredictedPrice": 430953,
@@ -1165,7 +1278,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true
   },
   {
     "id": "PP-017",
@@ -1184,7 +1304,7 @@
     "year": 2022,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 92,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "LOW_SELLER_RATING"
@@ -1240,7 +1360,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-018",
@@ -1259,7 +1387,7 @@
     "year": 2022,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 92,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "LOW_SELLER_RATING"
@@ -1315,7 +1443,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-019",
@@ -1334,7 +1470,7 @@
     "year": 2021,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 92,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "LOW_SELLER_RATING"
@@ -1390,7 +1526,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-020",
@@ -1410,7 +1554,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 92,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "LOW_SELLER_RATING"
     ],
@@ -1465,7 +1609,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true
   },
   {
     "id": "PP-021",
@@ -1484,7 +1635,7 @@
     "year": 2016,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 88,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "INCOMPLETE_REFERENCE"
@@ -1540,7 +1691,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ceb403a7e34_front_image.jpg",
-    "imageCount": 15
+    "imageCount": 15,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-022",
@@ -1559,7 +1719,7 @@
     "year": 2015,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 88,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "INCOMPLETE_REFERENCE"
@@ -1615,7 +1775,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c40635174f7_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-023",
@@ -1634,7 +1803,7 @@
     "year": 2015,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 88,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "INCOMPLETE_REFERENCE"
@@ -1690,7 +1859,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c40635174f7_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-024",
@@ -1709,7 +1887,7 @@
     "year": 2019,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 88,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "INCOMPLETE_REFERENCE"
@@ -1765,7 +1943,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bd6af7e5b13_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-025",
@@ -1784,7 +1971,7 @@
     "year": 2019,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 88,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "INCOMPLETE_REFERENCE"
@@ -1840,7 +2027,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bd6af7e5b13_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-026",
@@ -1859,7 +2055,7 @@
     "year": 2018,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 88,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "INCOMPLETE_REFERENCE"
@@ -1915,7 +2111,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce891d95fec_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-027",
@@ -1934,7 +2139,7 @@
     "year": 2019,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 85,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN"
@@ -1990,7 +2195,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c26575d4326_front_image.jpg",
-    "imageCount": 9
+    "imageCount": 9,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-028",
@@ -2010,7 +2223,7 @@
     "seller": "+86 135 3300 3379",
     "location": "Hong Kong",
     "confidence": 85,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN"
     ],
@@ -2065,7 +2278,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-029",
@@ -2085,7 +2304,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 85,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN"
     ],
@@ -2140,7 +2359,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-030",
@@ -2159,7 +2384,7 @@
     "year": 2026,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 85,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN"
@@ -2215,7 +2440,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c246b939846_front_image.jpg",
-    "imageCount": 7
+    "imageCount": 7,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-031",
@@ -2234,7 +2467,7 @@
     "year": 2016,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 85,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN"
@@ -2290,7 +2523,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-032",
@@ -2309,7 +2550,7 @@
     "year": 2011,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 85,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN"
@@ -2365,7 +2606,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69badc04489da_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-033",
@@ -2384,7 +2633,7 @@
     "year": 2023,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 85,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN"
@@ -2440,7 +2689,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-034",
@@ -2459,7 +2716,7 @@
     "year": 2012,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 85,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN"
@@ -2515,7 +2772,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69badc04489da_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-035",
@@ -2534,7 +2799,7 @@
     "year": 2024,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 85,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN"
@@ -2590,7 +2855,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 8
+    "imageCount": 8,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-036",
@@ -2610,7 +2883,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 85,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN"
     ],
@@ -2665,7 +2938,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-037",
@@ -2685,7 +2964,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 85,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN"
     ],
@@ -2740,7 +3019,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-038",
@@ -2760,7 +3045,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 85,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN"
     ],
@@ -2815,7 +3100,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-039",
@@ -2834,7 +3125,7 @@
     "year": 2011,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 85,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN"
@@ -2890,7 +3181,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ba21083f7ee_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-040",
@@ -2909,7 +3208,7 @@
     "year": 2012,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 85,
+    "confidence": 99,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN"
@@ -2965,7 +3264,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bffb8a3223b_front_image.jpg",
-    "imageCount": 3
+    "imageCount": 3,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-041",
@@ -2985,7 +3292,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 85,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN"
     ],
@@ -3040,7 +3347,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-042",
@@ -3060,7 +3373,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 85,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN"
     ],
@@ -3115,7 +3428,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c4068bca9f5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-043",
@@ -3135,7 +3458,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 85,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN"
     ],
@@ -3190,7 +3513,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c216869d8f7_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-044",
@@ -3210,7 +3543,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 85,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN"
     ],
@@ -3265,7 +3598,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true
   },
   {
     "id": "PP-045",
@@ -3285,7 +3625,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 82,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "CONDITION_UNKNOWN"
     ],
@@ -3340,7 +3680,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "CONDITION_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-046",
@@ -3360,7 +3707,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 82,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "CONDITION_UNKNOWN"
     ],
@@ -3415,7 +3762,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "CONDITION_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-047",
@@ -3434,7 +3788,7 @@
     "year": 2020,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 82,
+    "confidence": 97,
     "status": "NORMALIZED",
     "flags": [
       "CONDITION_UNKNOWN"
@@ -3490,7 +3844,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be177e2710b_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "CONDITION_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-048",
@@ -3509,7 +3872,7 @@
     "year": 2026,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 82,
+    "confidence": 97,
     "status": "NORMALIZED",
     "flags": [
       "CONDITION_UNKNOWN"
@@ -3565,7 +3928,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "CONDITION_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-049",
@@ -3585,7 +3957,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 80,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "DIAL_UNKNOWN"
     ],
@@ -3640,7 +4012,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-050",
@@ -3659,7 +4037,7 @@
     "year": 2026,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 80,
+    "confidence": 95,
     "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN"
@@ -3715,7 +4093,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bcebed60778_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-051",
@@ -3735,7 +4121,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 80,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "DIAL_UNKNOWN"
     ],
@@ -3790,7 +4176,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-052",
@@ -3810,7 +4202,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 80,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "DIAL_UNKNOWN"
     ],
@@ -3865,7 +4257,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-053",
@@ -3884,7 +4282,7 @@
     "year": 2011,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 80,
+    "confidence": 95,
     "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN"
@@ -3940,7 +4338,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bc3bc15951c_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-054",
@@ -3959,7 +4365,7 @@
     "year": 2011,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 80,
+    "confidence": 95,
     "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN"
@@ -4015,7 +4421,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be4e8349a40_front_image.jpg",
-    "imageCount": 5
+    "imageCount": 5,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-055",
@@ -4034,7 +4448,7 @@
     "year": 2021,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 80,
+    "confidence": 95,
     "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN"
@@ -4090,7 +4504,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bfca75e9e73_front_image.jpg",
-    "imageCount": 3
+    "imageCount": 3,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-056",
@@ -4109,7 +4531,7 @@
     "year": 2012,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 80,
+    "confidence": 95,
     "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN"
@@ -4165,7 +4587,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be94eda9103_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-057",
@@ -4185,7 +4615,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 80,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "DIAL_UNKNOWN"
     ],
@@ -4240,7 +4670,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true
   },
   {
     "id": "PP-058",
@@ -4260,7 +4697,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 80,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "DIAL_UNKNOWN"
     ],
@@ -4315,7 +4752,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-059",
@@ -4335,7 +4782,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 80,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "DIAL_UNKNOWN"
     ],
@@ -4390,7 +4837,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bcfcc4bf24f_front_image.jpg",
-    "imageCount": 3
+    "imageCount": 3,
+    "failureFlags": [
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-060",
@@ -4410,7 +4867,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 80,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "DIAL_UNKNOWN"
     ],
@@ -4465,7 +4922,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bcfcc4bf24f_front_image.jpg",
-    "imageCount": 3
+    "imageCount": 3,
+    "failureFlags": [
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-061",
@@ -4485,7 +4952,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 80,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "LOW_SELLER_RATING",
       "INCOMPLETE_REFERENCE"
@@ -4541,7 +5008,18 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce891d95fec_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-062",
@@ -4560,7 +5038,7 @@
     "year": 2026,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 77,
+    "confidence": 92,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN",
@@ -4617,7 +5095,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bae42e6452c_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-063",
@@ -4636,7 +5122,7 @@
     "year": 2021,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 77,
+    "confidence": 92,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN",
@@ -4693,7 +5179,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69badc04489da_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-064",
@@ -4712,7 +5206,7 @@
     "year": 2026,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 77,
+    "confidence": 92,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN",
@@ -4769,7 +5263,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c246b939846_front_image.jpg",
-    "imageCount": 7
+    "imageCount": 7,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-065",
@@ -4788,7 +5290,7 @@
     "year": 2018,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 77,
+    "confidence": 92,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN",
@@ -4845,7 +5347,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-066",
@@ -4865,7 +5375,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 77,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN",
       "LOW_SELLER_RATING"
@@ -4921,7 +5431,13 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "INFO",
+    "isResidue": true
   },
   {
     "id": "PP-067",
@@ -4940,7 +5456,7 @@
     "year": 2005,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 77,
+    "confidence": 92,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN",
@@ -4997,7 +5513,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c3ca3037788_front_image.jpg",
-    "imageCount": 3
+    "imageCount": 3,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-068",
@@ -5017,7 +5541,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 77,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN",
       "LOW_SELLER_RATING"
@@ -5073,7 +5597,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true
   },
   {
     "id": "PP-069",
@@ -5093,7 +5624,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 77,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN",
       "LOW_SELLER_RATING"
@@ -5149,7 +5680,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true
   },
   {
     "id": "PP-070",
@@ -5168,7 +5706,7 @@
     "year": 2024,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 74,
+    "confidence": 89,
     "status": "NORMALIZED",
     "flags": [
       "CONDITION_UNKNOWN",
@@ -5225,7 +5763,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69badc04489da_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "CONDITION_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-071",
@@ -5244,7 +5791,7 @@
     "year": 2016,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 73,
+    "confidence": 88,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN",
@@ -5301,7 +5848,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce67e787738_front_image.jpg",
-    "imageCount": 48
+    "imageCount": 48,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-072",
@@ -5321,7 +5877,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 73,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
@@ -5377,7 +5933,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-073",
@@ -5396,7 +5959,7 @@
     "year": 2020,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 73,
+    "confidence": 88,
     "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN",
@@ -5453,7 +6016,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69cebd0a1c1b1_front_image.jpg",
-    "imageCount": 4
+    "imageCount": 4,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-074",
@@ -5473,7 +6045,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 73,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
@@ -5529,7 +6101,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-075",
@@ -5549,7 +6128,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 73,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
@@ -5605,7 +6184,15 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE",
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true
   },
   {
     "id": "PP-076",
@@ -5625,7 +6212,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 73,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
@@ -5681,7 +6268,15 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE",
+      "PRICE_OUTLIER"
+    ],
+    "severity": "CRITICAL",
+    "isResidue": true
   },
   {
     "id": "PP-077",
@@ -5700,7 +6295,7 @@
     "year": 2019,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 72,
+    "confidence": 87,
     "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN",
@@ -5757,7 +6352,15 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 8
+    "imageCount": 8,
+    "failureFlags": [],
+    "severity": "INFO",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-078",
@@ -5777,7 +6380,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -5832,7 +6435,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-079",
@@ -5852,7 +6465,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -5907,7 +6520,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bc283c3e8b7_front_image.jpg",
-    "imageCount": 4
+    "imageCount": 4,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-080",
@@ -5927,7 +6550,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -5982,7 +6605,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c391dc2375f_front_image.jpg",
-    "imageCount": 8
+    "imageCount": 8,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-081",
@@ -6002,7 +6635,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6057,7 +6690,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c13f8a29349_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-082",
@@ -6077,7 +6720,7 @@
     "seller": "+86 135 3300 3379",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6132,7 +6775,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c43cba88f4c_front_image.jpg",
-    "imageCount": 7
+    "imageCount": 7,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-083",
@@ -6152,7 +6805,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6207,7 +6860,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-084",
@@ -6226,7 +6886,7 @@
     "year": 2020,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 70,
+    "confidence": 85,
     "status": "NORMALIZED",
     "flags": [
       "CONDITION_UNKNOWN",
@@ -6283,7 +6943,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69cebd0a1c1b1_front_image.jpg",
-    "imageCount": 4
+    "imageCount": 4,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "CONDITION_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-085",
@@ -6303,7 +6973,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6358,7 +7028,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-086",
@@ -6378,7 +7055,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6433,7 +7110,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 3
+    "imageCount": 3,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-087",
@@ -6453,7 +7140,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6508,7 +7195,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-088",
@@ -6528,7 +7222,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6583,7 +7277,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-089",
@@ -6603,7 +7304,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6658,7 +7359,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-090",
@@ -6678,7 +7386,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6733,7 +7441,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c1027d9b555_front_image.jpg",
-    "imageCount": 3
+    "imageCount": 3,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-091",
@@ -6753,7 +7471,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6808,7 +7526,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-092",
@@ -6828,7 +7553,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6883,7 +7608,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c3e2a5e75de_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-093",
@@ -6903,7 +7638,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -6958,7 +7693,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-094",
@@ -6978,7 +7723,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7033,7 +7778,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-095",
@@ -7053,7 +7805,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7108,7 +7860,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-096",
@@ -7128,7 +7887,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7183,7 +7942,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-097",
@@ -7203,7 +7969,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7258,7 +8024,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c08474f2d93_front_image.jpg",
-    "imageCount": 4
+    "imageCount": 4,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-098",
@@ -7278,7 +8054,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7333,7 +8109,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69badc04489da_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-099",
@@ -7353,7 +8139,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7408,7 +8194,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-100",
@@ -7428,7 +8221,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7483,7 +8276,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 6
+    "imageCount": 6,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-101",
@@ -7503,7 +8306,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7558,7 +8361,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-102",
@@ -7578,7 +8388,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7633,7 +8443,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-103",
@@ -7653,7 +8473,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7708,7 +8528,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-104",
@@ -7728,7 +8558,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7783,7 +8613,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-105",
@@ -7803,7 +8643,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7858,7 +8698,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-106",
@@ -7878,7 +8728,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -7933,7 +8783,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-107",
@@ -7953,7 +8813,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8008,7 +8868,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bfcbdc9dd62_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-108",
@@ -8028,7 +8898,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8083,7 +8953,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-109",
@@ -8103,7 +8983,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8158,7 +9038,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-110",
@@ -8178,7 +9065,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8233,7 +9120,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-111",
@@ -8253,7 +9150,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8308,7 +9205,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-112",
@@ -8328,7 +9235,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8383,7 +9290,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-113",
@@ -8403,7 +9320,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8458,7 +9375,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-114",
@@ -8478,7 +9402,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8533,7 +9457,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-115",
@@ -8553,7 +9487,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8608,7 +9542,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bfcbdc9dd62_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-116",
@@ -8628,7 +9572,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8683,7 +9627,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-117",
@@ -8703,7 +9657,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8758,7 +9712,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-118",
@@ -8778,7 +9742,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8833,7 +9797,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-119",
@@ -8853,7 +9827,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8908,7 +9882,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-120",
@@ -8928,7 +9912,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -8983,7 +9967,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-121",
@@ -9003,7 +9997,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9058,7 +10052,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-122",
@@ -9078,7 +10082,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9133,7 +10137,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-123",
@@ -9153,7 +10167,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9208,7 +10222,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-124",
@@ -9228,7 +10252,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9283,7 +10307,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-125",
@@ -9303,7 +10334,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9358,7 +10389,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-126",
@@ -9378,7 +10419,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9433,7 +10474,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-127",
@@ -9453,7 +10504,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9508,7 +10559,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-128",
@@ -9528,7 +10589,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9583,7 +10644,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-129",
@@ -9603,7 +10674,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9658,7 +10729,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-130",
@@ -9678,7 +10756,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9733,7 +10811,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-131",
@@ -9753,7 +10838,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9808,7 +10893,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-132",
@@ -9828,7 +10923,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9883,7 +10978,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-133",
@@ -9903,7 +11005,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -9958,7 +11060,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-134",
@@ -9978,7 +11090,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10033,7 +11145,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-135",
@@ -10053,7 +11172,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10108,7 +11227,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-136",
@@ -10128,7 +11254,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10183,7 +11309,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-137",
@@ -10203,7 +11336,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10258,7 +11391,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-138",
@@ -10278,7 +11421,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10333,7 +11476,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-139",
@@ -10353,7 +11503,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10408,7 +11558,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-140",
@@ -10428,7 +11585,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10483,7 +11640,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-141",
@@ -10503,7 +11667,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10558,7 +11722,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-142",
@@ -10578,7 +11752,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10633,7 +11807,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-143",
@@ -10653,7 +11837,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10708,7 +11892,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-144",
@@ -10728,7 +11922,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10783,7 +11977,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-145",
@@ -10803,7 +12007,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10858,7 +12062,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-146",
@@ -10878,7 +12089,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -10933,7 +12144,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-147",
@@ -10953,7 +12174,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -11008,7 +12229,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-148",
@@ -11028,7 +12259,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -11083,7 +12314,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-149",
@@ -11103,7 +12344,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -11158,7 +12399,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-150",
@@ -11178,7 +12429,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -11233,7 +12484,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-151",
@@ -11253,7 +12514,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -11308,7 +12569,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-152",
@@ -11328,7 +12599,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -11383,7 +12654,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-153",
@@ -11403,7 +12684,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -11458,7 +12739,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-154",
@@ -11478,7 +12769,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -11533,7 +12824,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-155",
@@ -11553,7 +12854,7 @@
     "seller": "Unknown",
     "location": "Hong Kong",
     "confidence": 70,
-    "status": "NORMALIZED",
+    "status": "RESIDUE",
     "flags": [
       "YEAR_MISSING"
     ],
@@ -11608,7 +12909,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-156",
@@ -11627,8 +12935,8 @@
     "year": 2010,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 68,
-    "status": "RESIDUE",
+    "confidence": 83,
+    "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN",
       "INCOMPLETE_REFERENCE"
@@ -11674,7 +12982,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce932c1d4e5_front_image.jpg",
-    "imageCount": 8
+    "imageCount": 8,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-157",
@@ -11693,8 +13010,8 @@
     "year": 2021,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 68,
-    "status": "RESIDUE",
+    "confidence": 83,
+    "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN",
       "INCOMPLETE_REFERENCE"
@@ -11740,7 +13057,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ceb223bd251_front_image.jpg",
-    "imageCount": 4
+    "imageCount": 4,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-158",
@@ -11806,7 +13132,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-159",
@@ -11825,8 +13158,8 @@
     "year": 2017,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 68,
-    "status": "RESIDUE",
+    "confidence": 83,
+    "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN",
       "INCOMPLETE_REFERENCE"
@@ -11872,7 +13205,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce67e787738_front_image.jpg",
-    "imageCount": 48
+    "imageCount": 48,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-160",
@@ -11891,8 +13233,8 @@
     "year": 2011,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 68,
-    "status": "RESIDUE",
+    "confidence": 83,
+    "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN",
       "INCOMPLETE_REFERENCE"
@@ -11938,7 +13280,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce67e787738_front_image.jpg",
-    "imageCount": 48
+    "imageCount": 48,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-161",
@@ -11957,8 +13308,8 @@
     "year": 2025,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 68,
-    "status": "RESIDUE",
+    "confidence": 83,
+    "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN",
       "INCOMPLETE_REFERENCE"
@@ -12004,7 +13355,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c3b5da7235f_front_image.jpg",
-    "imageCount": 23
+    "imageCount": 23,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-162",
@@ -12023,8 +13383,8 @@
     "year": 2020,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 68,
-    "status": "RESIDUE",
+    "confidence": 83,
+    "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN",
       "INCOMPLETE_REFERENCE"
@@ -12070,7 +13430,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69cebd0a1c1b1_front_image.jpg",
-    "imageCount": 4
+    "imageCount": 4,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-163",
@@ -12089,8 +13458,8 @@
     "year": 2015,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 65,
-    "status": "RESIDUE",
+    "confidence": 80,
+    "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN",
       "LOW_SELLER_RATING",
@@ -12137,7 +13506,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c40635174f7_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-164",
@@ -12156,8 +13534,8 @@
     "year": 2018,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 65,
-    "status": "RESIDUE",
+    "confidence": 80,
+    "status": "NORMALIZED",
     "flags": [
       "BOXPAPERS_UNKNOWN",
       "LOW_SELLER_RATING",
@@ -12204,7 +13582,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce891d95fec_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-165",
@@ -12270,7 +13657,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-166",
@@ -12336,7 +13730,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-167",
@@ -12402,7 +13806,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-168",
@@ -12468,7 +13882,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-169",
@@ -12534,7 +13958,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 6
+    "imageCount": 6,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-170",
@@ -12600,7 +14034,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 6
+    "imageCount": 6,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-171",
@@ -12666,7 +14110,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 6
+    "imageCount": 6,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-172",
@@ -12732,7 +14186,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 8
+    "imageCount": 8,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-173",
@@ -12798,7 +14262,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-174",
@@ -12864,7 +14335,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-175",
@@ -12930,7 +14408,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-176",
@@ -12996,7 +14484,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-177",
@@ -13062,7 +14560,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-178",
@@ -13128,7 +14636,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-179",
@@ -13194,7 +14712,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c11d56c3520_front_image.jpg",
-    "imageCount": 10
+    "imageCount": 10,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-180",
@@ -13260,7 +14788,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-181",
@@ -13326,7 +14864,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69be45e74a5bb_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-182",
@@ -13392,7 +14940,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-183",
@@ -13458,7 +15013,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-184",
@@ -13524,7 +15089,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-185",
@@ -13590,7 +15165,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-186",
@@ -13656,7 +15241,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce21bcef7a5_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-187",
@@ -13722,7 +15317,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bbea84d368b_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-188",
@@ -13788,7 +15393,14 @@
       }
     ],
     "imageUrl": null,
-    "imageCount": 0
+    "imageCount": 0,
+    "failureFlags": [
+      "YEAR_MISSING",
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN"
+    ],
+    "severity": "WARNING",
+    "isResidue": true
   },
   {
     "id": "PP-189",
@@ -13807,8 +15419,8 @@
     "year": 2026,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 60,
-    "status": "RESIDUE",
+    "confidence": 75,
+    "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN",
       "LOW_SELLER_RATING",
@@ -13855,7 +15467,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ce04b159140_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-190",
@@ -13874,8 +15495,8 @@
     "year": 2024,
     "seller": "Unknown",
     "location": "Hong Kong",
-    "confidence": 60,
-    "status": "RESIDUE",
+    "confidence": 75,
+    "status": "NORMALIZED",
     "flags": [
       "DIAL_UNKNOWN",
       "LOW_SELLER_RATING",
@@ -13922,7 +15543,16 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c27b92cc735_front_image.jpg",
-    "imageCount": 9
+    "imageCount": 9,
+    "failureFlags": [],
+    "severity": "WARNING",
+    "isResidue": false,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-191",
@@ -13988,7 +15618,18 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bd6af7e5b13_front_image.jpg",
-    "imageCount": 1
+    "imageCount": 1,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-192",
@@ -14054,7 +15695,18 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c4388c6fe37_front_image.jpg",
-    "imageCount": 5
+    "imageCount": 5,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-193",
@@ -14120,7 +15772,18 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c3ca3037788_front_image.jpg",
-    "imageCount": 3
+    "imageCount": 3,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-194",
@@ -14186,7 +15849,18 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69cebd0a1c1b1_front_image.jpg",
-    "imageCount": 42
+    "imageCount": 42,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-195",
@@ -14252,7 +15926,18 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c3b1374b828_front_image.jpg",
-    "imageCount": 12
+    "imageCount": 12,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-196",
@@ -14318,7 +16003,18 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c3e05aa13c7_front_image.jpg",
-    "imageCount": 7
+    "imageCount": 7,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-197",
@@ -14384,7 +16080,18 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69bb721b10ec2_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-198",
@@ -14450,7 +16157,18 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69ceaeba7b221_front_image.jpg",
-    "imageCount": 41
+    "imageCount": 41,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-199",
@@ -14516,7 +16234,18 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c0847de725c_front_image.jpg",
-    "imageCount": 2
+    "imageCount": 2,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   },
   {
     "id": "PP-200",
@@ -14582,6 +16311,17 @@
       }
     ],
     "imageUrl": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69c421395ebc8_front_image.jpg",
-    "imageCount": 17
+    "imageCount": 17,
+    "failureFlags": [
+      "YEAR_MISSING"
+    ],
+    "severity": "WARNING",
+    "isResidue": true,
+    "autoResolvedFlags": [
+      "DIAL_UNKNOWN",
+      "BOXPAPERS_UNKNOWN",
+      "INCOMPLETE_REFERENCE"
+    ],
+    "imageConfirmed": true
   }
 ]

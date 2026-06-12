@@ -40,6 +40,8 @@ export interface WatchRecord {
   severity: 'CRITICAL' | 'WARNING' | 'INFO';
   imageUrl?: string | null;
   imageCount?: number;
+  imageConfirmed?: boolean;
+  autoResolvedFlags?: string[];
 }
 
 export interface DashboardState {

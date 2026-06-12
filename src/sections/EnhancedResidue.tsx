@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, CheckCircle, Trash2, Edit3, ChevronDown, ChevronUp, Filter } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Trash2, Edit3, ChevronDown, ChevronUp, Filter, Camera } from 'lucide-react';
 import type { WatchRecord } from '@/types';
 
 interface EnhancedResidueProps {
@@ -37,6 +37,10 @@ export function EnhancedResidue({ records, onApprove, onEdit, onDelete }: Enhanc
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const residueRecords = useMemo(() => records.filter((r) => r.isResidue), [records]);
+  
+  // Auto-resolution stats
+  const autoResolvedCount = useMemo(() => records.filter((r) => r.autoResolvedFlags && r.autoResolvedFlags.length > 0).length, [records]);
+  const imageConfirmedCount = useMemo(() => records.filter((r) => r.imageConfirmed).length, [records]);
 
   // Get all unique flags
   const allFlags = useMemo(() => {
@@ -105,6 +109,25 @@ export function EnhancedResidue({ records, onApprove, onEdit, onDelete }: Enhanc
       animate={{ opacity: 1, y: 0 }}
       className="px-5 mt-8 mb-8"
     >
+      {/* Auto-resolution stats banner */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-bg-card border border-border-default rounded-md p-3 text-center">
+          <div className="text-lg font-bold font-mono text-warning">{residueRecords.length}</div>
+          <div className="text-[9px] text-text-muted uppercase">Needs Human Review</div>
+        </div>
+        <div className="bg-bg-card border border-border-default rounded-md p-3 text-center">
+          <div className="flex items-center justify-center gap-1">
+            <Camera size={14} className="text-success" />
+            <span className="text-lg font-bold font-mono text-success">{imageConfirmedCount}</span>
+          </div>
+          <div className="text-[9px] text-text-muted uppercase">Image Confirmed</div>
+        </div>
+        <div className="bg-bg-card border border-border-default rounded-md p-3 text-center">
+          <div className="text-lg font-bold font-mono text-info">{autoResolvedCount}</div>
+          <div className="text-[9px] text-text-muted uppercase">Reviews Saved</div>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <AlertTriangle size={16} className="text-warning" />
@@ -114,6 +137,11 @@ export function EnhancedResidue({ records, onApprove, onEdit, onDelete }: Enhanc
           <span className="text-[10px] bg-warning/10 text-warning px-2 py-0.5 rounded-full">
             {sorted.length} flagged
           </span>
+          {autoResolvedCount > 0 && (
+            <span className="text-[10px] bg-success/10 text-success px-2 py-0.5 rounded-full">
+              {autoResolvedCount} auto-resolved by images
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Filter size={12} className="text-text-muted" />
@@ -152,7 +180,12 @@ export function EnhancedResidue({ records, onApprove, onEdit, onDelete }: Enhanc
                 onClick={() => toggleRow(record.id)}
                 style={{ cursor: 'pointer' }}
               >
-                <span className="font-mono text-[11px] text-text-primary">{record.id}</span>
+                <span className="font-mono text-[11px] text-text-primary flex items-center gap-1">
+                  {record.id}
+                  {record.imageConfirmed && (
+                    <span title="Image confirmed"><Camera size={10} className="text-success" /></span>
+                  )}
+                </span>
                 <span className="font-mono text-[11px] text-gold-primary truncate">{record.reference || 'N/A'}</span>
                 <span className="text-right font-mono text-[11px] text-text-primary">
                   ${(record.price || 0).toLocaleString()}
@@ -233,8 +266,21 @@ export function EnhancedResidue({ records, onApprove, onEdit, onDelete }: Enhanc
                     <div><span className="text-text-muted">Year:</span> <span className="text-text-primary">{record.year || 'N/A'}</span></div>
                     <div><span className="text-text-muted">Box/Papers:</span> <span className="text-text-primary">{record.hasBox ? 'Box' : ''} {record.hasPapers ? 'Papers' : ''}</span></div>
                   </div>
+                  {/* Auto-resolved flags */}
+                  {record.autoResolvedFlags && record.autoResolvedFlags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1 items-center">
+                      <span className="text-[9px] text-success mr-1 flex items-center gap-1">
+                        <Camera size={10} /> IMG RESOLVED:
+                      </span>
+                      {record.autoResolvedFlags.map((flag) => (
+                        <span key={flag} className="text-[9px] bg-success/10 text-success px-1.5 py-0.5 rounded line-through opacity-70">
+                          {flag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="mt-2 flex flex-wrap gap-1">
-                    <span className="text-[9px] text-text-muted mr-1">ALL FLAGS:</span>
+                    <span className="text-[9px] text-text-muted mr-1">REMAINING FLAGS:</span>
                     {record.failureFlags?.map((flag) => (
                       <span
                         key={flag}
