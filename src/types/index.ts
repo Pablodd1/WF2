@@ -1,14 +1,6 @@
 export type StageName = 'INGEST' | 'VALIDATE' | 'NORMALIZE' | 'ENRICH' | 'ML_SCORE';
 
-export type FailureFlag =
-  | 'YEAR_MISSING'
-  | 'DIAL_UNKNOWN'
-  | 'INCOMPLETE_REFERENCE'
-  | 'BOXPAPERS_UNKNOWN'
-  | 'LOW_SELLER_RATING'
-  | 'PRICE_OUTLIER'
-  | 'BRAND_UNCERTAIN'
-  | 'CURRENCY_MISMATCH';
+export type FailureFlag = string;
 
 export interface PipelineStage {
   name: StageName;

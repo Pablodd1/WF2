@@ -11,7 +11,7 @@ import { useWatchData } from '@/hooks/useWatchData';
 import type { WatchRecord } from '@/types';
 
 export default function Home() {
-  const { records, loading, stats } = useWatchData();
+  const { records, stats } = useWatchData();
 
   // Modal state
   const [selectedRecord, setSelectedRecord] = useState<WatchRecord | null>(null);
