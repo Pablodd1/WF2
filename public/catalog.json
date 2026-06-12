@@ -1,0 +1,1772 @@
+[
+  {
+    "reference": "3700/1A",
+    "collection": "Nautilus",
+    "model": "Nautilus Jumbo",
+    "case_metal": "Stainless steel",
+    "production_years": "1976-1990",
+    "status": "Discontinued/Vintage",
+    "dial_colors": "Blue-black; Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3700/1J",
+    "collection": "Nautilus",
+    "model": "Nautilus Jumbo",
+    "case_metal": "Yellow gold",
+    "production_years": "1977-1980s",
+    "status": "Discontinued/Vintage",
+    "dial_colors": "Blue; Champagne; Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3700/11A",
+    "collection": "Nautilus",
+    "model": "Nautilus Jumbo",
+    "case_metal": "Stainless steel",
+    "production_years": "1980s-1990",
+    "status": "Discontinued/Vintage",
+    "dial_colors": "Blue-black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3800/1A",
+    "collection": "Nautilus",
+    "model": "Nautilus Mid Size",
+    "case_metal": "Stainless steel",
+    "production_years": "1981-2006",
+    "status": "Discontinued",
+    "dial_colors": "Blue; Black; White; Silver; Roman variations",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3800/1J",
+    "collection": "Nautilus",
+    "model": "Nautilus Mid Size",
+    "case_metal": "Yellow gold",
+    "production_years": "1980s-2006",
+    "status": "Discontinued",
+    "dial_colors": "Champagne; White; Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3800/1JA",
+    "collection": "Nautilus",
+    "model": "Nautilus Mid Size",
+    "case_metal": "Steel / yellow gold",
+    "production_years": "1980s-2006",
+    "status": "Discontinued",
+    "dial_colors": "Blue; White; Champagne",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3710/1A",
+    "collection": "Nautilus",
+    "model": "Nautilus Power Reserve",
+    "case_metal": "Stainless steel",
+    "production_years": "1998-2006",
+    "status": "Discontinued",
+    "dial_colors": "Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3712/1A",
+    "collection": "Nautilus",
+    "model": "Nautilus Moon Phase",
+    "case_metal": "Stainless steel",
+    "production_years": "2005-2006",
+    "status": "Discontinued",
+    "dial_colors": "Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5711/1A-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Jumbo",
+    "case_metal": "Stainless steel",
+    "production_years": "2006-2019",
+    "status": "Discontinued",
+    "dial_colors": "Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5711/1A-010",
+    "collection": "Nautilus",
+    "model": "Nautilus Jumbo",
+    "case_metal": "Stainless steel",
+    "production_years": "2019-2021",
+    "status": "Discontinued",
+    "dial_colors": "Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5711/1A-014",
+    "collection": "Nautilus",
+    "model": "Nautilus Jumbo",
+    "case_metal": "Stainless steel",
+    "production_years": "2021",
+    "status": "Discontinued",
+    "dial_colors": "Olive green",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5711/1A-018",
+    "collection": "Nautilus",
+    "model": "Nautilus Tiffany",
+    "case_metal": "Stainless steel",
+    "production_years": "2021",
+    "status": "Discontinued / limited",
+    "dial_colors": "Tiffany blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5711/1R-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Jumbo",
+    "case_metal": "Rose gold",
+    "production_years": "2015-2021",
+    "status": "Discontinued",
+    "dial_colors": "Brown / chocolate",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5726/1A-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Annual Calendar",
+    "case_metal": "Stainless steel",
+    "production_years": "2010s",
+    "status": "Discontinued",
+    "dial_colors": "Grey",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5726/1A-014",
+    "collection": "Nautilus",
+    "model": "Nautilus Annual Calendar",
+    "case_metal": "Stainless steel",
+    "production_years": "2019-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5712/1A-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Moon Phase",
+    "case_metal": "Stainless steel",
+    "production_years": "2006-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5712R-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Moon Phase",
+    "case_metal": "Rose gold",
+    "production_years": "2006-current?",
+    "status": "Current/verify",
+    "dial_colors": "Brown",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5980/1A-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Chronograph",
+    "case_metal": "Stainless steel",
+    "production_years": "2006-2014",
+    "status": "Discontinued",
+    "dial_colors": "Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5980/1A-014",
+    "collection": "Nautilus",
+    "model": "Nautilus Chronograph",
+    "case_metal": "Stainless steel",
+    "production_years": "2010s",
+    "status": "Discontinued",
+    "dial_colors": "Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5980/1R-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Chronograph",
+    "case_metal": "Rose gold",
+    "production_years": "2013-current?",
+    "status": "Current/verify",
+    "dial_colors": "Black-brown / gradient",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5990/1A-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Travel Time Chronograph",
+    "case_metal": "Stainless steel",
+    "production_years": "2014-2022",
+    "status": "Discontinued",
+    "dial_colors": "Black / grey",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5990/1A-011",
+    "collection": "Nautilus",
+    "model": "Nautilus Travel Time Chronograph",
+    "case_metal": "Stainless steel",
+    "production_years": "2022-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5811/1G-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Jumbo",
+    "case_metal": "White gold",
+    "production_years": "2022-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue sunburst",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5980/60G-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Chronograph",
+    "case_metal": "White gold",
+    "production_years": "2024-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue-grey opaline",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5060A-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut First Series",
+    "case_metal": "Stainless steel",
+    "production_years": "1997",
+    "status": "Discontinued",
+    "dial_colors": "Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5065A-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Jumbo",
+    "case_metal": "Stainless steel",
+    "production_years": "1998-2007",
+    "status": "Discontinued",
+    "dial_colors": "Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5066A-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Mid Size",
+    "case_metal": "Stainless steel",
+    "production_years": "1998-2007",
+    "status": "Discontinued",
+    "dial_colors": "Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5066A",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Japan Limited",
+    "case_metal": "Stainless steel",
+    "production_years": "1990s/2000s",
+    "status": "Discontinued / limited",
+    "dial_colors": "Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5067A-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Luce",
+    "case_metal": "Stainless steel",
+    "production_years": "2000s",
+    "status": "Discontinued",
+    "dial_colors": "Black; White",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5167A-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut",
+    "case_metal": "Stainless steel",
+    "production_years": "2007-current?",
+    "status": "Current/verify",
+    "dial_colors": "Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5167R-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut",
+    "case_metal": "Rose gold",
+    "production_years": "2009-current?",
+    "status": "Current/verify",
+    "dial_colors": "Chocolate brown",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5164A-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Travel Time",
+    "case_metal": "Stainless steel",
+    "production_years": "2011-2024?",
+    "status": "Discontinued/verify",
+    "dial_colors": "Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5164R-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Travel Time",
+    "case_metal": "Rose gold",
+    "production_years": "2016-current?",
+    "status": "Current/verify",
+    "dial_colors": "Brown",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5164G-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Travel Time",
+    "case_metal": "White gold",
+    "production_years": "2024-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue-grey",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5968A-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Chronograph",
+    "case_metal": "Stainless steel",
+    "production_years": "2018-current?",
+    "status": "Current/verify",
+    "dial_colors": "Black with orange accents",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5968G-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Chronograph",
+    "case_metal": "White gold",
+    "production_years": "2021-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5968G-010",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Chronograph",
+    "case_metal": "White gold",
+    "production_years": "2021-current?",
+    "status": "Current/verify",
+    "dial_colors": "Khaki green",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5267/200A-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Luce",
+    "case_metal": "Stainless steel",
+    "production_years": "2021-current?",
+    "status": "Current/verify",
+    "dial_colors": "Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5267/200A-010",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Luce",
+    "case_metal": "Stainless steel",
+    "production_years": "2021-current?",
+    "status": "Current/verify",
+    "dial_colors": "White",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5267/200A-011",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Luce",
+    "case_metal": "Stainless steel",
+    "production_years": "2021-current?",
+    "status": "Current/verify",
+    "dial_colors": "Khaki green",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5260/1455R-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Luce Rainbow",
+    "case_metal": "Rose gold",
+    "production_years": "2020s",
+    "status": "Current/verify",
+    "dial_colors": "Gem-set rainbow / mother-of-pearl",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5269R-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Luce Travel Time",
+    "case_metal": "Rose gold",
+    "production_years": "2022-current?",
+    "status": "Current/verify",
+    "dial_colors": "White",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5261R-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Luce Annual Calendar",
+    "case_metal": "Rose gold",
+    "production_years": "2023-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue-grey",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "96",
+    "collection": "Calatrava",
+    "model": "Calatrava Original",
+    "case_metal": "Multiple metals",
+    "production_years": "1932-1970s",
+    "status": "Vintage",
+    "dial_colors": "Silver; Cream; Two-tone; Sector; Black; Retailer-signed variants",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "570",
+    "collection": "Calatrava",
+    "model": "Calatrava Oversize",
+    "case_metal": "Multiple metals",
+    "production_years": "1938-1970s",
+    "status": "Vintage",
+    "dial_colors": "Silver; Cream; Two-tone; Black gilt",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "565",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Multiple metals",
+    "production_years": "1930s-1950s",
+    "status": "Vintage",
+    "dial_colors": "Silver; Cream; Sector; Black gilt",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "530",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Multiple metals",
+    "production_years": "1930s-1950s",
+    "status": "Vintage",
+    "dial_colors": "Silver; Cream; Black gilt",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "2526",
+    "collection": "Calatrava",
+    "model": "Calatrava Automatic",
+    "case_metal": "Yellow/rose/white gold/platinum",
+    "production_years": "1953-1960s",
+    "status": "Vintage",
+    "dial_colors": "Cream enamel; White enamel; Black enamel",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "2552",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Multiple metals",
+    "production_years": "1950s-1960s",
+    "status": "Vintage",
+    "dial_colors": "Silver; Cream",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3445",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Multiple metals",
+    "production_years": "1960s-1980s",
+    "status": "Vintage/Discontinued",
+    "dial_colors": "Silver; Champagne; Blue; Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3919J",
+    "collection": "Calatrava",
+    "model": "Calatrava Hobnail",
+    "case_metal": "Yellow gold",
+    "production_years": "1985-2006",
+    "status": "Discontinued",
+    "dial_colors": "White; Cream",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3919G",
+    "collection": "Calatrava",
+    "model": "Calatrava Hobnail",
+    "case_metal": "White gold",
+    "production_years": "1985-2006",
+    "status": "Discontinued",
+    "dial_colors": "White",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3919R",
+    "collection": "Calatrava",
+    "model": "Calatrava Hobnail",
+    "case_metal": "Rose gold",
+    "production_years": "1985-2006",
+    "status": "Discontinued",
+    "dial_colors": "White; Cream",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3998",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Multiple metals",
+    "production_years": "1990s",
+    "status": "Discontinued",
+    "dial_colors": "White; Cream; Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3796",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Multiple metals",
+    "production_years": "1980s-2000s",
+    "status": "Discontinued",
+    "dial_colors": "White; Silver; Roman; Breguet variants",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5000J",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Yellow gold",
+    "production_years": "1990s",
+    "status": "Discontinued",
+    "dial_colors": "Black; White",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5053",
+    "collection": "Calatrava",
+    "model": "Calatrava Officer",
+    "case_metal": "Multiple metals",
+    "production_years": "2000s",
+    "status": "Discontinued",
+    "dial_colors": "White; Silver",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5127J",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Yellow gold",
+    "production_years": "2000s",
+    "status": "Discontinued",
+    "dial_colors": "Cream / ivory",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5127G",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "White gold",
+    "production_years": "2000s",
+    "status": "Discontinued",
+    "dial_colors": "Silver / white",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5127R",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Rose gold",
+    "production_years": "2000s",
+    "status": "Discontinued",
+    "dial_colors": "Cream / ivory",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5119J",
+    "collection": "Calatrava",
+    "model": "Calatrava Hobnail",
+    "case_metal": "Yellow gold",
+    "production_years": "2006-2021",
+    "status": "Discontinued",
+    "dial_colors": "White",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5119G",
+    "collection": "Calatrava",
+    "model": "Calatrava Hobnail",
+    "case_metal": "White gold",
+    "production_years": "2006-2021",
+    "status": "Discontinued",
+    "dial_colors": "White",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5119R",
+    "collection": "Calatrava",
+    "model": "Calatrava Hobnail",
+    "case_metal": "Rose gold",
+    "production_years": "2006-2021",
+    "status": "Discontinued",
+    "dial_colors": "White",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5196J",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Yellow gold",
+    "production_years": "2004-2022",
+    "status": "Discontinued",
+    "dial_colors": "Cream / silver",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5196G",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "White gold",
+    "production_years": "2004-2022",
+    "status": "Discontinued",
+    "dial_colors": "Silver",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5196R",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Rose gold",
+    "production_years": "2004-2022",
+    "status": "Discontinued",
+    "dial_colors": "Silver / opaline",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5196P",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Platinum",
+    "production_years": "2004-2022",
+    "status": "Discontinued",
+    "dial_colors": "Two-tone silver",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5227J",
+    "collection": "Calatrava",
+    "model": "Calatrava Officer",
+    "case_metal": "Yellow gold",
+    "production_years": "2013-current?",
+    "status": "Current/verify",
+    "dial_colors": "Ivory lacquered",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5227G",
+    "collection": "Calatrava",
+    "model": "Calatrava Officer",
+    "case_metal": "White gold",
+    "production_years": "2013-current?",
+    "status": "Current/verify",
+    "dial_colors": "Ivory lacquered; Rose gilt-opaline",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5227R",
+    "collection": "Calatrava",
+    "model": "Calatrava Officer",
+    "case_metal": "Rose gold",
+    "production_years": "2013-current?",
+    "status": "Current/verify",
+    "dial_colors": "Ivory lacquered",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5212A-001",
+    "collection": "Calatrava",
+    "model": "Calatrava Weekly Calendar",
+    "case_metal": "Stainless steel",
+    "production_years": "2019-current?",
+    "status": "Current/verify",
+    "dial_colors": "Silvery opaline",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "6119R-001",
+    "collection": "Calatrava",
+    "model": "Calatrava Clous de Paris",
+    "case_metal": "Rose gold",
+    "production_years": "2021-current?",
+    "status": "Current/verify",
+    "dial_colors": "Silvery grained",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "6119G-001",
+    "collection": "Calatrava",
+    "model": "Calatrava Clous de Paris",
+    "case_metal": "White gold",
+    "production_years": "2021-current?",
+    "status": "Current/verify",
+    "dial_colors": "Charcoal grey",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "6007G-001",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "White gold",
+    "production_years": "2023-current?",
+    "status": "Current/verify",
+    "dial_colors": "Ebony black with yellow accents",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "6007G-010",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "White gold",
+    "production_years": "2023-current?",
+    "status": "Current/verify",
+    "dial_colors": "Ebony black with red accents",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "6007G-011",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "White gold",
+    "production_years": "2023-current?",
+    "status": "Current/verify",
+    "dial_colors": "Ebony black with sky-blue accents",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "6196P-001",
+    "collection": "Calatrava",
+    "model": "Calatrava",
+    "case_metal": "Platinum",
+    "production_years": "2024-current?",
+    "status": "Current/verify",
+    "dial_colors": "Rose-gilt opaline",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5110J",
+    "collection": "Complications / Grand Complications",
+    "model": "World Time",
+    "case_metal": "Yellow gold",
+    "production_years": "2000-2006",
+    "status": "Discontinued",
+    "dial_colors": "Silver; Cream",
+    "movement": "World time"
+  },
+  {
+    "reference": "5110G",
+    "collection": "Complications / Grand Complications",
+    "model": "World Time",
+    "case_metal": "White gold",
+    "production_years": "2000-2006",
+    "status": "Discontinued",
+    "dial_colors": "Silver",
+    "movement": "World time"
+  },
+  {
+    "reference": "5130J",
+    "collection": "Complications / Grand Complications",
+    "model": "World Time",
+    "case_metal": "Yellow gold",
+    "production_years": "2006-2016",
+    "status": "Discontinued",
+    "dial_colors": "Silver / opaline",
+    "movement": "World time"
+  },
+  {
+    "reference": "5130G",
+    "collection": "Complications / Grand Complications",
+    "model": "World Time",
+    "case_metal": "White gold",
+    "production_years": "2006-2016",
+    "status": "Discontinued",
+    "dial_colors": "Silver / opaline",
+    "movement": "World time"
+  },
+  {
+    "reference": "5230G",
+    "collection": "Complications / Grand Complications",
+    "model": "World Time",
+    "case_metal": "White gold",
+    "production_years": "2016-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue; Silver/grey",
+    "movement": "World time"
+  },
+  {
+    "reference": "5230P",
+    "collection": "Complications / Grand Complications",
+    "model": "World Time",
+    "case_metal": "Platinum",
+    "production_years": "2022-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue",
+    "movement": "World time"
+  },
+  {
+    "reference": "5035J",
+    "collection": "Complications / Grand Complications",
+    "model": "Annual Calendar",
+    "case_metal": "Yellow gold",
+    "production_years": "1996-2005",
+    "status": "Discontinued",
+    "dial_colors": "Silver; Black; Cream",
+    "movement": "First annual calendar"
+  },
+  {
+    "reference": "5146J",
+    "collection": "Complications / Grand Complications",
+    "model": "Annual Calendar",
+    "case_metal": "Yellow gold",
+    "production_years": "2005-2019",
+    "status": "Discontinued",
+    "dial_colors": "Cream; Grey; Slate",
+    "movement": "Annual calendar"
+  },
+  {
+    "reference": "5146G",
+    "collection": "Complications / Grand Complications",
+    "model": "Annual Calendar",
+    "case_metal": "White gold",
+    "production_years": "2005-2019",
+    "status": "Discontinued",
+    "dial_colors": "Cream; Slate grey",
+    "movement": "Annual calendar"
+  },
+  {
+    "reference": "5960P",
+    "collection": "Complications / Grand Complications",
+    "model": "Annual Calendar Chronograph",
+    "case_metal": "Platinum",
+    "production_years": "2006-2014",
+    "status": "Discontinued",
+    "dial_colors": "Grey; Blue; Black",
+    "movement": "Annual calendar chronograph"
+  },
+  {
+    "reference": "5070J",
+    "collection": "Complications / Grand Complications",
+    "model": "Chronograph",
+    "case_metal": "Yellow gold",
+    "production_years": "1998-2002",
+    "status": "Discontinued",
+    "dial_colors": "Black",
+    "movement": "Manual chronograph"
+  },
+  {
+    "reference": "5070G",
+    "collection": "Complications / Grand Complications",
+    "model": "Chronograph",
+    "case_metal": "White gold",
+    "production_years": "2002-2006",
+    "status": "Discontinued",
+    "dial_colors": "Silver",
+    "movement": "Manual chronograph"
+  },
+  {
+    "reference": "5070R",
+    "collection": "Complications / Grand Complications",
+    "model": "Chronograph",
+    "case_metal": "Rose gold",
+    "production_years": "2003-2008",
+    "status": "Discontinued",
+    "dial_colors": "Silver",
+    "movement": "Manual chronograph"
+  },
+  {
+    "reference": "5070P",
+    "collection": "Complications / Grand Complications",
+    "model": "Chronograph",
+    "case_metal": "Platinum",
+    "production_years": "2008-2010",
+    "status": "Discontinued",
+    "dial_colors": "Blue",
+    "movement": "Manual chronograph"
+  },
+  {
+    "reference": "3940J",
+    "collection": "Complications / Grand Complications",
+    "model": "Perpetual Calendar",
+    "case_metal": "Yellow gold",
+    "production_years": "1985-2007",
+    "status": "Discontinued",
+    "dial_colors": "Silver; Champagne; Black",
+    "movement": "Perpetual calendar"
+  },
+  {
+    "reference": "5140J",
+    "collection": "Complications / Grand Complications",
+    "model": "Perpetual Calendar",
+    "case_metal": "Yellow gold",
+    "production_years": "2006-2016",
+    "status": "Discontinued",
+    "dial_colors": "Cream / silver",
+    "movement": "Perpetual calendar"
+  },
+  {
+    "reference": "5327J",
+    "collection": "Complications / Grand Complications",
+    "model": "Perpetual Calendar",
+    "case_metal": "Yellow gold",
+    "production_years": "2016-current?",
+    "status": "Current/verify",
+    "dial_colors": "Ivory lacquered",
+    "movement": "Perpetual calendar"
+  },
+  {
+    "reference": "3970J",
+    "collection": "Complications / Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "Yellow gold",
+    "production_years": "1986-2004",
+    "status": "Discontinued",
+    "dial_colors": "Silver; Black",
+    "movement": "Perpetual chrono"
+  },
+  {
+    "reference": "5970J",
+    "collection": "Complications / Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "Yellow gold",
+    "production_years": "2004-2009",
+    "status": "Discontinued",
+    "dial_colors": "Silver",
+    "movement": "Perpetual chrono"
+  },
+  {
+    "reference": "5970G",
+    "collection": "Complications / Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "White gold",
+    "production_years": "2004-2009",
+    "status": "Discontinued",
+    "dial_colors": "Silver",
+    "movement": "Perpetual chrono"
+  },
+  {
+    "reference": "5970R",
+    "collection": "Complications / Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "Rose gold",
+    "production_years": "2004-2009",
+    "status": "Discontinued",
+    "dial_colors": "Silver",
+    "movement": "Perpetual chrono"
+  },
+  {
+    "reference": "5970P",
+    "collection": "Complications / Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "Platinum",
+    "production_years": "2009-2010",
+    "status": "Discontinued",
+    "dial_colors": "Black",
+    "movement": "Perpetual chrono"
+  },
+  {
+    "reference": "5270J",
+    "collection": "Complications / Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "Yellow gold",
+    "production_years": "2018-current?",
+    "status": "Current/verify",
+    "dial_colors": "Silver / opaline",
+    "movement": "Perpetual chrono"
+  },
+  {
+    "reference": "5270P",
+    "collection": "Complications / Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "Platinum",
+    "production_years": "2018-current?",
+    "status": "Current/verify",
+    "dial_colors": "Golden opaline; Salmon",
+    "movement": "Perpetual chrono"
+  },
+  {
+    "reference": "5370P",
+    "collection": "Complications / Grand Complications",
+    "model": "Split-Seconds Chronograph",
+    "case_metal": "Platinum",
+    "production_years": "2015-current?",
+    "status": "Current/verify",
+    "dial_colors": "Black enamel; Blue enamel",
+    "movement": "Split seconds"
+  },
+  {
+    "reference": "5002P",
+    "collection": "Complications / Grand Complications",
+    "model": "Sky Moon Tourbillon",
+    "case_metal": "Platinum",
+    "production_years": "2001-2010s",
+    "status": "Discontinued",
+    "dial_colors": "Blue; Black",
+    "movement": "Double-faced grand complication"
+  },
+  {
+    "reference": "6002G",
+    "collection": "Complications / Grand Complications",
+    "model": "Sky Moon Tourbillon",
+    "case_metal": "White gold",
+    "production_years": "2013-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue cloisonné / engraved",
+    "movement": "Double-faced grand complication"
+  },
+  {
+    "reference": "5175R",
+    "collection": "Complications / Grand Complications",
+    "model": "Grandmaster Chime",
+    "case_metal": "Rose gold",
+    "production_years": "2014",
+    "status": "Discontinued / limited",
+    "dial_colors": "Silver / engraved",
+    "movement": "175th anniversary"
+  },
+  {
+    "reference": "6300G",
+    "collection": "Complications / Grand Complications",
+    "model": "Grandmaster Chime",
+    "case_metal": "White gold",
+    "production_years": "2016-current?",
+    "status": "Current/verify",
+    "dial_colors": "Black / white reversible",
+    "movement": "Grand complication"
+  },
+  {
+    "reference": "6300A",
+    "collection": "Complications / Grand Complications",
+    "model": "Grandmaster Chime",
+    "case_metal": "Stainless steel",
+    "production_years": "2019",
+    "status": "Unique piece",
+    "dial_colors": "Rose / ebony black",
+    "movement": "Only Watch unique"
+  },
+  {
+    "reference": "5102G",
+    "collection": "Complications / Grand Complications",
+    "model": "Celestial",
+    "case_metal": "White gold",
+    "production_years": "2002-2012",
+    "status": "Discontinued",
+    "dial_colors": "Blue celestial chart",
+    "movement": "Astronomical"
+  },
+  {
+    "reference": "6102P",
+    "collection": "Complications / Grand Complications",
+    "model": "Celestial",
+    "case_metal": "Platinum",
+    "production_years": "2012-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue celestial chart",
+    "movement": "Astronomical"
+  },
+  {
+    "reference": "4910/10A",
+    "collection": "Twenty~4",
+    "model": "Twenty~4 Manchette",
+    "case_metal": "Stainless steel",
+    "production_years": "1999-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue; Grey; White; Black; Mother-of-pearl",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "7300/1200A-001",
+    "collection": "Twenty~4",
+    "model": "Twenty~4 Automatic",
+    "case_metal": "Stainless steel",
+    "production_years": "2018-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue sunburst",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "7300/1200A-010",
+    "collection": "Twenty~4",
+    "model": "Twenty~4 Automatic",
+    "case_metal": "Stainless steel",
+    "production_years": "2018-current?",
+    "status": "Current/verify",
+    "dial_colors": "Grey sunburst",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "7300/1200R-001",
+    "collection": "Twenty~4",
+    "model": "Twenty~4 Automatic",
+    "case_metal": "Rose gold",
+    "production_years": "2018-current?",
+    "status": "Current/verify",
+    "dial_colors": "Brown sunburst",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "7300/1200R-010",
+    "collection": "Twenty~4",
+    "model": "Twenty~4 Automatic",
+    "case_metal": "Rose gold",
+    "production_years": "2018-current?",
+    "status": "Current/verify",
+    "dial_colors": "Silver / opaline",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3548",
+    "collection": "Golden Ellipse",
+    "model": "Golden Ellipse",
+    "case_metal": "Yellow gold",
+    "production_years": "1968-1980s",
+    "status": "Vintage/Discontinued",
+    "dial_colors": "Blue gold; Champagne; Black",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "3738/100J",
+    "collection": "Golden Ellipse",
+    "model": "Golden Ellipse",
+    "case_metal": "Yellow gold",
+    "production_years": "1977-2000s",
+    "status": "Discontinued",
+    "dial_colors": "Blue gold; Champagne",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5738R-001",
+    "collection": "Golden Ellipse",
+    "model": "Golden Ellipse",
+    "case_metal": "Rose gold",
+    "production_years": "2018-current?",
+    "status": "Current/verify",
+    "dial_colors": "Ebony black sunburst",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5738P-001",
+    "collection": "Golden Ellipse",
+    "model": "Golden Ellipse",
+    "case_metal": "Platinum",
+    "production_years": "2008-current?",
+    "status": "Current/verify",
+    "dial_colors": "Blue gold sunburst",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5124G",
+    "collection": "Gondolo",
+    "model": "Gondolo",
+    "case_metal": "White gold",
+    "production_years": "2000s-2010s",
+    "status": "Discontinued",
+    "dial_colors": "Silver; Blue",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5124J",
+    "collection": "Gondolo",
+    "model": "Gondolo",
+    "case_metal": "Yellow gold",
+    "production_years": "2000s-2010s",
+    "status": "Discontinued",
+    "dial_colors": "Silver",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5200G",
+    "collection": "Gondolo",
+    "model": "Gondolo",
+    "case_metal": "White gold",
+    "production_years": "2013-2018?",
+    "status": "Discontinued",
+    "dial_colors": "Blue; Silver",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "7041R",
+    "collection": "Gondolo",
+    "model": "Gondolo",
+    "case_metal": "Rose gold",
+    "production_years": "2010s-current?",
+    "status": "Current/verify",
+    "dial_colors": "Silver / opaline",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "4962/200R",
+    "collection": "Gondolo",
+    "model": "Gondolo Serata",
+    "case_metal": "Rose gold",
+    "production_years": "2020s-current?",
+    "status": "Current/verify",
+    "dial_colors": "Brown lacquer; Purple lacquer",
+    "movement": "Time/date or listed complication"
+  },
+  {
+    "reference": "5711/1G-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Time & Date",
+    "case_metal": "White gold",
+    "production_years": "2015-2021",
+    "status": "Discontinued",
+    "dial_colors": "Grey",
+    "movement": "Cal. 26-330 S C, time/date"
+  },
+  {
+    "reference": "5711/1G-010",
+    "collection": "Nautilus",
+    "model": "Nautilus Time & Date",
+    "case_metal": "White gold",
+    "production_years": "2019-2021",
+    "status": "Discontinued",
+    "dial_colors": "Black",
+    "movement": "Cal. 26-330 S C, time/date"
+  },
+  {
+    "reference": "5711/1P-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Time & Date",
+    "case_metal": "Platinum",
+    "production_years": "2016",
+    "status": "Limited",
+    "dial_colors": "Blue gradient",
+    "movement": "Cal. 26-330 S C, time/date"
+  },
+  {
+    "reference": "5811/1A-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Jumbo",
+    "case_metal": "Stainless steel",
+    "production_years": "2022-current",
+    "status": "Current",
+    "dial_colors": "Black gradient",
+    "movement": "Cal. 26-330 S C, time/date"
+  },
+  {
+    "reference": "5726/1A-010",
+    "collection": "Nautilus",
+    "model": "Nautilus Annual Calendar",
+    "case_metal": "Stainless steel",
+    "production_years": "2022-current",
+    "status": "Current",
+    "dial_colors": "White",
+    "movement": "Cal. 324 S QA LU 24H/303, annual calendar"
+  },
+  {
+    "reference": "5740/1G-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Perpetual Calendar",
+    "case_metal": "White gold",
+    "production_years": "2018-2024",
+    "status": "Discontinued",
+    "dial_colors": "Blue gradient",
+    "movement": "Cal. 240 Q, perpetual calendar"
+  },
+  {
+    "reference": "5740/1A-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Perpetual Calendar",
+    "case_metal": "Stainless steel",
+    "production_years": "2021-2024",
+    "status": "Discontinued",
+    "dial_colors": "Black gradient",
+    "movement": "Cal. 240 Q, perpetual calendar"
+  },
+  {
+    "reference": "5980/1AR-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Flyback Chronograph",
+    "case_metal": "Rose gold / stainless steel",
+    "production_years": "2007-2021",
+    "status": "Discontinued",
+    "dial_colors": "Blue gradient; Brown",
+    "movement": "Cal. CH 28-520 C, flyback chronograph"
+  },
+  {
+    "reference": "7118/1A-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Ladies Automatic",
+    "case_metal": "Stainless steel",
+    "production_years": "2017-current",
+    "status": "Current",
+    "dial_colors": "Blue gradient",
+    "movement": "Cal. 324 S C, time only"
+  },
+  {
+    "reference": "7118/1A-010",
+    "collection": "Nautilus",
+    "model": "Nautilus Ladies Automatic",
+    "case_metal": "Stainless steel",
+    "production_years": "2021-current",
+    "status": "Current",
+    "dial_colors": "Black",
+    "movement": "Cal. 324 S C, time only"
+  },
+  {
+    "reference": "7118/1R-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Ladies Automatic",
+    "case_metal": "Rose gold",
+    "production_years": "2017-current",
+    "status": "Current",
+    "dial_colors": "Brown",
+    "movement": "Cal. 324 S C, time only"
+  },
+  {
+    "reference": "3712/1A-001",
+    "collection": "Nautilus",
+    "model": "Nautilus Moon Phase",
+    "case_metal": "Stainless steel",
+    "production_years": "2005-2006",
+    "status": "Discontinued",
+    "dial_colors": "Blue",
+    "movement": "Cal. 240 PS IRM C LU"
+  },
+  {
+    "reference": "5068R-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Luce",
+    "case_metal": "Rose gold",
+    "production_years": "2008-2019",
+    "status": "Discontinued",
+    "dial_colors": "Brown; Black; Pink",
+    "movement": "Cal. E15 (quartz)"
+  },
+  {
+    "reference": "5650G-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Advanced Research",
+    "case_metal": "White gold",
+    "production_years": "2017",
+    "status": "Limited",
+    "dial_colors": "Openworked",
+    "movement": "Cal. 324 S C FUS (experimental flex balance spring)"
+  },
+  {
+    "reference": "4973R-001",
+    "collection": "Aquanaut",
+    "model": "Aquanaut Luce Travel Time",
+    "case_metal": "Rose gold",
+    "production_years": "2010s",
+    "status": "Discontinued",
+    "dial_colors": "Brown; Black",
+    "movement": "Cal. E 23-250 S C FUS (quartz travel time)"
+  },
+  {
+    "reference": "5053J",
+    "collection": "Calatrava",
+    "model": "Calatrava Officer",
+    "case_metal": "Yellow gold",
+    "production_years": "2000s",
+    "status": "Discontinued",
+    "dial_colors": "White; Silver",
+    "movement": "Manual wind Cal. 215 PS"
+  },
+  {
+    "reference": "6000G-001",
+    "collection": "Calatrava",
+    "model": "Calatrava Pointer Date",
+    "case_metal": "White gold",
+    "production_years": "1999-2011",
+    "status": "Discontinued",
+    "dial_colors": "Silver opaline; Black",
+    "movement": "Cal. 240 PS C"
+  },
+  {
+    "reference": "6006G-001",
+    "collection": "Calatrava",
+    "model": "Calatrava Pointer Date",
+    "case_metal": "White gold",
+    "production_years": "2011-2019",
+    "status": "Discontinued",
+    "dial_colors": "Black; Silver opaline",
+    "movement": "Cal. 240 PS C"
+  },
+  {
+    "reference": "5322G-001",
+    "collection": "Calatrava",
+    "model": "Calatrava Alarm",
+    "case_metal": "White gold",
+    "production_years": "2024-current",
+    "status": "Current",
+    "dial_colors": "Blue lacquer",
+    "movement": "Cal. AL 30-660 S C, alarm"
+  },
+  {
+    "reference": "5322G-010",
+    "collection": "Calatrava",
+    "model": "Calatrava Alarm",
+    "case_metal": "White gold",
+    "production_years": "2024-current",
+    "status": "Current",
+    "dial_colors": "Green lacquer",
+    "movement": "Cal. AL 30-660 S C, alarm"
+  },
+  {
+    "reference": "5227G-001",
+    "collection": "Calatrava",
+    "model": "Calatrava Officer",
+    "case_metal": "White gold",
+    "production_years": "2013-current",
+    "status": "Current",
+    "dial_colors": "Black",
+    "movement": "Cal. 324 S C, automatic date"
+  },
+  {
+    "reference": "5205G-001",
+    "collection": "Complications",
+    "model": "Annual Calendar",
+    "case_metal": "White gold",
+    "production_years": "2011-current",
+    "status": "Current",
+    "dial_colors": "Silver opaline",
+    "movement": "Cal. 324 S QA LU 24H/303"
+  },
+  {
+    "reference": "5205G-010",
+    "collection": "Complications",
+    "model": "Annual Calendar",
+    "case_metal": "White gold",
+    "production_years": "2016-current",
+    "status": "Current",
+    "dial_colors": "Black",
+    "movement": "Cal. 324 S QA LU 24H/303"
+  },
+  {
+    "reference": "5205R-001",
+    "collection": "Complications",
+    "model": "Annual Calendar",
+    "case_metal": "Rose gold",
+    "production_years": "2015-current",
+    "status": "Current",
+    "dial_colors": "Brown; Silver opaline",
+    "movement": "Cal. 324 S QA LU 24H/303"
+  },
+  {
+    "reference": "5172G-001",
+    "collection": "Complications",
+    "model": "Chronograph",
+    "case_metal": "White gold",
+    "production_years": "2018-current",
+    "status": "Current",
+    "dial_colors": "Silver opaline; Black",
+    "movement": "Cal. CH 29-535 PS, manual chronograph"
+  },
+  {
+    "reference": "4946G-001",
+    "collection": "Complications",
+    "model": "Annual Calendar Moonphase",
+    "case_metal": "White gold",
+    "production_years": "2024-current",
+    "status": "Current",
+    "dial_colors": "Blue-grey shantung",
+    "movement": "Cal. 26-330 S QA LU 24H"
+  },
+  {
+    "reference": "1518",
+    "collection": "Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "Yellow/rose/stainless steel",
+    "production_years": "1941-1954",
+    "status": "Vintage",
+    "dial_colors": "Silver opaline; Champagne; Black",
+    "movement": "Manual wind perpetual calendar chronograph"
+  },
+  {
+    "reference": "2499",
+    "collection": "Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "Yellow/rose gold",
+    "production_years": "1950-1985",
+    "status": "Vintage",
+    "dial_colors": "Silver opaline; Champagne; Black",
+    "movement": "Manual wind perpetual calendar chronograph"
+  },
+  {
+    "reference": "5004P-001",
+    "collection": "Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "Platinum",
+    "production_years": "1993-2010",
+    "status": "Discontinued",
+    "dial_colors": "Silver opaline; Black",
+    "movement": "Cal. CHR 27-70 Q, split-sec perp. cal."
+  },
+  {
+    "reference": "5370P-001",
+    "collection": "Grand Complications",
+    "model": "Split-Seconds Chronograph",
+    "case_metal": "Platinum",
+    "production_years": "2015-current",
+    "status": "Current",
+    "dial_colors": "Black enamel; Blue enamel",
+    "movement": "Cal. CHR 29-535 PS, split-sec chronograph"
+  },
+  {
+    "reference": "5236P-001",
+    "collection": "Grand Complications",
+    "model": "Perpetual Calendar In-line",
+    "case_metal": "Platinum",
+    "production_years": "2021-current",
+    "status": "Current",
+    "dial_colors": "Silver opaline; Blue gradient",
+    "movement": "Cal. 31-260 PS QL, in-line perpetual calendar"
+  },
+  {
+    "reference": "5236P-010",
+    "collection": "Grand Complications",
+    "model": "Perpetual Calendar In-line",
+    "case_metal": "Platinum",
+    "production_years": "2023-current",
+    "status": "Current",
+    "dial_colors": "Rose-gilt opaline",
+    "movement": "Cal. 31-260 PS QL"
+  },
+  {
+    "reference": "5270R-001",
+    "collection": "Grand Complications",
+    "model": "Perpetual Calendar Chronograph",
+    "case_metal": "Rose gold",
+    "production_years": "2020-current",
+    "status": "Current",
+    "dial_colors": "Black; Charcoal gray; Red lacquer; Blue gradient",
+    "movement": "Cal. CH 29-535 PS Q"
+  },
+  {
+    "reference": "5208R-001",
+    "collection": "Grand Complications",
+    "model": "Minute Repeater Chronograph",
+    "case_metal": "Rose gold",
+    "production_years": "2017-current",
+    "status": "Current",
+    "dial_colors": "Brown; Silver opaline",
+    "movement": "Cal. R CH 27 PS QI, MR + perp. cal. + chrono"
+  },
+  {
+    "reference": "5308G-001",
+    "collection": "Grand Complications",
+    "model": "Minute Repeater Tourbillon",
+    "case_metal": "White gold",
+    "production_years": "2022-current",
+    "status": "Current",
+    "dial_colors": "Silver opaline",
+    "movement": "Cal. RTO 27 PS QI"
+  },
+  {
+    "reference": "5316R-001",
+    "collection": "Grand Complications",
+    "model": "Minute Repeater Tourbillon",
+    "case_metal": "Rose gold",
+    "production_years": "2018-current",
+    "status": "Current",
+    "dial_colors": "Silver opaline; Black",
+    "movement": "Cal. TO 30 PS, min. repeater tourbillon"
+  },
+  {
+    "reference": "5102G-001",
+    "collection": "Grand Complications",
+    "model": "Celestial",
+    "case_metal": "White gold",
+    "production_years": "2002-2012",
+    "status": "Discontinued",
+    "dial_colors": "Blue celestial chart",
+    "movement": "Cal. 240 LU CL, celestial"
+  },
+  {
+    "reference": "5002P-001",
+    "collection": "Grand Complications",
+    "model": "Sky Moon Tourbillon",
+    "case_metal": "Platinum",
+    "production_years": "2001-2012",
+    "status": "Discontinued",
+    "dial_colors": "Blue; Black",
+    "movement": "Cal. RTO 27 QR SID LU CL, tourbillon"
+  },
+  {
+    "reference": "5531G-001",
+    "collection": "Grand Complications",
+    "model": "World Time Minute Repeater",
+    "case_metal": "White gold",
+    "production_years": "2016-current",
+    "status": "Current",
+    "dial_colors": "Enamel cloisonné",
+    "movement": "Cal. RTO 27 PS G, world time min. repeater"
+  },
+  {
+    "reference": "5470P-001",
+    "collection": "Grand Complications",
+    "model": "1/10 Sec Monopusher Chronograph",
+    "case_metal": "Platinum",
+    "production_years": "2022-current",
+    "status": "Current",
+    "dial_colors": "Silver opaline",
+    "movement": "Cal. CH 29-535 PS 1/10"
+  },
+  {
+    "reference": "5175R-001",
+    "collection": "Grand Complications",
+    "model": "Grandmaster Chime",
+    "case_metal": "Rose gold",
+    "production_years": "2014",
+    "status": "Limited",
+    "dial_colors": "Silver / engraved",
+    "movement": "Cal. GS AL 36-750 QIS FUS IRM, 20 complications"
+  },
+  {
+    "reference": "6300A-010",
+    "collection": "Grand Complications",
+    "model": "Grandmaster Chime",
+    "case_metal": "Stainless steel",
+    "production_years": "2019",
+    "status": "Unique piece",
+    "dial_colors": "Rose; Ebony black",
+    "movement": "20 complications, reversible case"
+  },
+  {
+    "reference": "3548J",
+    "collection": "Golden Ellipse",
+    "model": "Golden Ellipse",
+    "case_metal": "Yellow gold",
+    "production_years": "1968-1980s",
+    "status": "Vintage/Discontinued",
+    "dial_colors": "Blue gold; Champagne; Black",
+    "movement": "Manual wind, time only"
+  },
+  {
+    "reference": "5738G-001",
+    "collection": "Golden Ellipse",
+    "model": "Golden Ellipse",
+    "case_metal": "White gold",
+    "production_years": "2022-current",
+    "status": "Current",
+    "dial_colors": "Olive green; Blue gradient",
+    "movement": "Cal. 240, ultra-thin automatic"
+  },
+  {
+    "reference": "5738R-011",
+    "collection": "Golden Ellipse",
+    "model": "Golden Ellipse",
+    "case_metal": "Rose gold",
+    "production_years": "2024-current",
+    "status": "Current",
+    "dial_colors": "Black",
+    "movement": "Cal. 240, ultra-thin automatic"
+  },
+  {
+    "reference": "5124G-001",
+    "collection": "Gondolo",
+    "model": "Gondolo",
+    "case_metal": "White gold",
+    "production_years": "2000s-2010s",
+    "status": "Discontinued",
+    "dial_colors": "Silver; Blue",
+    "movement": "Cal. 215 PS, manual wind"
+  },
+  {
+    "reference": "5124J-001",
+    "collection": "Gondolo",
+    "model": "Gondolo",
+    "case_metal": "Yellow gold",
+    "production_years": "2000s-2010s",
+    "status": "Discontinued",
+    "dial_colors": "Silver",
+    "movement": "Cal. 215 PS, manual wind"
+  },
+  {
+    "reference": "5200G-001",
+    "collection": "Gondolo",
+    "model": "Gondolo 8-Day",
+    "case_metal": "White gold",
+    "production_years": "2013-2018",
+    "status": "Discontinued",
+    "dial_colors": "Blue; Silver",
+    "movement": "Cal. 25-21 PS IRM, 8-day manual"
+  },
+  {
+    "reference": "4962/200R-001",
+    "collection": "Gondolo",
+    "model": "Gondolo Serata",
+    "case_metal": "Rose gold",
+    "production_years": "2020s-current",
+    "status": "Current",
+    "dial_colors": "Brown lacquer; Purple lacquer",
+    "movement": "Cal. E 15 (quartz)"
+  },
+  {
+    "reference": "5821/1A-001",
+    "collection": "Cubitus",
+    "model": "Cubitus Date",
+    "case_metal": "Stainless steel",
+    "production_years": "2024-current",
+    "status": "Current",
+    "dial_colors": "Blue gradient",
+    "movement": "Cal. 26-330 S C, time/date"
+  },
+  {
+    "reference": "5821/1A-010",
+    "collection": "Cubitus",
+    "model": "Cubitus Date",
+    "case_metal": "Stainless steel",
+    "production_years": "2024-current",
+    "status": "Current",
+    "dial_colors": "Black",
+    "movement": "Cal. 26-330 S C, time/date"
+  },
+  {
+    "reference": "5821/1R-001",
+    "collection": "Cubitus",
+    "model": "Cubitus Date",
+    "case_metal": "Rose gold",
+    "production_years": "2024-current",
+    "status": "Current",
+    "dial_colors": "Brown",
+    "movement": "Cal. 26-330 S C, time/date"
+  },
+  {
+    "reference": "5822P-001",
+    "collection": "Cubitus",
+    "model": "Cubitus Calendar Moonphase",
+    "case_metal": "Platinum",
+    "production_years": "2024-current",
+    "status": "Current",
+    "dial_colors": "Blue gradient",
+    "movement": "Cal. 240 PS CI J LU, calendar moonphase"
+  },
+  {
+    "reference": "5840P-001",
+    "collection": "Cubitus",
+    "model": "Cubitus Perpetual Calendar Skeleton",
+    "case_metal": "Platinum",
+    "production_years": "2025-current",
+    "status": "Current",
+    "dial_colors": "Openworked blue",
+    "movement": "Cal. 240 Q skeleton, perpetual calendar"
+  }
+]

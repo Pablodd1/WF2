@@ -4,9 +4,11 @@ import { StatsBar } from '@/components/StatsBar';
 import { Footer } from '@/components/Footer';
 import { ProcessingTheater } from '@/sections/ProcessingTheater';
 import { InventoryGrid } from '@/sections/InventoryGrid';
+import { LiquidityTaxonomy } from '@/sections/LiquidityTaxonomy';
+import { EnhancedResidue } from '@/sections/EnhancedResidue';
+import { WorkflowSidebar } from '@/components/WorkflowSidebar';
 import { DetailModal } from '@/components/DetailModal';
 import { EditModal } from '@/components/EditModal';
-import { ResidueBin } from '@/components/ResidueBin';
 import { AIInsights } from '@/sections/AIInsights';
 import { useWatchData } from '@/hooks/useWatchData';
 import type { WatchRecord } from '@/types';
@@ -19,7 +21,6 @@ export default function Home() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<WatchRecord | null>(null);
-  const [residueOpen, setResidueOpen] = useState(false);
 
   // ---- Handlers ----
 
@@ -73,6 +74,13 @@ export default function Home() {
     setEditingRecord(null);
   }, []);
 
+  const handleExportExcel = useCallback(() => {
+    const link = document.createElement('a');
+    link.href = '/Patek_Philippe_Analytics.xlsx';
+    link.download = 'Patek_Philippe_Analytics.xlsx';
+    link.click();
+  }, []);
+
   return (
     <Layout
       totalProcessed={stats.totalProcessed}
@@ -81,8 +89,17 @@ export default function Home() {
       throughputRate={stats.throughputRate}
       avgLatency={stats.avgLatency}
     >
-      {/* Stats Bar */}
-      <StatsBar
+      {/* Workflow Sidebar */}
+      <WorkflowSidebar
+        totalRecords={stats.totalProcessed}
+        normalizedCount={stats.normalizedCount}
+        residueCount={stats.residueCount}
+        onExportExcel={handleExportExcel}
+      />
+
+      <div className="ml-0">
+        {/* Stats Bar */}
+        <StatsBar
         totalProcessed={stats.totalProcessed}
         accuracyRate={stats.accuracyRate}
         mlAvgTime={stats.mlAvgTime}
@@ -102,21 +119,24 @@ export default function Home() {
         onSelectRecord={handleSelectRecord}
       />
 
+      {/* Liquidity & Taxonomy — NEW */}
+      <LiquidityTaxonomy />
+
       {/* AI Intelligence Center */}
       <AIInsights
         records={records}
         onSelectRecord={handleSelectRecord}
       />
 
-      {/* Residue Bin */}
-      <ResidueBin
+      {/* Enhanced Residue Bin — NEW */}
+      <EnhancedResidue
         records={records}
-        expanded={residueOpen}
-        onToggle={() => setResidueOpen(!residueOpen)}
         onApprove={handleApprove}
         onEdit={handleOpenEdit}
         onDelete={handleDelete}
       />
+
+      </div>
 
       {/* Detail Modal */}
       <DetailModal
