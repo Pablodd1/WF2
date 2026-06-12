@@ -14,7 +14,7 @@ interface WatchCardProps {
 }
 
 export function WatchCard({ record, index, onSelect }: WatchCardProps) {
-  const confidencePct = Math.round((record.confidence ?? 0) * 100);
+  const confidencePct = Math.round(record.confidence ?? 0);
 
   const statusColor =
     confidencePct >= 85

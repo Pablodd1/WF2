@@ -91,7 +91,7 @@ export function useInventoryFilters(records: WatchRecord[]) {
 
       if (conditions.length > 0 && !conditions.includes(record.condition)) return false;
 
-      const confPct = Math.round((record.confidence ?? 0) * 100);
+      const confPct = Math.round(record.confidence ?? 0);
       if (confPct < confidenceMin) return false;
 
       return true;

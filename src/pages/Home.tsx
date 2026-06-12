@@ -1,31 +1,76 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useCallback } from 'react';
 import { Layout } from '@/components/Layout';
 import { StatsBar } from '@/components/StatsBar';
 import { Footer } from '@/components/Footer';
 import { ProcessingTheater } from '@/sections/ProcessingTheater';
 import { InventoryGrid } from '@/sections/InventoryGrid';
+import { DetailModal } from '@/components/DetailModal';
+import { EditModal } from '@/components/EditModal';
+import { ResidueBin } from '@/components/ResidueBin';
 import { useWatchData } from '@/hooks/useWatchData';
 import type { WatchRecord } from '@/types';
-import { AlertTriangle, ChevronDown } from 'lucide-react';
-
-const sectionVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0, 0, 0.2, 1] as [number, number, number, number] } },
-};
 
 export default function Home() {
   const { records, loading, stats } = useWatchData();
+
+  // Modal state
   const [selectedRecord, setSelectedRecord] = useState<WatchRecord | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<WatchRecord | null>(null);
   const [residueOpen, setResidueOpen] = useState(false);
 
-  const handleSelectRecord = (record: WatchRecord) => {
+  // ---- Handlers ----
+
+  const handleSelectRecord = useCallback((record: WatchRecord) => {
     setSelectedRecord(record);
-    // Detail modal will be implemented by another agent
-    // For now, just log the selection
+    setDetailModalOpen(true);
+  }, []);
+
+  const handleCloseDetail = useCallback(() => {
+    setDetailModalOpen(false);
+    setSelectedRecord(null);
+  }, []);
+
+  const handleOpenEdit = useCallback((record: WatchRecord) => {
+    setEditingRecord(record);
+    setEditModalOpen(true);
+    setDetailModalOpen(false);
+    setSelectedRecord(null);
+  }, []);
+
+  const handleCloseEdit = useCallback(() => {
+    setEditModalOpen(false);
+    setEditingRecord(null);
+  }, []);
+
+  const handleApprove = useCallback((record: WatchRecord) => {
     // eslint-disable-next-line no-console
-    console.log('Selected record:', record.id);
-  };
+    console.log('Approve:', record.id);
+    setDetailModalOpen(false);
+    setSelectedRecord(null);
+  }, []);
+
+  const handleDelete = useCallback((record: WatchRecord) => {
+    // eslint-disable-next-line no-console
+    console.log('Delete:', record.id);
+    setDetailModalOpen(false);
+    setSelectedRecord(null);
+  }, []);
+
+  const handleFlag = useCallback((record: WatchRecord) => {
+    // eslint-disable-next-line no-console
+    console.log('Flag:', record.id);
+    setDetailModalOpen(false);
+    setSelectedRecord(null);
+  }, []);
+
+  const handleSaveEdit = useCallback((record: WatchRecord) => {
+    // eslint-disable-next-line no-console
+    console.log('Save & Re-run:', record.id);
+    setEditModalOpen(false);
+    setEditingRecord(null);
+  }, []);
 
   return (
     <Layout
@@ -44,83 +89,46 @@ export default function Home() {
       />
 
       {/* Processing Theater Section */}
-      {loading ? (
-        <motion.section
-          initial="hidden"
-          animate="visible"
-          variants={sectionVariants}
-          className="px-5 mt-4"
-        >
-          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-gold-primary mb-3">
-            LIVE PROCESSING THEATER
-          </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr_1fr] gap-3" style={{ minHeight: 520 }}>
-            <div className="bg-bg-card border border-border-default rounded-md p-3 flex items-center justify-center text-muted text-sm">
-              Loading stream data...
-            </div>
-            <div className="bg-bg-card border border-border-default rounded-md p-3 flex items-center justify-center text-muted text-sm">
-              Loading pipeline...
-            </div>
-            <div className="bg-bg-card border border-border-default rounded-md p-3 flex items-center justify-center text-muted text-sm">
-              Loading results...
-            </div>
-          </div>
-        </motion.section>
-      ) : (
-        <ProcessingTheater
-          records={records}
-          normalizedCount={stats.normalizedCount}
-          residueCount={stats.residueCount}
-        />
-      )}
+      <ProcessingTheater
+        records={records}
+        normalizedCount={stats.normalizedCount}
+        residueCount={stats.residueCount}
+      />
 
       {/* Inventory Section */}
-      <motion.section
-        initial="hidden"
-        animate="visible"
-        variants={{ ...sectionVariants, visible: { ...sectionVariants.visible, transition: { ...sectionVariants.visible.transition, delay: 0.15 } } }}
-        className="px-5 mt-8"
-      >
-        <InventoryGrid records={records} onSelectRecord={handleSelectRecord} />
-      </motion.section>
+      <InventoryGrid
+        records={records}
+        onSelectRecord={handleSelectRecord}
+      />
 
-      {/* Residue Bin Section */}
-      <motion.section
-        initial="hidden"
-        animate="visible"
-        variants={{ ...sectionVariants, visible: { ...sectionVariants.visible, transition: { ...sectionVariants.visible.transition, delay: 0.3 } } }}
-        className="px-5 mt-8 mb-8"
-      >
-        <button
-          onClick={() => setResidueOpen(!residueOpen)}
-          className="w-full h-11 bg-bg-card border border-border-default rounded-md px-4 flex items-center justify-between hover:border-border-hover transition-colors cursor-pointer"
-        >
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={16} className="text-warning" />
-            <span className="text-sm font-bold uppercase text-warning">RESIDUE BIN</span>
-            <span className="text-[10px] font-semibold text-warning bg-warning-dim rounded-full px-2 py-0.5">
-              {stats.residueCount} items
-            </span>
-          </div>
-          <ChevronDown
-            size={16}
-            className={`text-muted transition-transform duration-300 ${residueOpen ? 'rotate-180' : ''}`}
-          />
-        </button>
-        {residueOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="bg-bg-card border border-t-0 border-border-default rounded-b-md p-4"
-          >
-            <p className="text-sm text-muted text-center py-8">
-              Residue bin content will be implemented here
-            </p>
-          </motion.div>
-        )}
-      </motion.section>
+      {/* Residue Bin */}
+      <ResidueBin
+        records={records}
+        expanded={residueOpen}
+        onToggle={() => setResidueOpen(!residueOpen)}
+        onApprove={handleApprove}
+        onEdit={handleOpenEdit}
+        onDelete={handleDelete}
+      />
+
+      {/* Detail Modal */}
+      <DetailModal
+        record={selectedRecord}
+        open={detailModalOpen}
+        onClose={handleCloseDetail}
+        onApprove={handleApprove}
+        onEdit={handleOpenEdit}
+        onFlag={handleFlag}
+        onDelete={handleDelete}
+      />
+
+      {/* Edit Modal */}
+      <EditModal
+        record={editingRecord}
+        open={editModalOpen}
+        onClose={handleCloseEdit}
+        onSave={handleSaveEdit}
+      />
 
       <Footer />
     </Layout>

@@ -1,0 +1,434 @@
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Package, Paperclip, Star, Check, Settings, AlertTriangle, Trash2 } from 'lucide-react';
+import type { WatchRecord, FailureFlag } from '@/types';
+import { BrandBadge } from './ui/BrandBadge';
+import { ConditionBadge } from './ui/ConditionBadge';
+import { ConfidenceRing } from './ui/ConfidenceRing';
+import { DialColorSwatch } from './ui/DialColorSwatch';
+import { DemandBadge } from './ui/DemandBadge';
+import { StageDot } from './ui/StageDot';
+
+interface DetailModalProps {
+  record: WatchRecord | null;
+  open: boolean;
+  onClose: () => void;
+  onApprove: (record: WatchRecord) => void;
+  onEdit: (record: WatchRecord) => void;
+  onFlag: (record: WatchRecord) => void;
+  onDelete: (record: WatchRecord) => void;
+}
+
+const backdropVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.2 } },
+  exit: { opacity: 0, transition: { duration: 0.2 } },
+};
+
+const modalVariants = {
+  hidden: { opacity: 0, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    transition: { duration: 0.3, ease: [0, 0, 0.2, 1] as [number, number, number, number] },
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.95,
+    transition: { duration: 0.2, ease: [0.4, 0, 1, 1] as [number, number, number, number] },
+  },
+};
+
+const contentVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.05, duration: 0.3, ease: [0, 0, 0.2, 1] as [number, number, number, number] },
+  }),
+};
+
+const flagColors: Record<string, string> = {
+  YEAR_MISSING: 'bg-warning-dim text-warning',
+  DIAL_UNKNOWN: 'bg-info-dim text-info',
+  INCOMPLETE_REFERENCE: 'bg-[rgba(249,115,22,0.15)] text-[#F97316]',
+  BOXPAPERS_UNKNOWN: 'bg-[rgba(107,114,128,0.15)] text-text-muted',
+  LOW_SELLER_RATING: 'bg-purple-dim text-purple',
+  PRICE_OUTLIER: 'bg-danger-dim text-danger',
+  BRAND_UNCERTAIN: 'bg-warning-dim text-warning',
+  CURRENCY_MISMATCH: 'bg-info-dim text-info',
+};
+
+const stageColors: Record<string, string> = {
+  INGEST: '#3B82F6',
+  VALIDATE: '#F59E0B',
+  NORMALIZE: '#22C55E',
+  ENRICH: '#8B5CF6',
+  ML_SCORE: '#F97316',
+};
+
+const outcomeColors: Record<string, string> = {
+  HIGH: 'text-success',
+  RISING: 'text-info',
+  STABLE: 'text-warning',
+  LOW: 'text-text-muted',
+  DECLINING: 'text-danger',
+};
+
+function getStageDotState(stage: { status: string }): 'inactive' | 'active' | 'completed' | 'failed' {
+  if (stage.status === 'failed') return 'failed';
+  if (stage.status === 'completed') return 'completed';
+  if (stage.status === 'active') return 'active';
+  return 'inactive';
+}
+
+function formatTimestamp(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+}
+
+export function DetailModal({ record, open, onClose, onApprove, onEdit, onFlag, onDelete }: DetailModalProps) {
+  const [sourceExpanded, setSourceExpanded] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
+  // Handle escape key
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && open) onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [open, onClose]);
+
+  if (!record) return null;
+
+  const confidencePct = Math.round(record.confidence * 100);
+  const varianceGood = Math.abs(record.priceVariance) <= 10;
+  const varianceBad = Math.abs(record.priceVariance) > 20;
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <motion.div
+            variants={backdropVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="absolute inset-0 bg-black/70"
+            onClick={onClose}
+          />
+
+          {/* Modal Container */}
+          <motion.div
+            variants={modalVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="relative z-[110] w-full max-w-[900px] max-h-[90vh] bg-bg-card border border-border-active rounded-lg shadow-elevated shadow-gold overflow-hidden flex flex-col"
+          >
+            {/* Modal Header */}
+            <motion.div
+              custom={0}
+              variants={contentVariants}
+              initial="hidden"
+              animate="visible"
+              className="flex items-center justify-between px-5 py-4 border-b border-border-default flex-shrink-0"
+            >
+              <div className="flex items-center gap-3">
+                <BrandBadge brand={record.brand} />
+                <span className="font-mono text-xl font-bold text-text-primary">
+                  {record.reference || 'Unknown'}
+                </span>
+                <span className="text-[10px] text-gold-muted font-semibold uppercase tracking-[0.04em]">
+                  {record.family}
+                </span>
+              </div>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-md text-text-muted hover:text-gold-primary hover:bg-bg-elevated transition-colors cursor-pointer"
+                aria-label="Close modal"
+              >
+                <X size={20} />
+              </button>
+            </motion.div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="flex flex-col lg:flex-row">
+                {/* Left Column - Image Placeholder (40%) */}
+                <motion.div
+                  custom={1}
+                  variants={contentVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className="lg:w-[40%] p-5 flex flex-col"
+                >
+                  <div className="relative w-full aspect-square bg-bg-primary border border-border-default rounded-md flex items-center justify-center overflow-hidden">
+                    {/* Brand Watermark */}
+                    <span className="absolute inset-0 flex items-center justify-center text-gold-primary/5 text-4xl font-serif tracking-[0.2em] select-none pointer-events-none">
+                      PATEK PHILIPPE
+                    </span>
+                    {/* Watch Silhouette SVG */}
+                    <svg width="120" height="120" viewBox="0 0 120 120" fill="none" className="relative z-[1]">
+                      <ellipse cx="60" cy="60" rx="32" ry="40" stroke="#C9A96E" strokeWidth="1.5" />
+                      <ellipse cx="60" cy="60" rx="24" ry="30" stroke="#C9A96E" strokeWidth="1" />
+                      <line x1="60" y1="20" x2="60" y2="32" stroke="#C9A96E" strokeWidth="1.5" />
+                      <line x1="60" y1="88" x2="60" y2="100" stroke="#C9A96E" strokeWidth="1.5" />
+                      <line x1="36" y1="48" x2="44" y2="52" stroke="#C9A96E" strokeWidth="1" />
+                      <line x1="76" y1="52" x2="84" y2="48" stroke="#C9A96E" strokeWidth="1" />
+                      <line x1="36" y1="72" x2="44" y2="68" stroke="#C9A96E" strokeWidth="1" />
+                      <line x1="76" y1="68" x2="84" y2="72" stroke="#C9A96E" strokeWidth="1" />
+                    </svg>
+                    <span className="absolute bottom-4 text-sm text-text-muted">No Image Available</span>
+                  </div>
+                </motion.div>
+
+                {/* Right Column - Details (60%) */}
+                <motion.div
+                  custom={2}
+                  variants={contentVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className="lg:w-[60%] p-5 border-l border-border-default"
+                >
+                  {/* Dial Color */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <DialColorSwatch color={record.dialColor} size={14} />
+                  </div>
+
+                  {/* Price Section */}
+                  <div className="mb-4">
+                    <div className="text-2xl font-mono font-bold text-gold-primary">
+                      ${record.price.toLocaleString()}
+                    </div>
+                    <div className="text-sm text-text-muted mt-0.5">
+                      {record.originalCurrency} {record.originalPrice.toLocaleString()}
+                    </div>
+                  </div>
+
+                  {/* Specs Grid */}
+                  <div className="grid grid-cols-2 gap-3 mb-5">
+                    <div>
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Year</span>
+                      <span className="text-[11px] font-mono text-text-primary">{record.year ?? 'Unknown'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Condition</span>
+                      <ConditionBadge condition={record.condition} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Dial</span>
+                      <DialColorSwatch color={record.dialColor} size={14} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Box/Papers</span>
+                      <span className="flex items-center gap-1.5 text-[11px] text-text-secondary">
+                        <Package size={12} className={record.hasBox ? 'text-success' : 'text-text-muted'} />
+                        <Paperclip size={12} className={record.hasPapers ? 'text-success' : 'text-text-muted'} />
+                        <span>
+                          {record.hasBox && record.hasPapers ? 'Full Set' : record.hasBox ? 'Box Only' : record.hasPapers ? 'Papers Only' : 'None'}
+                        </span>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Seller Rating</span>
+                      <span className="flex items-center gap-0.5">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star
+                            key={i}
+                            size={12}
+                            className={i < record.sellerRating ? 'text-gold-primary fill-gold-primary' : 'text-bg-elevated'}
+                          />
+                        ))}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Days on Market</span>
+                      <span className="text-[11px] font-mono text-text-primary">{record.daysOnMarket} days</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Market Comparables</span>
+                      <span className="text-[11px] font-mono text-text-primary">{record.marketComparables}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">Source</span>
+                      <span className="text-[11px] font-mono text-text-primary uppercase">{record.source}</span>
+                    </div>
+                  </div>
+
+                  {/* ML Intelligence Section */}
+                  <div className="border-l-2 border-purple pl-4 mb-5 py-1">
+                    <span className="text-[10px] text-text-muted uppercase tracking-[0.08em] block mb-3">ML Intelligence</span>
+
+                    <div className="flex items-center gap-3 mb-2">
+                      <ConfidenceRing percentage={record.confidence} size={36} />
+                      <div>
+                        <span className="text-[10px] text-text-muted uppercase">Confidence</span>
+                        <span className="text-sm font-mono font-bold text-text-primary block">{confidencePct}%</span>
+                      </div>
+                    </div>
+
+                    <div className="mb-2">
+                      <span className="text-[10px] text-text-muted uppercase">ML Predicted Price</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-mono text-text-primary">${record.mlPredictedPrice.toLocaleString()}</span>
+                        <span className={`text-[11px] font-mono ${varianceGood ? 'text-success' : varianceBad ? 'text-danger' : 'text-warning'}`}>
+                          {record.priceVariance > 0 ? '+' : ''}{record.priceVariance.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 mb-2">
+                      <div>
+                        <span className="text-[10px] text-text-muted uppercase block">Demand</span>
+                        <DemandBadge forecast={record.demandForecast} />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-text-muted uppercase block">Outcome</span>
+                        <span className={`text-[11px] font-bold ${outcomeColors[record.outcomeClassification] ?? 'text-text-secondary'}`}>
+                          {record.outcomeClassification}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Flags Section */}
+                  {record.failureFlags.length > 0 && (
+                    <div className="mb-4">
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-2">Flags</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {record.failureFlags.map((flag: FailureFlag) => (
+                          <span
+                            key={flag}
+                            className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold ${flagColors[flag] ?? 'bg-warning-dim text-warning'}`}
+                          >
+                            {flag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Source Line - Collapsible */}
+                  <div className="mb-4">
+                    <button
+                      onClick={() => setSourceExpanded(!sourceExpanded)}
+                      className="flex items-center gap-1 text-[10px] text-text-muted uppercase tracking-wider hover:text-text-secondary transition-colors cursor-pointer"
+                    >
+                      <span>Source Message</span>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className={`transition-transform duration-200 ${sourceExpanded ? 'rotate-180' : ''}`}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                    <AnimatePresence>
+                      {sourceExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-2 p-2 bg-bg-card border border-border-default rounded font-mono text-[11px] text-text-secondary whitespace-pre-wrap break-all max-h-[150px] overflow-y-auto">
+                            {record.rawMessage}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Processing Log */}
+                  <div className="mb-4">
+                    <span className="text-[10px] text-text-muted uppercase tracking-[0.08em] block mb-2">Processing Log</span>
+                    <div className="relative pl-3">
+                      {/* Vertical connecting line */}
+                      <div className="absolute left-[6px] top-2 bottom-2 w-px bg-border-default" />
+                      {record.pipelineLog.map((stage, idx) => (
+                        <div key={idx} className="flex items-start gap-3 py-1 relative">
+                          <div className="relative z-[1] mt-0.5">
+                            <StageDot
+                              color={stageColors[stage.name] ?? '#6B7280'}
+                              state={getStageDotState(stage)}
+                              size={8}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span
+                              className="text-[10px] font-bold uppercase"
+                              style={{ color: stageColors[stage.name] ?? '#6B7280' }}
+                            >
+                              {stage.name}
+                            </span>
+                            <span className="text-[10px] text-text-secondary block">{stage.message}</span>
+                            <span className="text-[9px] text-text-muted font-mono">{formatTimestamp(stage.timestamp)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <motion.div
+              custom={3}
+              variants={contentVariants}
+              initial="hidden"
+              animate="visible"
+              className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border-default flex-shrink-0 flex-wrap"
+            >
+              <button
+                onClick={() => onApprove(record)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-sm font-medium bg-success-dim text-success hover:bg-success hover:text-bg-primary transition-colors cursor-pointer"
+              >
+                <Check size={14} />
+                Approve
+              </button>
+              <button
+                onClick={() => onEdit(record)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-sm font-medium bg-bg-elevated text-text-primary border border-border-default hover:bg-[rgba(201,169,110,0.15)] hover:text-gold-primary transition-colors cursor-pointer"
+              >
+                <Settings size={14} />
+                Edit
+              </button>
+              <button
+                onClick={() => onFlag(record)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-sm font-medium bg-warning-dim text-warning hover:bg-warning hover:text-bg-primary transition-colors cursor-pointer"
+              >
+                <AlertTriangle size={14} />
+                Flag for Review
+              </button>
+              <button
+                onClick={() => onDelete(record)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-sm font-medium bg-danger-dim text-danger border border-danger/30 hover:bg-danger hover:text-white transition-colors cursor-pointer"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
+            </motion.div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}

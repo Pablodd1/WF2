@@ -24,12 +24,12 @@ export interface WatchRecord {
   timestamp: string;
   brand: string;
   reference: string;
-  family: 'Nautilus' | 'Aquanaut' | 'Calatrava' | 'Grand Complications' | 'Complications' | 'Gondolo' | 'Twenty-4' | 'Other';
+  family: string;
   price: number;
   originalPrice: number;
-  originalCurrency: 'USD' | 'HKD' | 'EUR' | 'GBP';
+  originalCurrency: string;
   dialColor: string;
-  condition: 'New' | 'Used' | 'Like New' | 'Naked';
+  condition: string;
   hasBox: boolean;
   hasPapers: boolean;
   year: number | null;
@@ -38,13 +38,13 @@ export interface WatchRecord {
   confidence: number;
   mlPredictedPrice: number;
   priceVariance: number;
-  demandForecast: 'HIGH' | 'RISING' | 'STABLE' | 'LOW' | 'DECLINING';
-  outcomeClassification: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'PASS' | 'REVIEW';
+  demandForecast: string;
+  outcomeClassification: string;
   marketComparables: number;
   processingTime: number;
   pipelineLog: PipelineStage[];
   isResidue: boolean;
-  failureFlags: FailureFlag[];
+  failureFlags: string[];
   severity: 'CRITICAL' | 'WARNING' | 'INFO';
 }
 
