@@ -38,6 +38,8 @@ export interface WatchRecord {
   isResidue: boolean;
   failureFlags: string[];
   severity: 'CRITICAL' | 'WARNING' | 'INFO';
+  imageUrl?: string | null;
+  imageCount?: number;
 }
 
 export interface DashboardState {

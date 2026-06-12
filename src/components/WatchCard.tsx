@@ -41,14 +41,34 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
       className="group relative bg-bg-card border border-border-default rounded-md p-4 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-gold hover:border-border-hover flex flex-col"
       style={{ willChange: 'transform' }}
     >
-      {/* Status indicator dot */}
-      <span
-        className="absolute top-3 right-3 w-2 h-2 rounded-full"
-        style={{
-          backgroundColor: statusColor,
-          boxShadow: `0 0 8px ${statusColor}40`,
-        }}
-      />
+      {/* Watch Image */}
+      <div className="w-full aspect-square bg-bg-elevated rounded-md mb-3 overflow-hidden flex items-center justify-center relative">
+        {record.imageUrl ? (
+          <img
+            src={record.imageUrl}
+            alt={record.reference}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        ) : (
+          <img
+            src="/watch-silhouette.svg"
+            alt="Watch"
+            className="w-3/5 h-3/5 object-contain opacity-30"
+          />
+        )}
+        {/* Status indicator dot */}
+        <span
+          className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full border-2 border-bg-card"
+          style={{
+            backgroundColor: statusColor,
+            boxShadow: `0 0 8px ${statusColor}40`,
+          }}
+        />
+      </div>
 
       {/* Top row: BrandBadge + ConditionBadge left, ConfidenceRing right */}
       <div className="flex items-center justify-between mb-3">

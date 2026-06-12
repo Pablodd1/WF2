@@ -179,18 +179,32 @@ export function DetailModal({ record, open, onClose, onApprove, onEdit, onFlag, 
                     <span className="absolute inset-0 flex items-center justify-center text-gold-primary/5 text-4xl font-serif tracking-[0.2em] select-none pointer-events-none">
                       PATEK PHILIPPE
                     </span>
-                    {/* Watch Silhouette SVG */}
-                    <svg width="120" height="120" viewBox="0 0 120 120" fill="none" className="relative z-[1]">
-                      <ellipse cx="60" cy="60" rx="32" ry="40" stroke="#C9A96E" strokeWidth="1.5" />
-                      <ellipse cx="60" cy="60" rx="24" ry="30" stroke="#C9A96E" strokeWidth="1" />
-                      <line x1="60" y1="20" x2="60" y2="32" stroke="#C9A96E" strokeWidth="1.5" />
-                      <line x1="60" y1="88" x2="60" y2="100" stroke="#C9A96E" strokeWidth="1.5" />
-                      <line x1="36" y1="48" x2="44" y2="52" stroke="#C9A96E" strokeWidth="1" />
-                      <line x1="76" y1="52" x2="84" y2="48" stroke="#C9A96E" strokeWidth="1" />
-                      <line x1="36" y1="72" x2="44" y2="68" stroke="#C9A96E" strokeWidth="1" />
-                      <line x1="76" y1="68" x2="84" y2="72" stroke="#C9A96E" strokeWidth="1" />
-                    </svg>
-                    <span className="absolute bottom-4 text-sm text-text-muted">No Image Available</span>
+                    {/* Real Image or Silhouette */}
+                    {record.imageUrl ? (
+                      <img
+                        src={record.imageUrl}
+                        alt={record.reference}
+                        className="w-full h-full object-cover relative z-[1]"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <svg width="120" height="120" viewBox="0 0 120 120" fill="none" className="relative z-[1]">
+                          <ellipse cx="60" cy="60" rx="32" ry="40" stroke="#C9A96E" strokeWidth="1.5" />
+                          <ellipse cx="60" cy="60" rx="24" ry="30" stroke="#C9A96E" strokeWidth="1" />
+                          <line x1="60" y1="20" x2="60" y2="32" stroke="#C9A96E" strokeWidth="1.5" />
+                          <line x1="60" y1="88" x2="60" y2="100" stroke="#C9A96E" strokeWidth="1.5" />
+                          <line x1="36" y1="48" x2="44" y2="52" stroke="#C9A96E" strokeWidth="1" />
+                          <line x1="76" y1="52" x2="84" y2="48" stroke="#C9A96E" strokeWidth="1" />
+                          <line x1="36" y1="72" x2="44" y2="68" stroke="#C9A96E" strokeWidth="1" />
+                          <line x1="76" y1="68" x2="84" y2="72" stroke="#C9A96E" strokeWidth="1" />
+                        </svg>
+                        <span className="absolute bottom-4 text-sm text-text-muted">No Image Available</span>
+                      </>
+                    )}
                   </div>
                 </motion.div>
 
