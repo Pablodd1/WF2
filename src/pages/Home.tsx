@@ -3,8 +3,10 @@ import { motion } from 'framer-motion';
 import { Layout } from '@/components/Layout';
 import { StatsBar } from '@/components/StatsBar';
 import { Footer } from '@/components/Footer';
+import { InventoryGrid } from '@/sections/InventoryGrid';
 import { useWatchData } from '@/hooks/useWatchData';
-import { MessageSquare, Activity, FileSpreadsheet, Filter } from 'lucide-react';
+import type { WatchRecord } from '@/types';
+import { MessageSquare, Activity, FileSpreadsheet } from 'lucide-react';
 
 const sectionVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -13,7 +15,16 @@ const sectionVariants = {
 
 export default function Home() {
   const { records, loading, stats } = useWatchData();
+  const [selectedRecord, setSelectedRecord] = useState<WatchRecord | null>(null);
   const [residueOpen, setResidueOpen] = useState(false);
+
+  const handleSelectRecord = (record: WatchRecord) => {
+    setSelectedRecord(record);
+    // Detail modal will be implemented by another agent
+    // For now, just log the selection
+    // eslint-disable-next-line no-console
+    console.log('Selected record:', record.id);
+  };
 
   return (
     <Layout
@@ -106,17 +117,7 @@ export default function Home() {
         variants={{ ...sectionVariants, visible: { ...sectionVariants.visible, transition: { ...sectionVariants.visible.transition, delay: 0.15 } } }}
         className="px-5 mt-8"
       >
-        <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-gold-primary mb-3">
-          INVENTORY
-        </h2>
-        <div className="bg-bg-card border border-border-default rounded-md p-4" style={{ minHeight: 200 }}>
-          <div className="flex items-center justify-center text-muted text-sm h-full py-20">
-            <div className="flex items-center gap-2">
-              <Filter size={16} />
-              {loading ? 'Loading inventory...' : `${records.length.toLocaleString()} records loaded — inventory grid will appear here`}
-            </div>
-          </div>
-        </div>
+        <InventoryGrid records={records} onSelectRecord={handleSelectRecord} />
       </motion.section>
 
       {/* Residue Bin Section */}
