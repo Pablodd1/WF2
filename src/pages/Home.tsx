@@ -7,6 +7,7 @@ import { InventoryGrid } from '@/sections/InventoryGrid';
 import { DetailModal } from '@/components/DetailModal';
 import { EditModal } from '@/components/EditModal';
 import { ResidueBin } from '@/components/ResidueBin';
+import { AIInsights } from '@/sections/AIInsights';
 import { useWatchData } from '@/hooks/useWatchData';
 import type { WatchRecord } from '@/types';
 
@@ -97,6 +98,12 @@ export default function Home() {
 
       {/* Inventory Section */}
       <InventoryGrid
+        records={records}
+        onSelectRecord={handleSelectRecord}
+      />
+
+      {/* AI Intelligence Center */}
+      <AIInsights
         records={records}
         onSelectRecord={handleSelectRecord}
       />
