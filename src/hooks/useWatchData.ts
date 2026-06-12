@@ -37,6 +37,14 @@ interface RawRecord {
   sellerRating: number;
   daysOnMarket: number;
   stageLogs: RawStageLog[];
+  imageUrl?: string | null;
+  imageCount?: number;
+  imageConfirmed?: boolean;
+  autoResolvedFlags?: string[];
+  buyerCount?: number;
+  sellerCount?: number;
+  buyerSellerRatio?: number;
+  liquidityScore?: number;
 }
 
 function transformRecord(raw: RawRecord): WatchRecord {
@@ -106,6 +114,14 @@ function transformRecord(raw: RawRecord): WatchRecord {
     isResidue: raw.status === 'RESIDUE',
     failureFlags: raw.flags || [],
     severity,
+    imageUrl: raw.imageUrl || null,
+    imageCount: raw.imageCount || 0,
+    imageConfirmed: raw.imageConfirmed || false,
+    autoResolvedFlags: raw.autoResolvedFlags || [],
+    buyerCount: raw.buyerCount || 0,
+    sellerCount: raw.sellerCount || 0,
+    buyerSellerRatio: raw.buyerSellerRatio || 0,
+    liquidityScore: raw.liquidityScore || 0,
   };
 }
 

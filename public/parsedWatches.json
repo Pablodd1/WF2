@@ -78,7 +78,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-002",
@@ -157,7 +161,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-003",
@@ -238,7 +246,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-004",
@@ -317,7 +329,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-005",
@@ -398,7 +414,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-006",
@@ -479,7 +499,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-007",
@@ -560,7 +584,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-008",
@@ -641,7 +669,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-009",
@@ -722,7 +754,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-010",
@@ -803,7 +839,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-011",
@@ -884,7 +924,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-012",
@@ -963,7 +1007,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-013",
@@ -1044,7 +1092,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 3,
+    "sellerCount": 55,
+    "buyerSellerRatio": 0.05,
+    "liquidityScore": 11
   },
   {
     "id": "PP-014",
@@ -1125,7 +1177,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 1,
+    "sellerCount": 0,
+    "buyerSellerRatio": 1.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-015",
@@ -1205,7 +1261,11 @@
       "PRICE_OUTLIER"
     ],
     "severity": "CRITICAL",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-016",
@@ -1285,7 +1345,11 @@
       "PRICE_OUTLIER"
     ],
     "severity": "CRITICAL",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-017",
@@ -1368,7 +1432,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-018",
@@ -1451,7 +1519,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-019",
@@ -1534,7 +1606,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-020",
@@ -1616,7 +1692,11 @@
       "PRICE_OUTLIER"
     ],
     "severity": "CRITICAL",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-021",
@@ -1700,7 +1780,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 1,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-022",
@@ -1784,7 +1868,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-023",
@@ -1868,7 +1956,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-024",
@@ -1952,7 +2044,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 5,
+    "sellerCount": 0,
+    "buyerSellerRatio": 5.0,
+    "liquidityScore": 2
   },
   {
     "id": "PP-025",
@@ -2036,7 +2132,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 5,
+    "sellerCount": 0,
+    "buyerSellerRatio": 5.0,
+    "liquidityScore": 2
   },
   {
     "id": "PP-026",
@@ -2120,7 +2220,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 1,
+    "sellerCount": 0,
+    "buyerSellerRatio": 1.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-027",
@@ -2203,7 +2307,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-028",
@@ -2284,7 +2392,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-029",
@@ -2365,7 +2477,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-030",
@@ -2448,7 +2564,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 12,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 6
   },
   {
     "id": "PP-031",
@@ -2531,7 +2651,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-032",
@@ -2614,7 +2738,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-033",
@@ -2697,7 +2825,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-034",
@@ -2780,7 +2912,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-035",
@@ -2863,7 +2999,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-036",
@@ -2944,7 +3084,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-037",
@@ -3025,7 +3169,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-038",
@@ -3106,7 +3254,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-039",
@@ -3189,7 +3341,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-040",
@@ -3272,7 +3428,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-041",
@@ -3353,7 +3513,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-042",
@@ -3438,7 +3602,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-043",
@@ -3523,7 +3691,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-044",
@@ -3605,7 +3777,11 @@
       "PRICE_OUTLIER"
     ],
     "severity": "CRITICAL",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-045",
@@ -3687,7 +3863,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-046",
@@ -3769,7 +3949,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-047",
@@ -3853,7 +4037,11 @@
       "CONDITION_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-048",
@@ -3937,7 +4125,11 @@
       "CONDITION_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-049",
@@ -4018,7 +4210,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-050",
@@ -4101,7 +4297,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-051",
@@ -4182,7 +4382,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-052",
@@ -4263,7 +4467,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-053",
@@ -4346,7 +4554,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 181,
+    "sellerCount": 1283,
+    "buyerSellerRatio": 0.14,
+    "liquidityScore": 59
   },
   {
     "id": "PP-054",
@@ -4429,7 +4641,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 181,
+    "sellerCount": 1283,
+    "buyerSellerRatio": 0.14,
+    "liquidityScore": 59
   },
   {
     "id": "PP-055",
@@ -4512,7 +4728,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-056",
@@ -4595,7 +4815,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-057",
@@ -4677,7 +4901,11 @@
       "PRICE_OUTLIER"
     ],
     "severity": "CRITICAL",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-058",
@@ -4762,7 +4990,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-059",
@@ -4847,7 +5079,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-060",
@@ -4932,7 +5168,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-061",
@@ -5019,7 +5259,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 1,
+    "sellerCount": 0,
+    "buyerSellerRatio": 1.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-062",
@@ -5103,7 +5347,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-063",
@@ -5187,7 +5435,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-064",
@@ -5271,7 +5523,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 12,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 6
   },
   {
     "id": "PP-065",
@@ -5355,7 +5611,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-066",
@@ -5437,7 +5697,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "INFO",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-067",
@@ -5521,7 +5785,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-068",
@@ -5604,7 +5872,11 @@
       "PRICE_OUTLIER"
     ],
     "severity": "CRITICAL",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-069",
@@ -5687,7 +5959,11 @@
       "PRICE_OUTLIER"
     ],
     "severity": "CRITICAL",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-070",
@@ -5772,7 +6048,11 @@
       "CONDITION_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-071",
@@ -5857,7 +6137,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 38,
+    "sellerCount": 189,
+    "buyerSellerRatio": 0.2,
+    "liquidityScore": 39
   },
   {
     "id": "PP-072",
@@ -5940,7 +6224,11 @@
       "INCOMPLETE_REFERENCE"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-073",
@@ -6025,7 +6313,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 37,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 18
   },
   {
     "id": "PP-074",
@@ -6108,7 +6400,11 @@
       "INCOMPLETE_REFERENCE"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-075",
@@ -6192,7 +6488,11 @@
       "PRICE_OUTLIER"
     ],
     "severity": "CRITICAL",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 15,
+    "sellerCount": 1,
+    "buyerSellerRatio": 15.0,
+    "liquidityScore": 13
   },
   {
     "id": "PP-076",
@@ -6276,7 +6576,11 @@
       "PRICE_OUTLIER"
     ],
     "severity": "CRITICAL",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-077",
@@ -6360,7 +6664,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-078",
@@ -6445,7 +6753,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-079",
@@ -6530,7 +6842,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-080",
@@ -6615,7 +6931,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-081",
@@ -6700,7 +7020,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 1,
+    "sellerCount": 19,
+    "buyerSellerRatio": 0.05,
+    "liquidityScore": 10
   },
   {
     "id": "PP-082",
@@ -6785,7 +7109,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 170,
+    "sellerCount": 77,
+    "buyerSellerRatio": 2.21,
+    "liquidityScore": 68
   },
   {
     "id": "PP-083",
@@ -6867,7 +7195,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-084",
@@ -6953,7 +7285,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 37,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 18
   },
   {
     "id": "PP-085",
@@ -7035,7 +7371,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-086",
@@ -7120,7 +7460,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-087",
@@ -7202,7 +7546,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-088",
@@ -7284,7 +7632,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-089",
@@ -7366,7 +7718,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-090",
@@ -7451,7 +7807,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-091",
@@ -7533,7 +7893,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-092",
@@ -7618,7 +7982,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-093",
@@ -7703,7 +8071,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-094",
@@ -7785,7 +8157,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-095",
@@ -7867,7 +8243,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-096",
@@ -7949,7 +8329,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-097",
@@ -8034,7 +8418,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 2,
+    "sellerCount": 26,
+    "buyerSellerRatio": 0.08,
+    "liquidityScore": 14
   },
   {
     "id": "PP-098",
@@ -8119,7 +8507,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-099",
@@ -8201,7 +8593,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-100",
@@ -8286,7 +8682,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-101",
@@ -8368,7 +8768,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-102",
@@ -8453,7 +8857,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-103",
@@ -8538,7 +8946,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-104",
@@ -8623,7 +9035,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-105",
@@ -8708,7 +9124,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-106",
@@ -8793,7 +9213,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-107",
@@ -8878,7 +9302,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-108",
@@ -8963,7 +9391,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-109",
@@ -9045,7 +9477,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-110",
@@ -9130,7 +9566,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-111",
@@ -9215,7 +9655,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-112",
@@ -9300,7 +9744,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-113",
@@ -9382,7 +9830,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-114",
@@ -9467,7 +9919,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-115",
@@ -9552,7 +10008,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-116",
@@ -9637,7 +10097,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-117",
@@ -9722,7 +10186,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-118",
@@ -9807,7 +10275,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-119",
@@ -9892,7 +10364,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-120",
@@ -9977,7 +10453,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-121",
@@ -10062,7 +10542,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-122",
@@ -10147,7 +10631,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-123",
@@ -10232,7 +10720,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-124",
@@ -10314,7 +10806,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-125",
@@ -10399,7 +10895,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-126",
@@ -10484,7 +10984,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-127",
@@ -10569,7 +11073,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-128",
@@ -10654,7 +11162,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-129",
@@ -10736,7 +11248,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-130",
@@ -10818,7 +11334,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-131",
@@ -10903,7 +11423,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-132",
@@ -10985,7 +11509,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-133",
@@ -11070,7 +11598,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-134",
@@ -11152,7 +11684,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-135",
@@ -11234,7 +11770,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-136",
@@ -11316,7 +11856,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-137",
@@ -11401,7 +11945,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-138",
@@ -11483,7 +12031,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-139",
@@ -11565,7 +12117,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-140",
@@ -11647,7 +12203,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-141",
@@ -11732,7 +12292,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-142",
@@ -11817,7 +12381,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-143",
@@ -11902,7 +12470,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-144",
@@ -11987,7 +12559,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-145",
@@ -12069,7 +12645,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-146",
@@ -12154,7 +12734,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-147",
@@ -12239,7 +12823,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-148",
@@ -12324,7 +12912,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-149",
@@ -12409,7 +13001,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-150",
@@ -12494,7 +13090,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-151",
@@ -12579,7 +13179,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-152",
@@ -12664,7 +13268,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-153",
@@ -12749,7 +13357,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-154",
@@ -12834,7 +13446,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-155",
@@ -12916,7 +13532,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-156",
@@ -12991,7 +13611,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-157",
@@ -13066,7 +13690,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 27,
+    "sellerCount": 76,
+    "buyerSellerRatio": 0.36,
+    "liquidityScore": 55
   },
   {
     "id": "PP-158",
@@ -13139,7 +13767,11 @@
       "INCOMPLETE_REFERENCE"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 15,
+    "sellerCount": 1,
+    "buyerSellerRatio": 15.0,
+    "liquidityScore": 13
   },
   {
     "id": "PP-159",
@@ -13214,7 +13846,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 38,
+    "sellerCount": 189,
+    "buyerSellerRatio": 0.2,
+    "liquidityScore": 39
   },
   {
     "id": "PP-160",
@@ -13289,7 +13925,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 38,
+    "sellerCount": 189,
+    "buyerSellerRatio": 0.2,
+    "liquidityScore": 39
   },
   {
     "id": "PP-161",
@@ -13364,7 +14004,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 4,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 2
   },
   {
     "id": "PP-162",
@@ -13439,7 +14083,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 37,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 18
   },
   {
     "id": "PP-163",
@@ -13515,7 +14163,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-164",
@@ -13591,7 +14243,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 1,
+    "sellerCount": 0,
+    "buyerSellerRatio": 1.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-165",
@@ -13664,7 +14320,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-166",
@@ -13740,7 +14400,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-167",
@@ -13816,7 +14480,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-168",
@@ -13892,7 +14560,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-169",
@@ -13968,7 +14640,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-170",
@@ -14044,7 +14720,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-171",
@@ -14120,7 +14800,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-172",
@@ -14196,7 +14880,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-173",
@@ -14269,7 +14957,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-174",
@@ -14342,7 +15034,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-175",
@@ -14418,7 +15114,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-176",
@@ -14494,7 +15194,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-177",
@@ -14570,7 +15274,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-178",
@@ -14646,7 +15354,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-179",
@@ -14722,7 +15434,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-180",
@@ -14798,7 +15514,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-181",
@@ -14874,7 +15594,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-182",
@@ -14947,7 +15671,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-183",
@@ -15023,7 +15751,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-184",
@@ -15099,7 +15831,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-185",
@@ -15175,7 +15911,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-186",
@@ -15251,7 +15991,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-187",
@@ -15327,7 +16071,11 @@
       "DIAL_UNKNOWN",
       "BOXPAPERS_UNKNOWN"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-188",
@@ -15400,7 +16148,11 @@
       "BOXPAPERS_UNKNOWN"
     ],
     "severity": "WARNING",
-    "isResidue": true
+    "isResidue": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-189",
@@ -15476,7 +16228,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 4,
+    "sellerCount": 19,
+    "buyerSellerRatio": 0.21,
+    "liquidityScore": 35
   },
   {
     "id": "PP-190",
@@ -15552,7 +16308,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-191",
@@ -15629,7 +16389,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 5,
+    "sellerCount": 0,
+    "buyerSellerRatio": 5.0,
+    "liquidityScore": 2
   },
   {
     "id": "PP-192",
@@ -15706,7 +16470,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 2,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 1
   },
   {
     "id": "PP-193",
@@ -15783,7 +16551,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-194",
@@ -15860,7 +16632,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 465,
+    "sellerCount": 658,
+    "buyerSellerRatio": 0.71,
+    "liquidityScore": 100
   },
   {
     "id": "PP-195",
@@ -15937,7 +16713,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-196",
@@ -16014,7 +16794,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 1,
+    "sellerCount": 0,
+    "buyerSellerRatio": 1.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-197",
@@ -16091,7 +16875,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 0,
+    "buyerSellerRatio": 0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-198",
@@ -16168,7 +16956,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 1,
+    "sellerCount": 0,
+    "buyerSellerRatio": 1.0,
+    "liquidityScore": 0
   },
   {
     "id": "PP-199",
@@ -16245,7 +17037,11 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 0,
+    "sellerCount": 18,
+    "buyerSellerRatio": 0.0,
+    "liquidityScore": 9
   },
   {
     "id": "PP-200",
@@ -16322,6 +17118,10 @@
       "BOXPAPERS_UNKNOWN",
       "INCOMPLETE_REFERENCE"
     ],
-    "imageConfirmed": true
+    "imageConfirmed": true,
+    "buyerCount": 3,
+    "sellerCount": 26,
+    "buyerSellerRatio": 0.12,
+    "liquidityScore": 21
   }
 ]

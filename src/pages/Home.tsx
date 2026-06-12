@@ -7,6 +7,7 @@ import { InventoryGrid } from '@/sections/InventoryGrid';
 import { LiquidityTaxonomy } from '@/sections/LiquidityTaxonomy';
 import { EnhancedResidue } from '@/sections/EnhancedResidue';
 import { WorkflowSidebar } from '@/components/WorkflowSidebar';
+import { TabNav } from '@/components/TabNav';
 import { DetailModal } from '@/components/DetailModal';
 import { EditModal } from '@/components/EditModal';
 import { AIInsights } from '@/sections/AIInsights';
@@ -89,6 +90,9 @@ export default function Home() {
       throughputRate={stats.throughputRate}
       avgLatency={stats.avgLatency}
     >
+      {/* Tab Navigation */}
+      <TabNav totalProcessed={stats.totalProcessed} />
+
       {/* Workflow Sidebar */}
       <WorkflowSidebar
         totalRecords={stats.totalProcessed}

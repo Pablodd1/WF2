@@ -101,8 +101,42 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
       </div>
 
       {/* Price */}
-      <div className="text-gold-primary font-mono text-xl font-bold mb-3">
+      <div className="text-gold-primary font-mono text-xl font-bold mb-2">
         {formattedPrice}
+      </div>
+
+      {/* Liquidity / Taxonomy Badge */}
+      <div className="mb-3 p-2 bg-bg-elevated rounded border border-border-default">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[9px] text-text-muted uppercase tracking-wider">B/S Ratio</span>
+          <span className="text-[9px] font-mono font-bold text-info">
+            {record.buyerSellerRatio?.toFixed(2) || 'N/A'}
+          </span>
+        </div>
+        <div className="w-full h-1.5 bg-[#1E1E2E] rounded-full overflow-hidden flex mb-1">
+          <div
+            className="h-full bg-[#3B82F6]"
+            style={{ width: `${Math.min(100, (record.buyerCount || 0) / Math.max((record.buyerCount || 0) + (record.sellerCount || 0), 1) * 100)}%` }}
+          />
+          <div
+            className="h-full bg-[#C9A96E]"
+            style={{ width: `${Math.min(100, (record.sellerCount || 0) / Math.max((record.buyerCount || 0) + (record.sellerCount || 0), 1) * 100)}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[8px] text-text-muted">
+            B:{record.buyerCount || 0} S:{record.sellerCount || 0}
+          </span>
+          <span
+            className="text-[8px] font-bold px-1 rounded"
+            style={{
+              color: (record.liquidityScore || 0) >= 80 ? '#22C55E' : (record.liquidityScore || 0) >= 50 ? '#F59E0B' : '#6B7280',
+              background: `${(record.liquidityScore || 0) >= 80 ? '#22C55E' : (record.liquidityScore || 0) >= 50 ? '#F59E0B' : '#6B7280'}15`,
+            }}
+          >
+            LQ:{record.liquidityScore || 0}
+          </span>
+        </div>
       </div>
 
       {/* Details row: Year, Box/Papers, Seller Rating */}

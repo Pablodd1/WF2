@@ -42,6 +42,10 @@ export interface WatchRecord {
   imageCount?: number;
   imageConfirmed?: boolean;
   autoResolvedFlags?: string[];
+  buyerCount?: number;
+  sellerCount?: number;
+  buyerSellerRatio?: number;
+  liquidityScore?: number;
 }
 
 export interface DashboardState {
