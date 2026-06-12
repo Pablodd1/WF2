@@ -8,6 +8,7 @@ import { LiquidityTaxonomy } from '@/sections/LiquidityTaxonomy';
 import { EnhancedResidue } from '@/sections/EnhancedResidue';
 import { WorkflowSidebar } from '@/components/WorkflowSidebar';
 import { TabNav } from '@/components/TabNav';
+import { FloatingNav } from '@/components/FloatingNav';
 import { DetailModal } from '@/components/DetailModal';
 import { EditModal } from '@/components/EditModal';
 import { AIInsights } from '@/sections/AIInsights';
@@ -22,6 +23,10 @@ export default function Home() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<WatchRecord | null>(null);
+  // Track which residue records have been reviewed (for authentic workflow)
+  const [reviewedRecords, setReviewedRecords] = useState<Set<string>>(new Set());
+  const [approvedRecords, setApprovedRecords] = useState<Set<string>>(new Set());
+  const [deletedRecords, setDeletedRecords] = useState<Set<string>>(new Set());
 
   // ---- Handlers ----
 
@@ -48,22 +53,21 @@ export default function Home() {
   }, []);
 
   const handleApprove = useCallback((record: WatchRecord) => {
-    // eslint-disable-next-line no-console
-    console.log('Approve:', record.id);
+    setApprovedRecords((prev) => new Set(prev).add(record.id));
+    setReviewedRecords((prev) => new Set(prev).add(record.id));
     setDetailModalOpen(false);
     setSelectedRecord(null);
   }, []);
 
   const handleDelete = useCallback((record: WatchRecord) => {
-    // eslint-disable-next-line no-console
-    console.log('Delete:', record.id);
+    setDeletedRecords((prev) => new Set(prev).add(record.id));
+    setReviewedRecords((prev) => new Set(prev).add(record.id));
     setDetailModalOpen(false);
     setSelectedRecord(null);
   }, []);
 
   const handleFlag = useCallback((record: WatchRecord) => {
-    // eslint-disable-next-line no-console
-    console.log('Flag:', record.id);
+    setReviewedRecords((prev) => new Set(prev).add(record.id));
     setDetailModalOpen(false);
     setSelectedRecord(null);
   }, []);
@@ -138,9 +142,15 @@ export default function Home() {
         onApprove={handleApprove}
         onEdit={handleOpenEdit}
         onDelete={handleDelete}
+        approvedRecords={approvedRecords}
+        deletedRecords={deletedRecords}
+        reviewedRecords={reviewedRecords}
       />
 
       </div>
+
+      {/* Floating Navigation */}
+      <FloatingNav />
 
       {/* Detail Modal */}
       <DetailModal
