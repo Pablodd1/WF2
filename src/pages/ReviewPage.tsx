@@ -1,0 +1,486 @@
+import { useState, useMemo, useCallback } from 'react';
+import { Layout } from '@/components/Layout';
+import { TabNav } from '@/components/TabNav';
+import { useWatchData } from '@/hooks/useWatchData';
+import type { WatchRecord } from '@/types';
+import { Eye, Wand2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, HelpCircle, Save, RotateCcw } from 'lucide-react';
+
+interface Suggestion {
+  field: string;
+  value: string;
+  reason: string;
+  source: 'catalog' | 'claude' | 'gemini' | 'inference';
+}
+
+export default function ReviewPage() {
+  const { records, stats, loading } = useWatchData();
+  const [filterMinConfidence, setFilterMinConfidence] = useState(0);
+  const [filterMaxConfidence, setFilterMaxConfidence] = useState(100);
+  const [filterDial, setFilterDial] = useState<string>('all');
+  const [filterBrand, setFilterBrand] = useState<string>('all');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<WatchRecord | null>(null);
+  const [editForm, setEditForm] = useState<Partial<WatchRecord>>({});
+  const [suggestionsMap, setSuggestionsMap] = useState<Record<string, Suggestion[]>>({});
+  const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  const brands = useMemo(() => {
+    const set = new Set(records.map(r => r.brand).filter(Boolean));
+    return Array.from(set).sort();
+  }, [records]);
+
+  const dials = useMemo(() => {
+    const set = new Set(records.map(r => r.dialColor).filter(Boolean));
+    return Array.from(set).sort();
+  }, [records]);
+
+  const filtered = useMemo(() => {
+    return records.filter(r => {
+      if (r.confidence < filterMinConfidence || r.confidence > filterMaxConfidence) return false;
+      if (filterDial !== 'all' && r.dialColor !== filterDial) return false;
+      if (filterBrand !== 'all' && r.brand !== filterBrand) return false;
+      return true;
+    }).sort((a, b) => a.confidence - b.confidence);
+  }, [records, filterMinConfidence, filterMaxConfidence, filterDial, filterBrand]);
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpandedId(prev => prev === id ? null : id);
+  }, []);
+
+  const startEdit = useCallback((record: WatchRecord) => {
+    setEditingRecord(record);
+    setEditForm({
+      reference: record.reference,
+      dialColor: record.dialColor,
+      brand: record.brand,
+      price: record.price,
+      condition: record.condition,
+    });
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditingRecord(null);
+    setEditForm({});
+  }, []);
+
+  const saveEdit = useCallback(() => {
+    if (!editingRecord) return;
+    // In real app: send to backend + catalog.train()
+    setSavedIds(prev => new Set(prev).add(editingRecord.id));
+    setEditingRecord(null);
+    setEditForm({});
+  }, [editingRecord]);
+
+  const askAI = useCallback(async (record: WatchRecord) => {
+    setAiLoading(prev => ({ ...prev, [record.id]: true }));
+    try {
+      const res = await fetch('/api/ai-parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawMessage: record.rawMessage,
+          currentGuess: {
+            reference: record.reference,
+            dialColor: record.dialColor,
+            brand: record.brand,
+            price: record.price,
+            currency: record.originalCurrency,
+          }
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.parsed) {
+        const suggestions: Suggestion[] = [];
+        if (data.parsed.dialColor && data.parsed.dialColor !== record.dialColor) {
+          suggestions.push({
+            field: 'dialColor',
+            value: data.parsed.dialColor,
+            reason: `AI suggests ${data.parsed.dialColor} from reference suffix analysis`,
+            source: data.source as any,
+          });
+        }
+        if (data.parsed.reference && data.parsed.reference !== record.reference) {
+          suggestions.push({
+            field: 'reference',
+            value: data.parsed.reference,
+            reason: 'AI parsed full reference with suffix',
+            source: data.source as any,
+          });
+        }
+        if (data.parsed.brand && data.parsed.brand !== record.brand) {
+          suggestions.push({
+            field: 'brand',
+            value: data.parsed.brand,
+            reason: 'AI identified brand from reference pattern',
+            source: data.source as any,
+          });
+        }
+        setSuggestionsMap(prev => ({ ...prev, [record.id]: suggestions }));
+      }
+    } catch (e) {
+      console.error('AI parse failed:', e);
+    } finally {
+      setAiLoading(prev => ({ ...prev, [record.id]: false }));
+    }
+  }, []);
+
+  const applySuggestion = useCallback((recordId: string, suggestion: Suggestion) => {
+    setEditForm(prev => ({ ...prev, [suggestion.field]: suggestion.value }));
+    // If we're not in edit mode, start editing
+    const record = records.find(r => r.id === recordId);
+    if (record && !editingRecord) {
+      startEdit(record);
+      setEditForm({ [suggestion.field]: suggestion.value });
+    }
+  }, [records, editingRecord, startEdit]);
+
+  if (loading) {
+    return (
+      <Layout {...stats}>
+        <TabNav totalProcessed={stats.totalProcessed} />
+        <div className="p-8 text-center text-text-muted">Loading records...</div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout {...stats}>
+      <TabNav totalProcessed={stats.totalProcessed} />
+
+      <div className="p-5 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
+            <Eye size={24} className="text-gold-primary" />
+            Human Review Mode
+          </h1>
+          <p className="text-sm text-text-muted mt-1">
+            Review low-confidence parses, fix errors, and train the catalog. 
+            {filtered.length} records match current filters.
+          </p>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-bg-card border border-border-default rounded-lg p-4 mb-6 flex flex-wrap gap-4 items-end">
+          <div>
+            <label className="text-xs text-text-muted uppercase tracking-wider block mb-1">Min Confidence</label>
+            <select
+              value={filterMinConfidence}
+              onChange={e => setFilterMinConfidence(Number(e.target.value))}
+              className="bg-bg-elevated border border-border-default rounded px-3 py-1.5 text-sm text-text-primary"
+            >
+              <option value={0}>0%</option>
+              <option value={50}>50%</option>
+              <option value={60}>60%</option>
+              <option value={70}>70%</option>
+              <option value={80}>80%</option>
+              <option value={90}>90%</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-text-muted uppercase tracking-wider block mb-1">Max Confidence</label>
+            <select
+              value={filterMaxConfidence}
+              onChange={e => setFilterMaxConfidence(Number(e.target.value))}
+              className="bg-bg-elevated border border-border-default rounded px-3 py-1.5 text-sm text-text-primary"
+            >
+              <option value={100}>100%</option>
+              <option value={90}>90%</option>
+              <option value={80}>80%</option>
+              <option value={70}>70%</option>
+              <option value={60}>60%</option>
+              <option value={50}>50%</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-text-muted uppercase tracking-wider block mb-1">Brand</label>
+            <select
+              value={filterBrand}
+              onChange={e => setFilterBrand(e.target.value)}
+              className="bg-bg-elevated border border-border-default rounded px-3 py-1.5 text-sm text-text-primary"
+            >
+              <option value="all">All Brands</option>
+              {brands.map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-text-muted uppercase tracking-wider block mb-1">Dial Color</label>
+            <select
+              value={filterDial}
+              onChange={e => setFilterDial(e.target.value)}
+              className="bg-bg-elevated border border-border-default rounded px-3 py-1.5 text-sm text-text-primary"
+            >
+              <option value="all">All Dials</option>
+              {dials.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => {
+              setFilterMinConfidence(0);
+              setFilterMaxConfidence(100);
+              setFilterBrand('all');
+              setFilterDial('all');
+            }}
+            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+          >
+            <RotateCcw size={12} />
+            Reset
+          </button>
+        </div>
+
+        {/* Records List */}
+        <div className="space-y-3">
+          {filtered.slice(0, 200).map(record => {
+            const isExpanded = expandedId === record.id;
+            const isEditing = editingRecord?.id === record.id;
+            const suggestions = suggestionsMap[record.id] || [];
+            const isAiLoading = aiLoading[record.id];
+            const isSaved = savedIds.has(record.id);
+
+            let confidenceColor = 'text-emerald-400';
+            if (record.confidence < 60) confidenceColor = 'text-red-400';
+            else if (record.confidence < 80) confidenceColor = 'text-amber-400';
+
+            return (
+              <div
+                key={record.id}
+                className={`bg-bg-card border rounded-lg transition-all ${
+                  isExpanded ? 'border-gold-primary/50' : 'border-border-default hover:border-border-hover'
+                }`}
+              >
+                {/* Summary Row */}
+                <div
+                  className="flex items-center gap-4 p-4 cursor-pointer"
+                  onClick={() => toggleExpand(record.id)}
+                >
+                  <div className="flex-shrink-0">
+                    {record.confidence < 60 ? (
+                      <AlertTriangle size={18} className="text-red-400" />
+                    ) : record.confidence < 80 ? (
+                      <HelpCircle size={18} className="text-amber-400" />
+                    ) : (
+                      <CheckCircle size={18} className="text-emerald-400" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="font-bold text-text-primary">{record.reference}</span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-bg-elevated text-text-secondary">
+                        {record.dialColor}
+                      </span>
+                      <span className="text-xs text-text-muted">{record.brand}</span>
+                      <span className={`text-xs font-bold ${confidenceColor}`}>
+                        {record.confidence}%
+                      </span>
+                      {isSaved && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">
+                          Saved
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-text-muted mt-0.5 truncate">
+                      {record.rawMessage}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="text-right">
+                      <div className="text-sm font-bold text-text-primary">
+                        ${record.price?.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-text-muted">{record.originalCurrency}</div>
+                    </div>
+                    {isExpanded ? <ChevronUp size={16} className="text-text-muted" /> : <ChevronDown size={16} className="text-text-muted" />}
+                  </div>
+                </div>
+
+                {/* Expanded Detail */}
+                {isExpanded && (
+                  <div className="border-t border-border-default px-4 pb-4">
+                    {/* Original Message */}
+                    <div className="mt-4 mb-4">
+                      <label className="text-xs text-text-muted uppercase tracking-wider block mb-1">
+                        Original WhatsApp Message
+                      </label>
+                      <div className="bg-bg-elevated border border-border-default rounded p-3 text-sm text-text-secondary font-mono whitespace-pre-wrap">
+                        {record.rawMessage}
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    {record.description && (
+                      <div className="mb-4">
+                        <label className="text-xs text-text-muted uppercase tracking-wider block mb-1">
+                          Extracted Description
+                        </label>
+                        <div className="text-sm text-text-primary">{record.description}</div>
+                      </div>
+                    )}
+
+                    {/* Parsed Fields */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                      {isEditing ? (
+                        <>
+                          <div>
+                            <label className="text-xs text-text-muted block mb-1">Reference</label>
+                            <input
+                              value={editForm.reference || ''}
+                              onChange={e => setEditForm(p => ({ ...p, reference: e.target.value }))}
+                              className="w-full bg-bg-elevated border border-border-default rounded px-2 py-1 text-sm text-text-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-text-muted block mb-1">Dial Color</label>
+                            <input
+                              value={editForm.dialColor || ''}
+                              onChange={e => setEditForm(p => ({ ...p, dialColor: e.target.value }))}
+                              className="w-full bg-bg-elevated border border-border-default rounded px-2 py-1 text-sm text-text-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-text-muted block mb-1">Brand</label>
+                            <input
+                              value={editForm.brand || ''}
+                              onChange={e => setEditForm(p => ({ ...p, brand: e.target.value }))}
+                              className="w-full bg-bg-elevated border border-border-default rounded px-2 py-1 text-sm text-text-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-text-muted block mb-1">Price USD</label>
+                            <input
+                              type="number"
+                              value={editForm.price || 0}
+                              onChange={e => setEditForm(p => ({ ...p, price: Number(e.target.value) }))}
+                              className="w-full bg-bg-elevated border border-border-default rounded px-2 py-1 text-sm text-text-primary"
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="bg-bg-elevated rounded p-2">
+                            <div className="text-xs text-text-muted">Reference</div>
+                            <div className="text-sm font-bold text-text-primary">{record.reference}</div>
+                          </div>
+                          <div className="bg-bg-elevated rounded p-2">
+                            <div className="text-xs text-text-muted">Dial Color</div>
+                            <div className="text-sm font-bold text-text-primary">{record.dialColor}</div>
+                          </div>
+                          <div className="bg-bg-elevated rounded p-2">
+                            <div className="text-xs text-text-muted">Brand</div>
+                            <div className="text-sm font-bold text-text-primary">{record.brand}</div>
+                          </div>
+                          <div className="bg-bg-elevated rounded p-2">
+                            <div className="text-xs text-text-muted">Price (USD)</div>
+                            <div className="text-sm font-bold text-text-primary">${record.price?.toLocaleString()}</div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Confidence Reasons */}
+                    <div className="mb-4">
+                      <label className="text-xs text-text-muted uppercase tracking-wider block mb-1">
+                        Confidence Breakdown
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {(record as any).confidenceReasons?.map((reason: string, i: number) => (
+                          <span key={i} className="text-xs px-2 py-1 rounded bg-bg-elevated text-text-secondary capitalize">
+                            {reason.replace(/_/g, ' ')}
+                          </span>
+                        )) || (
+                          <span className="text-xs text-text-muted">Confidence computed from parsing quality</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* AI Suggestions */}
+                    {suggestions.length > 0 && (
+                      <div className="mb-4">
+                        <label className="text-xs text-text-muted uppercase tracking-wider block mb-1">
+                          AI Suggestions
+                        </label>
+                        <div className="space-y-2">
+                          {suggestions.map((s, i) => (
+                            <div key={i} className="flex items-center gap-3 bg-bg-elevated rounded p-2">
+                              <Wand2 size={14} className="text-gold-primary" />
+                              <div className="flex-1">
+                                <div className="text-sm text-text-primary">
+                                  <span className="font-bold">{s.field}:</span> {s.value}
+                                </div>
+                                <div className="text-xs text-text-muted">{s.reason}</div>
+                              </div>
+                              <button
+                                onClick={() => applySuggestion(record.id, s)}
+                                className="text-xs px-2 py-1 rounded bg-gold-primary/20 text-gold-primary hover:bg-gold-primary/30 transition-colors"
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-3">
+                      {isEditing ? (
+                        <>
+                          <button
+                            onClick={saveEdit}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors text-sm"
+                          >
+                            <Save size={14} />
+                            Save & Train Catalog
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            className="px-3 py-1.5 rounded bg-bg-elevated text-text-muted hover:text-text-primary transition-colors text-sm"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => startEdit(record)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-gold-primary/20 text-gold-primary hover:bg-gold-primary/30 transition-colors text-sm"
+                          >
+                            Edit Fields
+                          </button>
+                          <button
+                            onClick={() => askAI(record)}
+                            disabled={isAiLoading}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-bg-elevated text-text-secondary hover:text-text-primary transition-colors text-sm disabled:opacity-50"
+                          >
+                            <Wand2 size={14} />
+                            {isAiLoading ? 'Asking AI...' : 'Ask AI'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {filtered.length === 0 && (
+          <div className="text-center py-12 text-text-muted">
+            No records match the current filters.
+          </div>
+        )}
+
+        {filtered.length > 200 && (
+          <div className="text-center py-4 text-xs text-text-muted">
+            Showing 200 of {filtered.length} records. Use filters to narrow results.
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}

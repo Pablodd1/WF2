@@ -46,6 +46,7 @@ export interface WatchRecord {
   sellerCount?: number;
   buyerSellerRatio?: number;
   liquidityScore?: number;
+  description?: string;
 }
 
 export interface DashboardState {

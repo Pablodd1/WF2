@@ -49,6 +49,7 @@ interface RawRecord {
   buyerSellerRatio?: number;
   liquidityScore?: number;
   isResidue?: boolean;
+  description?: string;
 }
 
 interface EnrichedRef {
@@ -170,6 +171,7 @@ function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>):
     sellerCount,
     buyerSellerRatio,
     liquidityScore,
+    description: raw.description || '',
   };
 }
 
@@ -189,12 +191,30 @@ export function useWatchData() {
         return res.json();
       }).catch(() => [] as EnrichedRef[]),
     ])
-      .then(([rawData, enrichedData]: [RawRecord[], EnrichedRef[]]) => {
+      .then(([rawData, enrichedData]: [any, EnrichedRef[]]) => {
+        let records: RawRecord[];
+        if (Array.isArray(rawData) && rawData.length > 0 && Array.isArray(rawData[0])) {
+          const rows = rawData as any[][];
+          records = rows.map((row) => ({
+            id: row[0], hash: '', sourceType: 'WhatsApp', sourceLine: row[8] || '',
+            brand: row[1], reference: row[2], family: '', dialColor: row[3], condition: row[7],
+            boxPapers: '', price: row[4], currency: row[6], priceUSD: row[5], year: null,
+            seller: '', location: '', confidence: row[9], status: 'NORMALIZED', flags: [],
+            timestamp: '', mlPredictedPrice: 0, mlPriceConfidence: 0, mlDemandForecast: '',
+            mlOutcomeClass: '', mlOutcomeConfidence: 0, marketComparables: 0, sellerRating: 0,
+            daysOnMarket: 0, stageLogs: [], imageUrl: row[13] || null, imageCount: 0,
+            imageConfirmed: row[14] || false, autoResolvedFlags: [], buyerCount: 0, sellerCount: 0,
+            buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10],
+            description: row[15] || '',
+          }));
+        } else {
+          records = rawData as RawRecord[];
+        }
         const enrichedMap = new Map<string, EnrichedRef>();
         enrichedData.forEach((e) => {
           if (e.reference) enrichedMap.set(e.reference, e);
         });
-        const transformed = rawData.map((r) => transformRecord(r, enrichedMap));
+        const transformed = records.map((r) => transformRecord(r, enrichedMap));
         setRecords(transformed);
         setLoading(false);
       })
