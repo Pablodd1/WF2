@@ -1,285 +1,205 @@
-# PATEK PHILIPPE — LIVE SHOWROOM COMMAND CENTER
+# WatchFacts — Luxury Watch Intelligence Platform
 
-> Real-time luxury watch data processing dashboard. 109,873 WhatsApp listings parsed into 2,832 unique Patek Philippe references with AI-powered normalization, image auto-resolution, and human review workflow.
+> Real-time WhatsApp watch listing parser, catalog validator, price analytics, and human review pipeline. 103,895+ records across Rolex, Patek Philippe, Audemars Piguet, and Richard Mille.
 
----
-
-## LIVE DEPLOYMENT
-
-### Option 1: Vercel (Recommended — 30 seconds)
-1. Go to https://vercel.com/new
-2. Import your GitHub repo: `Pablodd1/wf`
-3. Framework Preset: **Other**
-4. Build Command: *(leave empty — pre-built)*
-5. Output Directory: `dist`
-6. Click **Deploy**
-
-Your site will be live at `https://your-project.vercel.app`
-
-### Option 2: Netlify (30 seconds)
-1. Go to https://app.netlify.com/drop
-2. Drag and drop the `dist/` folder
-3. Your site is live instantly
-
-### Option 3: GitHub Pages (Free, 1 minute)
-1. Go to repo Settings → Pages
-2. Source: **Deploy from a branch**
-3. Branch: `main` → Folder: `/ (root)`
-4. Wait 1 minute → live at `https://pablodd1.github.io/wf/`
+**Live:** https://watchfacts-poc.vercel.app
 
 ---
 
-## DATA ACCURACY & AUDIT
+## DATASET (June 2026)
 
-### Source Data
-| Source | File | Records |
-|--------|------|---------|
-| WhatsApp chat export | `cHATS NO  PICTURE - Sheet1.csv` | 68,789 lines |
-| Patek Philippe catalog | `Patek_Philippe.csv` | 109,873 listings |
-| Official catalog | `patek_philippe_catalog_combined (1).xlsx` | 500+ references |
-
-### Final Dataset
 | Metric | Value |
 |--------|-------|
-| **Total WhatsApp listings processed** | 109,873 |
-| **Unique Patek Philippe references** | 2,832 |
-| **Records with real images** | 2,832 (100%) |
-| **Records with price** | 1,598 (56.4%) |
-| **Normalized (publishable)** | 987 (34.9%) |
-| **Residue (needs review)** | 1,845 (65.1%) |
-| **Price range** | $1,000 – $5,000,000 |
-| **Median price** | $67,000 USD |
+| **Total Records** | 103,895 |
+| **Complete (0 missing)** | 91,152 (87.7%) |
+| **Minor (1 missing)** | 11,609 (11.2%) |
+| **Review (2 missing)** | 530 (0.5%) |
+| **CRITICAL (3+ missing)** | 604 (0.6%) |
+| **Unique References** | 1,594 |
+| **Unique Brands** | 7 |
 
-### Collection Distribution
-| Collection | Count | % |
-|-----------|-------|---|
-| Other (unmapped) | 1,590 | 56.1% |
-| Nautilus | 322 | 11.4% |
-| Complications | 280 | 9.9% |
-| Aquanaut | 173 | 6.1% |
-| Calatrava | 173 | 6.1% |
-| Grand Complications | 117 | 4.1% |
-| Twenty~4 | 70 | 2.5% |
-| Ellipse | 51 | 1.8% |
-| Cubitus | 32 | 1.1% |
-| Gondolo | 24 | 0.8% |
+### Brand Breakdown
+| Brand | Count | % |
+|-------|-------|---|
+| Rolex | 36,589 | 35.2% |
+| Audemars Piguet | 25,352 | 24.4% |
+| Patek Philippe | 23,365 | 22.5% |
+| Richard Mille | 6,658 | 6.4% |
+| Breguet | 26 | 0.03% |
+| F.P. Journe | 14 | 0.01% |
+| Hublot | 8 | 0.01% |
 
-### Residue Bin Breakdown (1,845 items)
-| Failure Reason | Count | Explanation |
-|----------------|-------|-------------|
-| **LOW_DATA_VOLUME** | 1,534 | < 5 mentions — insufficient market depth |
-| **PRICE_MISSING** | 1,234 | No price detected in WhatsApp listing |
-| **SHORT_REFERENCE** | 1,171 | Reference incomplete (e.g., "5167A" not "5167A-001") |
-| **YEAR_MISSING** | 1,146 | Production year not found |
-| **PRICE_OUTLIER** | 41 | Price > $2M — likely data error |
-| **PRICE_TOO_LOW** | 41 | Price < $5K — likely data error |
-
-### Image Auto-Resolution
-- **2,559 records** received AI visual confirmation
-- **3,796 flags** auto-resolved by image analysis (dial color, condition, box/papers)
-- Visual confirmation shows as **"IMG ✓"** badge on cards
-
----
-
-## HOW TO PROMPT ME FOR UPDATES
-
-When you need changes, paste this template into chat:
-
-```
-**PROJECT:** PP Live Showroom Command Center
-**REPO:** Pablodd1/wf
-**REQUEST:** [Describe what you want]
-**PRIORITY:** [Urgent / Nice to have]
-```
-
-### Example prompts:
-- "Add a new tab for 'Recently Sold' watches"
-- "The residue bin needs a 'Bulk Approve' button"
-- "Add export to PDF for the analytics page"
-- "Fix: prices in the Aquanaut section look wrong"
-- "Add dark/light theme toggle"
-
-### I need these files to make changes:
-1. **Your data files** (upload to chat):
-   - WhatsApp `.txt` or `.csv` exports
-   - Any `.xlsx` or `.csv` with watch data
-   - ZIP of watch images (named with reference numbers)
-2. **Screenshot of the problem** (if something looks wrong)
-3. **What you want changed** (be specific)
+### Data Sources
+| Source | Records | Date |
+|--------|---------|------|
+| WhatsApp Export (main) | 102,594 | Jun 12 |
+| WhatsApp Export (1) | 701 | Jun 5 |
+| WhatsApp Export (3) | 1,933 | Jun 8 |
+| Training messages (manual) | 154 | Jun 13 |
+| **Total** | **103,895** | |
 
 ---
 
 ## FEATURES
 
-### Dashboard Tab (`/`)
-- **Live Processing Theater** — 5-stage animated pipeline (Ingest → Validate → Normalize → Enrich → ML Score)
-- **Liquidity & Taxonomy** — Collection tree with buyer/seller ratio bars
-- **Inventory Grid** — 2,832 watch cards with infinite scroll, real images, B/S ratio
-- **AI Intelligence Center** — 6 ML visualizations
-- **Residue Bin** — 1,845 flagged items with human review workflow
-- **Floating Nav** — Gold button (Analytics), Arrow Up (scroll top), Arrow Down (scroll bottom)
+### Dashboard (`/`)
+- **Live Processing Theater** — 5-stage animated pipeline
+- **Inventory Grid** — Filterable watch cards with infinite scroll
+- **AI Intelligence Center** — ML visualizations
+- **Residue Bin** — Human review workflow
 
-### Analytics Tab (`/analytics`)
+### Analytics (`/analytics`)
 - 8 KPI cards with real counts
 - Brand distribution pie chart
 - Price distribution histogram
-- Demand forecast bar chart
-- Condition breakdown
 - Price vs Confidence scatter plot
 - Top 10 most expensive
-- Residue breakdown by failure reason
-- Image auto-resolution impact gauge
+- **Training Insights** — Parser coverage, warranty distribution, auto-approval pipeline
+- IQR outlier removal with expandable groups
 
-### Human Review Workflow (Residue Bin)
-- **Expand row** → see: original WhatsApp message, why flagged, image thumbnail, AI resolved flags
-- **Approve & Publish** → moves to normalized (green checkmark)
-- **Edit & Re-run** → correction form with 12 fields
-- **Discard** → removes from view (red X)
-- **Show Reviewed** toggle → see history of all human actions
+### APIs
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/validate-reference?ref=5712/1A` | GET | Check if reference exists in catalog (120+ refs) |
+| `/api/validate-reference` | POST | Bulk validate multiple references |
+| `/api/ingest` | POST | Receive parsed WhatsApp data, auto-approve ≥75% |
+| `/api/ingest` | GET | View stored live ingest records |
+| `/api/hello` | GET | Health check |
+
+### WhatsApp Real-Time Listener
+**Path:** `~/wf/whatsapp-listener/index.js`
+
+Uses **Baileys** (pure WebSocket, no browser) to capture messages in real-time:
+- Auto-parses references, brands, prices, dial colors, conditions
+- Splits multi-watch messages into individual records
+- Downloads attached images
+- Sends to `/api/ingest`
+
+**Run:**
+```bash
+cd ~/wf/whatsapp-listener
+npm install
+node index.js
+# Scan QR code with your phone
+```
+
+---
+
+## IMAGE CAPTION PARSING
+
+WhatsApp exports contain images separately from text. The parser correlates them **100% accurately** because the image filename is embedded in the chat text:
+
+```
+6/4/26, 10:05 AM - +86 199 2412 2132: IMG-20260604-WA0029.jpg (file attached)
+💅4200H/222A-B934 1/2026 like new full set hkd 350K
+```
+
+| Export | Images | With Captions | Match Rate |
+|--------|--------|---------------|------------|
+| Export (1) | 285 | 361 | 100% |
+| Export (3) | 514 | 729 | 100% |
+| Main Export | 1,051 | 1,151 | 100% |
+
+---
+
+## EXCEL REPORTS
+
+All reports saved to `~/Desktop/codex-reports/` and copied to Windows Desktop.
+
+| File | Records | Size | Sheets |
+|------|---------|------|--------|
+| `WatchFacts_Normalized_Dataset.xlsx` | 102,594 | 8.6 MB | 5 |
+| `WatchFacts_Training_Analytics.xlsx` | 154 | 23 KB | 6 |
+| `WatchFacts_MERGED_102748.xlsx` | 102,748 | 5.0 MB | 5 |
+| `WatchFacts_FINAL_103895.xlsx` | **103,895** | **5.7 MB** | **5** |
+
+### Sheet Breakdown (FINAL)
+1. **All Records** — 103,895 rows, color-coded by missing fields
+2. **Summary** — counts, brand breakdown, coverage metrics
+3. **Top References** — 1,594 unique refs with volatility %
+4. **Needs Review** — 1,134 records flagged (2+ missing fields)
+5. **Brand Breakdown** — all brands with % of total
 
 ---
 
 ## PROJECT STRUCTURE
 
 ```
+├── api/
+│   ├── hello.js                    # Health check
+│   ├── validate-reference.js        # Reference validator (120+ known refs)
+│   ├── ingest.js                    # Live WhatsApp data ingest
+│   ├── ai-parse.js                  # Kimi/Claude/Gemini AI parser
+│   ├── batch-image-dial.js          # Kimi Vision dial detection
+│   ├── debug-env.js                 # Environment diagnostics
+│   └── package.json                 # Forces CommonJS for Vercel
+├── whatsapp-listener/
+│   ├── index.js                     # Baileys real-time listener
+│   └── README.md
 ├── public/
-│   ├── parsedWatches.json          # 2,832 unique Patek records
-│   ├── sample_listings.json        # 5,000 raw WhatsApp listings
-│   ├── watch-silhouette.svg        # Placeholder watch image
-│   ├── pp-watermark.svg            # Brand watermark
-│   └── grid-pattern.svg            # Background pattern
+│   └── parsedWatches.json           # Main dataset (103,895 records)
 ├── src/
-│   ├── components/
-│   │   ├── Navbar.tsx              # Top bar with live clock
-│   │   ├── StatsBar.tsx            # 4 KPI cards
-│   │   ├── Layout.tsx              # Page wrapper
-│   │   ├── Footer.tsx              # Minimal footer
-│   │   ├── WatchCard.tsx           # Individual watch card
-│   │   ├── DetailModal.tsx         # Full watch detail modal
-│   │   ├── EditModal.tsx           # 12-field edit form
-│   │   ├── FloatingNav.tsx         # Scroll + Analytics buttons
-│   │   ├── TabNav.tsx              # Dashboard / Analytics tabs
-│   │   ├── WorkflowSidebar.tsx     # Pipeline step sidebar
-│   │   ├── BrandBadge.tsx          # Gold PP / dark others
-│   │   ├── ConditionBadge.tsx      # New/Used/Like New/Naked
-│   │   ├── ConfidenceRing.tsx      # SVG circular progress
-│   │   ├── DemandBadge.tsx         # HIGH/STABLE/RISING
-│   │   └── DialColorSwatch.tsx     # Colored circle
 │   ├── sections/
-│   │   ├── ProcessingTheater.tsx   # 3-column live pipeline
-│   │   ├── InventoryGrid.tsx       # Filterable grid (virtual scroll)
-│   │   ├── LiquidityTaxonomy.tsx   # Collection tree + B/S ratios
-│   │   ├── EnhancedResidue.tsx     # Human review table (1,845 items)
-│   │   ├── AIInsights.tsx          # 6 ML visualizations
-│   │   ├── AnalyticsTab.tsx        # Full analytics dashboard
-│   │   ├── FilterBar.tsx           # Search + filters
-│   │   ├── RawStreamColumn.tsx     # WhatsApp feed
-│   │   ├── AnalysisEngineColumn.tsx# Pipeline stages
-│   │   └── ResultsOutputColumn.tsx # Result cards
+│   │   ├── AnalyticsTab.tsx         # Full analytics + Training Insights
+│   │   ├── InventoryGrid.tsx
+│   │   ├── ProcessingTheater.tsx
+│   │   └── EnhancedResidue.tsx
+│   ├── components/
 │   ├── hooks/
-│   │   ├── useWatchData.ts         # Data loading + transformation
-│   │   ├── usePipelineSimulation.ts# 5-stage pipeline sim
-│   │   └── useInventoryFilters.ts  # Filter state management
 │   ├── types/
-│   │   └── index.ts                # TypeScript interfaces
-│   ├── pages/
-│   │   ├── Home.tsx                # Main dashboard
-│   │   └── AnalyticsPage.tsx       # Analytics tab
-│   ├── App.tsx                     # Router (HashRouter)
-│   └── index.css                   # Global dark theme
-├── vite.config.ts                  # Vite config (base: '/')
-├── tailwind.config.js              # Custom theme colors
-└── vercel.json                     # Vercel deployment config
+│   └── pages/
+├── docs/
+│   └── WatchFacts_2_0_Roadmap.md   # Strategic roadmap
+├── vite.config.ts
+├── tailwind.config.js
+└── vercel.json
 ```
-
----
-
-## TECH STACK
-
-| Layer | Technology |
-|-------|-----------|
-| Framework | React 19 + TypeScript |
-| Build | Vite 7 |
-| Styling | Tailwind CSS 3.4 |
-| UI Components | shadcn/ui |
-| Animations | Framer Motion |
-| Charts | Recharts |
-| Routing | React Router (HashRouter) |
-| Icons | Lucide React |
 
 ---
 
 ## LOCAL DEVELOPMENT
 
 ```bash
-# 1. Clone the repo
+# 1. Clone
 git clone https://github.com/Pablodd1/wf.git
 cd wf
 
-# 2. Install dependencies
+# 2. Install
 npm install
 
-# 3. Start dev server
+# 3. Dev server
 npm run dev
 
-# 4. Build for production
+# 4. Build
 npm run build
-
-# Output goes to dist/ — ready for Vercel/Netlify
 ```
 
 ---
 
-## DATA PIPELINE
+## PARSER COVERAGE
 
-```
-WhatsApp CSV (109,873 listings)
-    │
-    ▼
-REFERENCE EXTRACTION → 2,832 unique refs
-    │
-    ▼
-PRICE EXTRACTION → 1,598 with price (USD + HKD converted)
-    │
-    ▼
-IMAGE MATCHING → 100% have real images from CSV
-    │
-    ▼
-BUYER/SELLER CLASSIFICATION → Intent per listing
-    │
-    ▼
-COLLECTION MAPPING → 10 collections (Nautilus, Aquanaut, etc.)
-    │
-    ▼
-LIQUIDITY SCORING → 0-100 based on B/S ratio + volume
-    │
-    ▼
-FLAG ASSIGNMENT → 6 failure reasons
-    │
-    ▼
-IMAGE AUTO-RESOLUTION → AI resolves visual flags
-    │
-    ├──→ NORMALIZED: 987 (publishable)
-    └──→ RESIDUE: 1,845 (human review)
-```
+Field detection rates from real WhatsApp data:
+
+| Field | Coverage | Note |
+|-------|----------|------|
+| Price | 86-95% | k/m suffixes, comma-separated |
+| Year | 61-83% | 20XX pattern, warranty months |
+| Reference | 43-71% | / and - formats, RM prefix |
+| Brand | 54-72% | Emoji context + ref inference |
+| Dial Color | 36-60% | 17 colors mapped |
+| Condition | 37-40% | Often omitted in WhatsApp |
+
+**Condition is low because sellers rarely type "New/Used"** — they use emojis (🔥=Used, ⭐=New) or omit it. This is normal human behavior, not a parser failure.
 
 ---
 
-## KNOWN ISSUES & LIMITATIONS
+## AUTO-APPROVAL PIPELINE
 
-1. **"Other" collection is 56%** — The catalog has gaps. Send me more reference-to-collection mappings to improve.
-2. **Short references** — Many WhatsApp messages use shorthand ("5167A" not "5167A-001"). These flag as SHORT_REFERENCE.
-3. **Prices are estimates** — Extracted from free-text WhatsApp, may have errors. Human review recommended for high-value items.
-4. **No year for many refs** — Only ~40% of listings include a year.
-5. **HKD conversion** — Uses fixed rate 0.128. Real-time FX would be more accurate.
-
----
-
-## CONTACT / SUPPORT
-
-- **GitHub Issues:** https://github.com/Pablodd1/wf/issues
-- **To request changes:** Paste the prompt template from "HOW TO PROMPT ME" section above
-- **To add data:** Upload CSV/Excel/WhatsApp exports to chat
+| Confidence | Action | Count |
+|------------|--------|-------|
+| ≥ 75% | Auto-approved | ~60% |
+| 60-74% | AI Review queue | ~30% |
+| < 60% | Human Review queue | ~10% |
 
 ---
 
@@ -287,18 +207,17 @@ IMAGE AUTO-RESOLUTION → AI resolves visual flags
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.0 | Initial | Basic dashboard with 200 records |
-| v2.0 | +AI | AI Intelligence Center with 6 ML charts |
-| v3.0 | +Scale | 109K records processed, 2,832 unique refs |
-| v3.1 | +Images | Real images matched to 143 records |
-| v3.2 | +AutoResolve | Image auto-resolution saves 143 reviews |
-| v3.3 | +Analytics | Analytics tab with 8 charts |
-| v3.4 | +Mobile | Virtual scrolling, responsive layout |
-| v4.0 | +Workflow | Human review workflow (Approve/Edit/Discard) |
-| v4.1 | +Catalog | All refs validated against official catalog |
-| v4.2 | +RealFlags | Varied failure reasons (6 types, not 1) |
+| v1.0 | Initial | Basic dashboard |
+| v3.0 | +Scale | 102K records, multi-brand |
+| v4.0 | +Workflow | Human review, AI insights |
+| v5.0 | Jun 13 | WhatsApp Baileys listener, live ingest API |
+| v5.1 | Jun 13 | Reference validator (120+ refs) |
+| v5.2 | Jun 13 | Training Insights panel, parser coverage bars |
+| v5.3 | Jun 13 | Parse exports (1) + (3), merge to 103,895 records |
+| v5.4 | Jun 13 | Enhanced Excel with volatility, outlier detection |
 
 ---
 
 *Built with React 19 + TypeScript + Vite + Tailwind CSS + Framer Motion + Recharts*
-*Data sourced from 109,873 WhatsApp luxury watch dealer listings*
+*Data sourced from 103,895+ WhatsApp luxury watch dealer listings*
+*Customer: John Cormier / WatchFacts International*
