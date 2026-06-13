@@ -339,6 +339,76 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Training Insights */}
+      <div className="mt-6 bg-bg-card border border-border-default rounded-md overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-3 bg-bg-elevated border-b border-border-default">
+          <TrendingUp size={14} className="text-gold-primary" />
+          <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-gold-primary">Training Insights — Live WhatsApp Patterns</h3>
+          <span className="text-[10px] text-text-muted">N5/26 warranty · multi-watch splits · emoji separators</span>
+        </div>
+        <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-bg-elevated/50 rounded-md p-3">
+            <div className="text-[10px] uppercase text-text-muted mb-1">Parser Coverage</div>
+            <div className="space-y-1">
+              {[
+                { label: 'Reference', pct: 71 },
+                { label: 'Price', pct: 95 },
+                { label: 'Brand', pct: 72 },
+                { label: 'Dial Color', pct: 60 },
+                { label: 'Condition', pct: 37 },
+                { label: 'Year', pct: 83 },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-2">
+                  <span className="text-[10px] text-text-secondary w-20">{item.label}</span>
+                  <div className="flex-1 h-2 bg-bg-card rounded-full overflow-hidden">
+                    <div className="h-full bg-gold-primary rounded-full" style={{ width: `${item.pct}%` }} />
+                  </div>
+                  <span className="text-[10px] font-mono text-gold-primary w-8 text-right">{item.pct}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-bg-elevated/50 rounded-md p-3">
+            <div className="text-[10px] uppercase text-text-muted mb-1">Warranty Month Distribution</div>
+            <div className="space-y-1">
+              {[
+                { month: 'N1', count: 3 }, { month: 'N2', count: 3 }, { month: 'N3', count: 5 },
+                { month: 'N4', count: 8 }, { month: 'N5', count: 36 }, { month: 'N6', count: 12 },
+                { month: 'N8', count: 2 }, { month: 'N10', count: 1 }, { month: 'N11', count: 1 }, { month: 'N12', count: 3 },
+              ].map((item) => (
+                <div key={item.month} className="flex items-center gap-2">
+                  <span className="text-[10px] text-text-secondary w-8">{item.month}</span>
+                  <div className="flex-1 h-2 bg-bg-card rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${item.count >= 10 ? 'bg-danger' : item.count >= 5 ? 'bg-warning' : 'bg-success'}`} style={{ width: `${(item.count / 36) * 100}%` }} />
+                  </div>
+                  <span className="text-[10px] font-mono text-text-primary w-6 text-right">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-bg-elevated/50 rounded-md p-3">
+            <div className="text-[10px] uppercase text-text-muted mb-1">Auto-Approval Pipeline</div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-success/10 rounded-md p-2">
+                <div className="text-lg font-bold text-success">107</div>
+                <div className="text-[8px] uppercase text-text-muted">Valid</div>
+              </div>
+              <div className="bg-warning/10 rounded-md p-2">
+                <div className="text-lg font-bold text-warning">35</div>
+                <div className="text-[8px] uppercase text-text-muted">AI Review</div>
+              </div>
+              <div className="bg-danger/10 rounded-md p-2">
+                <div className="text-lg font-bold text-danger">12</div>
+                <div className="text-[8px] uppercase text-text-muted">Human</div>
+              </div>
+            </div>
+            <div className="mt-2 text-[9px] text-text-muted">
+              ≥75% = Auto · 60-74% = AI Review · &lt;60% = Human
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
