@@ -1,11 +1,16 @@
-import { useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { useMemo, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, ScatterChart, Scatter
 } from 'recharts';
-import { BarChart3, TrendingUp, AlertTriangle, CheckCircle, DollarSign, Package, Users, Activity } from 'lucide-react';
+import {
+  BarChart3, TrendingUp, AlertTriangle, CheckCircle, DollarSign, Package,
+  Users, Trash2, ChevronDown, ChevronUp
+} from 'lucide-react';
 import type { WatchRecord } from '@/types';
+import { buildPriceAnalytics } from '@/lib/analytics';
+import { formatCurrencyUSD } from '@/lib/currency';
+import { suggestReferences, trainReference } from '@/lib/catalog';
 
 interface AnalyticsTabProps {
   records: WatchRecord[];
@@ -14,38 +19,21 @@ interface AnalyticsTabProps {
 const COLORS = ['#C9A96E', '#22C55E', '#3B82F6', '#8B5CF6', '#EF4444', '#F59E0B', '#14B8A6', '#EC4899', '#6B7280', '#F97316'];
 
 export function AnalyticsTab({ records }: AnalyticsTabProps) {
-  // Brand distribution
+  const [showRecycleBin, setShowRecycleBin] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [minPointsFilter, setMinPointsFilter] = useState(1);
+  const [editingRef, setEditingRef] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [suggestions, setSuggestions] = useState<Array<{reference: string; brand: string; family: string; score: number; reason: string}>>([]);
+
+  const analytics = useMemo(() => buildPriceAnalytics(records, minPointsFilter), [records, minPointsFilter]);
+
   const brandData = useMemo(() => {
     const counts: Record<string, number> = {};
-    records.forEach((r) => {
-      counts[r.brand] = (counts[r.brand] || 0) + 1;
-    });
-    return Object.entries(counts)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
+    records.forEach((r) => { counts[r.brand] = (counts[r.brand] || 0) + 1; });
+    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [records]);
 
-  // Condition breakdown
-  const conditionData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    records.forEach((r) => {
-      counts[r.condition] = (counts[r.condition] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [records]);
-
-  // Demand forecast
-  const demandData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    records.forEach((r) => {
-      counts[r.demandForecast] = (counts[r.demandForecast] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value]) => ({
-      name, value, color: name === 'HIGH' ? '#22C55E' : name === 'RISING' ? '#3B82F6' : name === 'STABLE' ? '#F59E0B' : '#6B7280'
-    }));
-  }, [records]);
-
-  // Price distribution buckets
   const priceDistData = useMemo(() => {
     const buckets = [
       { range: '<$50K', min: 0, max: 50000, count: 0 },
@@ -63,48 +51,17 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
     return buckets;
   }, [records]);
 
-  // Price vs Confidence scatter
   const scatterData = useMemo(() => {
-    return records
-      .filter((r) => r.price > 0)
-      .map((r) => ({
-        x: r.price,
-        y: r.confidence || 0,
-        brand: r.brand,
-        reference: r.reference,
-        dial: r.dialColor,
-      }));
+    return records.filter((r) => r.price > 0).map((r) => ({
+      x: r.price, y: r.confidence || 0, brand: r.brand, reference: r.reference, dial: r.dialColor,
+    }));
   }, [records]);
 
-  // Top 10 most expensive
   const topExpensive = useMemo(() => {
-    return [...records]
-      .filter((r) => r.price > 0)
-      .sort((a, b) => b.price - a.price)
-      .slice(0, 10)
-      .map((r) => ({
-        name: `${r.reference}`,
-        price: r.price,
-        brand: r.brand,
-      }));
+    return [...records].filter((r) => r.price > 0).sort((a, b) => b.price - a.price).slice(0, 10)
+      .map((r) => ({ name: `${r.reference}`, price: r.price, brand: r.brand }));
   }, [records]);
 
-  // Residue breakdown
-  const residueData = useMemo(() => {
-    const flagCounts: Record<string, number> = {};
-    records.forEach((r) => {
-      if (r.failureFlags) {
-        r.failureFlags.forEach((f) => {
-          flagCounts[f] = (flagCounts[f] || 0) + 1;
-        });
-      }
-    });
-    return Object.entries(flagCounts)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [records]);
-
-  // Summary stats
   const stats = useMemo(() => {
     const normal = records.filter((r) => !r.isResidue);
     return {
@@ -117,21 +74,51 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
       brands: new Set(records.map((r) => r.brand)).size,
       withImages: records.filter((r) => r.imageUrl).length,
       imageResolved: records.filter((r) => r.imageConfirmed).length,
+      activeGroups: analytics.groups.length,
+      insufficientGroups: analytics.insufficient.length,
+      outlierCount: analytics.allOutliers.length,
     };
-  }, [records]);
+  }, [records, analytics]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleRefEdit = (rawRef: string, brand: string) => {
+    setEditingRef(rawRef);
+    setEditValue(rawRef);
+    setSuggestions(suggestReferences(rawRef, brand, 5));
+  };
+
+  const handleApplyCorrection = (rawRef: string, corrected: string, brand: string, family: string) => {
+    trainReference(rawRef, corrected, brand, family);
+    setEditingRef(null);
+    setSuggestions([]);
+  };
+
+  const handleInputChange = (val: string, brand: string) => {
+    setEditValue(val);
+    if (val.length >= 2) {
+      setSuggestions(suggestReferences(val, brand, 5));
+    } else {
+      setSuggestions([]);
+    }
+  };
+
+  const filteredGroups = analytics.groups.filter((g) => g.count >= minPointsFilter);
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="px-5 py-6"
-    >
+    <div className="px-5 py-6">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <BarChart3 size={20} className="text-gold-primary" />
-        <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-gold-primary">
-          Comprehensive Analytics Summary
-        </h2>
+        <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-gold-primary">Price Guide Analytics</h2>
+        <span className="text-[10px] text-text-muted">{analytics.totalReferences} refs · IQR outlier removal · adaptive gate</span>
       </div>
 
       {/* KPI Cards */}
@@ -143,8 +130,8 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
           { label: 'Avg Price', value: `$${(stats.avgPrice / 1000).toFixed(0)}K`, icon: DollarSign, color: 'text-gold-primary' },
           { label: 'Avg Confidence', value: `${stats.avgConfidence}%`, icon: TrendingUp, color: 'text-info' },
           { label: 'Total Value', value: `$${(stats.totalValue / 1000000).toFixed(1)}M`, icon: DollarSign, color: 'text-success' },
-          { label: 'Brands', value: stats.brands, icon: Users, color: 'text-purple' },
-          { label: 'With Images', value: stats.withImages, icon: Activity, color: 'text-text-primary' },
+          { label: 'Active Groups', value: stats.activeGroups, icon: Users, color: 'text-purple' },
+          { label: 'Outliers', value: stats.outlierCount, icon: Trash2, color: 'text-danger' },
         ].map((s) => (
           <div key={s.label} className="bg-bg-card border border-border-default rounded-md p-3 text-center">
             <s.icon size={14} className={`mx-auto mb-1 ${s.color}`} />
@@ -154,24 +141,165 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
         ))}
       </div>
 
+      {/* Price Guide Table */}
+      <div className="bg-bg-card border border-border-default rounded-md overflow-hidden mb-6">
+        <div className="flex items-center justify-between px-4 py-3 bg-bg-elevated border-b border-border-default">
+          <div className="flex items-center gap-3">
+            <DollarSign size={14} className="text-gold-primary" />
+            <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-gold-primary">Price Guide by Reference & Dial</h3>
+            <span className="text-[10px] text-text-muted">{filteredGroups.length} groups ≥ {minPointsFilter} pts</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-text-muted">Min pts:</span>
+            <input type="range" min={1} max={50} value={minPointsFilter} onChange={(e) => setMinPointsFilter(Number(e.target.value))} className="w-20 accent-gold-primary" />
+            <span className="text-[10px] font-mono text-gold-primary w-5">{minPointsFilter}</span>
+          </div>
+        </div>
+
+        {filteredGroups.length === 0 ? (
+          <div className="p-8 text-center text-[11px] text-text-muted">No reference groups meet the minimum data point threshold.</div>
+        ) : (
+          <div className="max-h-[600px] overflow-y-auto">
+            <div className="grid grid-cols-[120px_80px_60px_70px_70px_70px_70px_60px_60px_80px] gap-2 px-4 py-2 bg-bg-elevated/50 border-b border-border-default text-[9px] font-bold uppercase tracking-wider text-text-muted min-w-[900px]">
+              <span>Reference</span><span>Dial</span><span className="text-right">Pts</span>
+              <span className="text-right">Min</span><span className="text-right">Max</span>
+              <span className="text-right">Avg</span><span className="text-right">Med</span>
+              <span className="text-right">σ</span><span className="text-right">B</span><span className="text-right">S</span>
+            </div>
+            {filteredGroups.map((group) => {
+              const isExpanded = expandedGroups.has(group.key);
+              return (
+                <div key={group.key} className="border-b border-border-default/50">
+                  <div className="grid grid-cols-[120px_80px_60px_70px_70px_70px_70px_60px_60px_80px] gap-2 px-4 py-2 items-center hover:bg-bg-elevated transition-colors min-w-[900px] cursor-pointer" onClick={() => toggleGroup(group.key)}>
+                    <span className="font-mono text-[11px] font-semibold text-gold-primary">{group.reference}</span>
+                    <span className="text-[10px] text-text-secondary">{group.dialColor}</span>
+                    <span className="text-right font-mono text-[11px] text-success">{group.count}</span>
+                    <span className="text-right font-mono text-[10px] text-text-primary">{formatCurrencyUSD(group.minPrice)}</span>
+                    <span className="text-right font-mono text-[10px] text-text-primary">{formatCurrencyUSD(group.maxPrice)}</span>
+                    <span className="text-right font-mono text-[10px] text-gold-primary font-bold">{formatCurrencyUSD(group.avgPrice)}</span>
+                    <span className="text-right font-mono text-[10px] text-info">{formatCurrencyUSD(group.medianPrice)}</span>
+                    <span className="text-right font-mono text-[10px] text-text-muted">{group.stdDev > 0 ? `$${(group.stdDev / 1000).toFixed(1)}k` : '—'}</span>
+                    <span className="text-right font-mono text-[10px] text-info">{group.buyerCount}</span>
+                    <span className="text-right font-mono text-[10px] text-gold-primary">{group.sellerCount}</span>
+                  </div>
+                  {isExpanded && (
+                    <div className="px-4 py-2 bg-bg-elevated/30 border-t border-border-default/30">
+                      <div className="text-[9px] text-text-muted uppercase mb-1">Data Points ({group.records.length})</div>
+                      <div className="flex flex-wrap gap-1">
+                        {group.records.map((r) => (
+                          <span key={r.id} className="text-[9px] bg-bg-card border border-border-default px-1.5 py-0.5 rounded text-text-secondary">{formatCurrencyUSD(r.price)}</span>
+                        ))}
+                      </div>
+                      {group.outliers.length > 0 && (
+                        <>
+                          <div className="text-[9px] text-danger uppercase mt-2 mb-1">IQR Outliers Removed ({group.outliers.length})</div>
+                          <div className="flex flex-wrap gap-1">
+                            {group.outliers.map((r) => (
+                              <span key={r.id} className="text-[9px] bg-danger/10 border border-danger/30 px-1.5 py-0.5 rounded text-danger line-through">{formatCurrencyUSD(r.price)}</span>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Recycle Bin / Review Panel with Training */}
+      <div className="bg-bg-card border border-border-default rounded-md overflow-hidden mb-6">
+        <button onClick={() => setShowRecycleBin(!showRecycleBin)} className="w-full flex items-center justify-between px-4 py-3 bg-bg-elevated border-b border-border-default hover:bg-bg-elevated/80 transition-colors">
+          <div className="flex items-center gap-3">
+            <Trash2 size={14} className="text-danger" />
+            <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-danger">Recycle Bin — Removed & Incomplete</h3>
+            <span className="text-[10px] text-text-muted">{analytics.insufficient.length} insufficient · {analytics.allOutliers.length} outliers</span>
+          </div>
+          {showRecycleBin ? <ChevronUp size={14} className="text-text-muted" /> : <ChevronDown size={14} className="text-text-muted" />}
+        </button>
+
+        {showRecycleBin && (
+          <div className="max-h-[500px] overflow-y-auto">
+            {analytics.insufficient.length > 0 && (
+              <div className="border-b border-border-default/50">
+                <div className="px-4 py-2 bg-warning/5 text-[10px] font-bold uppercase text-warning">Insufficient Data Points (&lt; 5)</div>
+                <div className="grid grid-cols-[120px_80px_60px_100px_100px_80px_1fr] gap-2 px-4 py-1.5 bg-bg-elevated/30 text-[9px] font-bold uppercase tracking-wider text-text-muted">
+                  <span>Reference</span><span>Dial</span><span className="text-right">Pts</span>
+                  <span className="text-right">Min</span><span className="text-right">Max</span>
+                  <span className="text-right">Avg</span><span>Why Excluded</span>
+                </div>
+                {analytics.insufficient.map((g) => (
+                  <div key={g.key} className="grid grid-cols-[120px_80px_60px_100px_100px_80px_1fr] gap-2 px-4 py-1.5 border-t border-border-default/30 items-center hover:bg-bg-elevated/20">
+                    <span className="font-mono text-[10px] text-text-primary">{g.reference}</span>
+                    <span className="text-[10px] text-text-secondary">{g.dialColor}</span>
+                    <span className="text-right font-mono text-[10px] text-warning">{g.count}</span>
+                    <span className="text-right font-mono text-[10px] text-text-muted">{formatCurrencyUSD(g.minPrice)}</span>
+                    <span className="text-right font-mono text-[10px] text-text-muted">{formatCurrencyUSD(g.maxPrice)}</span>
+                    <span className="text-right font-mono text-[10px] text-text-muted">{formatCurrencyUSD(Math.round(g.avgPrice))}</span>
+                    <span className="text-[9px] text-warning">Need {minPointsFilter - g.count} more listings to qualify</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {analytics.allOutliers.length > 0 && (
+              <div>
+                <div className="px-4 py-2 bg-danger/5 text-[10px] font-bold uppercase text-danger">IQR Outliers Removed — Click reference to train catalog</div>
+                <div className="grid grid-cols-[100px_80px_100px_100px_1fr] gap-2 px-4 py-1.5 bg-bg-elevated/30 text-[9px] font-bold uppercase tracking-wider text-text-muted">
+                  <span>Reference</span><span>Dial</span><span className="text-right">Price</span>
+                  <span className="text-right">Currency</span><span>Raw Message</span>
+                </div>
+                {analytics.allOutliers.map((r) => (
+                  <div key={r.id} className="grid grid-cols-[100px_80px_100px_100px_1fr] gap-2 px-4 py-1.5 border-t border-border-default/30 items-center hover:bg-bg-elevated/20">
+                    {editingRef === r.reference ? (
+                      <div className="col-span-5 flex flex-col gap-1 py-1">
+                        <div className="flex items-center gap-2">
+                          <input value={editValue} onChange={(e) => handleInputChange(e.target.value, r.brand)} className="bg-bg-card border border-border-default rounded px-2 py-1 text-[10px] font-mono text-gold-primary flex-1" autoFocus />
+                          <button onClick={() => setEditingRef(null)} className="text-[9px] text-text-muted hover:text-text-primary">Cancel</button>
+                        </div>
+                        {suggestions.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {suggestions.map((s) => (
+                              <button key={s.reference} onClick={() => handleApplyCorrection(r.reference, s.reference, s.brand, s.family)} className="text-[9px] bg-bg-elevated border border-border-default hover:border-gold-primary px-2 py-0.5 rounded text-text-secondary transition-colors">
+                                {s.reference} <span className="text-text-muted">({s.reason} {Math.round(s.score * 100)}%)</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <button onClick={() => handleRefEdit(r.reference, r.brand)} className="font-mono text-[10px] text-gold-primary text-left hover:underline">{r.reference}</button>
+                        <span className="text-[10px] text-text-secondary">{r.dialColor}</span>
+                        <span className="text-right font-mono text-[10px] text-danger">{formatCurrencyUSD(r.price)}</span>
+                        <span className="text-right font-mono text-[10px] text-text-muted">{r.originalCurrency}</span>
+                        <span className="text-[9px] text-text-muted truncate">{r.rawMessage}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Brand Distribution */}
         <div className="bg-bg-card border border-border-default rounded-md p-4">
           <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-text-secondary mb-3">Brand Distribution</h4>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie data={brandData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                {brandData.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
+                {brandData.map((_, i) => (<Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />))}
               </Pie>
               <Tooltip contentStyle={{ background: '#1A1A24', border: '1px solid #2A2A3E', borderRadius: 6, fontSize: 11 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Price Distribution */}
         <div className="bg-bg-card border border-border-default rounded-md p-4">
           <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-text-secondary mb-3">Price Distribution</h4>
           <ResponsiveContainer width="100%" height={220}>
@@ -185,40 +313,6 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
           </ResponsiveContainer>
         </div>
 
-        {/* Demand Forecast */}
-        <div className="bg-bg-card border border-border-default rounded-md p-4">
-          <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-text-secondary mb-3">Demand Forecast</h4>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={demandData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2E" />
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#6B7280' }} stroke="#1E1E2E" />
-              <YAxis tick={{ fontSize: 10, fill: '#6B7280' }} stroke="#1E1E2E" />
-              <Tooltip contentStyle={{ background: '#1A1A24', border: '1px solid #2A2A3E', borderRadius: 6, fontSize: 11 }} />
-              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                {demandData.map((d, i) => (
-                  <Cell key={i} fill={d.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Condition Breakdown */}
-        <div className="bg-bg-card border border-border-default rounded-md p-4">
-          <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-text-secondary mb-3">Condition Breakdown</h4>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={conditionData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                {conditionData.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ background: '#1A1A24', border: '1px solid #2A2A3E', borderRadius: 6, fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Price vs Confidence */}
         <div className="bg-bg-card border border-border-default rounded-md p-4">
           <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-text-secondary mb-3">Price vs Confidence</h4>
           <ResponsiveContainer width="100%" height={240}>
@@ -227,12 +321,11 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
               <XAxis type="number" dataKey="x" name="Price" domain={[0, 'auto']} tick={{ fontSize: 10, fill: '#6B7280' }} stroke="#1E1E2E" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
               <YAxis type="number" dataKey="y" name="Confidence" domain={[0, 100]} tick={{ fontSize: 10, fill: '#6B7280' }} stroke="#1E1E2E" />
               <Tooltip contentStyle={{ background: '#1A1A24', border: '1px solid #2A2A3E', borderRadius: 6, fontSize: 11 }} formatter={(value: number, name: string) => [`${name === 'x' ? '$' : ''}${value.toLocaleString()}${name === 'y' ? '%' : ''}`, name === 'x' ? 'Price' : 'Confidence']} />
-              <Scatter data={scatterData} fill="#8B5CF6" fillOpacity={0.6} r={4} />
+              <Scatter data={scatterData} fill="#8B5CF6" fillOpacity={0.6} />
             </ScatterChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Top 10 Most Expensive */}
         <div className="bg-bg-card border border-border-default rounded-md p-4">
           <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-text-secondary mb-3">Top 10 Most Expensive</h4>
           <ResponsiveContainer width="100%" height={240}>
@@ -245,54 +338,7 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
             </BarChart>
           </ResponsiveContainer>
         </div>
-
-        {/* Residue Breakdown */}
-        <div className="bg-bg-card border border-border-default rounded-md p-4">
-          <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-text-secondary mb-3">Residue Breakdown by Flag</h4>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={residueData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2E" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 10, fill: '#6B7280' }} stroke="#1E1E2E" />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: '#9CA3AF' }} stroke="#1E1E2E" width={100} />
-              <Tooltip contentStyle={{ background: '#1A1A24', border: '1px solid #2A2A3E', borderRadius: 6, fontSize: 11 }} />
-              <Bar dataKey="value" fill="#EF4444" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Image Resolution Impact */}
-        <div className="bg-bg-card border border-border-default rounded-md p-4">
-          <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-text-secondary mb-3">Image Auto-Resolution Impact</h4>
-          <div className="flex flex-col items-center justify-center h-[220px]">
-            <div className="relative w-32 h-32">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="40" fill="none" stroke="#1E1E2E" strokeWidth="8" />
-                <circle
-                  cx="50" cy="50" r="40"
-                  fill="none"
-                  stroke="#22C55E"
-                  strokeWidth="8"
-                  strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 40}
-                  strokeDashoffset={2 * Math.PI * 40 * (1 - stats.imageResolved / Math.max(stats.residue + stats.imageResolved, 1))}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold font-mono text-success">{stats.imageResolved}</span>
-                <span className="text-[8px] text-text-muted uppercase">Resolved</span>
-              </div>
-            </div>
-            <div className="mt-3 text-center">
-              <div className="text-sm text-text-primary">{stats.residue} still need review</div>
-              <div className="text-[10px] text-success">
-                {stats.residue + stats.imageResolved > 0
-                  ? `${Math.round((stats.imageResolved / (stats.residue + stats.imageResolved)) * 100)}% auto-resolved`
-                  : '0% auto-resolved'}
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

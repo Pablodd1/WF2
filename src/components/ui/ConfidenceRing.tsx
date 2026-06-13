@@ -13,7 +13,7 @@ export function ConfidenceRing({ percentage, size = 36 }: ConfidenceRingProps) {
   const offset = circumference - (animatedPct / 100) * circumference;
 
   useEffect(() => {
-    const timer = setTimeout(() => setAnimatedPct(Math.round(percentage * 100)), 50);
+    const timer = setTimeout(() => setAnimatedPct(Math.round(percentage)), 50);
     return () => clearTimeout(timer);
   }, [percentage]);
 
