@@ -1,10 +1,9 @@
 /**
- * Unified AI parser fallback — Claude + Gemini
- * Updated to latest API specs per Anthropic & Google docs (June 2026)
+ * AI parser fallback using Kimi K2.6 API
+ * OpenAI-compatible endpoint at api.moonshot.ai
  */
 
-const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -17,12 +16,13 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'rawMessage (string) required' });
   }
 
+  const kimiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
   const claudeKey = process.env.ANTHROPIC_API_KEY;
   const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
-  if (!claudeKey && !geminiKey) {
+  if (!kimiKey && !claudeKey && !geminiKey) {
     return res.status(500).json({
-      error: 'No AI API key configured. Set ANTHROPIC_API_KEY or GEMINI_API_KEY in Vercel dashboard.',
+      error: 'No AI API key configured. Set KIMI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY.',
     });
   }
 
@@ -53,10 +53,60 @@ ${rawMessage}
 
 Return ONLY JSON:`;
 
-  // ── Claude (preferred for structured reasoning) ──
+  // ── Kimi K2.6 (preferred, OpenAI-compatible) ──
+  if (kimiKey) {
+    try {
+      const response = await fetch(KIMI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${kimiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'kimi-k2.6',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 1,
+          max_tokens: 8192,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error('[ai-parse] Kimi HTTP', response.status, errText);
+      } else {
+        const data = await response.json();
+        const choice = data.choices?.[0];
+        let content = choice?.message?.content;
+        // Kimi K2.6 thinking mode fallback
+        if (!content && choice?.message?.reasoning_content) {
+          console.log('[ai-parse] Kimi used reasoning_content');
+          content = choice.message.reasoning_content;
+        }
+        if (content) {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            return res.status(200).json({
+              success: true,
+              parsed,
+              source: 'kimi',
+              model: 'kimi-k2.6',
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[ai-parse] Kimi exception:', e.message);
+    }
+  }
+
+  // ── Claude fallback ──
   if (claudeKey) {
     try {
-      const response = await fetch(CLAUDE_API_URL, {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -64,7 +114,7 @@ Return ONLY JSON:`;
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-3-5-sonnet-20241022',
           max_tokens: 512,
           system: systemPrompt,
           messages: [{ role: 'user', content: userPrompt }],
@@ -84,7 +134,7 @@ Return ONLY JSON:`;
             success: true,
             parsed,
             source: 'claude',
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-3-5-sonnet-20241022',
           });
         }
       }
@@ -96,19 +146,22 @@ Return ONLY JSON:`;
   // ── Gemini fallback ──
   if (geminiKey) {
     try {
-      const response = await fetch(`${GEMINI_API_URL}?key=${geminiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: {
-            maxOutputTokens: 512,
-            temperature: 0.1,
-            responseMimeType: 'application/json',
-          },
-        }),
-      });
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+            generationConfig: {
+              maxOutputTokens: 512,
+              temperature: 0.1,
+              responseMimeType: 'application/json',
+            },
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errText = await response.text();
