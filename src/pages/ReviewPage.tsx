@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import { useWatchData } from '@/hooks/useWatchData';
+import { verifyImageReference, type VerifyImageResult } from '@/lib/verifyImage';
 import type { WatchRecord } from '@/types';
 import { Eye, Wand2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, HelpCircle, Save, RotateCcw } from 'lucide-react';
 
@@ -25,6 +26,8 @@ export default function ReviewPage() {
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [verifyMap, setVerifyMap] = useState<Record<string, VerifyImageResult>>({});
+  const [verifyLoading, setVerifyLoading] = useState<Record<string, boolean>>({});
 
   const brands = useMemo(() => {
     const set = new Set(records.map(r => r.brand).filter(Boolean));
@@ -122,6 +125,20 @@ export default function ReviewPage() {
       setAiLoading(prev => ({ ...prev, [record.id]: false }));
     }
   }, [parseOne]);
+
+  // Verify the photo matches the text-extracted reference (image read blind).
+  const verifyImage = useCallback(async (record: WatchRecord) => {
+    if (!record.imageUrl) return;
+    setVerifyLoading(prev => ({ ...prev, [record.id]: true }));
+    try {
+      const result = await verifyImageReference(record.imageUrl, record.reference, record.brand);
+      setVerifyMap(prev => ({ ...prev, [record.id]: result }));
+    } catch (e) {
+      console.error('Image verify failed:', e);
+    } finally {
+      setVerifyLoading(prev => ({ ...prev, [record.id]: false }));
+    }
+  }, []);
 
   // Bulk re-parse all currently-filtered records with Kimi (concurrency-limited).
   const bulkReparse = useCallback(async (targets: WatchRecord[]) => {
@@ -498,9 +515,46 @@ export default function ReviewPage() {
                             <Wand2 size={14} />
                             {isAiLoading ? 'Asking AI...' : 'Ask AI'}
                           </button>
+                          {record.imageUrl && (
+                            <button
+                              onClick={() => verifyImage(record)}
+                              disabled={verifyLoading[record.id]}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-bg-elevated text-text-secondary hover:text-text-primary transition-colors text-sm disabled:opacity-50"
+                              title="Read the photo blind and check it matches the reference"
+                            >
+                              <Eye size={14} />
+                              {verifyLoading[record.id] ? 'Verifying…' : 'Verify Image'}
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
+
+                    {/* Image-vs-reference verdict */}
+                    {verifyMap[record.id] && (() => {
+                      const v = verifyMap[record.id];
+                      const styles = v.verdict === 'MISMATCH'
+                        ? 'border-red-500/50 bg-red-500/10 text-red-300'
+                        : v.verdict === 'MATCH'
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                        : 'border-amber-500/40 bg-amber-500/10 text-amber-300';
+                      const Icon = v.verdict === 'MISMATCH' ? AlertTriangle : v.verdict === 'MATCH' ? CheckCircle : HelpCircle;
+                      return (
+                        <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${styles}`}>
+                          <div className="flex items-center gap-2 font-semibold">
+                            <Icon size={14} />
+                            {v.verdict === 'MISMATCH' ? '⚠ IMAGE MISMATCH — routed to human review' : v.verdict === 'MATCH' ? 'Image confirms reference' : 'Could not verify from image'}
+                            {v.source && <span className="opacity-60 font-normal">· {v.source}</span>}
+                          </div>
+                          <div className="mt-1 opacity-90">{v.reason}</div>
+                          {v.image && (
+                            <div className="mt-1 opacity-70">
+                              Image saw: {v.image.brand} / ref {v.image.referenceVisible} / {v.image.dialColor} (conf {v.image.confidence}%)
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
