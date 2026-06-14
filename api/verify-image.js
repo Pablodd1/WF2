@@ -24,7 +24,7 @@ function normRef(s) {
 function refsAgree(textRef, imageRef) {
   const a = normRef(textRef);
   const b = normRef(imageRef);
-  if (!a || !b) return null; // can't judge
+  if (!a || !b || b === 'UNKNOWN' || a === 'UNKNOWN' || b === 'NA' || b === 'NONE') return null; // can't judge
   if (a === b) return true;
   if (a.startsWith(b) || b.startsWith(a)) return true;
   const coreA = (a.match(/\d{4,6}/) || [])[0];
