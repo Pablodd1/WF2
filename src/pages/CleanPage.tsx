@@ -4,10 +4,10 @@ import { TabNav } from '@/components/TabNav';
 import { Footer } from '@/components/Footer';
 import { useWatchData } from '@/hooks/useWatchData';
 import { cleanAnalyze } from '@/lib/cleanAnalyze';
-import { exportCleanExcel } from '@/lib/cleanExport';
+import { exportCleanExcel, exportCleanCsv } from '@/lib/cleanExport';
 import type { CleanResponse, CleanWatch, CleanStage, Verdict } from '@/lib/cleanAnalyze';
 import {
-  Sparkles, Search, Globe, Cog, Download,
+  Sparkles, Search, Globe, Cog, Download, FileSpreadsheet,
   CheckCircle2, UserCheck, Trash2, AlertTriangle, Loader2,
 } from 'lucide-react';
 
@@ -201,6 +201,7 @@ export default function CleanPage() {
           <div className="mt-6">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-bold text-text-primary">Results Summary</h2>
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => {
                   if (res) exportCleanExcel(res.watches, res.summary);
@@ -210,6 +211,16 @@ export default function CleanPage() {
                 <Download size={12} />
                 Export Excel
               </button>
+              <button
+                onClick={() => {
+                  if (res) exportCleanCsv(res.watches, res.summary);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-text-muted/30 text-text-muted text-xs font-bold hover:bg-bg-elevated transition-colors"
+              >
+                <FileSpreadsheet size={12} />
+                Download CSV
+              </button>
+            </div>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {[

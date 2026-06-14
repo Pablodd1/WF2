@@ -140,14 +140,14 @@ export function exportCleanExcel(watches: CleanWatch[], summary: any) {
     dataCell('Count'),
     numCell(summary.approved, COLORS.lightGreen.bg),
     numCell(summary.human, COLORS.orange.bg),
-    numCell(summary.recycle, COLORS.red?.bg || COLORS.orange.bg),
+    numCell(summary.recycle, COLORS.red.bg),
     numCell(summary.total),
   ]);
   ws1Data.push([
     dataCell('Percentage'),
     pctCell(Math.round((summary.approved / summary.total) * 100), COLORS.lightGreen.bg),
     pctCell(Math.round((summary.human / summary.total) * 100), COLORS.orange.bg),
-    pctCell(Math.round((summary.recycle / summary.total) * 100), COLORS.orange.bg),
+    pctCell(Math.round((summary.recycle / summary.total) * 100), COLORS.red.bg),
     pctCell(100),
   ]);
   ws1Data.push([]);
@@ -270,7 +270,7 @@ export function exportCleanExcel(watches: CleanWatch[], summary: any) {
       : 0;
     const bg = v === 'APPROVED' ? COLORS.lightGreen.bg
       : v === 'HUMAN' ? COLORS.orange.bg
-      : COLORS.orange.bg;
+      : COLORS.red.bg;
 
     ws3Data.push([
       dataCell(v, bg, 'center'),
@@ -315,4 +315,58 @@ export function exportCleanExcel(watches: CleanWatch[], summary: any) {
   // Download
   const now = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
   XLSX.writeFile(wb, `WatchFacts_CleanAnalysis_${now}.xlsx`);
+}
+
+// ═══════════════════════ CSV Export ═══════════════════════
+
+function escapeCsv(val: any): string {
+  if (val === null || val === undefined) return '';
+  const s = String(val);
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+export function exportCleanCsv(watches: CleanWatch[], _summary: any) {
+  const rows: string[] = [];
+
+  // Header
+  rows.push(['ID', 'Brand', 'Reference', 'Dial', 'Price', 'USD', 'Currency', 'Condition', 'Year', 'Confidence', 'Status', 'Raw Message'].join(','));
+
+  // Data rows — EXACT same format as the Excel sheet
+  watches.forEach((w, i) => {
+    const missingCount = getMissingCount(w);
+    const status = statusFromVerdict(w.verdict, missingCount);
+    const price = w.parsed.price || 0;
+    const usd = w.parsed.currency === 'HKD' && price > 0
+      ? Math.round(price / 7.8)
+      : price;
+
+    rows.push([
+      escapeCsv(`clean_${i}`),
+      escapeCsv(w.parsed.brand),
+      escapeCsv(w.parsed.reference || 'Unknown'),
+      escapeCsv(w.parsed.dialColor || 'UNKNOWN'),
+      escapeCsv(price),
+      escapeCsv(usd),
+      escapeCsv(w.parsed.currency || 'Unknown'),
+      escapeCsv(w.parsed.condition),
+      escapeCsv(w.parsed.year ?? ''),
+      escapeCsv(w.confidence),
+      escapeCsv(status),
+      escapeCsv(w.input),
+    ].join(','));
+  });
+
+  const csv = rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const now = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  link.href = URL.createObjectURL(blob);
+  link.download = `WatchFacts_CleanAnalysis_${now}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
 }
