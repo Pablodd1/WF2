@@ -202,7 +202,7 @@ export function useWatchData() {
             seller: '', location: '', confidence: row[9], status: 'NORMALIZED', flags: [],
             timestamp: '', mlPredictedPrice: 0, mlPriceConfidence: 0, mlDemandForecast: '',
             mlOutcomeClass: '', mlOutcomeConfidence: 0, marketComparables: 0, sellerRating: 0,
-            daysOnMarket: 0, stageLogs: [], imageUrl: null, imageCount: 0,
+            daysOnMarket: 0, stageLogs: [], imageUrl: row[14] || null, imageCount: row[14] ? 1 : 0,
             imageConfirmed: false, autoResolvedFlags: [], buyerCount: 0, sellerCount: 0,
             buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10],
             description: row[13] || row[8] || '',
