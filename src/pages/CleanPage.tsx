@@ -6,14 +6,15 @@ import { useWatchData } from '@/hooks/useWatchData';
 import { cleanAnalyze } from '@/lib/cleanAnalyze';
 import type { CleanResponse, CleanWatch, CleanStage, Verdict } from '@/lib/cleanAnalyze';
 import {
-  Sparkles, Search, Globe, Image as ImageIcon, Cog,
-  CheckCircle2, UserCheck, Trash2, Link2, AlertTriangle, Loader2,
+  Sparkles, Search, Globe, Cog,
+  CheckCircle2, UserCheck, Trash2, AlertTriangle, Loader2,
 } from 'lucide-react';
 
-const SAMPLE = `5712/1A Blue New 2024 850k HKD
-RM35-03 NTPT carbon used full set
-116610LN black submariner — https://example.com/sub.jpg
-random text with no watch info here`;
+const SAMPLE = `5712/1A Blue N5/2026 New 850k HKD
+RM35-03 White unworn 2.1M HKD
+126334 Black 2025 used 45k USD
+Patek green new 500k`;
+
 
 const verdictMeta: Record<Verdict, { label: string; color: string; bg: string; Icon: any }> = {
   APPROVED: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30', Icon: CheckCircle2 },
@@ -22,7 +23,7 @@ const verdictMeta: Record<Verdict, { label: string; color: string; bg: string; I
 };
 
 const stageIcon: Record<string, any> = {
-  PARSE: Cog, AI_TEXT: Sparkles, ONLINE: Globe, IMAGE: ImageIcon,
+  PARSE: Cog, AI_TEXT: Sparkles, CATALOG: Search, IQR: AlertTriangle, CURRENCY: Globe,
 };
 
 function ConfidenceBar({ value }: { value: number }) {
@@ -92,9 +93,8 @@ function WatchCard({ w, n }: { w: CleanWatch; n: number }) {
             <span className="text-sm font-bold text-text-primary truncate">
               {w.parsed.brand !== 'Unknown' ? w.parsed.brand : 'Unidentified'}
               {w.parsed.reference ? ` · ${w.parsed.reference}` : ''}
+              {w.parsed.family && w.parsed.family !== 'OTHER' ? ` · ${w.parsed.family}` : ''}
             </span>
-            {w.hasImage && <ImageIcon size={12} className="text-gold-primary shrink-0" />}
-            {w.hasLink && !w.hasImage && <Link2 size={12} className="text-text-muted shrink-0" />}
           </div>
           <p className="text-[11px] text-text-muted mt-1 line-clamp-2">{w.input}</p>
         </div>
@@ -154,9 +154,9 @@ export default function CleanPage() {
             Clean · Manual Analysis
           </h1>
           <p className="text-sm text-text-muted mt-1">
-            Paste one or several watch descriptions (text, link, or image URL). Each watch is analyzed
-            <span className="text-text-secondary"> individually</span> through the full cascade —
-            <span className="text-text-secondary"> Parse → AI → Online → Image</span> — with a single 85% gate:
+            Paste one or several watch descriptions. Each watch is analyzed
+            <span className="text-text-secondary"> individually</span> through the full pipeline —
+            <span className="text-text-secondary"> Parse → AI → Catalog → IQR → Currency</span> — with a single 85% gate:
             <span className="text-emerald-400"> ≥85% Approved</span>,
             <span className="text-amber-400"> below → Human</span>,
             <span className="text-red-400"> no info → Recycle</span>.

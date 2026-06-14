@@ -1,12 +1,11 @@
 /**
- * Client for /api/clean-analyze — individualized, fully-visible watch analysis.
- * Paste 1..N watch descriptions (text, text+URL, text+image, or several
- * watches at once). Each watch is returned with its full stage-by-stage
+ * Client for /api/pipeline-parse — individualized, fully-visible watch analysis.
+ * Paste 1..N watch descriptions. Each watch is returned with its full stage-by-stage
  * workflow plus a single-gate verdict (APPROVED / HUMAN / RECYCLE).
  */
 
 export type Verdict = 'APPROVED' | 'HUMAN' | 'RECYCLE';
-export type StageName = 'PARSE' | 'AI_TEXT' | 'ONLINE' | 'IMAGE';
+export type StageName = 'PARSE' | 'AI_TEXT' | 'CATALOG' | 'IQR' | 'CURRENCY';
 
 export interface CleanStage {
   stage: StageName;
@@ -19,13 +18,16 @@ export interface CleanStage {
 }
 
 export interface CleanParsed {
-  reference: string | null;
   brand: string;
-  dialColor: string | null;
+  reference: string;
+  family: string;
+  dialColor: string;
   condition: string;
   year: number | null;
-  price: number | null;
-  currency: string | null;
+  price: number;
+  currency: string;
+  priceUSD: number;
+  materials: string[];
 }
 
 export interface CleanWatch {
@@ -34,10 +36,7 @@ export interface CleanWatch {
   confidence: number;
   verdict: Verdict;
   reason: string;
-  hasImage: boolean;
-  hasLink: boolean;
-  imageUrl: string | null;
-  pageUrl: string | null;
+  flags: string[];
   stages: CleanStage[];
 }
 
@@ -56,12 +55,12 @@ export interface CleanResponse {
   error?: string;
 }
 
-export async function cleanAnalyze(text: string, imageUrls?: string[]): Promise<CleanResponse> {
+export async function cleanAnalyze(text: string): Promise<CleanResponse> {
   try {
-    const res = await fetch('/api/clean-analyze', {
+    const res = await fetch('/api/pipeline-parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, imageUrls }),
+      body: JSON.stringify({ text }),
     });
     const data = await res.json();
     if (!res.ok) {
