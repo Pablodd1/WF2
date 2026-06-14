@@ -47,8 +47,9 @@ export function AIPriceChart({ records }: AIPriceChartProps) {
   }, [records]);
 
   const maxVal = useMemo(() => {
-    const all = [...data.map((d) => d.x), ...data.map((d) => d.y)];
-    return Math.max(...all, 100000) * 1.1;
+    let m = 100000;
+    for (const d of data) { if (d.x > m) m = d.x; if (d.y > m) m = d.y; }
+    return m * 1.1;
   }, [data]);
 
   if (data.length === 0) return null;

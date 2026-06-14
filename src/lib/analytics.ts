@@ -35,6 +35,18 @@ function median(arr: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
+// Safe min/max — Math.min(...arr) throws "Maximum call stack" on large arrays (1000+).
+function arrMin(arr: number[]): number {
+  let m = Infinity;
+  for (let i = 0; i < arr.length; i++) if (arr[i] < m) m = arr[i];
+  return m === Infinity ? 0 : m;
+}
+function arrMax(arr: number[]): number {
+  let m = -Infinity;
+  for (let i = 0; i < arr.length; i++) if (arr[i] > m) m = arr[i];
+  return m === -Infinity ? 0 : m;
+}
+
 function stdDev(arr: number[], mean: number): number {
   if (arr.length <= 1) return 0;
   const variance = arr.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / (arr.length - 1);
@@ -97,8 +109,8 @@ export function buildPriceAnalytics(
         family,
         brand,
         count: prices.length,
-        minPrice: prices.length > 0 ? Math.min(...prices) : 0,
-        maxPrice: prices.length > 0 ? Math.max(...prices) : 0,
+        minPrice: prices.length > 0 ? arrMin(prices) : 0,
+        maxPrice: prices.length > 0 ? arrMax(prices) : 0,
         avgPrice: prices.length > 0 ? prices.reduce((s, p) => s + p, 0) / prices.length : 0,
         medianPrice: median(prices),
         stdDev: 0,
@@ -129,8 +141,8 @@ export function buildPriceAnalytics(
       family,
       brand,
       count: keepPrices.length,
-      minPrice: keepPrices.length > 0 ? Math.min(...keepPrices) : 0,
-      maxPrice: keepPrices.length > 0 ? Math.max(...keepPrices) : 0,
+      minPrice: keepPrices.length > 0 ? arrMin(keepPrices) : 0,
+      maxPrice: keepPrices.length > 0 ? arrMax(keepPrices) : 0,
       avgPrice: Math.round(avg),
       medianPrice: Math.round(med),
       stdDev: Math.round(sd),
