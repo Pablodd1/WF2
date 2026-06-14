@@ -723,21 +723,59 @@ function regexExtract(text) {
 
   const rmMatch = text.match(/\bRM\s?\d{2}[-\s]?\d{2}[A-Z]?\b/i);
   const ppMatch = text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i);
-  const apMatch = text.match(/\b\d{5}[A-Z]{2,4}\b/i);
+  // AP: handle 'AP26650ti' (no space) and '26650ti' (with word boundary)
+  const apMatch = text.match(/\b(?:AP)?\s*(\d{5}[A-Z]{2,4})\b/i);
   const rolexMatch = text.match(/\b\d{6}[A-Z]{0,4}\b/i);
-  const genericMatch = text.match(/\b\d{4,6}[\/\s-]?\d?[A-Z]{1,4}\b/i);
   const parmigianiMatch = text.match(/\bPFC\d{3,4}[-.]\d{7,10}[-.]?\d{0,6}\b/i);
   const jlcMatch = text.match(/\bQ?\d{6}[A-Z]{0,4}\b/i);
-  const vcMatch = text.match(/\b\d{5}[A-Z]{0,2}\b/i);
+  // VC: 4-5 digits + optional letters (e.g., 82035, 4300V)
+  const vcMatch = text.match(/\b\d{4,5}[A-Z]{0,2}\b/i);
 
-  if (rmMatch) ref = rmMatch[0].toUpperCase().replace(/\s/g, '');
-  else if (parmigianiMatch) ref = parmigianiMatch[0].toUpperCase();
-  else if (ppMatch) ref = ppMatch[0].toUpperCase();
-  else if (apMatch) ref = apMatch[0].toUpperCase();
-  else if (rolexMatch) ref = rolexMatch[0].toUpperCase();
-  else if (jlcMatch) ref = jlcMatch[0].toUpperCase();
-  else if (vcMatch && !brand) ref = vcMatch[0].toUpperCase();
-  else if (genericMatch) ref = genericMatch[0].toUpperCase();
+  // Price detection FIRST — so we can exclude price-looking numbers from ref candidates
+  const kM = text.match(/\b(\d{1,3})\s?[kK]\b/);
+  let kPrice = null;
+  if (kM) kPrice = parseInt(kM[1], 10) * 1000;
+  const pM = text.match(/([\d,]{3,})\s?(HKD|USD|USDT|EUR|hkd|usd|eur|usdt|\$|€)/i);
+  let explicitPrice = null;
+  if (pM) explicitPrice = parseInt(pM[1].replace(/,/g, ''), 10);
+
+  // Build ref candidates, filtering out price-looking numbers
+  const candidates = [];
+  if (rmMatch) candidates.push({ ref: rmMatch[0].toUpperCase().replace(/\s/g, ''), source: 'rm' });
+  if (parmigianiMatch) candidates.push({ ref: parmigianiMatch[0].toUpperCase(), source: 'parmigiani' });
+  if (ppMatch) candidates.push({ ref: ppMatch[0].toUpperCase(), source: 'pp' });
+  if (apMatch) candidates.push({ ref: apMatch[1].toUpperCase(), source: 'ap' });
+  if (rolexMatch) candidates.push({ ref: rolexMatch[0].toUpperCase(), source: 'rolex' });
+  if (jlcMatch) candidates.push({ ref: jlcMatch[0].toUpperCase(), source: 'jlc' });
+  if (vcMatch && brand === 'Vacheron Constantin') candidates.push({ ref: vcMatch[0].toUpperCase(), source: 'vc' });
+
+  // Filter: reject candidates that are just the explicit price or K-price
+  const validCandidates = candidates.filter(c => {
+    const numOnly = parseInt(c.ref.replace(/\D/g, ''), 10);
+    if (explicitPrice && numOnly === explicitPrice) return false;
+    if (kPrice && numOnly === kPrice) return false;
+    // Reject if it looks like a year (2015-2026) + suffix
+    if (/^20[12]\d[A-Z]+$/.test(c.ref)) return false;
+    // Reject if it's just digits 4-6 chars with no letters (likely price)
+    if (/^\d{4,6}$/.test(c.ref) && explicitPrice) return false;
+    return true;
+  });
+
+  if (validCandidates.length > 0) {
+    ref = validCandidates[0].ref;
+  }
+
+  // Fallback: generic match only if no specific match and not a price
+  if (!ref) {
+    const genericMatch = text.match(/\b\d{4,6}[\/\s-]?\d?[A-Z]{1,4}\b/i);
+    if (genericMatch) {
+      const gRef = genericMatch[0].toUpperCase();
+      const gNum = parseInt(gRef.replace(/\D/g, ''), 10);
+      if ((!explicitPrice || gNum !== explicitPrice) && (!kPrice || gNum !== kPrice) && !/^20[12]\d[A-Z]+$/.test(gRef)) {
+        ref = gRef;
+      }
+    }
+  }
 
   // Infer brand from reference if not found
   if (!brand && ref) {
@@ -769,12 +807,16 @@ function regexExtract(text) {
   const yM = text.match(/\b(20[12]\d)\b/);
   if (yM) year = parseInt(yM[1], 10);
 
-  const kM = text.match(/\b(\d{1,3})\s?[kK]\b/);
-  if (kM) price = parseInt(kM[1], 10) * 1000;
-  const pM = text.match(/([\d,]{3,})\s?(HKD|USD|USDT|EUR|hkd|usd|eur|usdt|\$|€)/i);
-  if (pM) {
-    price = parseInt(pM[1].replace(/,/g, ''), 10) || price;
-    const cs = (pM[2] || '').toUpperCase();
+  // Price already detected earlier for ref filtering; reuse here
+  let kPrice2 = null, explicitPrice2 = null;
+  const kM2 = text.match(/\b(\d{1,3})\s?[kK]\b/);
+  if (kM2) kPrice2 = parseInt(kM2[1], 10) * 1000;
+  const pM2 = text.match(/([\d,]{3,})\s?(HKD|USD|USDT|EUR|hkd|usd|eur|usdt|\$|€)/i);
+  if (pM2) explicitPrice2 = parseInt(pM2[1].replace(/,/g, ''), 10);
+
+  price = kPrice2 || explicitPrice2 || price;
+  if (pM2) {
+    const cs = (pM2[2] || '').toUpperCase();
     if (cs === '$' || cs === 'USD') currency = 'USD';
     else if (cs === 'HKD' || cs === 'HK$') currency = 'HKD';
     else if (cs === 'EUR' || cs === '€') currency = 'EUR';
