@@ -111,7 +111,8 @@ async function visionKimi(key, base64, mime) {
   if (!r.ok) throw new Error(`Kimi ${r.status}: ${await r.text()}`);
   const d = await r.json();
   const choice = d.choices?.[0]?.message;
-  return { parsed: extractJson(choice?.content || choice?.reasoning_content || ''), source: 'kimi' };
+  const rawText = choice?.content || choice?.reasoning_content || '';
+  return { parsed: extractJson(rawText), source: 'kimi', raw: rawText };
 }
 
 export default async function handler(req, res) {
@@ -140,7 +141,7 @@ export default async function handler(req, res) {
     if (!vision?.parsed && kimiKey) {
       vision = await visionKimi(kimiKey, base64, mime);
     }
-    if (!vision?.parsed) return res.status(502).json({ error: 'Vision providers returned no parseable result' });
+    if (!vision?.parsed) return res.status(502).json({ error: 'Vision providers returned no parseable result', rawSample: (vision?.raw || '').slice(0, 300) });
 
     const img = vision.parsed;
 
