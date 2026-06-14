@@ -35,10 +35,16 @@ function refsAgree(textRef, imageRef) {
 
 const VISION_PROMPT = `You are a luxury watch authentication expert. Look at this watch photo and report ONLY what you can see — do NOT guess to match any expectation.
 
-Return ONLY this JSON:
-{"brand":"<brand or UNKNOWN>","referenceVisible":"<any reference number printed on the watch/papers, or UNKNOWN>","modelGuess":"<model family if recognizable, else UNKNOWN>","dialColor":"<color>","legible":<true|false>,"confidence":<0-100>,"notes":"<short note>"}
+Return ONLY a JSON object with exactly these keys and concrete values (no angle brackets, no placeholders):
+brand (string, e.g. "Rolex" or "UNKNOWN")
+referenceVisible (string, any reference number printed on the watch/papers, else "UNKNOWN")
+modelGuess (string, model family if recognizable, else "UNKNOWN")
+dialColor (string, e.g. "Blue")
+legible (boolean true or false)
+confidence (number 0-100)
+notes (short string)
 
-Set "legible": false if the image is blurry, cropped, a box/strap only, or otherwise not a clear watch face. Be honest when unsure.`;
+Set legible to false if the image is blurry, cropped, a box/strap only, or otherwise not a clear watch face. Be honest when unsure. Example: {"brand":"Rolex","referenceVisible":"116610LN","modelGuess":"Submariner","dialColor":"Black","legible":true,"confidence":92,"notes":"clear dial"}`;
 
 async function fetchImageBase64(imageUrl) {
   const imgRes = await fetch(imageUrl);
@@ -49,8 +55,22 @@ async function fetchImageBase64(imageUrl) {
 }
 
 function extractJson(text) {
-  const m = (text || '').match(/\{[\s\S]*\}/);
-  return m ? JSON.parse(m[0]) : null;
+  if (!text) return null;
+  let m = text.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  let raw = m[0];
+  // Repair common model artifacts: unfilled <placeholders>, trailing commas.
+  raw = raw
+    .replace(/:\s*<true\|false>/gi, ': false')
+    .replace(/:\s*<[^>"]*>/g, ': "UNKNOWN"')      // any leftover <placeholder>
+    .replace(/:\s*<(\d+)[^>]*>/g, ': $1')
+    .replace(/,\s*}/g, '}')
+    .replace(/,\s*]/g, ']');
+  try { return JSON.parse(raw); }
+  catch (e) {
+    try { return JSON.parse(raw.replace(/<[^>]*>/g, '"UNKNOWN"')); }
+    catch (e2) { return null; }
+  }
 }
 
 async function visionGemini(key, base64, mime) {
