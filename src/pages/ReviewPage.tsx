@@ -9,7 +9,7 @@ interface Suggestion {
   field: string;
   value: string;
   reason: string;
-  source: 'catalog' | 'claude' | 'gemini' | 'inference';
+  source: 'catalog' | 'kimi' | 'claude' | 'gemini' | 'inference';
 }
 
 export default function ReviewPage() {
@@ -24,6 +24,7 @@ export default function ReviewPage() {
   const [suggestionsMap, setSuggestionsMap] = useState<Record<string, Suggestion[]>>({});
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   const brands = useMemo(() => {
     const set = new Set(records.map(r => r.brand).filter(Boolean));
@@ -72,58 +73,83 @@ export default function ReviewPage() {
     setEditForm({});
   }, [editingRecord]);
 
+  // Build field-level suggestions from a Kimi parse result vs the current record.
+  const buildSuggestions = useCallback((record: WatchRecord, parsed: any, source: string): Suggestion[] => {
+    const suggestions: Suggestion[] = [];
+    const src = source as Suggestion['source'];
+    if (parsed.dialColor && parsed.dialColor.toUpperCase() !== (record.dialColor || '').toUpperCase()) {
+      suggestions.push({ field: 'dialColor', value: parsed.dialColor, reason: `${source} suggests ${parsed.dialColor} from reference/context analysis`, source: src });
+    }
+    if (parsed.reference && parsed.reference.toUpperCase() !== (record.reference || '').toUpperCase()) {
+      suggestions.push({ field: 'reference', value: parsed.reference, reason: `${source} parsed full reference with suffix`, source: src });
+    }
+    if (parsed.brand && parsed.brand !== 'Unknown' && parsed.brand !== record.brand) {
+      suggestions.push({ field: 'brand', value: parsed.brand, reason: `${source} identified brand from reference pattern`, source: src });
+    }
+    return suggestions;
+  }, []);
+
+  const parseOne = useCallback(async (record: WatchRecord): Promise<Suggestion[]> => {
+    const res = await fetch('/api/ai-parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rawMessage: record.rawMessage,
+        currentGuess: {
+          reference: record.reference,
+          dialColor: record.dialColor,
+          brand: record.brand,
+          price: record.price,
+          currency: record.originalCurrency,
+        },
+      }),
+    });
+    const data = await res.json();
+    if (data.success && data.parsed) {
+      return buildSuggestions(record, data.parsed, data.source || 'kimi');
+    }
+    return [];
+  }, [buildSuggestions]);
+
   const askAI = useCallback(async (record: WatchRecord) => {
     setAiLoading(prev => ({ ...prev, [record.id]: true }));
     try {
-      const res = await fetch('/api/ai-parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rawMessage: record.rawMessage,
-          currentGuess: {
-            reference: record.reference,
-            dialColor: record.dialColor,
-            brand: record.brand,
-            price: record.price,
-            currency: record.originalCurrency,
-          }
-        }),
-      });
-      const data = await res.json();
-      if (data.success && data.parsed) {
-        const suggestions: Suggestion[] = [];
-        if (data.parsed.dialColor && data.parsed.dialColor !== record.dialColor) {
-          suggestions.push({
-            field: 'dialColor',
-            value: data.parsed.dialColor,
-            reason: `AI suggests ${data.parsed.dialColor} from reference suffix analysis`,
-            source: data.source as any,
-          });
-        }
-        if (data.parsed.reference && data.parsed.reference !== record.reference) {
-          suggestions.push({
-            field: 'reference',
-            value: data.parsed.reference,
-            reason: 'AI parsed full reference with suffix',
-            source: data.source as any,
-          });
-        }
-        if (data.parsed.brand && data.parsed.brand !== record.brand) {
-          suggestions.push({
-            field: 'brand',
-            value: data.parsed.brand,
-            reason: 'AI identified brand from reference pattern',
-            source: data.source as any,
-          });
-        }
-        setSuggestionsMap(prev => ({ ...prev, [record.id]: suggestions }));
-      }
+      const suggestions = await parseOne(record);
+      setSuggestionsMap(prev => ({ ...prev, [record.id]: suggestions }));
     } catch (e) {
       console.error('AI parse failed:', e);
     } finally {
       setAiLoading(prev => ({ ...prev, [record.id]: false }));
     }
-  }, []);
+  }, [parseOne]);
+
+  // Bulk re-parse all currently-filtered records with Kimi (concurrency-limited).
+  const bulkReparse = useCallback(async (targets: WatchRecord[]) => {
+    const queue = targets.slice(0, 50); // safety cap per run
+    if (queue.length === 0) return;
+    setBulkProgress({ done: 0, total: queue.length });
+    const CONCURRENCY = 4;
+    let idx = 0;
+    let done = 0;
+    const worker = async () => {
+      while (idx < queue.length) {
+        const record = queue[idx++];
+        try {
+          const suggestions = await parseOne(record);
+          if (suggestions.length > 0) {
+            setSuggestionsMap(prev => ({ ...prev, [record.id]: suggestions }));
+          }
+        } catch (e) {
+          console.error('Bulk parse failed for', record.id, e);
+        } finally {
+          done++;
+          setBulkProgress({ done, total: queue.length });
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    setBulkProgress(null);
+  }, [parseOne]);
 
   const applySuggestion = useCallback((recordId: string, suggestion: Suggestion) => {
     setEditForm(prev => ({ ...prev, [suggestion.field]: suggestion.value }));
@@ -150,15 +176,28 @@ export default function ReviewPage() {
 
       <div className="p-5 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
-            <Eye size={24} className="text-gold-primary" />
-            Human Review Mode
-          </h1>
-          <p className="text-sm text-text-muted mt-1">
-            Review low-confidence parses, fix errors, and train the catalog. 
-            {filtered.length} records match current filters.
-          </p>
+        <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
+              <Eye size={24} className="text-gold-primary" />
+              Human Review Mode
+            </h1>
+            <p className="text-sm text-text-muted mt-1">
+              Review low-confidence parses, fix errors, and train the catalog. 
+              {filtered.length} records match current filters.
+            </p>
+          </div>
+          <button
+            onClick={() => bulkReparse(filtered)}
+            disabled={bulkProgress !== null || filtered.length === 0}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-primary/10 border border-gold-primary/40 text-gold-primary text-sm font-medium hover:bg-gold-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Re-parse the filtered records with Kimi K2.6 and surface suggestions"
+          >
+            <Wand2 size={16} />
+            {bulkProgress
+              ? `Kimi re-parsing… ${bulkProgress.done}/${bulkProgress.total}`
+              : `Bulk Kimi Re-parse (${Math.min(filtered.length, 50)})`}
+          </button>
         </div>
 
         {/* Filters */}
