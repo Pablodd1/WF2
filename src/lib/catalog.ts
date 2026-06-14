@@ -200,7 +200,8 @@ function getCatalog(): Map<string, CatalogEntry> {
 /** Normalize a raw reference string to canonical form */
 export function normalizeReference(rawRef: string, brandHint?: string): string {
   const catalog = getCatalog();
-  const cleaned = rawRef.trim().toUpperCase().replace(/\s+/g, ' ');
+  if (rawRef == null) return '';
+  const cleaned = String(rawRef).trim().toUpperCase().replace(/\s+/g, ' ');
 
   // Direct match
   if (catalog.has(cleaned)) return cleaned;
@@ -412,7 +413,9 @@ const DIAL_ALIASES: Record<string, string[]> = {
 };
 
 export function normalizeDialColor(raw: string): string {
-  const cleaned = raw.trim().toUpperCase();
+  if (raw == null) return 'UNKNOWN';
+  const cleaned = String(raw).trim().toUpperCase();
+  if (!cleaned) return 'UNKNOWN';
   for (const [canonical, aliases] of Object.entries(DIAL_ALIASES)) {
     if (canonical === cleaned || aliases.includes(cleaned)) return canonical;
   }

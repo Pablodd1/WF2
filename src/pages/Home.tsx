@@ -16,7 +16,7 @@ import { useWatchData } from '@/hooks/useWatchData';
 import type { WatchRecord } from '@/types';
 
 export default function Home() {
-  const { records, stats } = useWatchData();
+  const { records, stats, loading } = useWatchData();
 
   // Modal state
   const [selectedRecord, setSelectedRecord] = useState<WatchRecord | null>(null);
@@ -80,11 +80,62 @@ export default function Home() {
   }, []);
 
   const handleExportExcel = useCallback(() => {
+    // Generate a live report from the actual loaded records (no stale static file).
+    if (!records || records.length === 0) {
+      // Fallback: dataset not loaded yet — serve the static workbook.
+      const link = document.createElement('a');
+      link.href = '/WatchFacts_Normalized_Dataset.xlsx';
+      link.download = 'WatchFacts_Normalized_Dataset.xlsx';
+      link.click();
+      return;
+    }
+
+    const cols = [
+      'id', 'brand', 'reference', 'dialColor', 'condition',
+      'price', 'originalPrice', 'originalCurrency', 'year',
+      'confidence', 'isResidue', 'buyerCount', 'sellerCount',
+      'liquidityScore', 'rawMessage',
+    ];
+    const esc = (v: unknown) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = cols.join(',');
+    const rows = records.map((r) =>
+      cols.map((c) => esc((r as unknown as Record<string, unknown>)[c])).join(',')
+    );
+    const csv = '\uFEFF' + [header, ...rows].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = '/Patek_Philippe_Analytics.xlsx';
-    link.download = 'Patek_Philippe_Analytics.xlsx';
+    const stamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `WatchFacts_Report_${records.length}records_${stamp}.csv`;
+    document.body.appendChild(link);
     link.click();
-  }, []);
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [records]);
+
+  if (loading) {
+    return (
+      <Layout
+        totalProcessed={stats.totalProcessed}
+        normalizedCount={stats.normalizedCount}
+        residueCount={stats.residueCount}
+        throughputRate={stats.throughputRate}
+        avgLatency={stats.avgLatency}
+      >
+        <TabNav totalProcessed={stats.totalProcessed} />
+        <div className="flex flex-col items-center justify-center py-32 gap-4">
+          <div className="h-10 w-10 rounded-full border-2 border-gold-primary/30 border-t-gold-primary animate-spin" />
+          <p className="text-sm text-text-muted tracking-wide">
+            Loading 103,895 records…
+          </p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout

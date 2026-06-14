@@ -140,7 +140,7 @@ function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>):
     rawMessage: raw.sourceLine || '',
     timestamp: raw.timestamp || '',
     brand: raw.brand || 'Unknown',
-    reference: normalizeReference(raw.reference, raw.brand),
+    reference: normalizeReference(raw.reference || '', raw.brand),
     family: raw.family || 'Other',
     price: finalPrice,
     originalPrice: originalPrice,
@@ -205,7 +205,7 @@ export function useWatchData() {
             daysOnMarket: 0, stageLogs: [], imageUrl: null, imageCount: 0,
             imageConfirmed: false, autoResolvedFlags: [], buyerCount: 0, sellerCount: 0,
             buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10],
-            description: row[13] || '',
+            description: row[13] || row[8] || '',
           }));
         } else {
           records = rawData as RawRecord[];
@@ -214,7 +214,16 @@ export function useWatchData() {
         enrichedData.forEach((e) => {
           if (e.reference) enrichedMap.set(e.reference, e);
         });
-        const transformed = records.map((r) => transformRecord(r, enrichedMap));
+        const transformed = records
+          .map((r) => {
+            try {
+              return transformRecord(r, enrichedMap);
+            } catch (e) {
+              console.warn('Skipped malformed record', (r as any)?.id, e);
+              return null;
+            }
+          })
+          .filter((r): r is WatchRecord => r !== null);
         setRecords(transformed);
         setLoading(false);
       })

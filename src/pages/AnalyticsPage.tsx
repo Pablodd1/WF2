@@ -5,7 +5,7 @@ import { useWatchData } from '@/hooks/useWatchData';
 import { Footer } from '@/components/Footer';
 
 export default function AnalyticsPage() {
-  const { records, stats } = useWatchData();
+  const { records, stats, loading } = useWatchData();
 
   return (
     <Layout
@@ -16,7 +16,14 @@ export default function AnalyticsPage() {
       avgLatency={stats.avgLatency}
     >
       <TabNav totalProcessed={stats.totalProcessed} />
-      <AnalyticsTab records={records} />
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-32 gap-4">
+          <div className="h-10 w-10 rounded-full border-2 border-gold-primary/30 border-t-gold-primary animate-spin" />
+          <p className="text-sm text-text-muted tracking-wide">Loading analytics…</p>
+        </div>
+      ) : (
+        <AnalyticsTab records={records} />
+      )}
       <Footer />
     </Layout>
   );

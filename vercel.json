@@ -7,6 +7,17 @@
       "maxDuration": 30
     }
   },
+  "headers": [
+    {
+      "source": "/(parsedWatches|enriched_refs).json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, stale-while-revalidate=86400"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
