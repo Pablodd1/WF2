@@ -144,32 +144,38 @@ export default async function handler(req, res) {
 
     const img = vision.parsed;
 
-    // Decide verdict.
+    // Decide verdict. MISMATCH only on a GENUINE conflict, never on missing data.
     let verdict, flag = null, severity = 'INFO', reason;
+
+    const refAgree = refsAgree(reference, img.referenceVisible); // true | false | null(unknown)
+
+    // Brand conflict: both brands known AND clearly different.
+    const tb = (brand || '').toUpperCase().replace(/[^A-Z]/g, '');
+    const ib = (img.brand || '').toUpperCase().replace(/[^A-Z]/g, '');
+    const brandKnown = tb && ib && ib !== 'UNKNOWN' && tb !== 'UNKNOWN';
+    const brandConflict = brandKnown && !(tb.startsWith(ib.slice(0, 4)) || ib.startsWith(tb.slice(0, 4)));
+
     if (img.legible === false || (img.confidence ?? 0) < 40) {
       verdict = 'UNVERIFIED';
-      reason = 'Image not clear enough to verify the reference (blurry/cropped/box-only).';
+      reason = 'Image not clear enough to verify (blurry, cropped, or box/strap only).';
+    } else if (brandConflict || refAgree === false) {
+      // Genuine disagreement -> route to human review.
+      verdict = 'MISMATCH';
+      flag = 'IMAGE_MISMATCH';
+      severity = 'CRITICAL';
+      const seen = img.brand && img.brand !== 'UNKNOWN' ? img.brand : 'a different watch';
+      const seenRef = img.referenceVisible && img.referenceVisible !== 'UNKNOWN' ? ` ref "${img.referenceVisible}"` : '';
+      reason = `Image shows ${seen}${seenRef}, but the listing claims ${brand || 'reference'} "${reference}".`;
+    } else if (refAgree === true) {
+      verdict = 'MATCH';
+      reason = `Image reference "${img.referenceVisible}" agrees with listed reference "${reference}".`;
+    } else if (brandKnown && !brandConflict) {
+      // Brand confirmed by image, no printed reference to cross-check -> soft match.
+      verdict = 'MATCH';
+      reason = `Image confirms ${img.brand}${img.modelGuess && img.modelGuess !== 'UNKNOWN' ? ` ${img.modelGuess}` : ''}; no printed reference visible to verify exact ref, but brand is consistent.`;
     } else {
-      const agree = refsAgree(reference, img.referenceVisible);
-      const brandAgree =
-        !brand || !img.brand || img.brand === 'UNKNOWN'
-          ? null
-          : normRef(brand).slice(0, 5) === normRef(img.brand).slice(0, 5) ||
-            (brand || '').toUpperCase().includes((img.brand || '').toUpperCase().split(' ')[0]);
-
-      if (agree === true) {
-        verdict = 'MATCH';
-        reason = `Image reference "${img.referenceVisible}" agrees with text reference "${reference}".`;
-      } else if (agree === false || brandAgree === false) {
-        verdict = 'MISMATCH';
-        flag = 'IMAGE_MISMATCH';
-        severity = 'CRITICAL';
-        reason = `Image shows ${img.brand || 'a different watch'}${img.referenceVisible && img.referenceVisible !== 'UNKNOWN' ? ` ref "${img.referenceVisible}"` : ''} but text claims reference "${reference}".`;
-      } else {
-        // Image legible but no reference printed — fall back to dial-color sanity only.
-        verdict = 'UNVERIFIED';
-        reason = 'Image is clear but shows no printed reference to cross-check.';
-      }
+      verdict = 'UNVERIFIED';
+      reason = 'Image is clear but shows no printed reference or recognizable brand to cross-check.';
     }
 
     return res.status(200).json({
