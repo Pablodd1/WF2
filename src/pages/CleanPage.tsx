@@ -4,9 +4,10 @@ import { TabNav } from '@/components/TabNav';
 import { Footer } from '@/components/Footer';
 import { useWatchData } from '@/hooks/useWatchData';
 import { cleanAnalyze } from '@/lib/cleanAnalyze';
+import { exportCleanExcel } from '@/lib/cleanExport';
 import type { CleanResponse, CleanWatch, CleanStage, Verdict } from '@/lib/cleanAnalyze';
 import {
-  Sparkles, Search, Globe, Cog,
+  Sparkles, Search, Globe, Cog, Download,
   CheckCircle2, UserCheck, Trash2, AlertTriangle, Loader2,
 } from 'lucide-react';
 
@@ -93,7 +94,6 @@ function WatchCard({ w, n }: { w: CleanWatch; n: number }) {
             <span className="text-sm font-bold text-text-primary truncate">
               {w.parsed.brand !== 'Unknown' ? w.parsed.brand : 'Unidentified'}
               {w.parsed.reference ? ` · ${w.parsed.reference}` : ''}
-              {w.parsed.family && w.parsed.family !== 'OTHER' ? ` · ${w.parsed.family}` : ''}
             </span>
           </div>
           <p className="text-[11px] text-text-muted mt-1 line-clamp-2">{w.input}</p>
@@ -198,18 +198,32 @@ export default function CleanPage() {
 
         {/* summary */}
         {res && (
-          <div className="mt-6 grid grid-cols-4 gap-2">
-            {[
-              { label: 'Total', val: res.summary.total, color: 'text-text-primary' },
-              { label: 'Approved', val: res.summary.approved, color: 'text-emerald-400' },
-              { label: 'Human', val: res.summary.human, color: 'text-amber-400' },
-              { label: 'Recycle', val: res.summary.recycle, color: 'text-red-400' },
-            ].map((c) => (
-              <div key={c.label} className="rounded-lg border border-border-default bg-bg-card p-3 text-center">
-                <div className={`text-2xl font-extrabold ${c.color}`}>{c.val}</div>
-                <div className="text-[10px] uppercase tracking-wider text-text-muted mt-0.5">{c.label}</div>
-              </div>
-            ))}
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-text-primary">Results Summary</h2>
+              <button
+                onClick={() => {
+                  if (res) exportCleanExcel(res.watches, res.summary);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gold-primary/30 text-gold-primary text-xs font-bold hover:bg-gold-primary/10 transition-colors"
+              >
+                <Download size={12} />
+                Export Excel
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: 'Total', val: res.summary.total, color: 'text-text-primary' },
+                { label: 'Approved', val: res.summary.approved, color: 'text-emerald-400' },
+                { label: 'Human', val: res.summary.human, color: 'text-amber-400' },
+                { label: 'Recycle', val: res.summary.recycle, color: 'text-red-400' },
+              ].map((c) => (
+                <div key={c.label} className="rounded-lg border border-border-default bg-bg-card p-3 text-center">
+                  <div className={`text-2xl font-extrabold ${c.color}`}>{c.val}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-text-muted mt-0.5">{c.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
