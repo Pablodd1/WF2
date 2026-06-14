@@ -74,8 +74,8 @@ async function visionKimi(key, base64, mime) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model: 'kimi-k2.6',
-      temperature: 0.1,
-      max_tokens: 400,
+      temperature: 1,
+      max_tokens: 1024,
       messages: [
         { role: 'system', content: 'You are a luxury watch authentication expert. Return ONLY valid JSON.' },
         {
