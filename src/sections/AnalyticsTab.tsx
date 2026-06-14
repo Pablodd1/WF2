@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   BarChart3, TrendingUp, AlertTriangle, CheckCircle, DollarSign, Package,
-  Users, Trash2, ChevronDown, ChevronUp
+  Users, Trash2, ChevronDown, ChevronUp, Download
 } from 'lucide-react';
 import type { WatchRecord } from '@/types';
 import { buildPriceAnalytics } from '@/lib/analytics';
@@ -112,6 +112,46 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
 
   const filteredGroups = analytics.groups.filter((g) => g.count >= minPointsFilter);
 
+  // Download the price-guide analytics as an accurate CSV (per reference+dial).
+  const handleDownloadReport = () => {
+    const esc = (v: unknown) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const cols = [
+      'reference', 'brand', 'dialColor', 'family', 'listings',
+      'minPrice', 'medianPrice', 'avgPrice', 'maxPrice', 'stdDev',
+      'outliersRemoved', 'buyerCount', 'sellerCount', 'status',
+    ];
+    const rows = analytics.groups.map((g) => [
+      g.reference, g.brand, g.dialColor, g.family, g.count,
+      Math.round(g.minPrice), g.medianPrice, Math.round(g.avgPrice), Math.round(g.maxPrice), Math.round(g.stdDev),
+      g.removed?.length || 0, g.buyerCount, g.sellerCount, g.status,
+    ].map(esc).join(','));
+    // Summary header block (commented lines Excel ignores in column A)
+    const summary = [
+      `# WatchFacts Price Guide Analytics`,
+      `# Generated,${new Date().toISOString()}`,
+      `# Total records,${stats.total}`,
+      `# Normalized,${stats.normalized}`,
+      `# Residue,${stats.residue}`,
+      `# Distinct reference+dial groups,${analytics.totalReferences}`,
+      `# Records with images,${stats.withImages}`,
+      `# Total catalog value,$${stats.totalValue}`,
+      `#`,
+    ];
+    const csv = '\uFEFF' + [...summary, cols.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `WatchFacts_PriceGuide_${analytics.groups.length}refs_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="px-5 py-6">
       {/* Header */}
@@ -119,6 +159,14 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
         <BarChart3 size={20} className="text-gold-primary" />
         <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-gold-primary">Price Guide Analytics</h2>
         <span className="text-[10px] text-text-muted">{analytics.totalReferences} refs · IQR outlier removal · adaptive gate</span>
+        <button
+          onClick={handleDownloadReport}
+          className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-primary/10 border border-gold-primary/40 text-gold-primary text-xs font-semibold hover:bg-gold-primary/20 transition-colors"
+          title="Download the full price-guide analytics as CSV (opens in Excel)"
+        >
+          <Download size={14} />
+          Download Results ({analytics.groups.length} refs)
+        </button>
       </div>
 
       {/* KPI Cards */}
