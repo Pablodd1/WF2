@@ -54,23 +54,41 @@ async function fetchImageBase64(imageUrl) {
   return { base64: buf.toString('base64'), mime };
 }
 
-function extractJson(text) {
-  if (!text) return null;
-  let m = text.match(/\{[\s\S]*\}/);
-  if (!m) return null;
-  let raw = m[0];
-  // Repair common model artifacts: unfilled <placeholders>, trailing commas.
-  raw = raw
+function repairJson(raw) {
+  return raw
     .replace(/:\s*<true\|false>/gi, ': false')
-    .replace(/:\s*<[^>"]*>/g, ': "UNKNOWN"')      // any leftover <placeholder>
     .replace(/:\s*<(\d+)[^>]*>/g, ': $1')
+    .replace(/:\s*<[^>"]*>/g, ': "UNKNOWN"')
     .replace(/,\s*}/g, '}')
     .replace(/,\s*]/g, ']');
-  try { return JSON.parse(raw); }
-  catch (e) {
-    try { return JSON.parse(raw.replace(/<[^>]*>/g, '"UNKNOWN"')); }
-    catch (e2) { return null; }
+}
+
+function extractJson(text) {
+  if (!text) return null;
+  // Kimi K2.6 is a thinking model: it emits reasoning prose, then the JSON.
+  // Find ALL balanced {...} candidates and try them LAST-first (final answer wins).
+  const candidates = [];
+  const stack = [];
+  let start = -1;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '{') { if (stack.length === 0) start = i; stack.push(c); }
+    else if (c === '}') {
+      stack.pop();
+      if (stack.length === 0 && start >= 0) { candidates.push(text.slice(start, i + 1)); start = -1; }
+    }
   }
+  for (let k = candidates.length - 1; k >= 0; k--) {
+    const cand = candidates[k];
+    if (!/"(brand|dialColor|referenceVisible|legible)"/.test(cand)) continue; // must look like our schema
+    for (const attempt of [cand, repairJson(cand), repairJson(cand).replace(/<[^>]*>/g, '"UNKNOWN"')]) {
+      try { return JSON.parse(attempt); } catch (e) { /* try next */ }
+    }
+  }
+  // Fallback: greedy first-to-last
+  const m = text.match(/\{[\s\S]*\}/);
+  if (m) { try { return JSON.parse(repairJson(m[0])); } catch (e) { /* noop */ } }
+  return null;
 }
 
 async function visionGemini(key, base64, mime) {
@@ -95,7 +113,7 @@ async function visionKimi(key, base64, mime) {
     body: JSON.stringify({
       model: 'kimi-k2.6',
       temperature: 1,
-      max_tokens: 1024,
+      max_tokens: 2048,
       messages: [
         { role: 'system', content: 'You are a luxury watch authentication expert. Return ONLY valid JSON.' },
         {
