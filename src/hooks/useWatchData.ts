@@ -175,63 +175,72 @@ function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>):
   };
 }
 
+// Module-level cache so the 18MB dataset is fetched + transformed ONCE.
+// Without this, every tab switch re-fetches & re-parses -> multi-second loading
+// spinner on each navigation (looks like "the link doesn't work" on slow/mobile).
+let _cache: WatchRecord[] | null = null;
+let _cachePromise: Promise<WatchRecord[]> | null = null;
+
+function loadWatchData(): Promise<WatchRecord[]> {
+  if (_cache) return Promise.resolve(_cache);
+  if (_cachePromise) return _cachePromise;
+  _cachePromise = Promise.all([
+    fetch('/parsedWatches.json').then((res) => {
+      if (!res.ok) throw new Error(`parsedWatches.json HTTP ${res.status}`);
+      return res.json();
+    }),
+    fetch('/enriched_refs.json').then((res) => {
+      if (!res.ok) throw new Error(`enriched_refs.json HTTP ${res.status}`);
+      return res.json();
+    }).catch(() => [] as EnrichedRef[]),
+  ]).then(([rawData, enrichedData]: [any, EnrichedRef[]]) => {
+    let records: RawRecord[];
+    if (Array.isArray(rawData) && rawData.length > 0 && Array.isArray(rawData[0])) {
+      const rows = rawData as any[][];
+      records = rows.map((row) => ({
+        id: row[0], hash: '', sourceType: 'WhatsApp', sourceLine: row[8] || '',
+        brand: row[1], reference: row[2], family: '', dialColor: row[3], condition: row[7],
+        boxPapers: '', price: row[4], currency: row[6], priceUSD: row[5], year: null,
+        seller: '', location: '', confidence: row[9], status: 'NORMALIZED', flags: [],
+        timestamp: '', mlPredictedPrice: 0, mlPriceConfidence: 0, mlDemandForecast: '',
+        mlOutcomeClass: '', mlOutcomeConfidence: 0, marketComparables: 0, sellerRating: 0,
+        daysOnMarket: 0, stageLogs: [], imageUrl: row[14] || null, imageCount: row[14] ? 1 : 0,
+        imageConfirmed: false, autoResolvedFlags: [], buyerCount: 0, sellerCount: 0,
+        buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10],
+        description: row[13] || row[8] || '',
+      }));
+    } else {
+      records = rawData as RawRecord[];
+    }
+    const enrichedMap = new Map<string, EnrichedRef>();
+    enrichedData.forEach((e) => { if (e.reference) enrichedMap.set(e.reference, e); });
+    const transformed = records
+      .map((r) => {
+        try { return transformRecord(r, enrichedMap); }
+        catch (e) { console.warn('Skipped malformed record', (r as any)?.id, e); return null; }
+      })
+      .filter((r): r is WatchRecord => r !== null);
+    _cache = transformed;
+    return transformed;
+  });
+  return _cachePromise;
+}
+
 export function useWatchData() {
-  const [records, setRecords] = useState<WatchRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  // If already cached, start non-loading with data in hand (instant tab switches).
+  const [records, setRecords] = useState<WatchRecord[]>(_cache ?? []);
+  const [loading, setLoading] = useState(_cache === null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch('/parsedWatches.json').then((res) => {
-        if (!res.ok) throw new Error(`parsedWatches.json HTTP ${res.status}`);
-        return res.json();
-      }),
-      fetch('/enriched_refs.json').then((res) => {
-        if (!res.ok) throw new Error(`enriched_refs.json HTTP ${res.status}`);
-        return res.json();
-      }).catch(() => [] as EnrichedRef[]),
-    ])
-      .then(([rawData, enrichedData]: [any, EnrichedRef[]]) => {
-        let records: RawRecord[];
-        if (Array.isArray(rawData) && rawData.length > 0 && Array.isArray(rawData[0])) {
-          const rows = rawData as any[][];
-          records = rows.map((row) => ({
-            id: row[0], hash: '', sourceType: 'WhatsApp', sourceLine: row[8] || '',
-            brand: row[1], reference: row[2], family: '', dialColor: row[3], condition: row[7],
-            boxPapers: '', price: row[4], currency: row[6], priceUSD: row[5], year: null,
-            seller: '', location: '', confidence: row[9], status: 'NORMALIZED', flags: [],
-            timestamp: '', mlPredictedPrice: 0, mlPriceConfidence: 0, mlDemandForecast: '',
-            mlOutcomeClass: '', mlOutcomeConfidence: 0, marketComparables: 0, sellerRating: 0,
-            daysOnMarket: 0, stageLogs: [], imageUrl: row[14] || null, imageCount: row[14] ? 1 : 0,
-            imageConfirmed: false, autoResolvedFlags: [], buyerCount: 0, sellerCount: 0,
-            buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10],
-            description: row[13] || row[8] || '',
-          }));
-        } else {
-          records = rawData as RawRecord[];
-        }
-        const enrichedMap = new Map<string, EnrichedRef>();
-        enrichedData.forEach((e) => {
-          if (e.reference) enrichedMap.set(e.reference, e);
-        });
-        const transformed = records
-          .map((r) => {
-            try {
-              return transformRecord(r, enrichedMap);
-            } catch (e) {
-              console.warn('Skipped malformed record', (r as any)?.id, e);
-              return null;
-            }
-          })
-          .filter((r): r is WatchRecord => r !== null);
-        setRecords(transformed);
-        setLoading(false);
-      })
+    if (_cache) { setRecords(_cache); setLoading(false); return; }
+    let alive = true;
+    loadWatchData()
+      .then((data) => { if (alive) { setRecords(data); setLoading(false); } })
       .catch((err) => {
-        console.error('Failed to load watch data:', err);
-        setError(err.message);
-        setLoading(false);
+        if (alive) { console.error('Failed to load watch data:', err); setError(err.message); setLoading(false); }
       });
+    return () => { alive = false; };
   }, []);
 
   const stats = {
