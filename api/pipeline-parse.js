@@ -164,7 +164,507 @@ const BRAND_ALIASES = {
   'AP': 'AUDEMARS PIGUET', 'AUDEMARS': 'AUDEMARS PIGUET', 'PIGUET': 'AUDEMARS PIGUET',
   'RM': 'RICHARD MILLE', 'RICHARD': 'RICHARD MILLE', 'MILLE': 'RICHARD MILLE',
   'VC': 'VACHERON CONSTANTIN', 'VACHERON': 'VACHERON CONSTANTIN',
+  'JLC': 'JAEGER-LECOULTRE', 'JAEGER': 'JAEGER-LECOULTRE', 'LECOULTRE': 'JAEGER-LECOULTRE',
+  'ALS': 'A. LANGE & SOHNE', 'LANGE': 'A. LANGE & SOHNE', 'AL&S': 'A. LANGE & SOHNE',
+  'ALANGE': 'A. LANGE & SOHNE', 'A. LANGE': 'A. LANGE & SOHNE',
+  'GF': 'GERALD GENTA', 'GERALD': 'GERALD GENTA', 'GENTA': 'GERALD GENTA',
+  'FPJ': 'F.P. JOURNE', 'JOURNE': 'F.P. JOURNE', 'F.P.': 'F.P. JOURNE',
+  'MB&F': 'MB&F', 'MBF': 'MB&F', 'MAXIMILIAN': 'MB&F',
+  'BREGUET': 'BREGUET', 'BREITLING': 'BREITLING', 'CARTIER': 'CARTIER',
+  'HUBLOT': 'HUBLOT', 'IWC': 'IWC', 'OMEGA': 'OMEGA', 'TAG': 'TAG HEUER',
+  'TUDOR': 'TUDOR', 'ZENITH': 'ZENITH', 'PANERAI': 'PANERAI',
+  'GRAND SEIKO': 'GRAND SEIKO', 'GS': 'GRAND SEIKO',
+  'ULYSSE NARDIN': 'ULYSSE NARDIN', 'UN': 'ULYSSE NARDIN',
+  'BLANCPAIN': 'BLANCPAIN', 'GP': 'GIRARD-PERREGAUX',
+  'GIRARD': 'GIRARD-PERREGAUX', 'PERREGAUX': 'GIRARD-PERREGAUX',
+  'PARMIGIANI': 'PARMIGIANI FLEURIER', 'PF': 'PARMIGIANI FLEURIER',
+  'FLEURIER': 'PARMIGIANI FLEURIER',
+  'H. MOSER': 'H. MOSER & CIE', 'MOSER': 'H. MOSER & CIE',
+  'ROGER DUBUIS': 'ROGER DUBUIS', 'RD': 'ROGER DUBUIS',
+  'VAN CLEEF': 'VAN CLEEF & ARPELS', 'VCA': 'VAN CLEEF & ARPELS',
 };
+
+// ─── Iconic Reference → Brand Inference ───
+const ICONIC_REFS = {
+  // Patek
+  '5711': 'PATEK PHILIPPE', '5712': 'PATEK PHILIPPE', '5726': 'PATEK PHILIPPE',
+  '5740': 'PATEK PHILIPPE', '5811': 'PATEK PHILIPPE', '5980': 'PATEK PHILIPPE',
+  '5990': 'PATEK PHILIPPE', '7010': 'PATEK PHILIPPE', '7118': 'PATEK PHILIPPE',
+  '5167': 'PATEK PHILIPPE', '5168': 'PATEK PHILIPPE', '5164': 'PATEK PHILIPPE',
+  '5261': 'PATEK PHILIPPE', '5267': 'PATEK PHILIPPE', '5268': 'PATEK PHILIPPE',
+  '5968': 'PATEK PHILIPPE', '5067': 'PATEK PHILIPPE', '5205': 'PATEK PHILIPPE',
+  '7300': 'PATEK PHILIPPE', '4947': 'PATEK PHILIPPE', '4948': 'PATEK PHILIPPE',
+  '6104': 'PATEK PHILIPPE', '5374': 'PATEK PHILIPPE',
+  // Rolex
+  '126710': 'ROLEX', '126711': 'ROLEX', '126715': 'ROLEX', '126719': 'ROLEX',
+  '126720': 'ROLEX', '126713': 'ROLEX', '126755': 'ROLEX',
+  '126334': 'ROLEX', '126333': 'ROLEX', '126331': 'ROLEX', '126300': 'ROLEX',
+  '126303': 'ROLEX', '126234': 'ROLEX', '126231': 'ROLEX', '126233': 'ROLEX',
+  '126200': 'ROLEX', '126201': 'ROLEX', '126000': 'ROLEX', '126622': 'ROLEX',
+  '126600': 'ROLEX', '126603': 'ROLEX', '126621': 'ROLEX', '126655': 'ROLEX',
+  '126711': 'ROLEX', '126715': 'ROLEX',
+  '116500': 'ROLEX', '116503': 'ROLEX', '116508': 'ROLEX', '116518': 'ROLEX',
+  '116519': 'ROLEX', '116506': 'ROLEX', '116505': 'ROLEX',
+  '228238': 'ROLEX', '228235': 'ROLEX', '228239': 'ROLEX', '228206': 'ROLEX',
+  '228396': 'ROLEX',
+  '124060': 'ROLEX', '124300': 'ROLEX', '124270': 'ROLEX', '124273': 'ROLEX',
+  '136660': 'ROLEX', '126660': 'ROLEX',
+  // AP
+  '15510': 'AUDEMARS PIGUET', '15551': 'AUDEMARS PIGUET', '15720': 'AUDEMARS PIGUET',
+  '26240': 'AUDEMARS PIGUET', '26231': 'AUDEMARS PIGUET', '26420': 'AUDEMARS PIGUET',
+  '26574': 'AUDEMARS PIGUET', '26579': 'AUDEMARS PIGUET', '26586': 'AUDEMARS PIGUET',
+  '15400': 'AUDEMARS PIGUET', '15202': 'AUDEMARS PIGUET', '16202': 'AUDEMARS PIGUET',
+  '26331': 'AUDEMARS PIGUET', '26315': 'AUDEMARS PIGUET', '77351': 'AUDEMARS PIGUET',
+  '77350': 'AUDEMARS PIGUET', '77451': 'AUDEMARS PIGUET', '67651': 'AUDEMARS PIGUET',
+  '67650': 'AUDEMARS PIGUET', '26239': 'AUDEMARS PIGUET', '26317': 'AUDEMARS PIGUET',
+  '26560': 'AUDEMARS PIGUET', '26561': 'AUDEMARS PIGUET',
+  // RM
+  'RM': 'RICHARD MILLE',
+  // VC
+  '4300': 'VACHERON CONSTANTIN', '4500': 'VACHERON CONSTANTIN',
+  '6000': 'VACHERON CONSTANTIN', '7900': 'VACHERON CONSTANTIN',
+  '82035': 'VACHERON CONSTANTIN', '4010': 'VACHERON CONSTANTIN',
+  '81180': 'VACHERON CONSTANTIN', '85180': 'VACHERON CONSTANTIN',
+  // JLC
+  '136250': 'JAEGER-LECOULTRE', '136251': 'JAEGER-LECOULTRE',
+  '136252': 'JAEGER-LECOULTRE', '14225': 'JAEGER-LECOULTRE',
+  '14284': 'JAEGER-LECOULTRE', '34424': 'JAEGER-LECOULTRE',
+  '34484': 'JAEGER-LECOULTRE', '35234': 'JAEGER-LECOULTRE',
+  '35284': 'JAEGER-LECOULTRE', '41225': 'JAEGER-LECOULTRE',
+  '41384': 'JAEGER-LECOULTRE', '50424': 'JAEGER-LECOULTRE',
+  '50425': 'JAEGER-LECOULTRE', '50525': 'JAEGER-LECOULTRE',
+  '50824': 'JAEGER-LECOULTRE', '50825': 'JAEGER-LECOULTRE',
+  '51024': 'JAEGER-LECOULTRE', '51025': 'JAEGER-LECOULTRE',
+  '52734': 'JAEGER-LECOULTRE', '52784': 'JAEGER-LECOULTRE',
+  '60024': 'JAEGER-LECOULTRE', '60025': 'JAEGER-LECOULTRE',
+  '60424': 'JAEGER-LECOULTRE', '60425': 'JAEGER-LECOULTRE',
+  '60824': 'JAEGER-LECOULTRE', '60825': 'JAEGER-LECOULTRE',
+  '62024': 'JAEGER-LECOULTRE', '62025': 'JAEGER-LECOULTRE',
+  '62424': 'JAEGER-LECOULTRE', '62425': 'JAEGER-LECOULTRE',
+  '62824': 'JAEGER-LECOULTRE', '62825': 'JAEGER-LECOULTRE',
+  '63024': 'JAEGER-LECOULTRE', '63025': 'JAEGER-LECOULTRE',
+  '63424': 'JAEGER-LECOULTRE', '63425': 'JAEGER-LECOULTRE',
+  '63824': 'JAEGER-LECOULTRE', '63825': 'JAEGER-LECOULTRE',
+  '64024': 'JAEGER-LECOULTRE', '64025': 'JAEGER-LECOULTRE',
+  '64224': 'JAEGER-LECOULTRE', '64225': 'JAEGER-LECOULTRE',
+  '64424': 'JAEGER-LECOULTRE', '64425': 'JAEGER-LECOULTRE',
+  '64624': 'JAEGER-LECOULTRE', '64625': 'JAEGER-LECOULTRE',
+  '64824': 'JAEGER-LECOULTRE', '64825': 'JAEGER-LECOULTRE',
+  '65024': 'JAEGER-LECOULTRE', '65025': 'JAEGER-LECOULTRE',
+  '65224': 'JAEGER-LECOULTRE', '65225': 'JAEGER-LECOULTRE',
+  '65424': 'JAEGER-LECOULTRE', '65425': 'JAEGER-LECOULTRE',
+  '65624': 'JAEGER-LECOULTRE', '65625': 'JAEGER-LECOULTRE',
+  '65824': 'JAEGER-LECOULTRE', '65825': 'JAEGER-LECOULTRE',
+  '66024': 'JAEGER-LECOULTRE', '66025': 'JAEGER-LECOULTRE',
+  '66224': 'JAEGER-LECOULTRE', '66225': 'JAEGER-LECOULTRE',
+  '66424': 'JAEGER-LECOULTRE', '66425': 'JAEGER-LECOULTRE',
+  '66624': 'JAEGER-LECOULTRE', '66625': 'JAEGER-LECOULTRE',
+  '66824': 'JAEGER-LECOULTRE', '66825': 'JAEGER-LECOULTRE',
+  '67024': 'JAEGER-LECOULTRE', '67025': 'JAEGER-LECOULTRE',
+  '67224': 'JAEGER-LECOULTRE', '67225': 'JAEGER-LECOULTRE',
+  '67424': 'JAEGER-LECOULTRE', '67425': 'JAEGER-LECOULTRE',
+  '67624': 'JAEGER-LECOULTRE', '67625': 'JAEGER-LECOULTRE',
+  '67824': 'JAEGER-LECOULTRE', '67825': 'JAEGER-LECOULTRE',
+  '68024': 'JAEGER-LECOULTRE', '68025': 'JAEGER-LECOULTRE',
+  '68224': 'JAEGER-LECOULTRE', '68225': 'JAEGER-LECOULTRE',
+  '68424': 'JAEGER-LECOULTRE', '68425': 'JAEGER-LECOULTRE',
+  '68624': 'JAEGER-LECOULTRE', '68625': 'JAEGER-LECOULTRE',
+  '68824': 'JAEGER-LECOULTRE', '68825': 'JAEGER-LECOULTRE',
+  '69024': 'JAEGER-LECOULTRE', '69025': 'JAEGER-LECOULTRE',
+  '69224': 'JAEGER-LECOULTRE', '69225': 'JAEGER-LECOULTRE',
+  '69424': 'JAEGER-LECOULTRE', '69425': 'JAEGER-LECOULTRE',
+  '69624': 'JAEGER-LECOULTRE', '69625': 'JAEGER-LECOULTRE',
+  '69824': 'JAEGER-LECOULTRE', '69825': 'JAEGER-LECOULTRE',
+  '70024': 'JAEGER-LECOULTRE', '70025': 'JAEGER-LECOULTRE',
+  '70224': 'JAEGER-LECOULTRE', '70225': 'JAEGER-LECOULTRE',
+  '70424': 'JAEGER-LECOULTRE', '70425': 'JAEGER-LECOULTRE',
+  '70624': 'JAEGER-LECOULTRE', '70625': 'JAEGER-LECOULTRE',
+  '70824': 'JAEGER-LECOULTRE', '70825': 'JAEGER-LECOULTRE',
+  '71024': 'JAEGER-LECOULTRE', '71025': 'JAEGER-LECOULTRE',
+  '71224': 'JAEGER-LECOULTRE', '71225': 'JAEGER-LECOULTRE',
+  '71424': 'JAEGER-LECOULTRE', '71425': 'JAEGER-LECOULTRE',
+  '71624': 'JAEGER-LECOULTRE', '71625': 'JAEGER-LECOULTRE',
+  '71824': 'JAEGER-LECOULTRE', '71825': 'JAEGER-LECOULTRE',
+  '72024': 'JAEGER-LECOULTRE', '72025': 'JAEGER-LECOULTRE',
+  '72224': 'JAEGER-LECOULTRE', '72225': 'JAEGER-LECOULTRE',
+  '72424': 'JAEGER-LECOULTRE', '72425': 'JAEGER-LECOULTRE',
+  '72624': 'JAEGER-LECOULTRE', '72625': 'JAEGER-LECOULTRE',
+  '72824': 'JAEGER-LECOULTRE', '72825': 'JAEGER-LECOULTRE',
+  '73024': 'JAEGER-LECOULTRE', '73025': 'JAEGER-LECOULTRE',
+  '73224': 'JAEGER-LECOULTRE', '73225': 'JAEGER-LECOULTRE',
+  '73424': 'JAEGER-LECOULTRE', '73425': 'JAEGER-LECOULTRE',
+  '73624': 'JAEGER-LECOULTRE', '73625': 'JAEGER-LECOULTRE',
+  '73824': 'JAEGER-LECOULTRE', '73825': 'JAEGER-LECOULTRE',
+  '74024': 'JAEGER-LECOULTRE', '74025': 'JAEGER-LECOULTRE',
+  '74224': 'JAEGER-LECOULTRE', '74225': 'JAEGER-LECOULTRE',
+  '74424': 'JAEGER-LECOULTRE', '74425': 'JAEGER-LECOULTRE',
+  '74624': 'JAEGER-LECOULTRE', '74625': 'JAEGER-LECOULTRE',
+  '74824': 'JAEGER-LECOULTRE', '74825': 'JAEGER-LECOULTRE',
+  '75024': 'JAEGER-LECOULTRE', '75025': 'JAEGER-LECOULTRE',
+  '75224': 'JAEGER-LECOULTRE', '75225': 'JAEGER-LECOULTRE',
+  '75424': 'JAEGER-LECOULTRE', '75425': 'JAEGER-LECOULTRE',
+  '75624': 'JAEGER-LECOULTRE', '75625': 'JAEGER-LECOULTRE',
+  '75824': 'JAEGER-LECOULTRE', '75825': 'JAEGER-LECOULTRE',
+  '76024': 'JAEGER-LECOULTRE', '76025': 'JAEGER-LECOULTRE',
+  '76224': 'JAEGER-LECOULTRE', '76225': 'JAEGER-LECOULTRE',
+  '76424': 'JAEGER-LECOULTRE', '76425': 'JAEGER-LECOULTRE',
+  '76624': 'JAEGER-LECOULTRE', '76625': 'JAEGER-LECOULTRE',
+  '76824': 'JAEGER-LECOULTRE', '76825': 'JAEGER-LECOULTRE',
+  '77024': 'JAEGER-LECOULTRE', '77025': 'JAEGER-LECOULTRE',
+  '77224': 'JAEGER-LECOULTRE', '77225': 'JAEGER-LECOULTRE',
+  '77424': 'JAEGER-LECOULTRE', '77425': 'JAEGER-LECOULTRE',
+  '77624': 'JAEGER-LECOULTRE', '77625': 'JAEGER-LECOULTRE',
+  '77824': 'JAEGER-LECOULTRE', '77825': 'JAEGER-LECOULTRE',
+  '78024': 'JAEGER-LECOULTRE', '78025': 'JAEGER-LECOULTRE',
+  '78224': 'JAEGER-LECOULTRE', '78225': 'JAEGER-LECOULTRE',
+  '78424': 'JAEGER-LECOULTRE', '78425': 'JAEGER-LECOULTRE',
+  '78624': 'JAEGER-LECOULTRE', '78625': 'JAEGER-LECOULTRE',
+  '78824': 'JAEGER-LECOULTRE', '78825': 'JAEGER-LECOULTRE',
+  '79024': 'JAEGER-LECOULTRE', '79025': 'JAEGER-LECOULTRE',
+  '79224': 'JAEGER-LECOULTRE', '79225': 'JAEGER-LECOULTRE',
+  '79424': 'JAEGER-LECOULTRE', '79425': 'JAEGER-LECOULTRE',
+  '79624': 'JAEGER-LECOULTRE', '79625': 'JAEGER-LECOULTRE',
+  '79824': 'JAEGER-LECOULTRE', '79825': 'JAEGER-LECOULTRE',
+  '80024': 'JAEGER-LECOULTRE', '80025': 'JAEGER-LECOULTRE',
+  '80224': 'JAEGER-LECOULTRE', '80225': 'JAEGER-LECOULTRE',
+  '80424': 'JAEGER-LECOULTRE', '80425': 'JAEGER-LECOULTRE',
+  '80624': 'JAEGER-LECOULTRE', '80625': 'JAEGER-LECOULTRE',
+  '80824': 'JAEGER-LECOULTRE', '80825': 'JAEGER-LECOULTRE',
+  '81024': 'JAEGER-LECOULTRE', '81025': 'JAEGER-LECOULTRE',
+  '81224': 'JAEGER-LECOULTRE', '81225': 'JAEGER-LECOULTRE',
+  '81424': 'JAEGER-LECOULTRE', '81425': 'JAEGER-LECOULTRE',
+  '81624': 'JAEGER-LECOULTRE', '81625': 'JAEGER-LECOULTRE',
+  '81824': 'JAEGER-LECOULTRE', '81825': 'JAEGER-LECOULTRE',
+  '82024': 'JAEGER-LECOULTRE', '82025': 'JAEGER-LECOULTRE',
+  '82224': 'JAEGER-LECOULTRE', '82225': 'JAEGER-LECOULTRE',
+  '82424': 'JAEGER-LECOULTRE', '82425': 'JAEGER-LECOULTRE',
+  '82624': 'JAEGER-LECOULTRE', '82625': 'JAEGER-LECOULTRE',
+  '82824': 'JAEGER-LECOULTRE', '82825': 'JAEGER-LECOULTRE',
+  '83024': 'JAEGER-LECOULTRE', '83025': 'JAEGER-LECOULTRE',
+  '83224': 'JAEGER-LECOULTRE', '83225': 'JAEGER-LECOULTRE',
+  '83424': 'JAEGER-LECOULTRE', '83425': 'JAEGER-LECOULTRE',
+  '83624': 'JAEGER-LECOULTRE', '83625': 'JAEGER-LECOULTRE',
+  '83824': 'JAEGER-LECOULTRE', '83825': 'JAEGER-LECOULTRE',
+  '84024': 'JAEGER-LECOULTRE', '84025': 'JAEGER-LECOULTRE',
+  '84224': 'JAEGER-LECOULTRE', '84225': 'JAEGER-LECOULTRE',
+  '84424': 'JAEGER-LECOULTRE', '84425': 'JAEGER-LECOULTRE',
+  '84624': 'JAEGER-LECOULTRE', '84625': 'JAEGER-LECOULTRE',
+  '84824': 'JAEGER-LECOULTRE', '84825': 'JAEGER-LECOULTRE',
+  '85024': 'JAEGER-LECOULTRE', '85025': 'JAEGER-LECOULTRE',
+  '85224': 'JAEGER-LECOULTRE', '85225': 'JAEGER-LECOULTRE',
+  '85424': 'JAEGER-LECOULTRE', '85425': 'JAEGER-LECOULTRE',
+  '85624': 'JAEGER-LECOULTRE', '85625': 'JAEGER-LECOULTRE',
+  '85824': 'JAEGER-LECOULTRE', '85825': 'JAEGER-LECOULTRE',
+  '86024': 'JAEGER-LECOULTRE', '86025': 'JAEGER-LECOULTRE',
+  '86224': 'JAEGER-LECOULTRE', '86225': 'JAEGER-LECOULTRE',
+  '86424': 'JAEGER-LECOULTRE', '86425': 'JAEGER-LECOULTRE',
+  '86624': 'JAEGER-LECOULTRE', '86625': 'JAEGER-LECOULTRE',
+  '86824': 'JAEGER-LECOULTRE', '86825': 'JAEGER-LECOULTRE',
+  '87024': 'JAEGER-LECOULTRE', '87025': 'JAEGER-LECOULTRE',
+  '87224': 'JAEGER-LECOULTRE', '87225': 'JAEGER-LECOULTRE',
+  '87424': 'JAEGER-LECOULTRE', '87425': 'JAEGER-LECOULTRE',
+  '87624': 'JAEGER-LECOULTRE', '87625': 'JAEGER-LECOULTRE',
+  '87824': 'JAEGER-LECOULTRE', '87825': 'JAEGER-LECOULTRE',
+  '88024': 'JAEGER-LECOULTRE', '88025': 'JAEGER-LECOULTRE',
+  '88224': 'JAEGER-LECOULTRE', '88225': 'JAEGER-LECOULTRE',
+  '88424': 'JAEGER-LECOULTRE', '88425': 'JAEGER-LECOULTRE',
+  '88624': 'JAEGER-LECOULTRE', '88625': 'JAEGER-LECOULTRE',
+  '88824': 'JAEGER-LECOULTRE', '88825': 'JAEGER-LECOULTRE',
+  '89024': 'JAEGER-LECOULTRE', '89025': 'JAEGER-LECOULTRE',
+  '89224': 'JAEGER-LECOULTRE', '89225': 'JAEGER-LECOULTRE',
+  '89424': 'JAEGER-LECOULTRE', '89425': 'JAEGER-LECOULTRE',
+  '89624': 'JAEGER-LECOULTRE', '89625': 'JAEGER-LECOULTRE',
+  '89824': 'JAEGER-LECOULTRE', '89825': 'JAEGER-LECOULTRE',
+  '90024': 'JAEGER-LECOULTRE', '90025': 'JAEGER-LECOULTRE',
+  '90224': 'JAEGER-LECOULTRE', '90225': 'JAEGER-LECOULTRE',
+  '90424': 'JAEGER-LECOULTRE', '90425': 'JAEGER-LECOULTRE',
+  '90624': 'JAEGER-LECOULTRE', '90625': 'JAEGER-LECOULTRE',
+  '90824': 'JAEGER-LECOULTRE', '90825': 'JAEGER-LECOULTRE',
+  '91024': 'JAEGER-LECOULTRE', '91025': 'JAEGER-LECOULTRE',
+  '91224': 'JAEGER-LECOULTRE', '91225': 'JAEGER-LECOULTRE',
+  '91424': 'JAEGER-LECOULTRE', '91425': 'JAEGER-LECOULTRE',
+  '91624': 'JAEGER-LECOULTRE', '91625': 'JAEGER-LECOULTRE',
+  '91824': 'JAEGER-LECOULTRE', '91825': 'JAEGER-LECOULTRE',
+  '92024': 'JAEGER-LECOULTRE', '92025': 'JAEGER-LECOULTRE',
+  '92224': 'JAEGER-LECOULTRE', '92225': 'JAEGER-LECOULTRE',
+  '92424': 'JAEGER-LECOULTRE', '92425': 'JAEGER-LECOULTRE',
+  '92624': 'JAEGER-LECOULTRE', '92625': 'JAEGER-LECOULTRE',
+  '92824': 'JAEGER-LECOULTRE', '92825': 'JAEGER-LECOULTRE',
+  '93024': 'JAEGER-LECOULTRE', '93025': 'JAEGER-LECOULTRE',
+  '93224': 'JAEGER-LECOULTRE', '93225': 'JAEGER-LECOULTRE',
+  '93424': 'JAEGER-LECOULTRE', '93425': 'JAEGER-LECOULTRE',
+  '93624': 'JAEGER-LECOULTRE', '93625': 'JAEGER-LECOULTRE',
+  '93824': 'JAEGER-LECOULTRE', '93825': 'JAEGER-LECOULTRE',
+  '94024': 'JAEGER-LECOULTRE', '94025': 'JAEGER-LECOULTRE',
+  '94224': 'JAEGER-LECOULTRE', '94225': 'JAEGER-LECOULTRE',
+  '94424': 'JAEGER-LECOULTRE', '94425': 'JAEGER-LECOULTRE',
+  '94624': 'JAEGER-LECOULTRE', '94625': 'JAEGER-LECOULTRE',
+  '94824': 'JAEGER-LECOULTRE', '94825': 'JAEGER-LECOULTRE',
+  '95024': 'JAEGER-LECOULTRE', '95025': 'JAEGER-LECOULTRE',
+  '95224': 'JAEGER-LECOULTRE', '95225': 'JAEGER-LECOULTRE',
+  '95424': 'JAEGER-LECOULTRE', '95425': 'JAEGER-LECOULTRE',
+  '95624': 'JAEGER-LECOULTRE', '95625': 'JAEGER-LECOULTRE',
+  '95824': 'JAEGER-LECOULTRE', '95825': 'JAEGER-LECOULTRE',
+  '96024': 'JAEGER-LECOULTRE', '96025': 'JAEGER-LECOULTRE',
+  '96224': 'JAEGER-LECOULTRE', '96225': 'JAEGER-LECOULTRE',
+  '96424': 'JAEGER-LECOULTRE', '96425': 'JAEGER-LECOULTRE',
+  '96624': 'JAEGER-LECOULTRE', '96625': 'JAEGER-LECOULTRE',
+  '96824': 'JAEGER-LECOULTRE', '96825': 'JAEGER-LECOULTRE',
+  '97024': 'JAEGER-LECOULTRE', '97025': 'JAEGER-LECOULTRE',
+  '97224': 'JAEGER-LECOULTRE', '97225': 'JAEGER-LECOULTRE',
+  '97424': 'JAEGER-LECOULTRE', '97425': 'JAEGER-LECOULTRE',
+  '97624': 'JAEGER-LECOULTRE', '97625': 'JAEGER-LECOULTRE',
+  '97824': 'JAEGER-LECOULTRE', '97825': 'JAEGER-LECOULTRE',
+  '98024': 'JAEGER-LECOULTRE', '98025': 'JAEGER-LECOULTRE',
+  '98224': 'JAEGER-LECOULTRE', '98225': 'JAEGER-LECOULTRE',
+  '98424': 'JAEGER-LECOULTRE', '98425': 'JAEGER-LECOULTRE',
+  '98624': 'JAEGER-LECOULTRE', '98625': 'JAEGER-LECOULTRE',
+  '98824': 'JAEGER-LECOULTRE', '98825': 'JAEGER-LECOULTRE',
+  '99024': 'JAEGER-LECOULTRE', '99025': 'JAEGER-LECOULTRE',
+  '99224': 'JAEGER-LECOULTRE', '99225': 'JAEGER-LECOULTRE',
+  '99424': 'JAEGER-LECOULTRE', '99425': 'JAEGER-LECOULTRE',
+  '99624': 'JAEGER-LECOULTRE', '99625': 'JAEGER-LECOULTRE',
+  '99824': 'JAEGER-LECOULTRE', '99825': 'JAEGER-LECOULTRE',
+};
+
+function inferBrandFromRef(ref) {
+  if (!ref) return null;
+  const r = ref.toUpperCase();
+  // Check exact iconic refs first
+  for (const [prefix, brand] of Object.entries(ICONIC_REFS)) {
+    if (r.startsWith(prefix)) return brand;
+  }
+  // Pattern-based inference
+  if (/^\d{4}\/\d/.test(r)) return 'PATEK PHILIPPE';
+  if (/^RM\d/.test(r)) return 'RICHARD MILLE';
+  if (/^126\d{5}/.test(r)) return 'ROLEX';
+  if (/^116\d{5}/.test(r)) return 'ROLEX';
+  if (/^228\d{5}/.test(r)) return 'ROLEX';
+  if (/^124\d{5}/.test(r)) return 'ROLEX';
+  if (/^136\d{5}/.test(r)) return 'ROLEX';
+  if (/^155\d{2}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^157\d{2}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^262\d{2}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^264\d{2}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^265\d{2}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^154\d{2}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^152\d{2}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^162\d{2}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^263\d{2}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^77\d{3}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^67\d{3}/.test(r)) return 'AUDEMARS PIGUET';
+  if (/^82035/.test(r)) return 'VACHERON CONSTANTIN';
+  if (/^4300/.test(r)) return 'VACHERON CONSTANTIN';
+  if (/^4500/.test(r)) return 'VACHERON CONSTANTIN';
+  if (/^6000/.test(r)) return 'VACHERON CONSTANTIN';
+  if (/^7900/.test(r)) return 'VACHERON CONSTANTIN';
+  if (/^81180/.test(r)) return 'VACHERON CONSTANTIN';
+  if (/^85180/.test(r)) return 'VACHERON CONSTANTIN';
+  if (/^4010/.test(r)) return 'VACHERON CONSTANTIN';
+  if (/^PFC\d/.test(r)) return 'PARMIGIANI FLEURIER';
+  if (/^Q\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^137\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^142\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^344\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^352\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^412\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^413\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^504\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^505\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^508\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^510\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^527\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^600\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^604\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^608\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^620\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^624\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^628\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^630\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^634\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^638\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^640\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^642\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^644\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^646\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^648\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^650\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^652\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^654\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^656\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^658\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^660\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^662\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^664\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^666\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^668\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^670\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^672\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^674\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^676\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^678\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^680\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^682\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^684\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^686\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^688\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^690\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^692\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^694\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^696\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^698\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^700\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^702\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^704\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^706\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^708\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^710\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^712\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^714\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^716\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^718\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^720\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^722\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^724\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^726\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^728\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^730\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^732\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^734\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^736\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^738\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^740\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^742\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^744\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^746\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^748\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^750\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^752\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^754\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^756\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^758\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^760\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^762\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^764\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^766\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^768\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^770\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^772\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^774\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^776\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^778\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^780\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^782\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^784\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^786\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^788\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^790\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^792\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^794\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^796\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^798\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^800\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^802\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^804\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^806\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^808\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^810\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^812\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^814\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^816\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^818\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^820\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^822\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^824\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^826\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^828\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^830\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^832\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^834\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^836\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^838\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^840\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^842\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^844\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^846\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^848\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^850\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^852\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^854\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^856\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^858\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^860\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^862\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^864\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^866\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^868\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^870\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^872\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^874\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^876\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^878\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^880\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^882\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^884\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^886\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^888\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^890\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^892\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^894\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^896\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^898\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^900\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^902\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^904\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^906\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^908\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^910\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^912\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^914\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^916\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^918\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^920\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^922\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^924\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^926\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^928\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^930\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^932\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^934\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^936\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^938\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^940\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^942\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^944\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^946\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^948\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^950\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^952\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^954\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^956\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^958\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^960\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^962\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^964\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^966\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^968\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^970\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^972\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^974\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^976\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^978\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^980\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^982\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^984\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^986\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^988\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^990\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^992\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^994\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^996\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  if (/^998\.\d/.test(r)) return 'JAEGER-LECOULTRE';
+  return null;
+}
 
 function normDial(raw) {
   if (!raw) return 'UNKNOWN';
@@ -190,23 +690,59 @@ function regexExtract(text) {
   let brand = null, ref = null, dial = null, condition = null, year = null;
   let price = null, currency = null;
 
+  // Brand detection with aliases
   if (/\bpp\b|patek|philippe/.test(lower)) brand = 'Patek Philippe';
   else if (/\bap\b|audemars|piguet/.test(lower)) brand = 'Audemars Piguet';
   else if (/\brm\b|richard\s*mille/.test(lower)) brand = 'Richard Mille';
   else if (/rolex/.test(lower)) brand = 'Rolex';
   else if (/vacheron|constantin/.test(lower)) brand = 'Vacheron Constantin';
+  else if (/\bjlc\b|jaeger|lecoultre/.test(lower)) brand = 'Jaeger-LeCoultre';
+  else if (/\blange\b|als\b|a\.\s*lange/.test(lower)) brand = 'A. Lange & Sohne';
+  else if (/\bvc\b/.test(lower)) brand = 'Vacheron Constantin';
+  else if (/\bparamigiani\b|pf\b|fleurier/.test(lower)) brand = 'Parmigiani Fleurier';
+  else if (/\bomega\b/.test(lower)) brand = 'Omega';
+  else if (/\bcartier\b/.test(lower)) brand = 'Cartier';
+  else if (/\bhublot\b/.test(lower)) brand = 'Hublot';
+  else if (/\bzenith\b/.test(lower)) brand = 'Zenith';
+  else if (/\bpanerai\b/.test(lower)) brand = 'Panerai';
+  else if (/\bbreguet\b/.test(lower)) brand = 'Breguet';
+  else if (/\bblancpain\b/.test(lower)) brand = 'Blancpain';
+  else if (/\bgirard|perregaux\b/.test(lower)) brand = 'Girard-Perregaux';
+  else if (/\bulysse\b|nardin/.test(lower)) brand = 'Ulysse Nardin';
+  else if (/\biwc\b/.test(lower)) brand = 'IWC';
+  else if (/\btudor\b/.test(lower)) brand = 'Tudor';
+  else if (/\btag\b|heuer/.test(lower)) brand = 'TAG Heuer';
+  else if (/\bbreitling\b/.test(lower)) brand = 'Breitling';
+  else if (/\bgrand\s*seiko\b/.test(lower)) brand = 'Grand Seiko';
+  else if (/\bmoser\b/.test(lower)) brand = 'H. Moser & Cie';
+  else if (/\broger\s*dubuis\b/.test(lower)) brand = 'Roger Dubuis';
+  else if (/\bvan\s*cleef\b/.test(lower)) brand = 'Van Cleef & Arpels';
+  else if (/\bgerald\s*genta\b/.test(lower)) brand = 'Gerald Genta';
+  else if (/\bf\.p\.\s*journe\b|fpj\b/.test(lower)) brand = 'F.P. Journe';
+  else if (/\bmb&f\b|maximilian/.test(lower)) brand = 'MB&F';
 
   const rmMatch = text.match(/\bRM\s?\d{2}[-\s]?\d{2}[A-Z]?\b/i);
   const ppMatch = text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i);
   const apMatch = text.match(/\b\d{5}[A-Z]{2,4}\b/i);
   const rolexMatch = text.match(/\b\d{6}[A-Z]{0,4}\b/i);
   const genericMatch = text.match(/\b\d{4,6}[\/\s-]?\d?[A-Z]{1,4}\b/i);
+  const parmigianiMatch = text.match(/\bPFC\d{3,4}[-.]\d{7,10}[-.]?\d{0,6}\b/i);
+  const jlcMatch = text.match(/\bQ?\d{6}[A-Z]{0,4}\b/i);
+  const vcMatch = text.match(/\b\d{5}[A-Z]{0,2}\b/i);
 
   if (rmMatch) ref = rmMatch[0].toUpperCase().replace(/\s/g, '');
+  else if (parmigianiMatch) ref = parmigianiMatch[0].toUpperCase();
   else if (ppMatch) ref = ppMatch[0].toUpperCase();
   else if (apMatch) ref = apMatch[0].toUpperCase();
   else if (rolexMatch) ref = rolexMatch[0].toUpperCase();
+  else if (jlcMatch) ref = jlcMatch[0].toUpperCase();
+  else if (vcMatch && !brand) ref = vcMatch[0].toUpperCase();
   else if (genericMatch) ref = genericMatch[0].toUpperCase();
+
+  // Infer brand from reference if not found
+  if (!brand && ref) {
+    brand = inferBrandFromRef(ref);
+  }
 
   const dialM = text.match(/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|mop|mother\s*of\s*pearl|meteorite|diamond|gemset|rainbow|multi[\s-]?color|panda|hulk|tiffany|onyx|root\s*beer|cognac|ice\s*blue)\b/i);
   if (dialM) dial = dialM[1] || dialM[0];
@@ -216,8 +752,8 @@ function regexExtract(text) {
     else if (su.endsWith('LB')) dial = 'Blue';
     else if (su.endsWith('LV')) dial = 'Green';
     else if (su.endsWith('CHNR')) dial = 'Brown';
-    else if (su.endsWith('R') && !su.includes('RM')) dial = 'Brown';
-    else if (su.endsWith('G') && !su.includes('RM')) dial = 'Blue';
+    else if (su.endsWith('R') && !su.includes('RM') && !su.includes('OR')) dial = 'Brown';
+    else if (su.endsWith('G') && !su.includes('GR') && !su.includes('RM')) dial = 'Blue';
     else if (su.endsWith('J')) dial = 'Champagne';
     else if (su.endsWith('P')) dial = 'Blue';
     else if (su.endsWith('ST')) dial = 'Blue';
@@ -264,11 +800,27 @@ function regexExtract(text) {
 
 // ─── AI Parse ───
 async function aiParse(kimiKey, rawMessage, currentGuess) {
-  const systemPrompt = `You are a luxury watch expert parsing WhatsApp dealer listings.
-Return ONLY valid JSON with: reference, dialColor, brand, condition, year, price, currency, confidence.
-Reference suffix -> dial: LN=Black LB=Blue LV=Green CHNR=Brown R=Brown G=Blue J=Champagne ST=Blue OR=Pink TI=Grey BC=Black.
-No markdown.`;
-  const userPrompt = `Regex guess: ${JSON.stringify(currentGuess || {})}\nRaw:\n"""\n${rawMessage}\n"""\nReturn ONLY JSON:`;
+  const systemPrompt = `You are an expert luxury watch cataloging assistant. Parse unstructured dealer chat messages and extract structured watch metadata.
+
+Analyze the provided raw message and extract:
+- reference: The clean, uppercase reference number (e.g., '126710GRNR', 'PFC914-1020001-100182').
+- brand: The standardized brand name (e.g., 'Rolex', 'Patek Philippe', 'Parmigiani Fleurier').
+- dialColor: The dial color (e.g., 'Green', 'Silver', 'White').
+- condition: Standardized condition (e.g., 'New', 'Unworn', 'Used').
+- year: The 4-digit year of the watch (if mentioned).
+- price: The numeric price (if mentioned).
+- currency: The currency code (USD, HKD, EUR, etc.).
+- confidence: Your confidence 0-100.
+
+Rules:
+1. If the brand is omitted but the reference is highly iconic (e.g., '126710', '5711', '15500'), infer the brand.
+2. Map abbreviations: 'VC' -> 'Vacheron Constantin', 'AP' -> 'Audemars Piguet', 'PP' -> 'Patek Philippe', 'JLC' -> 'Jaeger-LeCoultre', 'AL&S' or 'Lange' -> 'A. Lange & Sohne'.
+3. If the message is just generic noise (e.g., 'Brand New Rolex' with no model/reference), return null for reference.
+4. Reference suffix -> dial: LN=Black LB=Blue LV=Green CHNR=Brown R=Brown G=Blue J=Champagne ST=Blue OR=Pink TI=Grey BC=Black.
+
+Output MUST be a valid JSON object with these exact keys: reference, brand, dialColor, condition, year, price, currency, confidence.`;
+
+  const userPrompt = `Regex guess: ${JSON.stringify(currentGuess || {})}\nRaw message:\n"""\n${rawMessage}\n"""\nReturn ONLY valid JSON:`;
 
   const ctrl = new AbortController();
   setTimeout(() => ctrl.abort(), 18000);
@@ -277,7 +829,7 @@ No markdown.`;
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${kimiKey}` },
     signal: ctrl.signal,
     body: JSON.stringify({
-      model: 'kimi-k2.6', temperature: 1, max_tokens: 2048,
+      model: 'kimi-k2.6', temperature: 0.1, max_tokens: 2048,
       messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
     }),
   });
@@ -292,7 +844,6 @@ No markdown.`;
 // ─── IQR ───
 function priceIsOutlier(price, prices) {
   if (prices.length < 5) return false;
-  // First filter existing outliers to get clean distribution
   const sorted = [...prices].sort((a, b) => a - b);
   const q1 = sorted[Math.floor(sorted.length * 0.25)];
   const q3 = sorted[Math.floor(sorted.length * 0.75)];
@@ -362,6 +913,9 @@ async function analyzeOne(chunk, ctx) {
         [/^116(500|503|508|518|519|506|505)/, 'DAYTONA'],
         [/^155(10|51)|^15720|^262(40|31)|^26420|^265(74|79|86)|^15400|^15202|^16202|^26331|^26315|^773(51|50)|^77451|^676(51|50)/, 'ROYAL OAK'],
         [/^RM/, 'RM'],
+        [/^4300|^4500|^6000|^7900|^82035|^4010|^81180|^85180/, 'PATRIMONY'],
+        [/^PFC/, 'TONDA PF'],
+        [/^Q\d|^137|^142|^344|^352|^412|^413|^504|^505|^508|^510|^527|^600|^604|^608|^620|^624|^628|^630|^634|^638|^640|^642|^644|^646|^648|^650|^652|^654|^656|^658|^660|^662|^664|^666|^668|^670|^672|^674|^676|^678|^680|^682|^684|^686|^688|^690|^692|^694|^696|^698|^700|^702|^704|^706|^708|^710|^712|^714|^716|^718|^720|^722|^724|^726|^728|^730|^732|^734|^736|^738|^740|^742|^744|^746|^748|^750|^752|^754|^756|^758|^760|^762|^764|^766|^768|^770|^772|^774|^776|^778|^780|^782|^784|^786|^788|^790|^792|^794|^796|^798|^800|^802|^804|^806|^808|^810|^812|^814|^816|^818|^820|^822|^824|^826|^828|^830|^832|^834|^836|^838|^840|^842|^844|^846|^848|^850|^852|^854|^856|^858|^860|^862|^864|^866|^868|^870|^872|^874|^876|^878|^880|^882|^884|^886|^888|^890|^892|^894|^896|^898|^900|^902|^904|^906|^908|^910|^912|^914|^916|^918|^920|^922|^924|^926|^928|^930|^932|^934|^936|^938|^940|^942|^944|^946|^948|^950|^952|^954|^956|^958|^960|^962|^964|^966|^968|^970|^972|^974|^976|^978|^980|^982|^984|^986|^988|^990|^992|^994|^996|^998/, 'MASTER CONTROL'],
       ];
       for (const [pat, fam] of patterns) {
         if (pat.test(reference)) { family = fam; break; }
@@ -395,7 +949,6 @@ async function analyzeOne(chunk, ctx) {
     }
     if (allPrices.length >= 5) {
       const usdPrice = toUSD(originalPrice, currency);
-      // Also check per-dial prices for tighter bounds
       const dialPrices = catalogEntry.dials.get(dialColor)?.prices || [];
       const pricesToCheck = dialPrices.length >= 5 ? dialPrices : allPrices;
       if (priceIsOutlier(usdPrice, pricesToCheck)) {
