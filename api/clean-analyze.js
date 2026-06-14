@@ -127,19 +127,30 @@ function codeConfidence(p) {
 
 // ───────────────────── external calls ─────────────────────
 
+// fetch with a hard timeout so no single call can hang the function
+async function fetchT(url, opts = {}, ms = 12000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function kimiTextParse(kimiKey, rawMessage, currentGuess) {
   const systemPrompt = `You are a luxury watch expert parsing WhatsApp dealer listings.
 Return ONLY valid JSON with: reference, dialColor, brand (Patek Philippe|Audemars Piguet|Rolex|Richard Mille|Unknown), condition (New|Used|Unknown), year (4-digit or null), price (number), currency (HKD|USD|USDT|EUR), confidence (0-100).
 Reference suffix -> dial: LN=Black LB=Blue LV=Green CHNR=Brown R=Brown G=Blue J=Champagne ST=Blue. No markdown.`;
   const userPrompt = `Regex guess: ${JSON.stringify(currentGuess || {})}\nRaw:\n"""\n${rawMessage}\n"""\nReturn ONLY JSON:`;
-  const r = await fetch(KIMI_API_URL, {
+  const r = await fetchT(KIMI_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${kimiKey}` },
     body: JSON.stringify({
       model: 'kimi-k2.6', temperature: 1, max_tokens: 2048,
       messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
     }),
-  });
+  }, 18000);
   if (!r.ok) throw new Error(`Kimi ${r.status}`);
   const d = await r.json();
   const choice = d.choices?.[0]?.message;
@@ -155,9 +166,9 @@ async function onlineCrossRef(brand, reference) {
   if (!reference) return { checked: false, found: false, note: 'no reference to look up' };
   const q = `${brand && brand !== 'Unknown' ? brand + ' ' : ''}${reference} watch`;
   try {
-    const r = await fetch(`https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
+    const r = await fetchT(`https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WatchFactsBot/1.0)' },
-    });
+    }, 8000);
     if (!r.ok) return { checked: true, found: false, note: `search ${r.status}` };
     const html = (await r.text()).toLowerCase();
     const refTokens = normRef(reference);
@@ -167,17 +178,17 @@ async function onlineCrossRef(brand, reference) {
     const found = hits >= 2;
     return { checked: true, found, hits, query: q, note: found ? `corroborated online (${hits} matches)` : 'weak/no online corroboration' };
   } catch (e) {
-    return { checked: true, found: false, note: `online lookup failed: ${e.message}` };
+    return { checked: true, found: false, note: `online lookup ${e.name === 'AbortError' ? 'timed out' : 'failed'}` };
   }
 }
 
 // Vision verify (reused logic from verify-image): reads image blind, compares to text.
 async function visionVerify(origin, imageUrl, reference, brand) {
-  const r = await fetch(`${origin}/api/verify-image`, {
+  const r = await fetchT(`${origin}/api/verify-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageUrl, reference: reference || 'UNKNOWN', brand }),
-  });
+  }, 25000);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) return { verdict: 'UNVERIFIED', reason: data.error || `verify-image ${r.status}`, error: true };
   return data;
@@ -302,12 +313,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Run watches sequentially so the per-watch process is clean & traceable
-    const results = [];
-    for (const chunk of chunks) {
-      // eslint-disable-next-line no-await-in-loop
-      results.push(await analyzeOne(chunk, ctx));
-    }
+    // Run watches in PARALLEL (each is independent) to stay under the 60s limit.
+    // Cap at 8 watches per request so we never fan out too wide.
+    const capped = chunks.slice(0, 8);
+    const results = await Promise.all(capped.map(chunk => analyzeOne(chunk, ctx)));
 
     const summary = {
       total: results.length,
