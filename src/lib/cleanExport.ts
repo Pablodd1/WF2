@@ -19,12 +19,13 @@ const COLORS = {
 
 function statusFromVerdict(v: Verdict, missingCount: number): string {
   if (v === 'APPROVED') return 'Complete';
-  if (v === 'RECYCLE') return 'Review';
+  if (v === 'RECYCLE') return 'Recycle';
   return missingCount <= 1 ? 'Minor' : 'Review';
 }
 
 function statusColor(status: string) {
   if (status === 'Complete') return COLORS.lightGreen;
+  if (status === 'Recycle') return COLORS.red;
   if (status === 'Review') return COLORS.orange;
   return COLORS.yellow;
 }
