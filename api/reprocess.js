@@ -18,9 +18,9 @@
  *     < 70 + has ref → DEEPSEEK  (structured extraction via API)
  *     < 70 + no ref  → RECYCLE   (stay recycled, no LLM waste)
  *
- *   STAGE 4 — DEEPSEEK MERGE
- *     Call deepseek-chat with expert watch prompt.
- *     Merge LLM result back, re-score, final gate.
+ *   STAGE 4 — DEEPSEEK BATCH MERGE
+ *     Collect up to 20 records per batch, send ONE API call with a JSON array
+ *     prompt, parse the array response, merge each result back, re-score, final gate.
  *
  * Supports two modes:
  *   { mode: 'batch', limit: N }   — re-process N HUMAN+RECYCLE records
@@ -32,6 +32,7 @@
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 const APPROVE_THRESHOLD = 90;
 const HUMAN_THRESHOLD = 70;
+const BATCH_SIZE = 20; // max records per DeepSeek API call
 
 // ── Currency rates (HKD is the main issue) ──
 const RATES = {
@@ -176,7 +177,7 @@ function stage1Parse(rawMsg) {
   else if (/\bmint\b|excellent/i.test(text)) condition = 'Like New';
 
   // Year: N5/2026 pattern (new production year) or plain 4-digit
-  const yearM = text.match(/[Nn]\d\/(\d{4})/) || text.match(/\b(20[12]\d)\b/);
+  const yearM = text.match(/[Nn]\d\/([\d]{4})/) || text.match(/\b(20[12]\d)\b/);
   const year = yearM ? parseInt(yearM[1], 10) : null;
 
   // Price — enhanced
@@ -232,7 +233,7 @@ async function stage2Catalog(parsed, catalogData) {
   return parsed;
 }
 
-// ── Stage 4: DeepSeek LLM extraction ──
+// ── Stage 4: DeepSeek LLM extraction (single record — kept for external use) ──
 async function stage4DeepSeek(rawMsg, currentGuess, apiKey) {
   const systemPrompt = `You are a luxury watch expert specializing in grey market dealer messages from WhatsApp groups.
 Your job: extract structured watch data from a raw dealer message and return ONLY valid JSON.
@@ -295,6 +296,88 @@ Return JSON only:`;
     const cleaned = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleaned);
   }
+}
+
+// ── Stage 4 BATCH: send up to BATCH_SIZE records in ONE DeepSeek API call ──
+// batchItems: Array<{ index: number, rawMsg: string, currentGuess: object }>
+// Returns: Array of LLM result objects, same length and order as batchItems.
+async function stage4DeepSeekBatch(batchItems, apiKey) {
+  const n = batchItems.length;
+
+  const systemPrompt = `You are a luxury watch expert specializing in grey market dealer messages from WhatsApp groups.
+Your job: extract structured watch data from raw dealer messages and return ONLY a valid JSON object with a single key "results" whose value is an array of exactly ${n} objects — one per watch, in the same order as the input.
+
+Each object must have these fields:
+- brand: "Patek Philippe" | "Audemars Piguet" | "Rolex" | "Richard Mille" | "Vacheron Constantin" | "Breguet" | "Omega" | "Cartier" | "Unknown"
+- reference: canonical reference number (e.g. "5712/1A-010", "15400ST.OO.1220ST.01", "RM07-01", "126334")
+- dialColor: "Blue" | "Black" | "Green" | "Brown" | "Grey" | "White" | "Silver" | "Pink" | "Purple" | "Red" | "Orange" | "Yellow" | "Champagne" | "MOP" | "Meteorite" | "Tiffany" | "Panda" | "Zebra" | "Unknown"
+- condition: "New" | "Used" | "Like New" | "Unknown"
+- year: integer year or null
+- price: numeric only (no currency symbol)
+- currency: "HKD" | "USD" | "USDT" | "EUR" | "GBP" | "CHF" | "SGD" | "Unknown"
+- confidence: 0-100 integer
+
+IMPORTANT RULES:
+1. Blue-circle emoji (🔵) at start = Patek Philippe listing in this channel
+2. N5/2026 or N3/2026 etc = "New, production year 2026/2023 etc" — condition=New, year=that year
+3. "k" suffix = thousands. "1.83m" = 1,830,000. "990k" = 990,000
+4. No explicit currency? If message context suggests HK dealer and price > 50k → HKD. If "usdt" → USDT.
+5. Reference suffixes indicate material NOT necessarily dial: /1A=steel, /1G=gold, /1R=rose gold, /1P=platinum
+6. Return ONLY the JSON object { "results": [...] }. No markdown, no explanation.
+7. The array MUST have exactly ${n} elements, one per input watch, preserving input order.`;
+
+  // Build an array of watch entries for the user prompt
+  const watchEntries = batchItems.map((item, i) =>
+    `Watch ${i + 1}:\nRegex pre-parse: ${JSON.stringify(item.currentGuess)}\nRaw message:\n"""\n${item.rawMsg}\n"""`
+  ).join('\n\n');
+
+  const userPrompt = `Parse these ${n} watch listings and return a JSON object { "results": [ ...${n} objects... ] }, one object per watch in order.\n\n${watchEntries}\n\nReturn JSON only:`;
+
+  const response = await fetch(DEEPSEEK_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      // Scale max_tokens with batch size; 350 per watch is generous
+      max_tokens: Math.min(n * 350, 8000),
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`DeepSeek API ${response.status}: ${await response.text()}`);
+  }
+
+  const data = await response.json();
+  const raw = data.choices?.[0]?.message?.content || '{}';
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const cleaned = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    parsed = JSON.parse(cleaned);
+  }
+
+  // Normalise: accept { results: [...] } or a bare array
+  const arr = Array.isArray(parsed)
+    ? parsed
+    : (Array.isArray(parsed.results) ? parsed.results : []);
+
+  // Pad / trim to exactly n entries so indices always align
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push(arr[i] || {});
+  }
+  return out;
 }
 
 // ── Merge LLM result into parsed ──
@@ -363,37 +446,82 @@ export default async function handler(req, res) {
   } catch { /* catalog optional */ }
 
   const batch = records.slice(offset, offset + limit);
-  const results = [];
-  let approved = 0, human = 0, recycled = 0, llmCalls = 0;
 
-  for (const row of batch) {
+  // ── Stage 1 + 2: regex parse + catalog lookup for every row ──
+  // We build a parallel structure to track which rows need LLM.
+  const parsedRows = []; // { id, raw, parsed, rowIndex }
+  for (let i = 0; i < batch.length; i++) {
+    const row = batch[i];
     // row is array: [id, brand, ref, dial, price, priceUSD, currency, condition, rawMsg, confidence, status, flags]
     const [id, , , , , , , , rawMsg] = row;
     const raw = String(rawMsg || '');
 
-    // Stage 1: regex parse
+    // Stage 1
     let parsed = stage1Parse(raw);
 
-    // Stage 2: catalog lookup
+    // Stage 2
     parsed = await stage2Catalog(parsed, catalogData);
 
-    // Stage 3: confidence gate — decide if LLM needed
-    let usedLLM = false;
-    if (parsed.confidence < HUMAN_THRESHOLD && parsed.ref && deepseekKey) {
-      try {
-        const llmResult = await stage4DeepSeek(raw, {
-          brand: parsed.brand, ref: parsed.ref,
-          price: parsed.price, currency: parsed.currency,
-        }, deepseekKey);
-        parsed = mergeLLM(parsed, llmResult);
-        usedLLM = true;
-        llmCalls++;
-      } catch (err) {
-        // LLM failed — keep regex result
-        parsed.llmError = err.message;
+    parsedRows.push({ id, raw, parsed });
+  }
+
+  // ── Stage 3 + 4: collect LLM-eligible rows, send in batches of BATCH_SIZE ──
+  // Mark which parsedRows need LLM
+  const llmQueue = []; // indices into parsedRows
+  if (deepseekKey) {
+    for (let i = 0; i < parsedRows.length; i++) {
+      const { parsed } = parsedRows[i];
+      if (parsed.confidence < HUMAN_THRESHOLD && parsed.ref) {
+        llmQueue.push(i);
       }
     }
+  }
 
+  let llmCalls = 0;
+
+  // Process LLM queue in chunks of BATCH_SIZE
+  for (let start = 0; start < llmQueue.length; start += BATCH_SIZE) {
+    const chunkIndices = llmQueue.slice(start, start + BATCH_SIZE);
+
+    const batchItems = chunkIndices.map((idx) => {
+      const { raw, parsed } = parsedRows[idx];
+      return {
+        index: idx,
+        rawMsg: raw,
+        currentGuess: {
+          brand: parsed.brand,
+          ref: parsed.ref,
+          price: parsed.price,
+          currency: parsed.currency,
+        },
+      };
+    });
+
+    try {
+      const llmResults = await stage4DeepSeekBatch(batchItems, deepseekKey);
+      llmCalls++; // one API call per batch chunk
+
+      for (let j = 0; j < chunkIndices.length; j++) {
+        const idx = chunkIndices[j];
+        const llmResult = llmResults[j];
+        if (llmResult && Object.keys(llmResult).length > 0) {
+          parsedRows[idx].parsed = mergeLLM(parsedRows[idx].parsed, llmResult);
+          parsedRows[idx].usedLLM = true;
+        }
+      }
+    } catch (err) {
+      // Batch LLM failed — mark all rows in chunk with error, keep regex result
+      for (const idx of chunkIndices) {
+        parsedRows[idx].parsed.llmError = err.message;
+      }
+    }
+  }
+
+  // ── Verdict + output ──
+  const results = [];
+  let approved = 0, human = 0, recycled = 0;
+
+  for (const { id, parsed, usedLLM } of parsedRows) {
     const verdict = verdictGate(parsed);
     const priceUSD = computePriceUSD(parsed);
 

@@ -119,6 +119,17 @@ export default function ReprocessPage() {
     while (off < targetRows.length && !stopRef.current) {
       try {
         const batch: BatchResponse = await runBatch(off, targetRows);
+
+        // Persist approved + human to Supabase
+        const toSave = batch.results.filter(r => r.verdict !== 'RECYCLE');
+        if (toSave.length > 0) {
+          fetch('/api/persist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records: toSave, mode: 'reprocess' }),
+          }).catch(() => {/* non-blocking */});
+        }
+
         setTotals(prev => ({
           processed: prev.processed + batch.processed,
           approved: prev.approved + batch.approved,

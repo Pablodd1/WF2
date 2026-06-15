@@ -883,28 +883,133 @@ Output MUST be a valid JSON object with these exact keys: reference, brand, dial
   return JSON.parse(m[0]);
 }
 
-// —— IQR ——
-function priceIsOutlier(price, prices) {
+// ─── IQR helpers ───────────────────────────────────────────────────────────────
+
+/**
+ * Canonical IQR outlier test.
+ * @param {number}   price      - Price under test (USD).
+ * @param {number[]} prices     - Reference pool (USD).
+ * @param {number}   [mult=1.5] - IQR fence multiplier (use 3 for Richard Mille).
+ * @param {number}   [tol=0.10] - Tolerance fraction applied to clean min/max.
+ * @returns {boolean}
+ */
+function priceIsOutlier(price, prices, mult = 1.5, tol = 0.10) {
   if (prices.length < 5) return false;
   const sorted = [...prices].sort((a, b) => a - b);
   const q1 = sorted[Math.floor(sorted.length * 0.25)];
   const q3 = sorted[Math.floor(sorted.length * 0.75)];
   const iqr = q3 - q1;
-  const lowBound = q1 - 1.5 * iqr;
-  const highBound = q3 + 1.5 * iqr;
+  const lowBound  = q1 - mult * iqr;
+  const highBound = q3 + mult * iqr;
   const clean = sorted.filter(p => p >= lowBound && p <= highBound);
   if (clean.length < 5) return false;
   const cq1 = clean[Math.floor(clean.length * 0.25)];
   const cq3 = clean[Math.floor(clean.length * 0.75)];
   const ciqr = cq3 - cq1;
-  const clow = cq1 - 1.5 * ciqr;
-  const chigh = cq3 + 1.5 * ciqr;
-  // Tolerance: allow prices within 10% of the clean min/max
+  const clow  = cq1 - mult * ciqr;
+  const chigh = cq3 + mult * ciqr;
+  // Tolerance band around the clean price range
   const minPrice = Math.min(...clean);
   const maxPrice = Math.max(...clean);
-  const toleranceLow = minPrice * 0.90;
-  const toleranceHigh = maxPrice * 1.10;
+  const toleranceLow  = minPrice * (1 - tol);
+  const toleranceHigh = maxPrice * (1 + tol);
   return (price < clow && price < toleranceLow) || (price > chigh && price > toleranceHigh);
+}
+
+/**
+ * Canonical brand keys used for per-brand IQR pools.
+ * All incoming brand strings are normalised to one of these keys.
+ */
+const BRAND_BUCKET_MAP = {
+  'PATEK PHILIPPE':   'PATEK_PHILIPPE',
+  'AUDEMARS PIGUET':  'AUDEMARS_PIGUET',
+  'ROLEX':            'ROLEX',
+  'RICHARD MILLE':    'RICHARD_MILLE',
+};
+
+function _brandBucketKey(brand) {
+  const key = String(brand || '').trim().toUpperCase();
+  return BRAND_BUCKET_MAP[key] || 'OTHER';
+}
+
+/**
+ * Returns { mult, tol } — the IQR fence multiplier and tolerance fraction
+ * appropriate for a given brand / reference combination.
+ *
+ * Rules:
+ *  - RICHARD_MILLE  → mult = 3.0  (prices span $50k–$5 M)
+ *  - PATEK_PHILIPPE high complications (52xx, 53xx, 57xx) → tol = 0.30 (20 pp on top of base 10 pp)
+ *  - All others     → mult = 1.5, tol = 0.10 (default)
+ */
+function _iqrParams(brandBucket, ref) {
+  if (brandBucket === 'RICHARD_MILLE') return { mult: 3.0, tol: 0.10 };
+  if (brandBucket === 'PATEK_PHILIPPE') {
+    const refNum = String(ref || '').replace(/[^0-9]/g, '').slice(0, 4);
+    if (/^5[237]/.test(refNum)) return { mult: 1.5, tol: 0.30 }; // 52xx, 53xx, 57xx
+  }
+  return { mult: 1.5, tol: 0.10 };
+}
+
+/**
+ * Brand-aware outlier check.  Builds per-brand (and optionally per-ref+dial)
+ * price pools from the master catalog, then delegates to priceIsOutlier with
+ * the correct fence parameters.
+ *
+ * @param {number} price        - Price under test (USD).
+ * @param {string} brand        - Normalised brand name (e.g. 'Richard Mille').
+ * @param {string} ref          - Reference number (e.g. 'RM11-03').
+ * @param {object|null} catalogEntry - Entry returned by lookupRef(), or null.
+ * @returns {{ outlier: boolean, pool: string, poolSize: number }}
+ */
+function priceIsOutlierBranded(price, brand, ref, catalogEntry) {
+  const brandBucket = _brandBucketKey(brand);
+  const { mult, tol } = _iqrParams(brandBucket, ref);
+
+  // ── 1. Try ref+dial sub-bucket (existing per-entry logic) ──────────────────
+  if (catalogEntry) {
+    // Aggregate all dial prices for this exact reference
+    const allRefPrices = [];
+    for (const d of catalogEntry.dials.values()) allRefPrices.push(...d.prices);
+
+    if (allRefPrices.length >= 5) {
+      return {
+        outlier:  priceIsOutlier(price, allRefPrices, mult, tol),
+        pool:     `ref:${ref}`,
+        poolSize: allRefPrices.length,
+      };
+    }
+  }
+
+  // ── 2. Fall back to brand-level pool built from the catalog ────────────────
+  // We iterate the already-loaded catalog snapshot (synchronous — catalog is
+  // cached after the first async load).  If the catalog hasn't loaded yet we
+  // skip outlier detection rather than throw.
+  if (!_catalog) {
+    return { outlier: false, pool: 'brand:no-catalog', poolSize: 0 };
+  }
+
+  const { catalog } = _catalog;
+  const brandKey = String(brand || '').trim().toUpperCase();
+  const brandPrices = [];
+
+  for (const [key, entry] of catalog) {
+    // Catalog keys are `BRAND::REF` — match the BRAND prefix
+    const entryBrand = key.split('::')[0];
+    if (entryBrand === brandKey) {
+      for (const d of entry.dials.values()) brandPrices.push(...d.prices);
+    }
+  }
+
+  if (brandPrices.length >= 5) {
+    return {
+      outlier:  priceIsOutlier(price, brandPrices, mult, tol),
+      pool:     `brand:${brandBucket}`,
+      poolSize: brandPrices.length,
+    };
+  }
+
+  // ── 3. Ultimate fallback — not enough data, never flag as outlier ──────────
+  return { outlier: false, pool: 'brand:insufficient', poolSize: brandPrices.length };
 }
 
 // ─── Per-watch analysis ───
@@ -991,24 +1096,19 @@ async function analyzeOne(chunk, ctx) {
   }
 
   let outlierFlag = null;
-  if (catalogEntry && originalPrice) {
-    const allPrices = [];
-    for (const d of catalogEntry.dials.values()) {
-      allPrices.push(...d.prices);
-    }
-    if (allPrices.length >= 5) {
-      const usdPrice = toUSD(originalPrice, currency);
-      const dialPrices = catalogEntry.dials.get(dialColor)?.prices || [];
-      const pricesToCheck = dialPrices.length >= 5 ? dialPrices : allPrices;
-      if (priceIsOutlier(usdPrice, pricesToCheck)) {
+  if (originalPrice) {
+    const usdPrice = toUSD(originalPrice, currency);
+    const { outlier, pool, poolSize } = priceIsOutlierBranded(usdPrice, brand, reference, catalogEntry);
+    if (poolSize >= 5) {
+      if (outlier) {
         outlierFlag = 'PRICE_OUTLIER';
         confidence = Math.min(confidence, 60);
-        stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { priceUSD: usdPrice, catalogPrices: pricesToCheck.length, checkedDial: dialPrices.length >= 5 }, note: 'Price is IQR outlier for this reference' });
+        stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { priceUSD: usdPrice, pool, poolSize }, note: `Price is IQR outlier [pool: ${pool}]` });
       } else {
-        stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { priceUSD: usdPrice, catalogPrices: pricesToCheck.length, checkedDial: dialPrices.length >= 5 }, note: 'Price within normal range' });
+        stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { priceUSD: usdPrice, pool, poolSize }, note: `Price within normal range [pool: ${pool}]` });
       }
     } else {
-      stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { catalogPrices: allPrices.length }, note: 'Insufficient catalog data for IQR (< 5 points)' });
+      stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { pool, poolSize }, note: `Insufficient data for IQR (${poolSize} < 5 points) [pool: ${pool}]` });
     }
   }
 
