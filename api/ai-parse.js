@@ -1,11 +1,35 @@
 /**
  * AI parser fallback using Kimi K2.6 API
  * OpenAI-compatible endpoint at api.moonshot.ai
+ * CommonJS pattern for Vercel serverless
  */
 
 const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
 
-export default async function handler(req, res) {
+const systemPrompt = `You are a luxury watch expert parsing WhatsApp chat listings.
+Extract these fields from the raw message into valid JSON:
+- reference: watch reference number (e.g., "5712/1A-010", "RM07-01", "15400ST")
+- dialColor: dial color in English (Blue, Black, Green, Brown, White, Silver, Grey, Pink, Purple, Yellow, Orange, Champagne, Ice Blue, Mother of Pearl, Meteorite, Diamond, Special)
+- brand: one of "Patek Philippe", "Audemars Piguet", "Rolex", "Richard Mille", "Unknown"
+- condition: "New", "Used", or "Unknown"
+- year: 4-digit year if mentioned, else null
+- price: numeric value only
+- currency: "HKD", "USD", "USDT", or "EUR"
+
+Rules:
+1. Reference suffixes indicate dial color: LN=Black, LB=Blue, LV=Green, CHNR=Brown, R=Brown, G=Blue, J=Champagne, P=Blue, ST=Blue, OR=Pink, TI=Grey, BC=Black
+2. If no dial color stated, infer from reference suffix
+3. Return ONLY valid JSON. No markdown, no explanations, no code blocks.
+
+Example input: "5712/1a Blue N5/2026 New 850k HKD"
+Example output: {"reference":"5712/1A-010","dialColor":"Blue","brand":"Patek Philippe","condition":"New","year":2026,"price":850000,"currency":"HKD","confidence":95}`;
+
+module.exports = async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
@@ -25,24 +49,6 @@ export default async function handler(req, res) {
       error: 'No AI API key configured. Set KIMI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY.',
     });
   }
-
-  const systemPrompt = `You are a luxury watch expert parsing WhatsApp chat listings.
-Extract these fields from the raw message into valid JSON:
-- reference: watch reference number (e.g., "5712/1A-010", "RM07-01", "15400ST")
-- dialColor: dial color in English (Blue, Black, Green, Brown, White, Silver, Grey, Pink, Purple, Yellow, Orange, Champagne, Ice Blue, Mother of Pearl, Meteorite, Diamond, Special)
-- brand: one of "Patek Philippe", "Audemars Piguet", "Rolex", "Richard Mille", "Unknown"
-- condition: "New", "Used", or "Unknown"
-- year: 4-digit year if mentioned, else null
-- price: numeric value only
-- currency: "HKD", "USD", "USDT", or "EUR"
-
-Rules:
-1. Reference suffixes indicate dial color: LN=Black, LB=Blue, LV=Green, CHNR=Brown, R=Brown, G=Blue, J=Champagne, P=Blue, ST=Blue, OR=Pink, TI=Grey, BC=Black
-2. If no dial color stated, infer from reference suffix
-3. Return ONLY valid JSON. No markdown, no explanations, no code blocks.
-
-Example input: "5712/1a Blue N5/2026 New 850k HKD"
-Example output: {"reference":"5712/1A-010","dialColor":"Blue","brand":"Patek Philippe","condition":"New","year":2026,"price":850000,"currency":"HKD","confidence":95}`;
 
   const userPrompt = `Current regex guess: ${JSON.stringify(currentGuess || {})}
 
@@ -82,7 +88,6 @@ Return ONLY JSON:`;
         let content = choice?.message?.content;
         // Kimi K2.6 thinking mode fallback
         if (!content && choice?.message?.reasoning_content) {
-          console.log('[ai-parse] Kimi used reasoning_content');
           content = choice.message.reasoning_content;
         }
         if (content) {
@@ -187,4 +192,4 @@ Return ONLY JSON:`;
   }
 
   return res.status(500).json({ error: 'All AI providers failed' });
-}
+};
