@@ -130,7 +130,7 @@ export default function Home() {
         <div className="flex flex-col items-center justify-center py-32 gap-4">
           <div className="h-10 w-10 rounded-full border-2 border-gold-primary/30 border-t-gold-primary animate-spin" />
           <p className="text-sm text-text-muted tracking-wide">
-            Loading 103,895 records…
+            Loading 117,744 records… (this takes ~8s on first load)
           </p>
         </div>
       </Layout>

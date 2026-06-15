@@ -119,14 +119,18 @@ function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>):
   const effectivePrice = raw.priceUSD || raw.price || 0;
 
   // Currency detection from raw message if price seems off or missing
+  // Skip regex re-parse if priceUSD already present in data (col 5)
   let originalCurrency = raw.currency || 'USD';
   let originalPrice = raw.price || 0;
   let finalPrice = effectivePrice;
-  const currencyInfo = raw.sourceLine ? detectCurrency(raw.sourceLine) : null;
-  if (currencyInfo && currencyInfo.usdAmount > 0) {
-    originalCurrency = currencyInfo.currency;
-    originalPrice = currencyInfo.originalAmount;
-    finalPrice = currencyInfo.usdAmount;
+  // Only run expensive detectCurrency if priceUSD column is missing/zero
+  if (finalPrice === 0 && raw.sourceLine) {
+    const currencyInfo = detectCurrency(raw.sourceLine);
+    if (currencyInfo && currencyInfo.usdAmount > 0) {
+      originalCurrency = currencyInfo.currency;
+      originalPrice = currencyInfo.originalAmount;
+      finalPrice = currencyInfo.usdAmount;
+    }
   }
 
   // Calculate price variance
