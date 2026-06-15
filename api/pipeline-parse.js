@@ -732,9 +732,9 @@ function regexExtract(text) {
   const vcMatch = text.match(/\b\d{4,5}[A-Z]{0,2}\b/i);
 
   // Price detection FIRST — so we can exclude price-looking numbers from ref candidates
-  const kM = text.match(/\b(\d{1,3})\s?[kK]\b/);
+  const kM = text.match(/\b(\d{1,3}(?:\.\d{1,2})?)\s?[kK]\b/);
   let kPrice = null;
-  if (kM) kPrice = parseInt(kM[1], 10) * 1000;
+  if (kM) kPrice = Math.round(parseFloat(kM[1]) * 1000);
   const pM = text.match(/([\d,]{3,})\s?(HKD|USD|USDT|EUR|hkd|usd|eur|usdt|\$|€)/i);
   let explicitPrice = null;
   if (pM) explicitPrice = parseInt(pM[1].replace(/,/g, ''), 10);
@@ -809,8 +809,8 @@ function regexExtract(text) {
 
   // Price already detected earlier for ref filtering; reuse here
   let kPrice2 = null, explicitPrice2 = null;
-  const kM2 = text.match(/\b(\d{1,3})\s?[kK]\b/);
-  if (kM2) kPrice2 = parseInt(kM2[1], 10) * 1000;
+  const kM2 = text.match(/\b(\d{1,3}(?:\.\d{1,2})?)\s?[kK]\b/);
+  if (kM2) kPrice2 = Math.round(parseFloat(kM2[1]) * 1000);
   const pM2 = text.match(/([\d,]{3,})\s?(HKD|USD|USDT|EUR|hkd|usd|eur|usdt|\$|€)/i);
   if (pM2) explicitPrice2 = parseInt(pM2[1].replace(/,/g, ''), 10);
 
@@ -883,7 +883,7 @@ Output MUST be a valid JSON object with these exact keys: reference, brand, dial
   return JSON.parse(m[0]);
 }
 
-// ─── IQR ───
+// —— IQR ——
 function priceIsOutlier(price, prices) {
   if (prices.length < 5) return false;
   const sorted = [...prices].sort((a, b) => a - b);
@@ -897,7 +897,14 @@ function priceIsOutlier(price, prices) {
   const cq1 = clean[Math.floor(clean.length * 0.25)];
   const cq3 = clean[Math.floor(clean.length * 0.75)];
   const ciqr = cq3 - cq1;
-  return price < cq1 - 1.5 * ciqr || price > cq3 + 1.5 * ciqr;
+  const clow = cq1 - 1.5 * ciqr;
+  const chigh = cq3 + 1.5 * ciqr;
+  // Tolerance: allow prices within 10% of the clean min/max
+  const minPrice = Math.min(...clean);
+  const maxPrice = Math.max(...clean);
+  const toleranceLow = minPrice * 0.90;
+  const toleranceHigh = maxPrice * 1.10;
+  return (price < clow && price < toleranceLow) || (price > chigh && price > toleranceHigh);
 }
 
 // ─── Per-watch analysis ───
@@ -1057,7 +1064,33 @@ module.exports = async function handler(req, res) {
   const kimiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
   const ctx = { kimiKey };
 
-  const chunks = text.split(/\n\s*\n+/).map(b => b.trim()).filter(Boolean);
+  // Multi-watch splitting: split on double newlines OR brand transitions within a line
+  const rawChunks = text.split(/\n\s*\n+/).map(b => b.trim()).filter(Boolean);
+  const chunks = [];
+  const BRAND_TRANSITION_RE = /\b(?:rolex|patek|pp\b|audemars|ap\b|rm\b|richard\s+mille|vacheron|vc\b|cartier|omega|jaeger|jlc\b|lange|parmigiani|hublot|zenith|panerai|breguet|blancpain|girard|ulysse|iwc|tudor|tag\s+heuer|breitling|grand\s+seiko|moser|roger\s+dubuis|van\s+cleef|gerald\s+genta|fpj|f\.p\.\s+journe|mb&f)\b/gi;
+
+  for (const raw of rawChunks) {
+    // Find all brand positions in this chunk
+    const positions = [];
+    let m;
+    while ((m = BRAND_TRANSITION_RE.exec(raw)) !== null) {
+      positions.push(m.index);
+    }
+    BRAND_TRANSITION_RE.lastIndex = 0; // reset
+
+    if (positions.length > 1) {
+      // Split at each brand transition
+      for (let i = 0; i < positions.length; i++) {
+        const start = positions[i];
+        const end = positions[i + 1] !== undefined ? positions[i + 1] : raw.length;
+        const sub = raw.slice(start, end).trim();
+        if (sub.length > 5) chunks.push(sub);
+      }
+    } else {
+      chunks.push(raw);
+    }
+  }
+
   const capped = chunks.slice(0, 8);
 
   try {
