@@ -218,27 +218,39 @@ export function regexExtract(rawMessage: string): RawExtracted {
   let price: number | null = null;
   let currency: string | null = null;
 
-  // Pattern: number + k/K
-  const kMatch = text.match(/\b(\d{1,3})\s?[kK]\b/);
-  if (kMatch) {
-    price = parseInt(kMatch[1], 10) * 1000;
+  // Million prices: 1.83m, 1.83M HKD
+  const mMatch = text.match(/\b(\d{1,4}(?:\.\d{1,3})?)\s*(?:m|million)\b/i);
+  if (mMatch) price = Math.round(parseFloat(mMatch[1]) * 1_000_000);
+
+  // K prices: 850k, 21.6k, 850 K
+  if (!price) {
+    const kMatch = text.match(/\b(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
+    if (kMatch) price = Math.round(parseFloat(kMatch[1]) * 1000);
   }
-  // Pattern: explicit number with currency
-  const priceMatch = text.match(/([\d,]{3,})\s?(HKD|USD|USDT|EUR|hkd|usd|eur|usdt|\$|€)/i);
+
+  // Plain numbers >= 4 digits with explicit currency
+  const priceMatch = text.match(/([\d,]{4,})\s*(HKD|USD|USDT|EUR|GBP|CHF|SGD|hkd|usd|eur|usdt|\$|€)/i);
   if (priceMatch) {
-    price = parseInt(priceMatch[1].replace(/,/g, ''), 10) || price;
+    const parsed = parseInt(priceMatch[1].replace(/,/g, ''), 10);
+    if (!price || parsed > price) price = parsed;
     const curSym = (priceMatch[2] || '').toUpperCase();
     if (curSym === '$' || curSym === 'USD') currency = 'USD';
     else if (curSym === 'HKD' || curSym === 'HK$') currency = 'HKD';
     else if (curSym === 'EUR' || curSym === '€') currency = 'EUR';
     else if (curSym === 'USDT') currency = 'USDT';
+    else if (curSym === 'GBP' || curSym === '£') currency = 'GBP';
+    else if (curSym === 'CHF') currency = 'CHF';
+    else if (curSym === 'SGD') currency = 'SGD';
   }
-  // Fallback currency detection
+
+  // Currency fallback detection
   if (!currency) {
     if (/\bhkd\b|hk\$/i.test(text)) currency = 'HKD';
     else if (/\busdt\b/i.test(text)) currency = 'USDT';
     else if (/\beur\b|€/i.test(text)) currency = 'EUR';
-    else if (/\$|usd\b/i.test(text)) currency = 'USD';
+    else if (/\bgbp\b|£/i.test(text)) currency = 'GBP';
+    else if (/\bchf\b/i.test(text)) currency = 'CHF';
+    else if (/\$|\busd\b/i.test(text)) currency = 'USD';
   }
 
   // Box & papers
