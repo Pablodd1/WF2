@@ -4,6 +4,7 @@ import AnalyticsPage from '@/pages/AnalyticsPage';
 import ReviewPage from '@/pages/ReviewPage';
 import CleanPage from '@/pages/CleanPage';
 import ReprocessPage from '@/pages/ReprocessPage';
+import DemoPage from '@/pages/DemoPage';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
       <Route path="/review" element={<ReviewPage />} />
       <Route path="/clean" element={<CleanPage />} />
       <Route path="/reprocess" element={<ReprocessPage />} />
+      <Route path="/demo" element={<DemoPage />} />
     </Routes>
   );
 }
