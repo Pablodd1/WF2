@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, BarChart3, Eye, Sparkles } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Eye, Sparkles, BookOpen } from 'lucide-react';
 
 interface TabNavProps {
   totalProcessed: number;
@@ -75,6 +75,23 @@ export function TabNav({ totalProcessed }: TabNavProps) {
           Clean
           <span className="text-[9px] bg-bg-elevated text-text-muted px-1.5 py-0.5 rounded ml-1">
             Manual Analysis
+          </span>
+        </NavLink>
+
+        <NavLink
+          to="/study"
+          className={({ isActive }) =>
+            `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
+              isActive
+                ? 'text-gold-primary border-gold-primary'
+                : 'text-text-muted border-transparent hover:text-text-secondary'
+            }`
+          }
+        >
+          <BookOpen size={14} />
+          Study
+          <span className="text-[9px] bg-bg-elevated text-text-muted px-1.5 py-0.5 rounded ml-1">
+            Step-by-Step
           </span>
         </NavLink>
       </div>
