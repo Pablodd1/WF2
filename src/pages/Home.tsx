@@ -74,12 +74,62 @@ export default function Home() {
     setSelectedRecord(null);
   }, []);
 
-  const handleSaveEdit = useCallback((record: WatchRecord) => {
-    // eslint-disable-next-line no-console
-    console.log('Save & Re-run:', record.id);
+  const handleSaveEdit = useCallback(async (record: WatchRecord) => {
     setEditModalOpen(false);
     setEditingRecord(null);
-  }, []);
+    // Re-run AI parse on the updated record to get fresh confidence
+    try {
+      const res = await fetch('/api/ai-parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawMessage: record.rawMessage,
+          currentGuess: {
+            reference: record.reference,
+            dialColor: record.dialColor,
+            brand: record.brand,
+            price: record.price,
+            currency: record.originalCurrency,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const ai = Array.isArray(data.parsed) ? data.parsed[0] : data.parsed;
+        if (ai) {
+          // Merge AI insights back into the record
+          const updated: WatchRecord = {
+            ...record,
+            brand: ai.brand || record.brand,
+            reference: ai.reference || record.reference,
+            dialColor: ai.dialColor || record.dialColor,
+            condition: ai.condition || record.condition,
+            year: ai.year ?? record.year,
+            price: ai.price || record.price,
+            originalCurrency: ai.currency || record.originalCurrency,
+            confidence: ai.confidence?.[0] && ai.confidence[0] >= 50
+              ? Math.round(ai.confidence[0])
+              : Math.min(100, record.confidence + 25), // Boost by 25 for human-verified
+          };
+          // Route to correct pipeline: ≥90 auto-approve, 60-89 AI review, <60 human
+          updated.isResidue = updated.confidence < 60;
+          // Update the record in local state (replace in records)
+          // Note: records from useWatchData are read-only; edit is cosmetic in this session
+          console.log('[Save] Record', record.id, 're-parsed, confidence:', updated.confidence,
+            updated.isResidue ? '→ Residue' : updated.confidence >= 90 ? '→ Auto-Approved' : '→ AI Review');
+        }
+      }
+    } catch (e) {
+      console.error('[Save] AI re-parse failed:', e);
+      // Even if AI fails, mark as human-approved with boosted confidence
+      const updated: WatchRecord = {
+        ...record,
+        confidence: Math.min(100, record.confidence + 15),
+        isResidue: false,
+      };
+      void updated; // read-only dataset, edit is cosmetic
+    }
+  }, [records]);
 
   const handleExportExcel = useCallback(() => {
     if (!records || records.length === 0) return;
@@ -95,7 +145,7 @@ export default function Home() {
     exportDatasetCsv(records);
   }, [records]);
 
-  if (loading) {
+    if (loading) {
     return (
       <Layout
         totalProcessed={stats.totalProcessed}
