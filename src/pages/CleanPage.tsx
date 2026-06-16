@@ -7,7 +7,7 @@ import { cleanAnalyze } from '@/lib/cleanAnalyze';
 import { exportCleanExcel, exportCleanCsv } from '@/lib/cleanExport';
 import type { CleanResponse, CleanWatch, CleanStage, Verdict } from '@/lib/cleanAnalyze';
 import {
-  Sparkles, Search, Globe, Cog, Download, FileSpreadsheet,
+  Sparkles, Search, Cog, Download, FileSpreadsheet,
   CheckCircle2, UserCheck, Trash2, AlertTriangle, Loader2,
 } from 'lucide-react';
 
@@ -24,7 +24,7 @@ const verdictMeta: Record<Verdict, { label: string; color: string; bg: string; I
 };
 
 const stageIcon: Record<string, any> = {
-  PARSE: Cog, AI_TEXT: Sparkles, CATALOG: Search, IQR: AlertTriangle, CURRENCY: Globe,
+  PARSE: Cog, AI_TEXT: Sparkles, ONLINE: Search, IMAGE: AlertTriangle,
 };
 
 function ConfidenceBar({ value }: { value: number }) {
