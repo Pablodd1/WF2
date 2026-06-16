@@ -10,7 +10,7 @@ export function TabNav({ totalProcessed }: TabNavProps) {
     <div className="sticky top-14 z-40 bg-bg-card/95 backdrop-blur border-b border-border-default px-5 overflow-x-auto hide-scrollbar">
       <div className="flex items-center gap-1 min-w-max">
         <NavLink
-          to="/dashboard"
+          to="/"
           end
           className={({ isActive }) =>
             `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
@@ -28,7 +28,7 @@ export function TabNav({ totalProcessed }: TabNavProps) {
         </NavLink>
 
         <NavLink
-          to="/dashboard/analytics"
+          to="/analytics"
           className={({ isActive }) =>
             `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
               isActive
@@ -45,7 +45,7 @@ export function TabNav({ totalProcessed }: TabNavProps) {
         </NavLink>
 
         <NavLink
-          to="/dashboard/review"
+          to="/review"
           className={({ isActive }) =>
             `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
               isActive
@@ -62,7 +62,7 @@ export function TabNav({ totalProcessed }: TabNavProps) {
         </NavLink>
 
         <NavLink
-          to="/dashboard/clean"
+          to="/clean"
           className={({ isActive }) =>
             `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
               isActive
@@ -79,7 +79,7 @@ export function TabNav({ totalProcessed }: TabNavProps) {
         </NavLink>
 
         <NavLink
-          to="/dashboard/reprocess"
+          to="/reprocess"
           className={({ isActive }) =>
             `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
               isActive
@@ -113,7 +113,7 @@ export function TabNav({ totalProcessed }: TabNavProps) {
         </NavLink>
 
         <NavLink
-          to="/dashboard/demo"
+          to="/demo"
           className={({ isActive }) =>
             `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
               isActive

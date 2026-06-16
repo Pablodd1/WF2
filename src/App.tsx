@@ -9,13 +9,13 @@ import DemoPage from '@/pages/DemoPage';
 export default function App() {
   return (
     <Routes>
-      <Route path="/dashboard" element={<Home />} />
-      <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
-      <Route path="/dashboard/review" element={<ReviewPage />} />
-      <Route path="/dashboard/clean" element={<CleanPage />} />
-      <Route path="/dashboard/reprocess" element={<ReprocessPage />} />
-      <Route path="/dashboard/demo" element={<DemoPage />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Home />} />
+      <Route path="/analytics" element={<AnalyticsPage />} />
+      <Route path="/review" element={<ReviewPage />} />
+      <Route path="/clean" element={<CleanPage />} />
+      <Route path="/reprocess" element={<ReprocessPage />} />
+      <Route path="/demo" element={<DemoPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

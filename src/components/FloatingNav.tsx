@@ -25,11 +25,11 @@ export function FloatingNav() {
   };
 
   const goToAnalytics = () => {
-    navigate('/dashboard/analytics');
+    navigate('/analytics');
   };
 
   const goToDashboard = () => {
-    navigate('/dashboard');
+    navigate('/');
   };
 
   return (
