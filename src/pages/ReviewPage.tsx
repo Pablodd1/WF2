@@ -3,8 +3,10 @@ import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import { useWatchData } from '@/hooks/useWatchData';
 import { verifyImageReference, type VerifyImageResult } from '@/lib/verifyImage';
+import { enrichWatch } from '@/lib/enrich';
 import type { WatchRecord } from '@/types';
-import { Eye, Wand2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, HelpCircle, Save, RotateCcw } from 'lucide-react';
+import type { EnrichmentData } from '@/lib/enrich';
+import { Eye, Wand2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, HelpCircle, Save, RotateCcw, TrendingUp, ExternalLink } from 'lucide-react';
 
 interface Suggestion {
   field: string;
@@ -28,6 +30,8 @@ export default function ReviewPage() {
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [verifyMap, setVerifyMap] = useState<Record<string, VerifyImageResult>>({});
   const [verifyLoading, setVerifyLoading] = useState<Record<string, boolean>>({});
+  const [enrichMap, setEnrichMap] = useState<Record<string, EnrichmentData>>({});
+  const [enrichLoading, setEnrichLoading] = useState<Record<string, boolean>>({});
 
   const brands = useMemo(() => {
     const set = new Set(records.map(r => r.brand).filter(Boolean));
@@ -177,6 +181,22 @@ export default function ReviewPage() {
       setEditForm({ [suggestion.field]: suggestion.value });
     }
   }, [records, editingRecord, startEdit]);
+
+  // Enrich a single record with structured market data
+  const handleEnrich = useCallback(async (record: WatchRecord) => {
+    if (!record.reference) return;
+    setEnrichLoading(prev => ({ ...prev, [record.id]: true }));
+    try {
+      const data = await enrichWatch(record.reference, record.brand);
+      if (data.success && data.enrichment) {
+        setEnrichMap(prev => ({ ...prev, [record.id]: data.enrichment! }));
+      }
+    } catch (e) {
+      console.error('Enrich failed:', e);
+    } finally {
+      setEnrichLoading(prev => ({ ...prev, [record.id]: false }));
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -515,6 +535,15 @@ export default function ReviewPage() {
                             <Wand2 size={14} />
                             {isAiLoading ? 'Asking AI...' : 'Ask AI'}
                           </button>
+                          <button
+                            onClick={() => handleEnrich(record)}
+                            disabled={enrichLoading[record.id] || !record.reference}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-bg-elevated text-text-secondary hover:text-text-primary transition-colors text-sm disabled:opacity-50"
+                            title="Fetch catalog + market data for this reference"
+                          >
+                            <TrendingUp size={14} />
+                            {enrichLoading[record.id] ? 'Enriching…' : 'Enrich'}
+                          </button>
                           {record.imageUrl && (
                             <button
                               onClick={() => verifyImage(record)}
@@ -529,6 +558,42 @@ export default function ReviewPage() {
                         </>
                       )}
                     </div>
+
+                    {/* Enrichment Results */}
+                    {enrichMap[record.id] && (() => {
+                      const e = enrichMap[record.id];
+                      return (
+                        <div className="mt-3 rounded-lg border border-gold-primary/30 bg-gold-primary/5 px-3 py-2">
+                          <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp size={12} className="text-gold-primary" />
+                            <span className="text-xs font-bold text-gold-primary uppercase tracking-wider">Enrichment</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {e.catalog?.collection && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted font-mono">
+                                {e.catalog.collection}
+                              </span>
+                            )}
+                            {e.catalog?.model && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted font-mono">
+                                {e.catalog.model}
+                              </span>
+                            )}
+                            {e.market?.chrono24?.priceRange && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono">
+                                Chrono24: ${e.market.chrono24.priceRange.median.toLocaleString()}
+                              </span>
+                            )}
+                            {e.officialUrl && (
+                              <a href={e.officialUrl} target="_blank" rel="noopener noreferrer"
+                                className="text-[10px] text-text-muted hover:text-gold-primary transition-colors flex items-center gap-0.5">
+                                <ExternalLink size={10} /> Official
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Image-vs-reference verdict */}
                     {verifyMap[record.id] && (() => {
