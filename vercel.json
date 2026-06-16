@@ -19,8 +19,11 @@
     }
   ],
   "rewrites": [
+    { "source": "/", "destination": "/extract.html" },
+    { "source": "/dashboard", "destination": "/index.html" },
+    { "source": "/dashboard/:path*", "destination": "/index.html" },
     { "source": "/extract", "destination": "/extract.html" },
     { "source": "/extract.html", "destination": "/extract.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+    { "source": "/(.*)", "destination": "/extract.html" }
+  ],
 }
