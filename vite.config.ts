@@ -16,12 +16,14 @@ export default defineConfig({
     },
   },
   build: {
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks: {
           'vendor-charts': ['recharts'],
           'vendor-motion': ['framer-motion'],
           'vendor-react': ['react', 'react-dom', 'react-router'],
+          'vendor-xlsx': ['xlsx'],
         },
       },
     },
