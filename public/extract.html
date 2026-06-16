@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WatchFacts Extractor</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #0f1117;
@@ -30,8 +31,6 @@
     flex-direction: column;
   }
   .container { max-width: 900px; margin: 0 auto; padding: 24px 20px; width: 100%; flex: 1; }
-
-  /* Header */
   .header {
     display: flex; align-items: center; gap: 12px; margin-bottom: 28px;
   }
@@ -46,16 +45,12 @@
     font-size: 11px; color: var(--muted); background: var(--card);
     padding: 2px 10px; border-radius: 99px; border: 1px solid var(--border);
   }
-
-  /* Instructions */
   .instructions {
     background: var(--card); border: 1px solid var(--border);
     border-radius: 12px; padding: 14px 18px; margin-bottom: 20px;
     font-size: 13px; color: var(--muted); line-height: 1.6;
   }
   .instructions strong { color: var(--text); }
-
-  /* Textarea */
   .input-area { margin-bottom: 16px; }
   textarea {
     width: 100%; min-height: 200px; resize: vertical;
@@ -66,8 +61,6 @@
   }
   textarea:focus { border-color: var(--accent); }
   textarea::placeholder { color: var(--muted); opacity: 0.6; }
-
-  /* Buttons */
   .actions {
     display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 24px;
   }
@@ -81,16 +74,18 @@
     color: #fff;
   }
   .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-download {
+    background: var(--green); color: #0f1117;
+  }
+  .btn-download:disabled { opacity: 0.4; cursor: not-allowed; background: var(--border); color: var(--muted); }
+  .btn-download:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
   .btn-secondary {
     background: var(--card); color: var(--text); border: 1px solid var(--border);
   }
   .btn-secondary:hover { border-color: var(--muted); }
-  .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* Stats bar */
   .stats {
-    display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
-    font-size: 13px;
+    display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; font-size: 13px;
   }
   .stat { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); }
   .stat.clean { color: var(--green); background: var(--green-bg); border-color: var(--green); }
@@ -98,7 +93,6 @@
   .stat.issues { color: var(--red); background: var(--red-bg); border-color: var(--red); }
   .stat.total { color: var(--text); background: var(--card); }
 
-  /* Results */
   .results { display: none; }
   .results.visible { display: block; }
 
@@ -138,13 +132,6 @@
     word-break: break-all; line-height: 1.4;
   }
 
-  /* Empty state */
-  .empty {
-    text-align: center; padding: 40px 20px; color: var(--muted);
-  }
-  .empty .icon { font-size: 40px; margin-bottom: 12px; display: block; }
-
-  /* Footer */
   .footer {
     text-align: center; padding: 20px; font-size: 12px; color: var(--muted);
     border-top: 1px solid var(--border); margin-top: 20px;
@@ -167,8 +154,9 @@
 
   <div class="instructions">
     <strong>Paste raw watch descriptions</strong> from WhatsApp, forums, or dealer listings.
-    Supports Patek Philippe, Rolex, Audemars Piguet, Richard Mille, and more.
+    Supports Patek Philippe, Rolex, Audemars Piguet, Richard Mille.
     Handles mixed HKD/USD, compound lines, year <code>2024Y</code> format, full set/papers.
+    Click <strong>Download Excel Report</strong> to get a colored file with legend.
   </div>
 
   <div class="input-area">
@@ -177,9 +165,8 @@
 
   <div class="actions">
     <button class="btn btn-primary" onclick="extract()">&#9654; Extract &amp; Color</button>
-    <button class="btn btn-secondary" onclick="downloadJSON()" id="btn-json" disabled>Download JSON</button>
-    <button class="btn btn-secondary" onclick="downloadCSV()" id="btn-csv" disabled>Download CSV</button>
-    <button class="btn btn-secondary" onclick="document.getElementById('input').value='';document.getElementById('results').classList.remove('visible');document.getElementById('stats').innerHTML='';" style="margin-left:auto">Clear</button>
+    <button class="btn btn-download" onclick="downloadExcel()" id="btn-excel" disabled>&#8595; Download Excel Report</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('input').value='';document.getElementById('results').classList.remove('visible');document.getElementById('stats').innerHTML='';document.getElementById('btn-excel').disabled=true" style="margin-left:auto">Clear</button>
   </div>
 
   <div class="stats" id="stats"></div>
@@ -187,11 +174,11 @@
 </div>
 
 <div class="footer">
-  WatchFacts Extractor &mdash; built for Patek/Rolex/AP watch data extraction
+  WatchFacts Extractor &mdash; colored Excel report with one click
 </div>
 
 <script>
-// --- Reference catalog (same as CLI tool) ---
+// --- Reference catalog ---
 var REFS = {};
 function addRef(r, b) { REFS[r] = b; }
 addRef('5167A','Patek Philippe'); addRef('5167/1A','Patek Philippe');
@@ -290,6 +277,8 @@ function parseLine(line) {
   if (!ym) ym = t.match(/\b(19[7-9]\d|20[0-2]\d)\b/);
   if (ym) e.year = parseInt(ym[1]);
 
+  function toNum(s) { var n = parseFloat(s.replace(/,/g,'')); return isNaN(n) ? null : n; }
+
   // HKD
   var hkdK = t.match(/(?:HKD|HK\$)\s*(\d{1,4}(?:\.\d)?)\s*[kK]\b/i);
   var hkdK2 = t.match(/(\d{1,4}(?:\.\d)?)\s*[kK]\s*(?:HKD|hkd)/);
@@ -297,11 +286,11 @@ function parseLine(line) {
   var hkdK3 = t.match(/(?:^|\s)(\d{1,4}(?:\.\d)?)\s*[kK]\s*hkd/i);
   var hkdFull2 = t.match(/(\d{1,3}(?:,\d{3})+)\s*HKD/i);
   var hkdVal = null;
-  if (hkdK) hkdVal = parseFloat(hkdK[1]) * 1000;
-  else if (hkdK2) hkdVal = parseFloat(hkdK2[1]) * 1000;
-  else if (hkdFull) hkdVal = parseFloat(hkdFull[1].replace(/,/g,''));
-  else if (hkdK3) hkdVal = parseFloat(hkdK3[1]) * 1000;
-  else if (hkdFull2) hkdVal = parseFloat(hkdFull2[1].replace(/,/g,''));
+  if (hkdK) hkdVal = toNum(hkdK[1]) * 1000;
+  else if (hkdK2) hkdVal = toNum(hkdK2[1]) * 1000;
+  else if (hkdFull) hkdVal = toNum(hkdFull[1]);
+  else if (hkdK3) hkdVal = toNum(hkdK3[1]) * 1000;
+  else if (hkdFull2) hkdVal = toNum(hkdFull2[1]);
   if (hkdVal !== null) e.price_hkd = hkdVal;
 
   // USD
@@ -312,12 +301,12 @@ function parseLine(line) {
   var usdDollarFull = t.match(/\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\b/);
   var usdBareK = t.match(/(\d{1,4}(?:\.\d)?)\s*[kK]\b(?!\s*(?:hkd|HKD|HK\$))/);
   var usdVal = null;
-  if (usdKLabel) usdVal = parseFloat(usdKLabel[1]) * 1000;
-  else if (usdKAsterisk) usdVal = parseFloat(usdKAsterisk[1]) * 1000;
-  else if (usdDollarK) usdVal = parseFloat(usdDollarK[1]) * 1000;
-  else if (usdCommaLabel) usdVal = parseFloat(usdCommaLabel[1].replace(/,/g,''));
-  else if (usdDollarFull && !/HKD/i.test(t)) usdVal = parseFloat(usdDollarFull[1].replace(/,/g,''));
-  else if (usdBareK && !/HKD/i.test(t) && !/HK\$/.test(t)) usdVal = parseFloat(usdBareK[1]) * 1000;
+  if (usdKLabel) usdVal = toNum(usdKLabel[1]) * 1000;
+  else if (usdKAsterisk) usdVal = toNum(usdKAsterisk[1]) * 1000;
+  else if (usdDollarK) usdVal = toNum(usdDollarK[1]) * 1000;
+  else if (usdCommaLabel) usdVal = toNum(usdCommaLabel[1]);
+  else if (usdDollarFull && !/HKD/i.test(t)) usdVal = toNum(usdDollarFull[1]);
+  else if (usdBareK && !/HKD/i.test(t) && !/HK\$/.test(t)) usdVal = toNum(usdBareK[1]) * 1000;
   if (usdVal !== null) e.price_usd = usdVal;
 
   var tl = t.toLowerCase();
@@ -362,7 +351,6 @@ function extract() {
 
   var parsed = unique.map(function(l){return parseLine(l);}).filter(Boolean);
 
-  // Render
   var el = document.getElementById('results');
   var statsEl = document.getElementById('stats');
   el.innerHTML = '';
@@ -418,37 +406,152 @@ function extract() {
     '<span class="stat partial">' + partial + ' partial</span>' +
     '<span class="stat issues">' + issues + ' issues</span>';
 
-  // Enable download buttons
   window._results = parsed;
-  document.getElementById('btn-json').disabled = false;
-  document.getElementById('btn-csv').disabled = false;
+  document.getElementById('btn-excel').disabled = false;
 }
 
 function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function downloadJSON() {
+// --- DOWNLOAD COLORED EXCEL ---
+function downloadExcel() {
   if (!window._results || !window._results.length) return;
-  var blob = new Blob([JSON.stringify(window._results, null, 2)], {type:'application/json'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'wf-extract-' + Date.now() + '.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
+  var results = window._results;
 
-function downloadCSV() {
-  if (!window._results || !window._results.length) return;
-  var lines = ['ref,brand,year,price_usd,price_hkd,condition,includes,issues,raw'];
-  for (var i = 0; i < window._results.length; i++) {
-    var r = window._results[i];
-    lines.push('"' + (r.ref||'') + '","' + (r.brand||'') + '","' + (r.year||'') + '","' + (r.price_usd||'') + '","' + (r.price_hkd||'') + '","' + (r.condition||'') + '","' + (r.includes||'') + '","' + r.issues.join('; ') + '","' + String(r.raw).replace(/"/g,'""') + '"');
+  // Color palette
+  var GREEN  = 'FF22C55E';
+  var YELLOW = 'FFEAB308';
+  var RED    = 'FFEF4444';
+  var WHITE  = 'FFFFFFFF';
+  var LIGHT_GREEN  = 'FFE8F5E9';
+  var LIGHT_YELLOW = 'FFFFF8E1';
+  var LIGHT_RED    = 'FFFFEBEE';
+  var HEADER_BG = 'FF1A1D28';
+  var HEADER_FG = 'FFFFFFFF';
+
+  var wb = XLSX.utils.book_new();
+
+  // --- SHEET 1: Data ---
+  function getRowColor(e) {
+    if (e.issues.length === 0) return LIGHT_GREEN;
+    if (e.issues.length <= 2) return LIGHT_YELLOW;
+    return LIGHT_RED;
   }
-  var blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  function getLabel(e) {
+    if (e.issues.length === 0) return 'CLEAN';
+    if (e.issues.length <= 2) return 'PARTIAL';
+    return 'ISSUES';
+  }
+
+  var header = ['Status','Reference','Brand','Year','Price USD','Price HKD','Condition','Set','Issues','Raw Text'];
+  var data = [header];
+  for (var i = 0; i < results.length; i++) {
+    var r = results[i];
+    var priceUsd = r.price_usd ? '$' + numStr(r.price_usd) : '';
+    var priceHkd = r.price_hkd ? 'HK$' + numStr(r.price_hkd) : '';
+    data.push([
+      getLabel(r),
+      r.ref || '',
+      r.brand || '',
+      r.year || '',
+      priceUsd,
+      priceHkd,
+      r.condition || '',
+      r.includes || '',
+      r.issues.join(', '),
+      r.raw
+    ]);
+  }
+
+  var ws = XLSX.utils.aoa_to_sheet(data);
+
+  // Set column widths
+  ws['!cols'] = [
+    {wch:10},{wch:14},{wch:18},{wch:8},
+    {wch:16},{wch:16},{wch:14},{wch:12},
+    {wch:24},{wch:50}
+  ];
+
+  // Build cell styles
+  var GREEN_FILL = { patternType:'solid', fgColor:{rgb:GREEN} };
+  var YELLOW_FILL = { patternType:'solid', fgColor:{rgb:YELLOW} };
+  var RED_FILL = { patternType:'solid', fgColor:{rgb:RED} };
+  var LIGHT_GREEN_FILL = { patternType:'solid', fgColor:{rgb:LIGHT_GREEN} };
+  var LIGHT_YELLOW_FILL = { patternType:'solid', fgColor:{rgb:LIGHT_YELLOW} };
+  var LIGHT_RED_FILL = { patternType:'solid', fgColor:{rgb:LIGHT_RED} };
+  var HEADER_FILL = { patternType:'solid', fgColor:{rgb:HEADER_BG} };
+  var HEADER_FONT = { color:{rgb:HEADER_FG}, bold:true, sz:11 };
+
+  // Apply: header row formatting
+  for (var c = 0; c < 10; c++) {
+    var ref = XLSX.utils.encode_cell({r:0,c:c});
+    if (!ws[ref]) ws[ref] = {};
+    ws[ref].s = { fill: HEADER_FILL, font: HEADER_FONT };
+  }
+
+  // Apply: data row colors based on status
+  for (var i = 0; i < results.length; i++) {
+    var row = i + 1;
+    var r = results[i];
+    var rowFill = getRowColor(r);
+    for (var c = 0; c < 10; c++) {
+      var ref = XLSX.utils.encode_cell({r:row,c:c});
+      if (!ws[ref]) ws[ref] = {};
+      ws[ref].s = { fill: { patternType:'solid', fgColor:{rgb:rowFill} } };
+    }
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Extracted Watches');
+
+  // --- SHEET 2: Legend ---
+  var legendData = [
+    ['WatchFacts Extractor - Color Legend'],
+    [''],
+    ['Status', 'Color', 'Description'],
+    ['CLEAN',   'GREEN',  'All fields successfully parsed (ref, year, price, condition, set)'],
+    ['PARTIAL', 'YELLOW', 'Missing 1-2 fields (e.g. no price or no year — review needed)'],
+    ['ISSUES',  'RED',    'Missing 3+ fields — needs manual lookup'],
+    [''],
+    ['Generated: ' + new Date().toLocaleString()],
+    ['Total watches: ' + results.length],
+    ['- CLEAN: ' + results.filter(function(r){return r.issues.length===0;}).length],
+    ['- PARTIAL: ' + results.filter(function(r){return r.issues.length>0 && r.issues.length<=2;}).length],
+    ['- ISSUES: ' + results.filter(function(r){return r.issues.length>2;}).length]
+  ];
+  var ws2 = XLSX.utils.aoa_to_sheet(legendData);
+  ws2['!cols'] = [{wch:12},{wch:12},{wch:60}];
+
+  // Legend header
+  var legRef = XLSX.utils.encode_cell({r:0,c:0});
+  if (!ws2[legRef]) ws2[legRef] = {};
+  ws2[legRef].s = { font: {bold:true, sz:14} };
+
+  // Color the legend examples
+  var colorRows = { 3:'GREEN', 4:'YELLOW', 5:'RED' };
+  var fillMap = { GREEN:LIGHT_GREEN_FILL, YELLOW:LIGHT_YELLOW_FILL, RED:LIGHT_RED_FILL };
+  for (var r in colorRows) {
+    for (var c = 0; c < 3; c++) {
+      var ref = XLSX.utils.encode_cell({r:parseInt(r),c:c});
+      if (!ws2[ref]) ws2[ref] = {};
+      ws2[ref].s = { fill: fillMap[colorRows[r]] };
+    }
+  }
+  // Bold status labels in legend
+  for (var r = 3; r <= 5; r++) {
+    var ref = XLSX.utils.encode_cell({r:r,c:0});
+    if (!ws2[ref]) ws2[ref] = {};
+    ws2[ref].s = { font: {bold:true}, fill: fillMap[colorRows[r]] };
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws2, 'Color Legend');
+
+  // Generate and download
+  var wbout = XLSX.write(wb, { bookType:'xlsx', bookSST:false, type:'array' });
+  var blob = new Blob([wbout], {type:'application/octet-stream'});
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'wf-extract-' + Date.now() + '.csv';
+  a.download = 'wf-extract-' + Date.now() + '.xlsx';
   a.click();
   URL.revokeObjectURL(a.href);
 }
