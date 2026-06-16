@@ -131,12 +131,13 @@ export default function Home() {
     }
   }, [records]);
 
-  const handleExportExcel = useCallback(() => {
+  const handleExportExcel = useCallback(async () => {
     if (!records || records.length === 0) return;
     try {
-      exportDatasetExcel(records);
+      await exportDatasetExcel(records);
     } catch (e) {
       console.error('Excel export failed:', e);
+      alert('Export failed: ' + (e as Error).message);
     }
   }, [records]);
 
@@ -145,7 +146,7 @@ export default function Home() {
     exportDatasetCsv(records);
   }, [records]);
 
-    if (loading) {
+  if (loading) {
     return (
       <Layout
         totalProcessed={stats.totalProcessed}
