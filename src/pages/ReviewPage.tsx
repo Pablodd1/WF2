@@ -172,6 +172,34 @@ export default function ReviewPage() {
     setBulkProgress(null);
   }, [parseOne]);
 
+  // Bulk enrich all currently-filtered records with structured market data
+  const bulkEnrich = useCallback(async (targets: WatchRecord[]) => {
+    const queue = targets.filter(r => r.reference).slice(0, 50);
+    if (queue.length === 0) return;
+    setBulkProgress({ done: 0, total: queue.length });
+    const CONCURRENCY = 4;
+    let idx = 0;
+    let done = 0;
+    const worker = async () => {
+      while (idx < queue.length) {
+        const record = queue[idx++];
+        try {
+          const data = await enrichWatch(record.reference!, record.brand);
+          if (data.success && data.enrichment) {
+            setEnrichMap(prev => ({ ...prev, [record.id]: data.enrichment! }));
+          }
+        } catch (e) {
+          console.error('Bulk enrich failed for', record.id, e);
+        } finally {
+          done++;
+          setBulkProgress({ done, total: queue.length });
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    setBulkProgress(null);
+  }, []);
+
   const applySuggestion = useCallback((recordId: string, suggestion: Suggestion) => {
     setEditForm(prev => ({ ...prev, [suggestion.field]: suggestion.value }));
     // If we're not in edit mode, start editing
@@ -224,17 +252,30 @@ export default function ReviewPage() {
               {filtered.length} records match current filters.
             </p>
           </div>
-          <button
-            onClick={() => bulkReparse(filtered)}
-            disabled={bulkProgress !== null || filtered.length === 0}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-primary/10 border border-gold-primary/40 text-gold-primary text-sm font-medium hover:bg-gold-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Re-parse the filtered records with Kimi K2.6 and surface suggestions"
-          >
-            <Wand2 size={16} />
-            {bulkProgress
-              ? `Kimi re-parsing… ${bulkProgress.done}/${bulkProgress.total}`
-              : `Bulk Kimi Re-parse (${Math.min(filtered.length, 50)})`}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => bulkEnrich(filtered)}
+              disabled={bulkProgress !== null || filtered.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 text-sm font-medium hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Enrich all filtered records with catalog + market data"
+            >
+              <TrendingUp size={16} />
+              {bulkProgress
+                ? `Enriching… ${bulkProgress.done}/${bulkProgress.total}`
+                : `Bulk Enrich (${Math.min(filtered.length, 50)})`}
+            </button>
+            <button
+              onClick={() => bulkReparse(filtered)}
+              disabled={bulkProgress !== null || filtered.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-primary/10 border border-gold-primary/40 text-gold-primary text-sm font-medium hover:bg-gold-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Re-parse the filtered records with Kimi K2.6 and surface suggestions"
+            >
+              <Wand2 size={16} />
+              {bulkProgress
+                ? `Kimi re-parsing… ${bulkProgress.done}/${bulkProgress.total}`
+                : `Bulk Kimi Re-parse (${Math.min(filtered.length, 50)})`}
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
