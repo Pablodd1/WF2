@@ -83,6 +83,7 @@ textarea:focus{border-color:#818cf8}
 <div class="instructions">
 <strong>Paste watch descriptions</strong> from WhatsApp, forums, or dealer listings. Click <strong>Extract</strong> to parse.
 <strong>Edit any field</strong> directly — the confidence re-scores automatically.
+Use <strong>🌐 Web Lookup</strong> per row or <strong>Web Enrich All</strong> to cross-reference against real listings via web search.
 Use <strong>AI Fix</strong> on individual rows for Kimi-powered analysis.
 Click <strong>Download Excel Report</strong> for a colored file with legend.
 </div>
@@ -104,6 +105,7 @@ Patek Philippe 5930G-001 Blue World Time Chrono With papers $49,000
 <button class="btn btn-extract" onclick="extractAll()">&#9654; Extract</button>
 <button class="btn btn-download" onclick="downloadExcel()" id="btn-excel" disabled>&#8595; Download Excel Report</button>
 <button class="btn btn-clear" id="btn-clear" onclick="clearAll()">Clear</button>
+<button class="btn" id="btn-web-enrich" onclick="enrichAll()" disabled style="background:#3b82f6;color:#fff;font-size:12px">🌐 Web Enrich All</button>
 </div>
 
 <div class="stats" id="stats"></div>
@@ -224,12 +226,17 @@ function renderResults(){
     html+='<span class="watch-ref">'+(refVal||'???')+'</span>';
     html+='<span class="conf-badge '+cc+'">'+c.score+'%</span>';
     html+=issuesHtml;
-    html+='<span style="margin-left:auto;display:flex;gap:4px;flex-wrap:wrap">';
+    html+='<span style="margin-left:auto;display:flex;gap:4px;flex-wrap:wrap;align-items:center">';
+    // Web enrichment status badge
+    if(e.webStatus==='enriched')html+='<span style="color:#3b82f6;font-size:11px;padding:2px 8px;border-radius:99px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3)">🌐 Verified</span>';
+    else if(e.webStatus==='pending')html+='<span style="color:#eab308;font-size:11px" class="anim-pulse">🌐 Searching...</span>';
+    else if(e.webStatus==='failed')html+='<span style="color:#ef4444;font-size:11px">🌐 Fail</span>';
     html+='<button class="btn btn-ai" onclick="aiFix('+i+')" id="ai-btn-'+i+'">&#129302; AI Fix</button>';
-    if(Object.keys(e.edited).length>0)html+='<button class="btn btn-accept" onclick="acceptEdit('+i+')">&#10003; Accept</button>';
+    if(!e.webStatus||e.webStatus==='failed')html+='<button class="btn" style="background:#1e40af;color:#93c5fd;font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid #3b82f6" onclick="webLookup('+i+')">🌐 Lookup</button>';
+    if(Object.keys(e.edited).length>0)html+='<button class="btn btn-accept" onclick="acceptEdit('+i+')">✓ Accept</button>';
     html+='</span>';
     html+='</div>';
-    
+
     html+='<div class="watch-fields">';
     // Brand
     html+='<div class="field"><span class="field-label">Brand</span><input class="field-input'+(e.edited.brand!==undefined?' edited':'')+'" value="'+htmlEsc(brandVal)+'" onchange="editField('+i+',\'brand\',this.value)"></div>';
@@ -384,6 +391,112 @@ function dismissAI(idx){
   if(!data[idx])return;
   if(data[idx]._aiResultDiv)data[idx]._aiResultDiv.style.display='none';
 }
+
+// ===== WEB LOOKUP (real-time search validation) =====
+function webLookup(idx){
+  if(!data[idx])return;
+  var e=data[idx];
+  e.webStatus='pending';
+  renderResults();
+  
+  var params=new URLSearchParams();
+  if(e.ref)params.append('reference',e.ref);
+  if(e.brand)params.append('brand',e.brand);
+  if(e.year)params.append('year',e.year);
+  if(e.raw)params.append('raw',e.raw.slice(0,200));
+  
+  var xhr=new XMLHttpRequest();
+  xhr.open('GET','/api/web-lookup?'+params.toString());
+  xhr.onload=function(){
+    if(xhr.status===200){
+      try{
+        var resp=JSON.parse(xhr.responseText);
+        if(resp.success&&(resp.catalogEnrichment||resp.webEnrichment)){
+          // Store web enrichment data
+          e.webCatalog=resp.catalogEnrichment;
+          e.webEnrichment=resp.webEnrichment;
+          e.webResults=resp.results;
+          e.confidenceBoost=resp.confidenceBoost||0;
+          e.webStatus='enriched';
+          
+          // Auto-update missing fields from catalog + web
+          var cat=resp.catalogEnrichment;
+          if(cat&&cat.model&&!e.edited.model)e.edited.model=cat.model;
+          if(cat&&cat.collection&&!e.edited.collection)e.edited.collection=cat.collection;
+          if(cat&&cat.caseMetal&&!e.edited.caseMetal)e.edited.caseMetal=cat.caseMetal;
+          
+          var web=resp.webEnrichment;
+          if(web&&web.price){
+            if(!e.price_usd&&web.price.usd)e.edited.price_usd=web.price.usd;
+            if(!e.price_hkd&&web.price.hkd)e.edited.price_hkd=web.price.hkd;
+          }
+          if(web&&web.year&&!e.year)e.edited.year=web.year;
+        }else{
+          e.webStatus='failed';
+        }
+      }catch(ex){
+        e.webStatus='failed';
+      }
+    }else{
+      e.webStatus='failed';
+    }
+    renderResults();
+  };
+  xhr.onerror=function(){
+    e.webStatus='failed';
+    renderResults();
+  };
+  xhr.send();
+}
+
+function enrichAll(){
+  var btn=document.getElementById('btn-web-enrich');
+  btn.disabled=true;
+  btn.innerHTML='🌐 Enriching...';
+  
+  var pending=0;
+  for(var i=0;i<data.length;i++){
+    if(!data[i].webStatus){
+      data[i].webStatus='pending';
+      pending++;
+    }
+  }
+  renderResults();
+  
+  if(pending===0){
+    btn.disabled=false;
+    btn.innerHTML='🌐 Web Enrich All';
+    return;
+  }
+  
+  // Process in sequence to avoid rate limiting
+  var idx=0;
+  function processNext(){
+    // Find next unenriched entry
+    while(idx<data.length&&data[idx].webStatus!=='pending')idx++;
+    if(idx>=data.length){
+      var done=document.getElementById('btn-web-enrich');
+      done.disabled=false;
+      done.innerHTML='🌐 Web Enrich All';
+      return;
+    }
+    webLookup(idx);
+    idx++;
+    // Wait 1.5s between requests to avoid rate limiting
+    setTimeout(processNext,1500);
+  }
+  processNext();
+}
+
+// Enable Web Enrich All button when data is present
+function enableWebEnrich(){document.getElementById('btn-web-enrich').disabled=false;}
+
+// Override renderResults to enable the enrich button
+var _origRender=renderResults;
+renderResults=function(){
+  _origRender();
+  enableWebEnrich();
+};
 
 // ===== DOWNLOAD COLORED EXCEL =====
 function downloadExcel(){
