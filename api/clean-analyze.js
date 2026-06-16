@@ -10,7 +10,7 @@
  * CASCADE (stop at first confident hit):
  *   1. PARSE        regex/normalize -> brand, reference, dial, condition, price
  *   2. CATALOG      fuzzy match against known references (code-first, free)
- *   3. AI TEXT      Kimi K2.6 parse when code can't resolve cleanly
+ *   3. AI TEXT      DeepSeek primary -> Gemini fallback -> Kimi last resort
  *   4. ONLINE       web cross-reference of the reference (text-only)
  *   5. IMAGE/URL    if a link/image is present, vision reads it BLIND and we
  *                   compare picture-vs-text (MATCH / MISMATCH / UNVERIFIED)
@@ -23,6 +23,8 @@
  */
 
 const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 const APPROVE_THRESHOLD = 85;   // >= this => auto approve
 const RECYCLE_FLOOR = 35;       // below this AND unidentified => recycle bin
 
@@ -138,26 +140,103 @@ async function fetchT(url, opts = {}, ms = 12000) {
   }
 }
 
-async function kimiTextParse(kimiKey, rawMessage, currentGuess) {
-  const systemPrompt = `You are a luxury watch expert parsing WhatsApp dealer listings.
+const SYSTEM_PROMPT = `You are a luxury watch expert parsing WhatsApp dealer listings.
 Return ONLY valid JSON with: reference, dialColor, brand (Patek Philippe|Audemars Piguet|Rolex|Richard Mille|Unknown), condition (New|Used|Unknown), year (4-digit or null), price (number), currency (HKD|USD|USDT|EUR), confidence (0-100).
 Reference suffix -> dial: LN=Black LB=Blue LV=Green CHNR=Brown R=Brown G=Blue J=Champagne ST=Blue. No markdown.`;
-  const userPrompt = `Regex guess: ${JSON.stringify(currentGuess || {})}\nRaw:\n"""\n${rawMessage}\n"""\nReturn ONLY JSON:`;
+
+function buildUserPrompt(rawMessage, currentGuess) {
+  return `Regex guess: ${JSON.stringify(currentGuess || {})}\nRaw:\n"""\n${rawMessage}\n"""\nReturn ONLY JSON:`;
+}
+
+function extractJson(text) {
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('no JSON');
+  return JSON.parse(m[0]);
+}
+
+async function deepseekParse(key, rawMessage, currentGuess) {
+  const r = await fetchT(DEEPSEEK_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model: 'deepseek-chat', temperature: 0.3, max_tokens: 512,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildUserPrompt(rawMessage, currentGuess) },
+      ],
+    }),
+  }, 8000);
+  if (!r.ok) throw new Error(`DeepSeek ${r.status}`);
+  const d = await r.json();
+  const content = d.choices?.[0]?.message?.content || '';
+  return extractJson(content);
+}
+
+async function geminiParse(key, rawMessage, currentGuess) {
+  const r = await fetchT(`${GEMINI_API_URL}?key=${key}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: SYSTEM_PROMPT + '\n\n' + buildUserPrompt(rawMessage, currentGuess) }] }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 512 },
+    }),
+  }, 8000);
+  if (!r.ok) throw new Error(`Gemini ${r.status}`);
+  const d = await r.json();
+  const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return extractJson(text);
+}
+
+async function kimiParse(key, rawMessage, currentGuess) {
   const r = await fetchT(KIMI_API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${kimiKey}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: 'kimi-k2.6', temperature: 1, max_tokens: 2048,
-      messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      model: 'kimi-k2.6', temperature: 0.3, max_tokens: 512,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildUserPrompt(rawMessage, currentGuess) },
+      ],
     }),
-  }, 18000);
+  }, 8000);
   if (!r.ok) throw new Error(`Kimi ${r.status}`);
   const d = await r.json();
-  const choice = d.choices?.[0]?.message;
-  const content = choice?.content || choice?.reasoning_content || '';
-  const m = content.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('Kimi: no JSON');
-  return JSON.parse(m[0]);
+  const content = d.choices?.[0]?.message?.content || d.choices?.[0]?.message?.reasoning_content || '';
+  return extractJson(content);
+}
+
+// Try AI providers in order: DeepSeek -> Gemini -> Kimi
+async function aiTextParse(ctx, rawMessage, currentGuess) {
+  const errors = [];
+
+  if (ctx.deepseekKey) {
+    try {
+      const result = await deepseekParse(ctx.deepseekKey, rawMessage, currentGuess);
+      return { ...result, _source: 'deepseek' };
+    } catch (e) {
+      errors.push(`DeepSeek: ${e.message}`);
+    }
+  }
+
+  if (ctx.geminiKey) {
+    try {
+      const result = await geminiParse(ctx.geminiKey, rawMessage, currentGuess);
+      return { ...result, _source: 'gemini' };
+    } catch (e) {
+      errors.push(`Gemini: ${e.message}`);
+    }
+  }
+
+  if (ctx.kimiKey) {
+    try {
+      const result = await kimiParse(ctx.kimiKey, rawMessage, currentGuess);
+      return { ...result, _source: 'kimi' };
+    } catch (e) {
+      errors.push(`Kimi: ${e.message}`);
+    }
+  }
+
+  throw new Error(errors.join(' | ') || 'no AI keys configured');
 }
 
 // Online cross-reference: confirm the reference exists / is real.
@@ -210,9 +289,9 @@ async function analyzeOne(chunk, ctx) {
 
   // 2) AI TEXT (only if code couldn't resolve a clean brand+reference)
   const needsAi = !parsed.reference || parsed.brand === 'Unknown' || confidence < APPROVE_THRESHOLD;
-  if (needsAi && ctx.kimiKey) {
+  if (needsAi && (ctx.deepseekKey || ctx.geminiKey || ctx.kimiKey)) {
     try {
-      const ai = await kimiTextParse(ctx.kimiKey, textOnly || chunk, parsed);
+      const ai = await aiTextParse(ctx, textOnly || chunk, parsed);
       // Merge: prefer AI values where code was empty/unknown
       parsed = {
         reference: ai.reference || parsed.reference,
@@ -224,9 +303,9 @@ async function analyzeOne(chunk, ctx) {
         currency: ai.currency || parsed.currency,
       };
       confidence = Math.max(confidence, Math.min(ai.confidence ?? codeConfidence(parsed), 100));
-      stages.push({ stage: 'AI_TEXT', engine: 'kimi-k2.6', confidence, data: { ...parsed }, note: 'AI parsed messy text' });
+      stages.push({ stage: 'AI_TEXT', engine: ai._source || 'ai', confidence, data: { ...parsed }, note: `AI parsed messy text (${ai._source})` });
     } catch (e) {
-      stages.push({ stage: 'AI_TEXT', engine: 'kimi-k2.6', confidence, error: e.message, note: 'AI parse failed, kept code result' });
+      stages.push({ stage: 'AI_TEXT', engine: 'ai-fallback', confidence, error: e.message, note: 'AI parse failed, kept code result' });
     }
   }
 
@@ -298,11 +377,13 @@ export default async function handler(req, res) {
   }
 
   const kimiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
+  const deepseekKey = process.env.DEEPSEEK_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   const proto = (req.headers['x-forwarded-proto'] || 'https');
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   const origin = `${proto}://${host}`;
 
-  const ctx = { kimiKey, origin };
+  const ctx = { kimiKey, deepseekKey, geminiKey, origin };
 
   let chunks = splitWatches(text);
   if (chunks.length === 0) chunks = [text.trim()];
