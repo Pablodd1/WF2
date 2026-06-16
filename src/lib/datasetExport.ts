@@ -12,8 +12,13 @@
  *   Headers  → Navy         #1F4E78  white bold
  */
 
-import * as XLSX from 'xlsx';
 import type { WatchRecord } from '@/types';
+
+// Lazy-load SheetJS to avoid bloating the initial bundle
+async function getXLSX() {
+  const mod = await import('xlsx');
+  return mod;
+}
 
 // ── Color palette ──────────────────────────────────────────────────────────────
 const C = {
@@ -92,7 +97,8 @@ function titleCell(v: string) {
 }
 
 // ── Main Excel export ──────────────────────────────────────────────────────────
-export function exportDatasetExcel(records: WatchRecord[]) {
+export async function exportDatasetExcel(records: WatchRecord[]) {
+  const XLSX = await getXLSX();
   const stamp = new Date().toISOString().slice(0, 10);
   const wb = XLSX.utils.book_new();
 
