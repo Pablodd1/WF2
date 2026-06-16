@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WatchFacts Extractor</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d28;
+    --border: #2a2d3a;
+    --text: #e4e6ef;
+    --muted: #7a7f94;
+    --green: #22c55e;
+    --green-bg: rgba(34,197,94,0.1);
+    --yellow: #eab308;
+    --yellow-bg: rgba(234,179,8,0.1);
+    --red: #ef4444;
+    --red-bg: rgba(239,68,68,0.1);
+    --blue: #60a5fa;
+    --accent: #818cf8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 20px; width: 100%; flex: 1; }
+
+  /* Header */
+  .header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 28px;
+  }
+  .logo {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--blue), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 16px; color: #fff;
+  }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .tag {
+    font-size: 11px; color: var(--muted); background: var(--card);
+    padding: 2px 10px; border-radius: 99px; border: 1px solid var(--border);
+  }
+
+  /* Instructions */
+  .instructions {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 18px; margin-bottom: 20px;
+    font-size: 13px; color: var(--muted); line-height: 1.6;
+  }
+  .instructions strong { color: var(--text); }
+
+  /* Textarea */
+  .input-area { margin-bottom: 16px; }
+  textarea {
+    width: 100%; min-height: 200px; resize: vertical;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; color: var(--text);
+    font-size: 14px; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    line-height: 1.5; outline: none; transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--muted); opacity: 0.6; }
+
+  /* Buttons */
+  .actions {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 24px;
+  }
+  .btn {
+    padding: 10px 24px; border-radius: 10px; font-size: 14px; font-weight: 500;
+    cursor: pointer; border: none; transition: all 0.2s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--blue), var(--accent));
+    color: #fff;
+  }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-secondary {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--muted); }
+  .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Stats bar */
+  .stats {
+    display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+    font-size: 13px;
+  }
+  .stat { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); }
+  .stat.clean { color: var(--green); background: var(--green-bg); border-color: var(--green); }
+  .stat.partial { color: var(--yellow); background: var(--yellow-bg); border-color: var(--yellow); }
+  .stat.issues { color: var(--red); background: var(--red-bg); border-color: var(--red); }
+  .stat.total { color: var(--text); background: var(--card); }
+
+  /* Results */
+  .results { display: none; }
+  .results.visible { display: block; }
+
+  .watch-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px; margin-bottom: 10px;
+    transition: border-color 0.2s;
+  }
+  .watch-card.clean { border-left: 3px solid var(--green); }
+  .watch-card.partial { border-left: 3px solid var(--yellow); }
+  .watch-card.issues { border-left: 3px solid var(--red); }
+
+  .watch-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  }
+  .watch-ref {
+    font-size: 16px; font-weight: 600; font-family: 'SF Mono', monospace;
+  }
+  .badge {
+    font-size: 11px; padding: 2px 10px; border-radius: 99px; font-weight: 500;
+  }
+  .badge.clean { background: var(--green-bg); color: var(--green); }
+  .badge.partial { background: var(--yellow-bg); color: var(--yellow); }
+  .badge.issues { background: var(--red-bg); color: var(--red); }
+
+  .watch-fields {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 6px 20px; font-size: 13px;
+  }
+  .field { display: flex; gap: 6px; }
+  .field-label { color: var(--muted); min-width: 50px; }
+  .field-value { color: var(--text); }
+
+  .watch-raw {
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--muted); font-family: monospace;
+    word-break: break-all; line-height: 1.4;
+  }
+
+  /* Empty state */
+  .empty {
+    text-align: center; padding: 40px 20px; color: var(--muted);
+  }
+  .empty .icon { font-size: 40px; margin-bottom: 12px; display: block; }
+
+  /* Footer */
+  .footer {
+    text-align: center; padding: 20px; font-size: 12px; color: var(--muted);
+    border-top: 1px solid var(--border); margin-top: 20px;
+  }
+
+  @media (max-width: 600px) {
+    .container { padding: 16px 12px; }
+    .watch-fields { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <div class="logo">WF</div>
+    <h1>WatchFacts Extractor</h1>
+    <span class="tag">client tool</span>
+  </div>
+
+  <div class="instructions">
+    <strong>Paste raw watch descriptions</strong> from WhatsApp, forums, or dealer listings.
+    Supports Patek Philippe, Rolex, Audemars Piguet, Richard Mille, and more.
+    Handles mixed HKD/USD, compound lines, year <code>2024Y</code> format, full set/papers.
+  </div>
+
+  <div class="input-area">
+    <textarea id="input" placeholder="Example:&#10;5167A 2013 fullset 510k hkd&#10;*5980/1AR* Patek Two Tone *2014* *103k USD*&#10;??7010R Purple 2024Y Like New 538K ??5712/1A Blue 2020Y HKD970K&#10;Sold Order 5968A Aug 2024 142k USD"></textarea>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="extract()">&#9654; Extract &amp; Color</button>
+    <button class="btn btn-secondary" onclick="downloadJSON()" id="btn-json" disabled>Download JSON</button>
+    <button class="btn btn-secondary" onclick="downloadCSV()" id="btn-csv" disabled>Download CSV</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('input').value='';document.getElementById('results').classList.remove('visible');document.getElementById('stats').innerHTML='';" style="margin-left:auto">Clear</button>
+  </div>
+
+  <div class="stats" id="stats"></div>
+  <div class="results" id="results"></div>
+</div>
+
+<div class="footer">
+  WatchFacts Extractor &mdash; built for Patek/Rolex/AP watch data extraction
+</div>
+
+<script>
+// --- Reference catalog (same as CLI tool) ---
+var REFS = {};
+function addRef(r, b) { REFS[r] = b; }
+addRef('5167A','Patek Philippe'); addRef('5167/1A','Patek Philippe');
+addRef('5712/1A','Patek Philippe'); addRef('5712/1a','Patek Philippe');
+addRef('5712/1R','Patek Philippe'); addRef('5711/1A','Patek Philippe');
+addRef('5711/1R','Patek Philippe'); addRef('5980/1AR','Patek Philippe');
+addRef('5980R','Patek Philippe'); addRef('5968A','Patek Philippe');
+addRef('5968G','Patek Philippe'); addRef('5267/200A','Patek Philippe');
+addRef('5268/461G','Patek Philippe'); addRef('5168G','Patek Philippe');
+addRef('5170J','Patek Philippe'); addRef('5172G','Patek Philippe');
+addRef('5930G','Patek Philippe'); addRef('5930G-001','Patek Philippe');
+addRef('7010R','Patek Philippe'); addRef('5036/1G','Patek Philippe');
+addRef('5036/1G-013','Patek Philippe'); addRef('5726','Patek Philippe');
+addRef('5726/1A','Patek Philippe'); addRef('3729','Patek Philippe');
+addRef('5270P','Patek Philippe'); addRef('5204G','Patek Philippe');
+addRef('5370P','Patek Philippe'); addRef('5531R','Patek Philippe');
+addRef('5740G','Patek Philippe'); addRef('6002G','Patek Philippe');
+addRef('6104G','Patek Philippe'); addRef('6301P','Patek Philippe');
+addRef('705R','Patek Philippe'); addRef('7118/1A','Patek Philippe');
+addRef('7280A','Patek Philippe'); addRef('7234G','Patek Philippe');
+addRef('7243G','Patek Philippe'); addRef('4947/1A','Patek Philippe');
+addRef('4948/1A','Patek Philippe'); addRef('5520P','Patek Philippe');
+addRef('5738G','Patek Philippe'); addRef('5160G','Patek Philippe');
+addRef('5270P-001','Patek Philippe'); addRef('6300G-010','Patek Philippe');
+addRef('116610LV','Rolex'); addRef('116610LN','Rolex');
+addRef('126610LV','Rolex'); addRef('126610LN','Rolex');
+addRef('124060','Rolex'); addRef('116500LN','Rolex');
+addRef('116518LN','Rolex'); addRef('116519LN','Rolex');
+addRef('116520','Rolex'); addRef('116710BLNR','Rolex');
+addRef('126710BLRO','Rolex'); addRef('116613LB','Rolex');
+addRef('116718LN','Rolex'); addRef('228238','Rolex');
+addRef('228235','Rolex'); addRef('279171','Rolex');
+addRef('279174','Rolex'); addRef('278274','Rolex');
+addRef('278240','Rolex'); addRef('114060','Rolex');
+addRef('214270','Rolex'); addRef('216570','Rolex');
+addRef('226570','Rolex'); addRef('326933','Rolex');
+addRef('326934','Rolex'); addRef('326935','Rolex');
+addRef('326936','Rolex'); addRef('326938','Rolex');
+addRef('15500ST','Audemars Piguet'); addRef('15510ST','Audemars Piguet');
+addRef('15400ST','Audemars Piguet'); addRef('15450ST','Audemars Piguet');
+addRef('15202ST','Audemars Piguet'); addRef('16202ST','Audemars Piguet');
+addRef('15720ST','Audemars Piguet'); addRef('15710ST','Audemars Piguet');
+addRef('14790ST','Audemars Piguet'); addRef('15300ST','Audemars Piguet');
+addRef('26176FO','Audemars Piguet'); addRef('26331ST','Audemars Piguet');
+addRef('26703ST','Audemars Piguet'); addRef('26574ST','Audemars Piguet');
+addRef('26615ST','Audemars Piguet'); addRef('26393ST','Audemars Piguet');
+addRef('26394ST','Audemars Piguet'); addRef('26420ST','Audemars Piguet');
+addRef('26405CE','Audemars Piguet');
+addRef('RM 011','Richard Mille'); addRef('RM 030','Richard Mille');
+addRef('RM 055','Richard Mille'); addRef('RM 35-01','Richard Mille');
+addRef('RM 35-02','Richard Mille'); addRef('RM 11-03','Richard Mille');
+addRef('RM 27-03','Richard Mille'); addRef('RM 52-01','Richard Mille');
+addRef('RM 52-05','Richard Mille'); addRef('RM 67-02','Richard Mille');
+
+var SORTED_REFS = Object.keys(REFS).sort(function(a,b){return b.length-a.length;});
+
+function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function splitCompound(line) {
+  var refsFound = [];
+  for (var i = 0; i < SORTED_REFS.length; i++) {
+    if (new RegExp('\\b' + escapeRegex(SORTED_REFS[i]) + '\\b', 'i').test(line))
+      refsFound.push(SORTED_REFS[i]);
+  }
+  if (refsFound.length <= 1) return [line];
+  var escaped = refsFound.map(function(r){return escapeRegex(r);});
+  var fragments = line.split(new RegExp('(?=' + escaped.join('|') + ')', 'i')).filter(Boolean);
+  var result = [];
+  for (var f = 0; f < fragments.length; f++) {
+    var frag = fragments[f].trim().replace(/^\?{2,}\s*/, '');
+    if (!frag) continue;
+    var hasRef = refsFound.some(function(r) {
+      return new RegExp('\\b' + escapeRegex(r) + '\\b', 'i').test(frag);
+    });
+    if (hasRef) result.push(frag);
+  }
+  return result.length > 1 ? result : [line];
+}
+
+function parseLine(line) {
+  var t = line.trim();
+  if (!t || t.length < 5) return null;
+  var e = { raw: t, brand: null, ref: null, year: null, price_usd: null, price_hkd: null, condition: null, includes: null, issues: [] };
+
+  for (var i = 0; i < SORTED_REFS.length; i++) {
+    if (new RegExp('\\b' + escapeRegex(SORTED_REFS[i]) + '\\b', 'i').test(t)) {
+      e.ref = SORTED_REFS[i].toUpperCase(); e.brand = REFS[SORTED_REFS[i]]; break;
+    }
+  }
+  if (!e.ref) {
+    var m = t.match(/(\d{3,4}\/[A-Z0-9]+[A-Za-z]?|\b[A-Z]{1,2}\d{3,4}[A-Z]?\b)/);
+    if (m) e.ref = m[1].toUpperCase();
+  }
+
+  var ym = t.match(/\b(20[0-2]\d)[Yy]/);
+  if (!ym) ym = t.match(/\b(19[7-9]\d|20[0-2]\d)\b/);
+  if (ym) e.year = parseInt(ym[1]);
+
+  // HKD
+  var hkdK = t.match(/(?:HKD|HK\$)\s*(\d{1,4}(?:\.\d)?)\s*[kK]\b/i);
+  var hkdK2 = t.match(/(\d{1,4}(?:\.\d)?)\s*[kK]\s*(?:HKD|hkd)/);
+  var hkdFull = t.match(/(?:HKD|HK\$)\s*(\d{1,3}(?:,\d{3})*(?:\.\d)?)/i);
+  var hkdK3 = t.match(/(?:^|\s)(\d{1,4}(?:\.\d)?)\s*[kK]\s*hkd/i);
+  var hkdFull2 = t.match(/(\d{1,3}(?:,\d{3})+)\s*HKD/i);
+  var hkdVal = null;
+  if (hkdK) hkdVal = parseFloat(hkdK[1]) * 1000;
+  else if (hkdK2) hkdVal = parseFloat(hkdK2[1]) * 1000;
+  else if (hkdFull) hkdVal = parseFloat(hkdFull[1].replace(/,/g,''));
+  else if (hkdK3) hkdVal = parseFloat(hkdK3[1]) * 1000;
+  else if (hkdFull2) hkdVal = parseFloat(hkdFull2[1].replace(/,/g,''));
+  if (hkdVal !== null) e.price_hkd = hkdVal;
+
+  // USD
+  var usdKLabel = t.match(/(\d{1,3}(?:\.\d)?)\s*[kK]\s+(?:USD|usd|dollar)/);
+  var usdKAsterisk = t.match(/\*(\d{1,3}(?:\.\d)?)\s*[kK]\s*(?:USD|usd)/);
+  var usdDollarK = t.match(/\$\s*(\d{1,3}(?:\.\d)?)\s*[kK]\b(?!\s*hkd)/);
+  var usdCommaLabel = t.match(/(\d{1,3}(?:,\d{3})+)\s*(?:USD|usd)/);
+  var usdDollarFull = t.match(/\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\b/);
+  var usdBareK = t.match(/(\d{1,4}(?:\.\d)?)\s*[kK]\b(?!\s*(?:hkd|HKD|HK\$))/);
+  var usdVal = null;
+  if (usdKLabel) usdVal = parseFloat(usdKLabel[1]) * 1000;
+  else if (usdKAsterisk) usdVal = parseFloat(usdKAsterisk[1]) * 1000;
+  else if (usdDollarK) usdVal = parseFloat(usdDollarK[1]) * 1000;
+  else if (usdCommaLabel) usdVal = parseFloat(usdCommaLabel[1].replace(/,/g,''));
+  else if (usdDollarFull && !/HKD/i.test(t)) usdVal = parseFloat(usdDollarFull[1].replace(/,/g,''));
+  else if (usdBareK && !/HKD/i.test(t) && !/HK\$/.test(t)) usdVal = parseFloat(usdBareK[1]) * 1000;
+  if (usdVal !== null) e.price_usd = usdVal;
+
+  var tl = t.toLowerCase();
+  if (tl.indexOf('unworn') !== -1) e.condition = 'Unworn';
+  else if (tl.indexOf('like new') !== -1) e.condition = 'Like New';
+  else if (/\bnew\b/.test(tl)) e.condition = 'Unworn';
+  else if (tl.indexOf('mint') !== -1) e.condition = 'Mint';
+  else if (tl.indexOf('excellent') !== -1) e.condition = 'Excellent';
+  else if (tl.indexOf('good') !== -1) e.condition = 'Good';
+  else if (tl.indexOf('fair') !== -1) e.condition = 'Fair';
+  else if (tl.indexOf('used') !== -1) e.condition = 'Used';
+
+  if (/full set|fullset|complete set/i.test(t)) e.includes = 'Full Set';
+  else if (/papers|box and papers/i.test(t)) e.includes = 'Papers';
+  else if (/\bpaper\b/i.test(t)) e.includes = 'Papers';
+
+  if (!e.ref) e.issues.push('No reference found');
+  if (!e.price_usd && !e.price_hkd) e.issues.push('No price found');
+  if (!e.year) e.issues.push('No year found');
+
+  return e;
+}
+
+function numStr(n) { return Math.round(n).toLocaleString(); }
+
+function extract() {
+  var text = document.getElementById('input').value;
+  if (!text.trim()) return;
+
+  var rawLines = text.split('\n').filter(function(l){return l.trim();});
+  var allLines = [];
+  for (var i = 0; i < rawLines.length; i++) {
+    var expanded = splitCompound(rawLines[i]);
+    for (var j = 0; j < expanded.length; j++) allLines.push(expanded[j]);
+  }
+  var seen = {};
+  var unique = [];
+  for (var i = 0; i < allLines.length; i++) {
+    var l = allLines[i].trim();
+    if (!seen[l]) { seen[l] = true; unique.push(l); }
+  }
+
+  var parsed = unique.map(function(l){return parseLine(l);}).filter(Boolean);
+
+  // Render
+  var el = document.getElementById('results');
+  var statsEl = document.getElementById('stats');
+  el.innerHTML = '';
+  el.className = 'results visible';
+
+  var clean = 0, partial = 0, issues = 0;
+  var html = '';
+
+  for (var i = 0; i < parsed.length; i++) {
+    var e = parsed[i];
+    var isClean = e.issues.length === 0;
+    var isPartial = e.issues.length <= 2;
+    var cls = isClean ? 'clean' : (isPartial ? 'partial' : 'issues');
+    var label = isClean ? 'CLEAN' : (isPartial ? 'PARTIAL' : 'ISSUES');
+
+    if (isClean) clean++;
+    else if (isPartial) partial++;
+    else issues++;
+
+    var priceStr = '';
+    if (e.price_usd) priceStr += '$' + numStr(e.price_usd) + ' USD';
+    if (e.price_usd && e.price_hkd) priceStr += ' | ';
+    if (e.price_hkd) priceStr += 'HK$' + numStr(e.price_hkd);
+    if (!priceStr) priceStr = '<span style="color:var(--muted)">--</span>';
+
+    var issuesHtml = '';
+    if (e.issues.length) {
+      issuesHtml = '<span style="color:var(--yellow);font-size:12px"> &#9888; ' + e.issues.join(', ') + '</span>';
+    }
+
+    html += '<div class="watch-card ' + cls + '">';
+    html += '<div class="watch-header">';
+    html += '<span class="badge ' + cls + '">' + label + '</span>';
+    html += '<span class="watch-ref">' + (e.ref || '???') + '</span>';
+    html += issuesHtml;
+    html += '</div>';
+    html += '<div class="watch-fields">';
+    html += '<div class="field"><span class="field-label">Brand</span><span class="field-value">' + (e.brand || '--') + '</span></div>';
+    html += '<div class="field"><span class="field-label">Year</span><span class="field-value">' + (e.year || '--') + '</span></div>';
+    html += '<div class="field"><span class="field-label">Price</span><span class="field-value">' + priceStr + '</span></div>';
+    html += '<div class="field"><span class="field-label">Cond</span><span class="field-value">' + (e.condition || '--') + '</span></div>';
+    html += '<div class="field"><span class="field-label">Set</span><span class="field-value">' + (e.includes || '--') + '</span></div>';
+    html += '</div>';
+    html += '<div class="watch-raw">' + escapeHtml(e.raw) + '</div>';
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+
+  statsEl.innerHTML =
+    '<span class="stat total">' + parsed.length + ' watches</span>' +
+    '<span class="stat clean">' + clean + ' clean</span>' +
+    '<span class="stat partial">' + partial + ' partial</span>' +
+    '<span class="stat issues">' + issues + ' issues</span>';
+
+  // Enable download buttons
+  window._results = parsed;
+  document.getElementById('btn-json').disabled = false;
+  document.getElementById('btn-csv').disabled = false;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function downloadJSON() {
+  if (!window._results || !window._results.length) return;
+  var blob = new Blob([JSON.stringify(window._results, null, 2)], {type:'application/json'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'wf-extract-' + Date.now() + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function downloadCSV() {
+  if (!window._results || !window._results.length) return;
+  var lines = ['ref,brand,year,price_usd,price_hkd,condition,includes,issues,raw'];
+  for (var i = 0; i < window._results.length; i++) {
+    var r = window._results[i];
+    lines.push('"' + (r.ref||'') + '","' + (r.brand||'') + '","' + (r.year||'') + '","' + (r.price_usd||'') + '","' + (r.price_hkd||'') + '","' + (r.condition||'') + '","' + (r.includes||'') + '","' + r.issues.join('; ') + '","' + String(r.raw).replace(/"/g,'""') + '"');
+  }
+  var blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'wf-extract-' + Date.now() + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>

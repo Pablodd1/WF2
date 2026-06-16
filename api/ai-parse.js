@@ -1,35 +1,141 @@
 /**
- * AI parser fallback using Kimi K2.6 API
- * OpenAI-compatible endpoint at api.moonshot.ai
- * CommonJS pattern for Vercel serverless
+ * AI parser — Gemini 2.5 Flash, Kimi K2.6, or Claude
+ * For multi-line chat messages, sends the full message to Gemini with
+ * instructions to extract ALL watch listings as an array.
+ * Falls back to line-by-line Kimi if Gemini times out.
+ * CommonJS for Vercel serverless — maxDuration: 60
  */
 
-const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
+const KIMI_URL = 'https://api.moonshot.ai/v1/chat/completions';
 
-const systemPrompt = `You are a luxury watch expert parsing WhatsApp chat listings.
-Extract these fields from the raw message into valid JSON:
-- reference: watch reference number (e.g., "5712/1A-010", "RM07-01", "15400ST")
-- dialColor: dial color in English (Blue, Black, Green, Brown, White, Silver, Grey, Pink, Purple, Yellow, Orange, Champagne, Ice Blue, Mother of Pearl, Meteorite, Diamond, Special)
-- brand: one of "Patek Philippe", "Audemars Piguet", "Rolex", "Richard Mille", "Unknown"
+const SYS = `You are a luxury watch expert parsing WhatsApp chat listings.
+Extract ALL watch listings from the message. For each listing extract:
+- reference: watch reference number
+- dialColor: dial color in English
+- brand: brand name
 - condition: "New", "Used", or "Unknown"
 - year: 4-digit year if mentioned, else null
 - price: numeric value only
 - currency: "HKD", "USD", "USDT", or "EUR"
+- intent: "SELL" if offering for sale, "BUY" if looking to purchase (WTB, want to buy, looking for, NTQ, ISO), "INQUIRY" if asking a question
 
 Rules:
-1. Reference suffixes indicate dial color: LN=Black, LB=Blue, LV=Green, CHNR=Brown, R=Brown, G=Blue, J=Champagne, P=Blue, ST=Blue, OR=Pink, TI=Grey, BC=Black
-2. If no dial color stated, infer from reference suffix
-3. Return ONLY valid JSON. No markdown, no explanations, no code blocks.
+1. Reference suffixes indicate dial: LN=Black, LB=Blue, LV=Green, CHNR=Brown, R=Brown, G=Blue, J=Champagne, P=Blue, ST=Blue, OR=Pink, TI=Grey, BC=Black
+2. If multiple listings are present, return an ARRAY of objects.
+3. If only one listing, return a single object (not array).
+4. ALWAYS resolve brand from reference number if not stated. Examples: 5164R→Patek Philippe, 116610LV→Rolex, IW328904→IWC, 5146R→Patek Philippe, RM11-03→Richard Mille, 15400ST→Audemars Piguet, 5712/1A→Patek Philippe
+5. Return ONLY valid JSON. No markdown, no explanations.`;
 
-Example input: "5712/1a Blue N5/2026 New 850k HKD"
-Example output: {"reference":"5712/1A-010","dialColor":"Blue","brand":"Patek Philippe","condition":"New","year":2026,"price":850000,"currency":"HKD","confidence":95}`;
+/** Try Gemini first (handles multi-listing natively), then Kimi line-by-line */
+async function tryAI(text, gKey, kKey, cKey) {
+  const flat = text; // preserve newlines — Gemini needs structure
+
+  // Gemini — can handle multi-listing in one shot
+  if (gKey) {
+    try {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 12000);
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${gKey}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ac.signal,
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: SYS + '\n\nMessage:\n"""\n' + flat + '\n"""\nExtract JSON:' }] }],
+            generationConfig: { maxOutputTokens: 2048, temperature: 0 } }) }
+      );
+      clearTimeout(t);
+      if (r.ok) {
+        const d = await r.json();
+        const c = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = c.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          // Normalize: always wrap single obj in array
+          const arr = Array.isArray(parsed) ? parsed : [parsed];
+          if (arr.length > 0) return { ok: true, p: arr, src: 'gemini' };
+        }
+      }
+    } catch (e) { console.error('[ai] Gemini:', e.message); }
+  }
+
+  // Kimi — try full message first, fallback to per-line
+  if (kKey) {
+    const tryKimi = async (msg) => {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 10000);
+      const r = await fetch(KIMI_URL, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${kKey}` }, signal: ac.signal,
+        body: JSON.stringify({ model: 'kimi-k2.6',
+          messages: [{ role: 'system', content: SYS + '\nReturn an ARRAY if multiple listings.' },
+                     { role: 'user', content: 'Message:\n"""\n' + msg + '\n"""\nExtract JSON:' }],
+          temperature: 0.5, max_tokens: 8192 }) });
+      clearTimeout(t);
+      if (r.status === 429) return { retry: true };
+      if (r.ok) {
+        const d = await r.json();
+        const ch = d.choices?.[0];
+        let content = ch?.message?.content;
+        if (!content && ch?.message?.reasoning_content) content = ch.message.reasoning_content;
+        if (content) {
+          const m = content.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+          if (m) {
+            const parsed = JSON.parse(m[0]);
+            const arr = Array.isArray(parsed) ? parsed : [parsed];
+            if (arr.length > 0) return { ok: true, p: arr, src: 'kimi' };
+          }
+        }
+      }
+      return { ok: false };
+    };
+
+    // Full message attempt
+    let res = await tryKimi(text);
+    if (res.retry) { await new Promise(r => setTimeout(r, 1000)); res = await tryKimi(text); }
+    if (res.ok) return res;
+
+    // If full message failed, try splitting into lines and parse each
+    const lines = text.split(/[\r\n]+/).map(l => l.trim()).filter(l => l.length > 5);
+    if (lines.length >= 2) {
+      const results = [];
+      for (const line of lines) {
+        res = await tryKimi(line);
+        if (res.retry) { await new Promise(r => setTimeout(r, 1000)); res = await tryKimi(line); }
+        if (res.ok) results.push(res.p[0]);
+      }
+      if (results.length > 0) return { ok: true, p: results, src: 'kimi', multi: true };
+    }
+  }
+
+  // Claude
+  if (cKey) {
+    try {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 10000);
+      const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': cKey, 'anthropic-version': '2023-06-01' },
+        signal: ac.signal,
+        body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 1024, system: SYS,
+          messages: [{ role: 'user', content: 'Message:\n"""\n' + flat + '\n"""\nExtract JSON:' }] }) });
+      clearTimeout(t);
+      if (r.ok) {
+        const d = await r.json();
+        const c = d.content?.[0]?.text || '';
+        const m = c.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+        if (m) {
+          const parsed = JSON.parse(m[0]);
+          const arr = Array.isArray(parsed) ? parsed : [parsed];
+          if (arr.length > 0) return { ok: true, p: arr, src: 'claude' };
+        }
+      }
+    } catch (e) { console.error('[ai] Claude:', e.message); }
+  }
+
+  return { ok: false };
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
@@ -40,156 +146,20 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'rawMessage (string) required' });
   }
 
-  const kimiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
-  const claudeKey = process.env.ANTHROPIC_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const gKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const kKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
+  const cKey = process.env.ANTHROPIC_API_KEY;
 
-  if (!kimiKey && !claudeKey && !geminiKey) {
-    return res.status(500).json({
-      error: 'No AI API key configured. Set KIMI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY.',
-    });
+  if (!gKey && !kKey && !cKey) {
+    return res.status(500).json({ error: 'No AI API key configured.' });
   }
 
-  const userPrompt = `Current regex guess: ${JSON.stringify(currentGuess || {})}
+  const r = await tryAI(rawMessage, gKey, kKey, cKey);
+  if (!r.ok) return res.status(500).json({ error: 'All AI providers failed' });
 
-Raw message:
-"""
-${rawMessage}
-"""
-
-Return ONLY JSON:`;
-
-  // ── Kimi K2.6 (preferred, OpenAI-compatible) ──
-  if (kimiKey) {
-    try {
-      const response = await fetch(KIMI_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${kimiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'kimi-k2.6',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 1,
-          max_tokens: 8192,
-        }),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error('[ai-parse] Kimi HTTP', response.status, errText);
-      } else {
-        const data = await response.json();
-        const choice = data.choices?.[0];
-        let content = choice?.message?.content;
-        // Kimi K2.6 thinking mode fallback
-        if (!content && choice?.message?.reasoning_content) {
-          content = choice.message.reasoning_content;
-        }
-        if (content) {
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            return res.status(200).json({
-              success: true,
-              parsed,
-              source: 'kimi',
-              model: 'kimi-k2.6',
-            });
-          }
-        }
-      }
-    } catch (e) {
-      console.error('[ai-parse] Kimi exception:', e.message);
-    }
+  // Normalize: if single result, return object (not array) for backwards compat
+  if (r.p.length === 1 && !r.multi) {
+    return res.status(200).json({ success: true, parsed: r.p[0], source: r.src });
   }
-
-  // ── Claude fallback ──
-  if (claudeKey) {
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': claudeKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-3-5-sonnet-20241022',
-          max_tokens: 512,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
-        }),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error('[ai-parse] Claude HTTP', response.status, errText);
-      } else {
-        const data = await response.json();
-        const content = data.content?.[0]?.text || '';
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return res.status(200).json({
-            success: true,
-            parsed,
-            source: 'claude',
-            model: 'claude-3-5-sonnet-20241022',
-          });
-        }
-      }
-    } catch (e) {
-      console.error('[ai-parse] Claude exception:', e.message);
-    }
-  }
-
-  // ── Gemini fallback ──
-  if (geminiKey) {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-            generationConfig: {
-              maxOutputTokens: 512,
-              temperature: 0.1,
-              responseMimeType: 'application/json',
-            },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error('[ai-parse] Gemini HTTP', response.status, errText);
-      } else {
-        const data = await response.json();
-        const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return res.status(200).json({
-            success: true,
-            parsed,
-            source: 'gemini',
-            model: 'gemini-2.0-flash',
-          });
-        }
-      }
-    } catch (e) {
-      console.error('[ai-parse] Gemini exception:', e.message);
-      return res.status(500).json({ error: `Gemini API error: ${e.message}` });
-    }
-  }
-
-  return res.status(500).json({ error: 'All AI providers failed' });
+  return res.status(200).json({ success: true, parsed: r.p, source: r.src, multi: true });
 };

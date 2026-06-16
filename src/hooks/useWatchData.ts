@@ -188,6 +188,8 @@ let _cachePromise: Promise<WatchRecord[]> | null = null;
 function loadWatchData(): Promise<WatchRecord[]> {
   if (_cache) return Promise.resolve(_cache);
   if (_cachePromise) return _cachePromise;
+  // Log progress so we can show meaningful loading states
+  console.time('loadWatchData');
   _cachePromise = Promise.all([
     fetch('/parsedWatches.json').then((res) => {
       if (!res.ok) throw new Error(`parsedWatches.json HTTP ${res.status}`);
@@ -225,6 +227,7 @@ function loadWatchData(): Promise<WatchRecord[]> {
       })
       .filter((r): r is WatchRecord => r !== null);
     _cache = transformed;
+    console.timeEnd('loadWatchData');
     return transformed;
   });
   return _cachePromise;
@@ -262,5 +265,5 @@ export function useWatchData() {
       : 0,
   };
 
-  return { records, loading, error, stats };
+  return { records, loading, error, stats, setRecords };
 }

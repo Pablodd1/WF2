@@ -15,6 +15,7 @@ export interface ParsedWatch {
   year: number | null;
   confidence: number;
   flags: string[];
+  intent: 'SELL' | 'BUY' | 'INQUIRY';
 }
 
 // ── Brand catalog ──
@@ -146,10 +147,30 @@ export function parseWatch(raw: string): ParsedWatch {
   }
   // Brand from reference prefix if brand unknown
   if (brand === 'Unknown') {
-    if (/\b57\d{2}/.test(clean) || /\b59\d{2}/.test(clean) || /\b71\d{2}/.test(clean) || /\b72\d{2}/.test(clean)) brand = 'Patek Philippe';
-    else if (/\b116\d{3}/.test(clean) || /\b126\d{3}/.test(clean) || /\b166\d{3}/.test(clean) || /\b226\d{3}/.test(clean)) brand = 'Rolex';
-    else if (/\b15\d{3}[A-Z]/.test(clean) || /\b26\d{3}[A-Z]/.test(clean)) brand = 'Audemars Piguet';
+    // Patek Philippe: 49xx, 50xx, 51xx, 52xx, 57xx, 59xx, 61xx, 71xx, 72xx
+    if (/\b(49\d{2}|50\d{2}|51\d{2}|52\d{2}|57\d{2}|59\d{2}|61\d{2}|71\d{2}|72\d{2})/.test(clean)) brand = 'Patek Philippe';
+    // Rolex: 116xxx, 126xxx, 166xxx, 226xxx, 114xxx, 124xxx etc.
+    else if (/\b(11[46]\d{3}|12[46]\d{3}|16[46]\d{3}|22[68]\d{3}|279\d{3}|118\d{3}|155\d{3}|176\d{3}|177\d{3}|184\d{3}|190\d{3}|268\d{3}|128\d{3}|816\d{3})/.test(clean)) brand = 'Rolex';
+    // Audemars Piguet: 15xxx, 16xxx, 26xxx
+    else if (/\b(15\d{3}[A-Z]|16\d{3}[A-Z]|26\d{3}[A-Z])/.test(clean)) brand = 'Audemars Piguet';
+    // Richard Mille: RM followed by digits
     else if (/RM\d{2,4}/i.test(clean)) brand = 'Richard Mille';
+    // IWC: IW followed by digits (IW328904, IW3777)
+    else if (/\bIW\d{4,6}\b/i.test(clean)) brand = 'IWC';
+    // Cartier: starts with CR, WG, HP, or ends in xxx/xxxx
+    else if (/\b(CR\d{3}|WG\d{4}|HP\d{3}|SANTOS|BALLON|TANK|PANTHERE)\b/i.test(clean)) brand = 'Cartier';
+    // Omega: starts with 311, 321, 331, special patterns
+    else if (/\b(31[0139]\d{3}|32[013]\d{3}|33[012]\d{3}|SEAMASTER|SPEEDMASTER)\b/i.test(clean)) brand = 'Omega';
+    // Hublot: HUB, HH, or 301/302/303/304/305 patterns
+    else if (/\b(HUB\d{2}|30[12345]\d{3}|CLASSIC|BIG BANG)\b/i.test(clean)) brand = 'Hublot';
+    // Panerai: PAM followed by digits
+    else if (/\bPAM\d{3,4}\b/i.test(clean)) brand = 'Panerai';
+    // Breitling: starts with AB, A1, A2, A3 or ends in chronomat/navitimer
+    else if (/\b(AB\d{4}|A[123]\d{4}|CHRONOMAT|NAVITIMER|AVENGER)\b/i.test(clean)) brand = 'Breitling';
+    // Vacheron Constantin: starts with 47xxx, reference format
+    else if (/\b(47\d{3}|OVERSEAS|PATRIMONY|TRADITIONNELLE)\b/i.test(clean)) brand = 'Vacheron Constantin';
+    // Jaeger-LeCoultre: Q followed by digits, or REVERSO
+    else if (/\b(Q\d{5,6}|REVERSO|MASTER\s*.*CONTROL)\b/i.test(clean)) brand = 'Jaeger-LeCoultre';
   }
 
   // 2. Reference
@@ -249,6 +270,22 @@ export function parseWatch(raw: string): ParsedWatch {
   // Condition found -> +2
   if (condition !== 'Unknown') score += 2;
 
+  // ── Intent detection ──
+  let intent: 'SELL' | 'BUY' | 'INQUIRY' = 'SELL';
+  const lc = clean.toLowerCase();
+  // Buy intent: looking for, WTB, want to buy, looking, ISO (in search of), need, NTQ
+  if (/\b(wtb|want.*buy|looking for|iso |in search of|need |ntq\b|looking to buy|want.*find|hunt|searching for|anyone.*have|who.*sell|where.*buy)\b/i.test(lc)) {
+    intent = 'BUY';
+  }
+  // Inquiry: what is, how much, price check, valuation, worth, question mark
+  else if (/\b(how much|what.*price|valuation|worth|price check|quote|pm me|dm me|interested|\\?)\b/i.test(lc)) {
+    intent = 'INQUIRY';
+  }
+  // "NTQ" specifically (No Text Quick) — buyer signaling
+  if (/\bntq\b/i.test(lc)) {
+    intent = 'BUY';
+  }
+
   return {
     rawMessage: raw,
     brand,
@@ -261,6 +298,7 @@ export function parseWatch(raw: string): ParsedWatch {
     year,
     confidence: Math.min(100, Math.round(score)),
     flags,
+    intent,
   };
 }
 

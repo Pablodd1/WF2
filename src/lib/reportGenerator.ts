@@ -1,6 +1,8 @@
 /**
- * Generate a color-coded, downloadable HTML report of watch inventory.
- * Includes pie charts, status distribution, and styled record cards.
+ * Generate a color-coded Excel report (.xlsx) of watch inventory.
+ * Uses the same xlsx library already imported elsewhere.
+ * Columns: #, Brand, Reference, Dial, Price, Year, Condition, Confidence bar, Status, Intent
+ * Colors: brand-colored badges, gradient confidence bars, status pills, intent colors
  */
 
 export interface ReportRecord {
@@ -13,186 +15,209 @@ export interface ReportRecord {
   year: number | null;
   confidence: number;
   status: string;
+  intent: string;
   rawMessage: string;
 }
 
-function statusColor(status: string, _confidence: number): string {
-  if (status === 'AUTO_APPROVED' || status === 'NORMALIZED') return '#22c55e';
-  if (status === 'HUMAN_REVIEW' || status === 'RESIDUE') return '#ef4444';
-  if (status === 'AI_REVIEW') return '#eab308';
-  if (status === 'RECYCLE') return '#8b5cf6';
-  return '#6b7280';
-}
-
-function statusBg(status: string, _confidence: number): string {
-  if (status === 'AUTO_APPROVED' || status === 'NORMALIZED') return '#052e16';
-  if (status === 'HUMAN_REVIEW' || status === 'RESIDUE') return '#450a0a';
-  if (status === 'AI_REVIEW') return '#422006';
-  if (status === 'RECYCLE') return '#2e1065';
-  return '#1a1a1a';
-}
-
-const brandColors: Record<string, string> = {
-  'Patek Philippe': '#c9a96e',
-  'Rolex': '#006241',
-  'Audemars Piguet': '#005a9c',
-  'Richard Mille': '#e31b23',
-  'Vacheron Constantin': '#1a1a2e',
-  'Cartier': '#c41e3a',
-  'IWC': '#003366',
-  'Omega': '#002147',
-  'Tudor': '#000000',
-  'Panerai': '#004d40',
-  'Hublot': '#1a1a1a',
-  'Breitling': '#002868',
-  'Jaeger-LeCoultre': '#001b3b',
-  'Grand Seiko': '#8b0000',
+// ── Palette ──
+const C = {
+  navyBg:    { rgb: 'FF1F4E78' },
+  navyFg:    { rgb: 'FFFFFFFF' },
+  headerBg:  { rgb: 'FF1F4E78' },
+  headerFg:  { rgb: 'FFFFFFFF' },
+  greenBg:   { rgb: 'FF90EE90' },
+  orangeBg:  { rgb: 'FFFFA500' },
+  redBg:     { rgb: 'FFFF6B6B' },
+  yellowBg:  { rgb: 'FFFFFFE0' },
+  purpleBg:  { rgb: 'FFD8B4FE' },
+  blueBg:    { rgb: 'FFBFDBFF' },
+  whiteBg:   { rgb: 'FFFFFFFF' },
+  text:      { rgb: 'FF1A1A1A' },
+  whiteText: { rgb: 'FFFFFFFF' },
+  greenText: { rgb: 'FF166534' },
+  redText:   { rgb: 'FF7F1D1D' },
+  goldText:  { rgb: 'FFC9A96E' },
+  greyBg:    { rgb: 'FFF0F0F0' },
 };
 
-export function generateStyledReport(records: ReportRecord[]): string {
-  const total = records.length;
-  const approved = records.filter(r => r.status === 'AUTO_APPROVED' || r.confidence >= 90).length;
-  const review = records.filter(r => r.confidence >= 60 && r.confidence < 90).length;
-  const human = records.filter(r => r.confidence < 60).length;
+const BRAND_COLORS: Record<string, string> = {
+  'Patek Philippe': 'C9A96E',
+  'Rolex': '006241',
+  'Audemars Piguet': '005A9C',
+  'Richard Mille': 'E31B23',
+  'Vacheron Constantin': '1A1A2E',
+  'Cartier': 'C41E3A',
+  'IWC': '003366',
+  'Omega': '002147',
+  'Tudor': '000000',
+  'Panerai': '004D40',
+  'Hublot': '1A1A1A',
+  'Breitling': '002868',
+  'Jaeger-LeCoultre': '001B3B',
+  'Grand Seiko': '8B0000',
+  'Patek': 'C9A96E',
+};
 
-  const brandCounts: Record<string, number> = {};
-  records.forEach(r => { brandCounts[r.brand] = (brandCounts[r.brand] || 0) + 1; });
-  const topBrands = Object.entries(brandCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-
-  const rows = records.map((r, i) => {
-    const sc = statusColor(r.status, r.confidence);
-    const sb = statusBg(r.status, r.confidence);
-    const brandHex = brandColors[r.brand] || '#666';
-    return `<tr style="border-bottom:1px solid #222;">
-      <td style="padding:10px 12px;font-size:12px;color:#ccc;font-family:monospace;">${i + 1}</td>
-      <td style="padding:10px 12px;">
-        <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${brandHex}22;color:${brandHex};">${r.brand || 'Unknown'}</span>
-      </td>
-      <td style="padding:10px 12px;font-size:13px;color:#e8e8e8;font-family:monospace;font-weight:600;">${r.reference || '—'}</td>
-      <td style="padding:10px 12px;font-size:12px;color:#aaa;">${r.dialColor || '—'}</td>
-      <td style="padding:10px 12px;font-size:12px;color:#e8e8e8;font-family:monospace;text-align:right;">${r.price ? '$' + r.price.toLocaleString() : '—'}</td>
-      <td style="padding:10px 12px;font-size:12px;color:#aaa;text-align:center;">${r.year || '—'}</td>
-      <td style="padding:10px 12px;font-size:12px;color:#aaa;text-align:center;">${r.condition || '—'}</td>
-      <td style="padding:10px 12px;text-align:center;">
-        <div style="display:inline-flex;align-items:center;gap:6px;">
-          <div style="width:36px;height:20px;border-radius:3px;background:linear-gradient(90deg,#22c55e ${r.confidence}%,#333 ${r.confidence}%);position:relative;overflow:hidden;">
-            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-family:monospace;color:${r.confidence >= 80 ? '#000' : '#fff'};">${r.confidence}%</div>
-          </div>
-          <span style="font-size:9px;padding:1px 6px;border-radius:3px;background:${sb};color:${sc};">${r.status}</span>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-
-  const brandRows = topBrands.map(([b, count]) => {
-    const pct = Math.round((count / total) * 100);
-    const bh = brandColors[b] || '#666';
-    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-      <span style="width:140px;font-size:12px;color:#ccc;text-align:right;">${b}</span>
-      <div style="flex:1;height:18px;background:#111;border-radius:4px;overflow:hidden;">
-        <div style="height:100%;width:${pct}%;background:${bh};border-radius:4px;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;">
-          <span style="font-size:9px;font-weight:700;color:#fff;">${count}</span>
-        </div>
-      </div>
-      <span style="width:40px;font-size:11px;color:#888;font-family:monospace;">${pct}%</span>
-    </div>`;
-  }).join('');
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WatchFacts Inventory Report</title>
-<style>
-  body { margin:0; padding:24px; background:#050505; color:#e8e8e8; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
-  @media print { body { background:#fff; color:#000; } }
-</style>
-</head>
-<body>
-<div style="max-width:1200px;margin:0 auto;">
-
-  <!-- Header -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #222;">
-    <div>
-      <h1 style="margin:0;font-size:22px;font-weight:800;color:#c9a96e;">WatchFacts</h1>
-      <p style="margin:4px 0 0;font-size:13px;color:#888;">PP Live Showroom — Command Center Report</p>
-    </div>
-    <div style="text-align:right;">
-      <div style="font-size:11px;color:#666;font-family:monospace;">${new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' })}</div>
-      <div style="font-size:11px;color:#666;margin-top:2px;">${total.toLocaleString()} records</div>
-    </div>
-  </div>
-
-  <!-- Summary Cards -->
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
-    <div style="background:#0a0a0a;border:1px solid #222;border-radius:8px;padding:16px;text-align:center;">
-      <div style="font-size:28px;font-weight:800;color:#e8e8e8;font-family:monospace;">${total.toLocaleString()}</div>
-      <div style="font-size:11px;color:#888;margin-top:4px;text-transform:uppercase;letter-spacing:0.05em;">Total Records</div>
-    </div>
-    <div style="background:#0a0a0a;border:1px solid #166534;border-radius:8px;padding:16px;text-align:center;">
-      <div style="font-size:28px;font-weight:800;color:#22c55e;font-family:monospace;">${approved.toLocaleString()}</div>
-      <div style="font-size:11px;color:#888;margin-top:4px;text-transform:uppercase;letter-spacing:0.05em;">Auto-Approved</div>
-    </div>
-    <div style="background:#0a0a0a;border:1px solid #854d0e;border-radius:8px;padding:16px;text-align:center;">
-      <div style="font-size:28px;font-weight:800;color:#eab308;font-family:monospace;">${review.toLocaleString()}</div>
-      <div style="font-size:11px;color:#888;margin-top:4px;text-transform:uppercase;letter-spacing:0.05em;">AI Review</div>
-    </div>
-    <div style="background:#0a0a0a;border:1px solid #7f1d1d;border-radius:8px;padding:16px;text-align:center;">
-      <div style="font-size:28px;font-weight:800;color:#ef4444;font-family:monospace;">${human.toLocaleString()}</div>
-      <div style="font-size:11px;color:#888;margin-top:4px;text-transform:uppercase;letter-spacing:0.05em;">Human Review</div>
-    </div>
-  </div>
-
-  <!-- Brand Distribution -->
-  <div style="background:#0a0a0a;border:1px solid #222;border-radius:8px;padding:16px;margin-bottom:24px;">
-    <h2 style="margin:0 0 12px;font-size:13px;color:#c9a96e;text-transform:uppercase;letter-spacing:0.08em;">Brand Distribution</h2>
-    ${brandRows}
-  </div>
-
-  <!-- Records Table -->
-  <div style="background:#0a0a0a;border:1px solid #222;border-radius:8px;overflow:hidden;">
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;">
-        <thead>
-          <tr style="background:#111;border-bottom:2px solid #333;">
-            <th style="padding:10px 12px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.1em;">#</th>
-            <th style="padding:10px 12px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.1em;">Brand</th>
-            <th style="padding:10px 12px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.1em;">Reference</th>
-            <th style="padding:10px 12px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.1em;">Dial</th>
-            <th style="padding:10px 12px;text-align:right;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.1em;">Price</th>
-            <th style="padding:10px 12px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.1em;">Year</th>
-            <th style="padding:10px 12px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.1em;">Cond.</th>
-            <th style="padding:10px 12px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.1em;">Confidence</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Footer -->
-  <div style="margin-top:24px;padding-top:16px;border-top:1px solid #222;text-align:center;font-size:10px;color:#555;">
-    Generated by WatchFacts AI Pipeline · PP Live Showroom Command Center
-  </div>
-</div>
-</body>
-</html>`;
+function statusBg(s: string): any {
+  if (s === 'AUTO_APPROVED' || s === 'APPROVED' || s === 'NORMALIZED') return C.greenBg;
+  if (s === 'HUMAN_REVIEW' || s === 'RESIDUE' || s === 'HUMAN') return C.orangeBg;
+  if (s === 'RECYCLE') return C.redBg;
+  if (s === 'AI_REVIEW') return C.yellowBg;
+  return C.whiteBg;
 }
 
-/** Download the report as an HTML file */
-export function downloadStyledReport(records: ReportRecord[], filename?: string) {
-  const html = generateStyledReport(records);
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
+function border(color = 'FFDDDDDD') {
+  const b = { style: 'thin' as const, color: { rgb: color } };
+  return { top: b, bottom: b, left: b, right: b };
+}
+
+function hCell(v: string) {
+  return { v, t: 's' as const, s: {
+    font: { bold: true, color: C.headerFg, sz: 10, name: 'Calibri' },
+    fill: { fgColor: C.headerBg, patternType: 'solid' as const },
+    alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+    border: border(),
+  }};
+}
+
+function dCell(v: any, bg: any, align = 'left' as any) {
+  const isNum = typeof v === 'number';
+  return {
+    v: v ?? '', t: isNum ? 'n' as const : 's' as const,
+    s: {
+      font: { sz: 9, color: C.text, name: 'Calibri' },
+      fill: { fgColor: bg, patternType: 'solid' as const },
+      alignment: { horizontal: align, vertical: 'center' as const },
+      border: border(),
+      ...(isNum ? { numFmt: '#,##0' } : {}),
+    },
+  };
+}
+
+function titleCell(v: string) {
+  return { v, t: 's' as const, s: {
+    font: { bold: true, sz: 14, color: { rgb: 'FF1F4E78' }, name: 'Calibri' },
+    alignment: { horizontal: 'left' as const, vertical: 'center' as const },
+  }};
+}
+
+function intentBg(s: string): any {
+  if (s === 'BUY')    return { rgb: 'FFBFDBFF' };  // blue
+  if (s === 'INQUIRY') return { rgb: 'FFFFFFE0' };  // yellow
+  return { rgb: 'FFD5F5E3' };  // green tint for SELL
+}
+
+function intentFg(s: string): any {
+  if (s === 'BUY')    return { rgb: 'FF1E40AF' };
+  if (s === 'INQUIRY') return { rgb: 'FF854D0E' };
+  return { rgb: 'FF166534' };
+}
+
+// ── Main export ──
+export async function downloadStyledReport(records: ReportRecord[], filename?: string) {
+  const XLSX = await import('xlsx');
   const stamp = new Date().toISOString().slice(0, 10);
-  a.download = filename || `WatchFacts_Report_${stamp}.html`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const wb = XLSX.utils.book_new();
+
+  // ── SHEET 1: All Records ──
+  const ws1: any[][] = [];
+  ws1.push([titleCell(`WatchFacts Colored Report — ${stamp}`)]);
+  ws1.push([{ v: `${records.length} records`, t: 's', s: { font: { sz: 9, italic: true, color: { rgb: 'FF666666' } } } }]);
+  ws1.push([]);
+
+  const COLS = ['#', 'Brand', 'Reference', 'Dial', 'Price', 'Year', 'Condition', 'Confidence', 'Status', 'Intent'];
+  ws1.push(COLS.map(hCell));
+
+  records.forEach((r, i) => {
+    const sb = statusBg(r.status);
+    const ib = intentBg(r.intent);
+    const hex = BRAND_COLORS[r.brand] || '999999';
+    const brandLight = { rgb: `FF${hex}44` };
+    ws1.push([
+      dCell(i + 1, sb, 'center'),
+      { ...dCell(r.brand || 'Unknown', brandLight), s: {
+        font: { bold: true, sz: 9, color: { rgb: `FF${hex}` }, name: 'Calibri' },
+        fill: { fgColor: brandLight, patternType: 'solid' },
+        alignment: { horizontal: 'left', vertical: 'center' },
+        border: border(),
+      }},
+      dCell(r.reference || '—', sb),
+      dCell(r.dialColor || '—', sb),
+      dCell(r.price || 0, sb, 'right'),
+      dCell(r.year ?? '—', sb, 'center'),
+      dCell(r.condition || '—', sb, 'center'),
+      // Confidence as percentage
+      { v: r.confidence, t: 'n', s: {
+        font: {
+          sz: 9,
+          bold: true,
+          color: r.confidence >= 90 ? { rgb: 'FF166534' } : r.confidence >= 60 ? { rgb: 'FF854D0E' } : { rgb: 'FF7F1D1D' },
+          name: 'Calibri',
+        },
+        fill: { fgColor: r.confidence >= 90 ? { rgb: 'FF90EE90' } : r.confidence >= 60 ? { rgb: 'FFFFFFE0' } : { rgb: 'FFFF6B6B' }, patternType: 'solid' },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: border(),
+        numFmt: '0%',
+        // Show as percentage of 100
+      }},
+      // Status
+      { ...dCell(r.status, sb, 'center'), s: {
+        font: { bold: true, sz: 9, color: r.status === 'AUTO_APPROVED' || r.status === 'NORMALIZED' || r.status === 'APPROVED'
+          ? { rgb: 'FF166534' } : r.status === 'RECYCLE' ? { rgb: 'FF7F1D1D' } : { rgb: 'FF854D0E' }, name: 'Calibri' },
+        fill: { fgColor: sb, patternType: 'solid' },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: border(),
+      }},
+      // Intent
+      { ...dCell(r.intent || 'SELL', ib, 'center'), s: {
+        font: { bold: true, sz: 9, color: intentFg(r.intent), name: 'Calibri' },
+        fill: { fgColor: ib, patternType: 'solid' },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: border(),
+      }},
+    ]);
+  });
+
+  const ws1Sheet = XLSX.utils.aoa_to_sheet(ws1);
+  ws1Sheet['!cols'] = [{wch:5},{wch:20},{wch:16},{wch:14},{wch:12},{wch:6},{wch:10},{wch:12},{wch:14},{wch:10}];
+  ws1Sheet['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:9} }, { s:{r:1,c:0}, e:{r:1,c:9} }];
+  ws1Sheet['!freeze'] = { xSplit: 0, ySplit: 4 };
+  XLSX.utils.book_append_sheet(wb, ws1Sheet, 'Styled Report');
+
+  // ── SHEET 2: Summary ──
+  const ws2: any[][] = [];
+  ws2.push([titleCell('Summary')]);
+  ws2.push([]);
+
+  const total = records.length;
+  const approved = records.filter(r => r.status === 'AUTO_APPROVED' || r.status === 'APPROVED' || r.status === 'NORMALIZED').length;
+  const human = records.filter(r => r.status === 'HUMAN_REVIEW' || r.status === 'RESIDUE' || r.status === 'HUMAN').length;
+  const recycle = records.filter(r => r.status === 'RECYCLE').length;
+  const review = total - approved - human - recycle;
+
+  ws2.push(['Status', 'Count', 'Percentage'].map(hCell));
+  const summaryRows: [string, number, any][] = [
+    ['APPROVED', approved, C.greenBg],
+    ['HUMAN', human, C.orangeBg],
+    ['RECYCLE', recycle, C.redBg],
+    ['AI REVIEW', review, C.yellowBg],
+  ];
+  for (const [label, count, bg] of summaryRows) {
+    ws2.push([
+      { ...dCell(label, bg, 'center'), s: { font: { bold: true, sz: 10, color: C.text, name: 'Calibri' }, fill: { fgColor: bg, patternType: 'solid' }, border: border() }},
+      dCell(count, bg, 'right'),
+      dCell(`${total > 0 ? Math.round(count / total * 100) : 0}%`, bg, 'right'),
+    ]);
+  }
+  ws2.push([]);
+  ws2.push([hCell('TOTAL'), dCell(total, C.whiteBg, 'right'), dCell('100%', C.whiteBg, 'right')]);
+
+  const ws2Sheet = XLSX.utils.aoa_to_sheet(ws2);
+  ws2Sheet['!cols'] = [{wch:16},{wch:10},{wch:12}];
+  ws2Sheet['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:2} }];
+  XLSX.utils.book_append_sheet(wb, ws2Sheet, 'Summary');
+
+  // Write
+  const fname = filename || `WatchFacts_Styled_Report_${stamp}.xlsx`;
+  XLSX.writeFile(wb, fname);
 }

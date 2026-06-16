@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   if (!GEMINI_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
 
   try {
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
 
     // Fetch image as base64

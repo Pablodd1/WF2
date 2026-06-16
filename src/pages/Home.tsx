@@ -15,6 +15,7 @@ import { EditModal } from '@/components/EditModal';
 import { AIInsights } from '@/sections/AIInsights';
 import { useWatchData } from '@/hooks/useWatchData';
 import { exportDatasetExcel, exportDatasetCsv } from '@/lib/datasetExport';
+import { downloadStyledReport } from '@/lib/reportGenerator';
 import type { WatchRecord } from '@/types';
 
 export default function Home() {
@@ -146,6 +147,23 @@ export default function Home() {
     exportDatasetCsv(records);
   }, [records]);
 
+  const handleExportReport = useCallback(() => {
+    if (!records || records.length === 0) return;
+    downloadStyledReport(records.map(r => ({
+      reference: r.reference,
+      brand: r.brand,
+      dialColor: r.dialColor,
+      price: r.price,
+      currency: r.originalCurrency,
+      condition: r.condition,
+      year: r.year,
+      confidence: r.confidence,
+      status: r.isResidue ? 'HUMAN_REVIEW' : r.confidence >= 90 ? 'AUTO_APPROVED' : 'AI_REVIEW',
+      intent: (r as any).intent || 'SELL',
+      rawMessage: r.rawMessage,
+    })));
+  }, [records]);
+
   if (loading) {
     return (
       <Layout
@@ -201,6 +219,7 @@ export default function Home() {
         residueCount={stats.residueCount}
         onExportExcel={handleExportExcel}
         onExportCsv={handleExportCsv}
+        onExportReport={handleExportReport}
       />
 
       <div className="ml-0">

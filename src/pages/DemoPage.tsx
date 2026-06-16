@@ -1,12 +1,30 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { parseWatch, getVerdict } from '@/utils/parseEngine';
 import type { ParsedWatch } from '@/utils/parseEngine';
-import { Download, Brain, Eye, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, Brain, Eye, CheckCircle2, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 
 export default function DemoPage() {
   const [input, setInput] = useState('');
   const [results, setResults] = useState<(ParsedWatch & { verdict: string; aiSuggestion?: any; expanded?: boolean })[]>([]);
   const [aiLoading, setAiLoading] = useState<Set<string>>(new Set());
+  const [hasAutoRan, setHasAutoRan] = useState(false);
+
+  // Auto-run demo with sample data on first load so the page isn't just an empty input
+  useEffect(() => {
+    if (hasAutoRan) return;
+    setHasAutoRan(true);
+    const demoText = `🏮5712/1A Blue N5/2026 New 850k HKD
+🔥116610LV Green Submariner 2021 1.2M HKD
+RM11-03 2022 250k USD
+5146R Annual Calendar 2023 Brown 350k HKD
+📥 WTB 5164R 2023 Aquanaut full set`;
+    setInput(demoText);
+    const parsed = demoText.split('\n').map(l => {
+      const p = parseWatch(l.trim());
+      return { ...p, verdict: getVerdict(p.confidence), expanded: false };
+    });
+    setResults(parsed);
+  }, [hasAutoRan]);
 
   const handleParse = useCallback(() => {
     const lines = input.split('\n').map(l => l.trim()).filter(l => l);
@@ -200,6 +218,12 @@ export default function DemoPage() {
                       <FieldBox label="Year" value={r.year ? String(r.year) : '—'} good={!!r.year} />
                       <FieldBox label="Model" value={r.model || '—'} good={!!r.model} />
                       <FieldBox label="Flags" value={r.flags.length ? r.flags.join(', ') : 'None'} good={r.flags.length === 0} />
+                      <div className="rounded-lg p-2.5" style={{ backgroundColor: '#111' }}>
+                        <div className="text-xs mb-1" style={{ color: '#666' }}>Intent</div>
+                        <span className={`text-sm font-medium inline-flex items-center gap-1 ${r.intent === 'SELL' ? 'text-green-400' : r.intent === 'BUY' ? 'text-blue-400' : 'text-yellow-400'}`}>
+                          {r.intent === 'SELL' ? '📤 Sell' : r.intent === 'BUY' ? '📥 Buy' : '❓ Inquiry'}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Confidence breakdown */}
@@ -229,15 +253,94 @@ export default function DemoPage() {
                               <><Brain className="inline w-3 h-3 mr-1" />Ask Kimi AI</>
                             )}
                           </button>
-                        ) : (
-                          <div className="w-full p-3 rounded-lg text-xs" style={{ backgroundColor: '#1a1a1a', color: '#aaa' }}>
-                            <div className="font-semibold mb-2" style={{ color: '#eab308' }}>AI Suggestion (Kimi K2.6)</div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                              <div><span style={{ color: '#888' }}>Ref: </span>{r.aiSuggestion.reference}</div>
-                              <div><span style={{ color: '#888' }}>Dial: </span>{r.aiSuggestion.dialColor}</div>
-                              <div><span style={{ color: '#888' }}>Price: </span>{r.aiSuggestion.price?.toLocaleString()}</div>
-                              <div><span style={{ color: '#888' }}>Brand: </span>{r.aiSuggestion.brand}</div>
+                        ) : r.verdict === 'HUMAN_REVIEW' ? (
+                          // Human-review items: show editable fields + Apply button
+                          <div className="w-full">
+                            <div className="font-semibold mb-2 text-xs" style={{ color: '#eab308' }}>Human Edit — fix fields and confirm</div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                              <div>
+                                <span style={{ color: '#888', fontSize: '10px' }}>Brand</span>
+                                <select value={r.aiSuggestion?.brand || r.brand}
+                                  onChange={(e) => {
+                                    const updated = [...results];
+                                    updated[idx] = { ...r, brand: e.target.value, aiSuggestion: { ...(r.aiSuggestion || {}), brand: e.target.value } };
+                                    setResults(updated);
+                                  }}
+                                  className="w-full mt-1 p-1 rounded text-xs" style={{ background: '#111', color: '#e8e8e8', border: '1px solid #333' }}>
+                                  {['Patek Philippe','Rolex','Audemars Piguet','Richard Mille','Vacheron Constantin','Cartier','IWC','Omega','Tudor','Panerai','Hublot','Breitling','Jaeger-LeCoultre','Grand Seiko','Unknown'].map(b => <option key={b} value={b}>{b}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <span style={{ color: '#888', fontSize: '10px' }}>Reference</span>
+                                <input value={r.aiSuggestion?.reference || r.reference || ''}
+                                  onChange={(e) => {
+                                    const updated = [...results];
+                                    updated[idx] = { ...r, reference: e.target.value, aiSuggestion: { ...(r.aiSuggestion || {}), reference: e.target.value } };
+                                    setResults(updated);
+                                  }}
+                                  className="w-full mt-1 p-1 rounded text-xs font-mono" style={{ background: '#111', color: '#e8e8e8', border: '1px solid #333' }} />
+                              </div>
+                              <div>
+                                <span style={{ color: '#888', fontSize: '10px' }}>Dial Color</span>
+                                <input value={r.aiSuggestion?.dialColor || r.dialColor || ''}
+                                  onChange={(e) => {
+                                    const updated = [...results];
+                                    updated[idx] = { ...r, dialColor: e.target.value, aiSuggestion: { ...(r.aiSuggestion || {}), dialColor: e.target.value } };
+                                    setResults(updated);
+                                  }}
+                                  className="w-full mt-1 p-1 rounded text-xs font-mono" style={{ background: '#111', color: '#e8e8e8', border: '1px solid #333' }} />
+                              </div>
+                              <div>
+                                <span style={{ color: '#888', fontSize: '10px' }}>Price</span>
+                                <input value={r.aiSuggestion?.price || r.price || 0}
+                                  onChange={(e) => {
+                                    const updated = [...results];
+                                    updated[idx] = { ...r, price: Number(e.target.value), aiSuggestion: { ...(r.aiSuggestion || {}), price: Number(e.target.value) } };
+                                    setResults(updated);
+                                  }}
+                                  className="w-full mt-1 p-1 rounded text-xs font-mono" style={{ background: '#111', color: '#e8e8e8', border: '1px solid #333' }} />
+                              </div>
                             </div>
+                            <button onClick={() => {
+                              // Re-run AI with human-edited guesses
+                              const updated = [...results];
+                              updated[idx] = { ...r, verdict: 'AI_REVIEW', aiSuggestion: undefined };
+                              setResults(updated);
+                              handleAskAI(idx);
+                            }}
+                              className="px-4 py-2 rounded-lg text-xs font-semibold transition-opacity hover:opacity-90"
+                              style={{ backgroundColor: '#422006', color: '#eab308', border: '1px solid #854d0e' }}>
+                              <RefreshCw className="inline w-3 h-3 mr-1" />Re-run with Edits
+                            </button>
+                          </div>
+                        ) : (
+                          // AI review items: show AI suggestion with Apply button
+                          <div className="w-full p-3 rounded-lg text-xs" style={{ backgroundColor: '#1a1a1a', color: '#aaa' }}>
+                            <div className="font-semibold mb-2" style={{ color: '#eab308' }}>AI Suggestion</div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              <div><span style={{ color: '#888' }}>Ref: </span>{r.aiSuggestion?.reference}</div>
+                              <div><span style={{ color: '#888' }}>Dial: </span>{r.aiSuggestion?.dialColor}</div>
+                              <div><span style={{ color: '#888' }}>Price: </span>{r.aiSuggestion?.price?.toLocaleString()}</div>
+                              <div><span style={{ color: '#888' }}>Brand: </span>{r.aiSuggestion?.brand}</div>
+                            </div>
+                            <button onClick={() => {
+                              // Apply AI guess and re-parse
+                              const updated = [...results];
+                              updated[idx] = {
+                                ...r,
+                                brand: r.aiSuggestion?.brand || r.brand,
+                                reference: r.aiSuggestion?.reference || r.reference,
+                                dialColor: r.aiSuggestion?.dialColor || r.dialColor,
+                                price: r.aiSuggestion?.price || r.price,
+                                aiSuggestion: undefined,
+                                verdict: 'HUMAN_REVIEW',
+                              };
+                              setResults(updated);
+                            }}
+                              className="mt-2 px-3 py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-90"
+                              style={{ backgroundColor: '#052e16', color: '#22c55e', border: '1px solid #166534' }}>
+                              <CheckCircle2 className="inline w-3 h-3 mr-1" />Accept & Edit
+                            </button>
                           </div>
                         )}
                       </div>
