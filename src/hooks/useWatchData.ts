@@ -205,14 +205,14 @@ function loadWatchData(): Promise<WatchRecord[]> {
       const rows = rawData as any[][];
       records = rows.map((row) => ({
         id: row[0], hash: '', sourceType: 'WhatsApp', sourceLine: row[8] || '',
-        brand: row[1], reference: row[2], family: '', dialColor: row[3], condition: row[7],
-        boxPapers: '', price: row[4], currency: row[6], priceUSD: row[5], year: null,
-        seller: '', location: '', confidence: row[9], status: 'NORMALIZED', flags: [],
+        brand: row[1], reference: row[2], family: '', dialColor: row[3], condition: row[6],
+        boxPapers: '', price: row[4], currency: row[7], priceUSD: row[5], year: row[12] ?? null,
+        seller: '', location: '', confidence: row[9], status: 'NORMALIZED', flags: row[11] || [],
         timestamp: '', mlPredictedPrice: 0, mlPriceConfidence: 0, mlDemandForecast: '',
         mlOutcomeClass: '', mlOutcomeConfidence: 0, marketComparables: 0, sellerRating: 0,
         daysOnMarket: 0, stageLogs: [], imageUrl: row[14] || null, imageCount: row[14] ? 1 : 0,
         imageConfirmed: false, autoResolvedFlags: [], buyerCount: 0, sellerCount: 0,
-        buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10],
+        buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10] === 'RESIDUE' || row[10] === true,
         description: row[13] || row[8] || '',
       }));
     } else {
