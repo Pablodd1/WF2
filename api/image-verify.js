@@ -71,15 +71,17 @@ function repairJson(raw) {
 
 function extractJson(text) {
   if (!text) return null;
+  // Strip markdown fences first
+  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   const candidates = [];
   const stack = [];
   let start = -1;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
+  for (let i = 0; i < cleaned.length; i++) {
+    const c = cleaned[i];
     if (c === '{') { if (stack.length === 0) start = i; stack.push(c); }
     else if (c === '}') {
       stack.pop();
-      if (stack.length === 0 && start >= 0) { candidates.push(text.slice(start, i + 1)); start = -1; }
+      if (stack.length === 0 && start >= 0) { candidates.push(cleaned.slice(start, i + 1)); start = -1; }
     }
   }
   for (let k = candidates.length - 1; k >= 0; k--) {
@@ -89,7 +91,7 @@ function extractJson(text) {
       try { return JSON.parse(attempt); } catch (e) { /* try next */ }
     }
   }
-  const m = text.match(/\{[\s\S]*\}/);
+  const m = cleaned.match(/\{[\s\S]*\}/);
   if (m) { try { return JSON.parse(repairJson(m[0])); } catch (e) { /* noop */ } }
   return null;
 }
