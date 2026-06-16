@@ -19,9 +19,10 @@ interface WorkflowSidebarProps {
   normalizedCount: number;
   residueCount: number;
   onExportExcel: () => void;
+  onExportCsv: () => void;
 }
 
-export function WorkflowSidebar({ totalRecords, normalizedCount, residueCount, onExportExcel }: WorkflowSidebarProps) {
+export function WorkflowSidebar({ totalRecords, normalizedCount, residueCount, onExportExcel, onExportCsv }: WorkflowSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   const steps: WorkflowStep[] = [
@@ -107,6 +108,13 @@ export function WorkflowSidebar({ totalRecords, normalizedCount, residueCount, o
                 >
                   <FileSpreadsheet size={12} className="text-gold-primary" />
                   <span className="text-[11px] text-gold-primary">Export Excel</span>
+                </button>
+                <button
+                  onClick={onExportCsv}
+                  className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-gold-primary/5 hover:bg-gold-primary/10 rounded-md transition-colors text-left border border-gold-primary/20"
+                >
+                  <FileSpreadsheet size={12} className="text-gold-primary/70" />
+                  <span className="text-[11px] text-gold-primary/70">Export CSV</span>
                 </button>
                 <button
                   onClick={() => window.location.reload()}
