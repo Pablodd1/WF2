@@ -5,10 +5,13 @@ import { Footer } from '@/components/Footer';
 import { useWatchData } from '@/hooks/useWatchData';
 import { cleanAnalyze } from '@/lib/cleanAnalyze';
 import { exportCleanExcel, exportCleanCsv } from '@/lib/cleanExport';
+import { enrichWatch } from '@/lib/enrich';
 import type { CleanResponse, CleanWatch, CleanStage, Verdict } from '@/lib/cleanAnalyze';
+import type { EnrichmentData } from '@/lib/enrich';
 import {
   Sparkles, Search, Cog, Download, FileSpreadsheet,
   CheckCircle2, UserCheck, Trash2, AlertTriangle, Loader2,
+  ExternalLink, Image, TrendingUp,
 } from 'lucide-react';
 
 const SAMPLE = `5712/1A Blue N5/2026 New 850k HKD
@@ -82,8 +85,17 @@ function StageRow({ s, idx }: { s: CleanStage; idx: number }) {
   );
 }
 
-function WatchCard({ w, n }: { w: CleanWatch; n: number }) {
+function WatchCard({ w, n, enrichment, onEnrich }: { w: CleanWatch; n: number; enrichment?: EnrichmentData; onEnrich?: () => void }) {
   const meta = verdictMeta[w.verdict];
+  const [loadingEnrich, setLoadingEnrich] = useState(false);
+
+  async function handleEnrich() {
+    if (!w.parsed.reference || loadingEnrich || !onEnrich) return;
+    setLoadingEnrich(true);
+    await onEnrich();
+    setLoadingEnrich(false);
+  }
+
   return (
     <div className="rounded-xl border border-border-default bg-bg-card overflow-hidden">
       {/* header */}
@@ -111,6 +123,35 @@ function WatchCard({ w, n }: { w: CleanWatch; n: number }) {
         {w.verdict === 'HUMAN' && <AlertTriangle size={12} className="text-amber-400 mt-0.5 shrink-0" />}
         <p className="text-[11px] text-text-secondary leading-snug">{w.reason}</p>
       </div>
+      {/* enrichment bar */}
+      {w.parsed.reference && (
+        <div className="px-4 py-2 border-b border-border-default flex items-center gap-2">
+          <button
+            onClick={handleEnrich}
+            disabled={loadingEnrich}
+            className="flex items-center gap-1.5 text-[11px] font-bold text-gold-primary hover:text-gold-bright transition-colors disabled:opacity-40"
+          >
+            {loadingEnrich ? <Loader2 size={12} className="animate-spin" /> : <TrendingUp size={12} />}
+            {loadingEnrich ? 'Enriching…' : enrichment ? 'Re-enrich' : 'Enrich'}
+          </button>
+          {enrichment?.catalog?.collection && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted font-mono">
+              {enrichment.catalog.collection}
+            </span>
+          )}
+          {enrichment?.market?.chrono24?.priceRange && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono">
+              ${enrichment.market.chrono24.priceRange.median.toLocaleString()}
+            </span>
+          )}
+          {enrichment?.officialUrl && (
+            <a href={enrichment.officialUrl} target="_blank" rel="noopener noreferrer"
+              className="text-[10px] text-text-muted hover:text-gold-primary transition-colors flex items-center gap-0.5">
+              <ExternalLink size={10} /> Official
+            </a>
+          )}
+        </div>
+      )}
       {/* stages */}
       <div className="p-4 pt-3">
         <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-3">Workflow · {w.stages.length} stages</p>
@@ -126,14 +167,22 @@ export default function CleanPage() {
   const [loading, setLoading] = useState(false);
   const [res, setRes] = useState<CleanResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [enrichments, setEnrichments] = useState<Record<number, EnrichmentData>>({});
 
   async function run() {
     if (!text.trim()) return;
-    setLoading(true); setErr(null); setRes(null);
+    setLoading(true); setErr(null); setRes(null); setEnrichments({});
     const r = await cleanAnalyze(text);
     setLoading(false);
     if (!r.success) { setErr(r.error || 'Analysis failed'); return; }
     setRes(r);
+  }
+
+  async function handleEnrich(idx: number, ref: string, brand: string) {
+    const data = await enrichWatch(ref, brand);
+    if (data.success && data.enrichment) {
+      setEnrichments(prev => ({ ...prev, [idx]: data.enrichment! }));
+    }
   }
 
   return (
@@ -241,7 +290,15 @@ export default function CleanPage() {
         {/* results */}
         {res && (
           <div className="mt-4 space-y-4">
-            {res.watches.map((w, i) => <WatchCard key={i} w={w} n={i + 1} />)}
+            {res.watches.map((w, i) => (
+              <WatchCard
+                key={i}
+                w={w}
+                n={i + 1}
+                enrichment={enrichments[i]}
+                onEnrich={w.parsed.reference ? () => handleEnrich(i, w.parsed.reference!, w.parsed.brand) : undefined}
+              />
+            ))}
           </div>
         )}
       </div>
