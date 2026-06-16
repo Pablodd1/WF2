@@ -471,7 +471,11 @@ export default async function handler(req, res) {
   if (deepseekKey) {
     for (let i = 0; i < parsedRows.length; i++) {
       const { parsed } = parsedRows[i];
+      // LLM for: low confidence with ref, OR any HUMAN/RECYCLE status with raw message
       if (parsed.confidence < HUMAN_THRESHOLD && parsed.ref) {
+        llmQueue.push(i);
+      } else if (parsed.confidence < HUMAN_THRESHOLD && !parsed.ref) {
+        // No ref but has brand — try LLM to find ref
         llmQueue.push(i);
       }
     }
