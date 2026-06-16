@@ -156,7 +156,7 @@ export default function CleanPage() {
           <p className="text-sm text-text-muted mt-1">
             Paste one or several watch descriptions. Each watch is analyzed
             <span className="text-text-secondary"> individually</span> through the full pipeline —
-            <span className="text-text-secondary"> Parse → AI → Catalog → IQR → Currency</span> — with a single 85% gate:
+            <span className="text-text-secondary"> Parse → AI → Online → Image</span> — with a single 85% gate:
             <span className="text-emerald-400"> ≥85% Approved</span>,
             <span className="text-amber-400"> below → Human</span>,
             <span className="text-red-400"> no info → Recycle</span>.
