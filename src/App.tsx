@@ -1,20 +1,21 @@
-import { useRef } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import Home from '@/pages/Home';
+import AnalyticsPage from '@/pages/AnalyticsPage';
+import ReviewPage from '@/pages/ReviewPage';
+import CleanPage from '@/pages/CleanPage';
+import ReprocessPage from '@/pages/ReprocessPage';
+import DemoPage from '@/pages/DemoPage';
 
 export default function App() {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-
   return (
-    <div style={{ width: '100%', height: '100vh', overflow: 'hidden', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: 8, right: 12, zIndex: 100 }}>
-        <a href="/dashboard" style={{ color: '#7a7f94', fontSize: 12, textDecoration: 'none', background: '#1a1d28', padding: '4px 12px', borderRadius: 6, border: '1px solid #2a2d3a' }}>Dashboard &rarr;</a>
-      </div>
-      <iframe
-        ref={iframeRef}
-        src="/extract.html"
-        style={{ width: '100%', height: '100%', border: 'none' }}
-        title="WatchFacts Extractor"
-        sandbox="allow-scripts allow-same-origin"
-      />
-    </div>
+    <Routes>
+      <Route path="/dashboard" element={<Home />} />
+      <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
+      <Route path="/dashboard/review" element={<ReviewPage />} />
+      <Route path="/dashboard/clean" element={<CleanPage />} />
+      <Route path="/dashboard/reprocess" element={<ReprocessPage />} />
+      <Route path="/dashboard/demo" element={<DemoPage />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
   );
 }
