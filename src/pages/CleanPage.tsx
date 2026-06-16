@@ -11,7 +11,7 @@ import type { EnrichmentData } from '@/lib/enrich';
 import {
   Sparkles, Search, Cog, Download, FileSpreadsheet,
   CheckCircle2, UserCheck, Trash2, AlertTriangle, Loader2,
-  ExternalLink, Image, TrendingUp,
+  ExternalLink, TrendingUp,
 } from 'lucide-react';
 
 const SAMPLE = `5712/1A Blue N5/2026 New 850k HKD
