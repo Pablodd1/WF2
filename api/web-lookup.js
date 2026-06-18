@@ -63,6 +63,38 @@ async function searchDuckDuckGo(query) {
   return results;
 }
 
+// Bing search fallback (works from serverless IPs where DDG gets blocked)
+async function searchBing(query) {
+  const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+  });
+  if (!res.ok) return [];
+  const html = await res.text();
+  const results = [];
+  // Bing uses <li class="b_algo"> for organic results
+  const algoRegex = /<li class="b_algo"[^>]*>([\s\S]*?)<\/li>/g;
+  let m;
+  while ((m = algoRegex.exec(html)) !== null) {
+    const block = m[1];
+    // Title: <h2><a href="URL">TITLE</a></h2>
+    const titleMatch = block.match(/<h2>\s*<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/);
+    if (!titleMatch) continue;
+    const url2 = titleMatch[1];
+    const title = titleMatch[2].replace(/<[^>]+>/g, '').trim();
+    // Snippet: <p class="b_paractl"> or <p>
+    const snippetMatch = block.match(/<p[^>]*>([\s\S]*?)<\/p>/);
+    const snippet = snippetMatch ? snippetMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+    results.push({ url: url2, title, snippet: snippet.slice(0, 300) });
+    if (results.length >= 5) break;
+  }
+  return results;
+}
+
 function extractPrice(text) {
   const prices = {};
   const usdM = text.match(/\$[\s,]*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(?:USD|usd)?/);
@@ -143,10 +175,16 @@ module.exports = async function handler(req, res) {
     }
     if (queries.length) {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        // Try DDG first
         webResults = await searchDuckDuckGo(queries[0]);
-        clearTimeout(timeoutId);
+        // If DDG returned nothing (blocked from serverless IP), fall back to Bing
+        if (webResults.length === 0) {
+          try {
+            webResults = await searchBing(queries[0]);
+          } catch (bingErr) {
+            webError = `DDG blocked, Bing failed: ${bingErr.message}`;
+          }
+        }
         webSnippets = webResults.map(r => r.snippet || '').filter(Boolean).join(' ');
       } catch (e) {
         webError = e.message;
