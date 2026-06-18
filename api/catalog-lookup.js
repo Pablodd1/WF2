@@ -25,7 +25,7 @@ function loadCatalogs() {
     for (const item of catalog) {
       const ref = normalizeRef(item.reference);
       catalogMap.set(ref, {
-        brand: 'Patek Philippe',
+        brand: item.brand || 'Patek Philippe',
         collection: item.collection,
         model: item.model,
         caseMetal: item.case_metal,
@@ -46,7 +46,7 @@ function loadCatalogs() {
       const existing = enrichedMap.get(ref);
       if (!existing) {
         enrichedMap.set(ref, {
-          brand: 'Patek Philippe',
+          brand: item.brand || 'Patek Philippe',
           collection: item.collection,
           model: item.model,
           caseMetal: item.case_metal,
