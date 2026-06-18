@@ -13,10 +13,10 @@
  *     Boost confidence if ref is recognized.
  *
  *   STAGE 3 — CONFIDENCE GATE
- *     >= 90  → APPROVED  (write directly)
- *     70-89  → HUMAN     (flag for light review)
- *     < 70 + has ref → DEEPSEEK  (structured extraction via API)
- *     < 70 + no ref  → RECYCLE   (stay recycled, no LLM waste)
+ *     >= 85  → APPROVED  (write directly)
+ *     65-84  → HUMAN     (flag for light review)
+ *     < 65 + has ref → DEEPSEEK  (structured extraction via API)
+ *     < 65 + no ref  → RECYCLE   (stay recycled, no LLM waste)
  *
  *   STAGE 4 — DEEPSEEK BATCH MERGE
  *     Collect up to 20 records per batch, send ONE API call with a JSON array
@@ -30,8 +30,8 @@
  */
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
-const APPROVE_THRESHOLD = 90;
-const HUMAN_THRESHOLD = 70;
+const APPROVE_THRESHOLD = 85;
+const HUMAN_THRESHOLD = 65;
 const BATCH_SIZE = 20; // max records per DeepSeek API call
 
 // ── Currency rates (HKD is the main issue) ──
@@ -409,9 +409,15 @@ function verdictGate(parsed) {
   // Hard recycle: confidence too low
   if (conf < 35) return 'RECYCLE';
 
+  // APPROVED: 85+ with ref + brand + price
+  if (conf >= APPROVE_THRESHOLD && hasRef && hasBrand && hasPrice) return 'APPROVED';
+  // APPROVED: 85+ with ref + brand (no price but strong otherwise)
   if (conf >= APPROVE_THRESHOLD && hasRef && hasBrand) return 'APPROVED';
-  if (conf >= HUMAN_THRESHOLD) return 'HUMAN';
-  return 'HUMAN';  // anything with a ref/brand but low conf → human (not recycle)
+  // HUMAN: 65-84 with ref or brand
+  if (conf >= HUMAN_THRESHOLD && (hasRef || hasBrand)) return 'HUMAN';
+  // HUMAN: has ref or brand but low confidence
+  if (hasRef || hasBrand) return 'HUMAN';
+  return 'RECYCLE';
 }
 
 // ── Convert priceUSD ──
@@ -452,8 +458,8 @@ export default async function handler(req, res) {
   const parsedRows = []; // { id, raw, parsed, rowIndex }
   for (let i = 0; i < batch.length; i++) {
     const row = batch[i];
-    // row is array: [id, brand, ref, dial, price, priceUSD, currency, condition, rawMsg, confidence, status, flags]
-    const [id, , , , , , , , rawMsg] = row;
+    // row is array: [id, brand, ref, dial, priceRetail, priceListed, condition, currency, rawMsg, confidence, status, flags, year]
+    const [id, existingBrand, existingRef, existingDial, priceRetail, priceListed, existingCondition, existingCurrency, rawMsg, existingConfidence, existingStatus, existingFlags, existingYear] = row;
     const raw = String(rawMsg || '');
 
     // Stage 1
