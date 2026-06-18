@@ -145,7 +145,7 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // Build enrichment from catalog
+    // Build enrichment from catalog (includes price ranges when available)
     const catalogEnrichment = catalogMatch ? {
       model: catalogMatch.model || null,
       collection: catalogMatch.collection || null,
@@ -156,6 +156,11 @@ module.exports = async function handler(req, res) {
       buyerRatio: catalogMatch.buyer_ratio || null,
       sellerRatio: catalogMatch.seller_ratio || null,
       liquidityScore: catalogMatch.liquidity_score || null,
+      // Price data from the historical dataset
+      avgPrice: catalogMatch.avg_price || null,
+      minPrice: catalogMatch.min_price || null,
+      maxPrice: catalogMatch.max_price || null,
+      topDial: catalogMatch.dial_colors || null,
       inCatalog: true,
     } : null;
 
@@ -177,21 +182,17 @@ module.exports = async function handler(req, res) {
       try {
         // Try DDG first
         webResults = await searchDuckDuckGo(queries[0]);
-        console.log(`[web-lookup] DDG returned ${webResults.length} results for "${queries[0]}"`);
         // If DDG returned nothing (blocked from serverless IP), fall back to Bing
         if (webResults.length === 0) {
           try {
             webResults = await searchBing(queries[0]);
-            console.log(`[web-lookup] Bing returned ${webResults.length} results`);
           } catch (bingErr) {
             webError = `DDG blocked, Bing failed: ${bingErr.message}`;
-            console.log(`[web-lookup] Bing error: ${bingErr.message}`);
           }
         }
         webSnippets = webResults.map(r => r.snippet || '').filter(Boolean).join(' ');
       } catch (e) {
         webError = e.message;
-        console.log(`[web-lookup] Outer error: ${e.message}`);
         // Web search failed silently — catalog data is still returned
       }
     }
