@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import { useWatchData } from '@/hooks/useWatchData';
@@ -52,6 +52,9 @@ export default function ReviewPage() {
     }).sort((a, b) => a.confidence - b.confidence);
   }, [records, filterMinConfidence, filterMaxConfidence, filterDial, filterBrand]);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [keyboardHelp, setKeyboardHelp] = useState(false);
+
   const toggleExpand = useCallback((id: string) => {
     setExpandedId(prev => prev === id ? null : id);
   }, []);
@@ -95,6 +98,75 @@ export default function ReviewPage() {
     }
     return suggestions;
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const visible = filtered.slice(0, 200);
+      const currentIdx = expandedId ? visible.findIndex(r => r.id === expandedId) : -1;
+
+      switch (e.key.toLowerCase()) {
+        case 'n': // Next
+          e.preventDefault();
+          if (currentIdx >= 0 && currentIdx < visible.length - 1) {
+            setExpandedId(visible[currentIdx + 1].id);
+          } else if (visible.length > 0) {
+            setExpandedId(visible[0].id);
+          }
+          break;
+        case 'p': // Previous
+          e.preventDefault();
+          if (currentIdx > 0) {
+            setExpandedId(visible[currentIdx - 1].id);
+          }
+          break;
+        case 'e': // Edit
+          e.preventDefault();
+          if (expandedId) {
+            const r = visible.find(r => r.id === expandedId);
+            if (r) startEdit(r);
+          }
+          break;
+        case 'a': // Approve
+          e.preventDefault();
+          if (expandedId) {
+            setSavedIds(prev => new Set(prev).add(expandedId));
+          }
+          break;
+        case 'r': // Recycle
+          e.preventDefault();
+          if (expandedId) {
+            // Mark as recycled (visual only for now)
+            setSavedIds(prev => { const s = new Set(prev); s.delete(expandedId); return s; });
+          }
+          break;
+        case 's': // Select for bulk
+          e.preventDefault();
+          if (expandedId) {
+            setSelectedIds(prev => {
+              const s = new Set(prev);
+              if (s.has(expandedId)) s.delete(expandedId);
+              else s.add(expandedId);
+              return s;
+            });
+          }
+          break;
+        case '?':
+        case 'h':
+          e.preventDefault();
+          setKeyboardHelp(prev => !prev);
+          break;
+        case 'escape':
+          setExpandedId(null);
+          setEditingRecord(null);
+          setKeyboardHelp(false);
+          break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [filtered, expandedId, startEdit]);
 
   const parseOne = useCallback(async (record: WatchRecord): Promise<Suggestion[]> => {
     const res = await fetch('/api/ai-parse', {
@@ -350,6 +422,26 @@ export default function ReviewPage() {
           </button>
         </div>
 
+        {/* Keyboard Help */}
+        {keyboardHelp && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setKeyboardHelp(false)}>
+            <div className="bg-bg-card border border-border-default rounded-xl p-6 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-bold text-text-primary mb-4">Keyboard Shortcuts</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-text-secondary">N</span><span className="text-text-muted">Next record</span></div>
+                <div className="flex justify-between"><span className="text-text-secondary">P</span><span className="text-text-muted">Previous record</span></div>
+                <div className="flex justify-between"><span className="text-text-secondary">E</span><span className="text-text-muted">Edit fields</span></div>
+                <div className="flex justify-between"><span className="text-text-secondary">A</span><span className="text-text-muted">Approve record</span></div>
+                <div className="flex justify-between"><span className="text-text-secondary">R</span><span className="text-text-muted">Recycle record</span></div>
+                <div className="flex justify-between"><span className="text-text-secondary">S</span><span className="text-text-muted">Select for bulk</span></div>
+                <div className="flex justify-between"><span className="text-text-secondary">H / ?</span><span className="text-text-muted">Toggle this help</span></div>
+                <div className="flex justify-between"><span className="text-text-secondary">Esc</span><span className="text-text-muted">Close / Cancel</span></div>
+              </div>
+              <button onClick={() => setKeyboardHelp(false)} className="mt-4 w-full py-2 rounded bg-gold-primary/20 text-gold-primary text-sm font-medium">Close</button>
+            </div>
+          </div>
+        )}
+
         {/* Records List */}
         <div className="space-y-3">
           {filtered.slice(0, 200).map(record => {
@@ -358,6 +450,7 @@ export default function ReviewPage() {
             const suggestions = suggestionsMap[record.id] || [];
             const isAiLoading = aiLoading[record.id];
             const isSaved = savedIds.has(record.id);
+            const isSelected = selectedIds.has(record.id);
 
             let confidenceColor = 'text-emerald-400';
             if (record.confidence < 60) confidenceColor = 'text-red-400';
@@ -367,7 +460,7 @@ export default function ReviewPage() {
               <div
                 key={record.id}
                 className={`bg-bg-card border rounded-lg transition-all ${
-                  isExpanded ? 'border-gold-primary/50' : 'border-border-default hover:border-border-hover'
+                  isExpanded ? 'border-gold-primary/50' : isSelected ? 'border-cyan-400/50' : 'border-border-default hover:border-border-hover'
                 }`}
               >
                 {/* Summary Row */}
@@ -375,7 +468,8 @@ export default function ReviewPage() {
                   className="flex items-center gap-4 p-4 cursor-pointer"
                   onClick={() => toggleExpand(record.id)}
                 >
-                  <div className="flex-shrink-0">
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isSelected && <div className="w-2 h-2 rounded-full bg-cyan-400" />}
                     {record.confidence < 60 ? (
                       <AlertTriangle size={18} className="text-red-400" />
                     ) : record.confidence < 80 ? (
