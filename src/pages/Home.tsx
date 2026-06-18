@@ -13,6 +13,7 @@ import { FloatingNav } from '@/components/FloatingNav';
 import { DetailModal } from '@/components/DetailModal';
 import { EditModal } from '@/components/EditModal';
 import { AIInsights } from '@/sections/AIInsights';
+import LiveStream from '@/components/LiveStream';
 import { useWatchData } from '@/hooks/useWatchData';
 import { exportDatasetExcel, exportDatasetCsv } from '@/lib/datasetExport';
 import { downloadStyledReport } from '@/lib/reportGenerator';
@@ -237,6 +238,9 @@ export default function Home() {
         normalizedCount={stats.normalizedCount}
         residueCount={stats.residueCount}
       />
+
+      {/* Live Stream from Supabase — real WhatsApp/Telegram messages */}
+      <LiveStream />
 
       {/* Inventory Section */}
       <InventoryGrid
