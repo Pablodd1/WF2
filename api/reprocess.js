@@ -127,6 +127,31 @@ function inferDialFromRef(ref) {
   return null;
 }
 
+// ── Brand normalization ──
+function normalizeBrand(brand) {
+  if (!brand) return null;
+  const b = brand.toUpperCase().trim();
+  const map = {
+    'PATEK PHILIPPE': 'Patek Philippe',
+    'PATEK': 'Patek Philippe',
+    'PP': 'Patek Philippe',
+    'AUDEMARS PIGUET': 'Audemars Piguet',
+    'AP': 'Audemars Piguet',
+    'AUDEMARS': 'Audemars Piguet',
+    'ROLEX': 'Rolex',
+    'RICHARD MILLE': 'Richard Mille',
+    'RM': 'Richard Mille',
+    'VACHERON CONSTANTIN': 'Vacheron Constantin',
+    'VC': 'Vacheron Constantin',
+    'BREGUET': 'Breguet',
+    'OMEGA': 'Omega',
+    'CARTIER': 'Cartier',
+    'GRAND SEIKO': 'Grand Seiko',
+    'SEIKO': 'Seiko',
+  };
+  return map[b] || brand;
+}
+
 // ── Full regex stage 1 parse ──
 function stage1Parse(rawMsg) {
   const text = rawMsg || '';
@@ -143,6 +168,8 @@ function stage1Parse(rawMsg) {
   else if (/omega/i.test(text)) brand = 'Omega';
   else if (/cartier/i.test(text)) brand = 'Cartier';
   else if (/grand\s?seiko|seiko/i.test(text)) brand = 'Grand Seiko';
+  
+  brand = normalizeBrand(brand);
 
   // Reference
   let ref = null;
@@ -218,7 +245,7 @@ async function stage2Catalog(parsed, catalogData) {
     if (catRef === parsedRef || catRef.startsWith(parsedRef) || parsedRef.startsWith(catRef)) {
       // Hit — boost brand + confidence
       if (!parsed.brand) {
-        parsed.brand = 'Patek Philippe';  // catalog.json is Patek-only
+        parsed.brand = normalizeBrand('PATEK PHILIPPE');  // catalog.json is Patek-only
         parsed.confidence += 20;
       }
       if (!parsed.dial && entry.collection) {
@@ -383,7 +410,7 @@ IMPORTANT RULES:
 // ── Merge LLM result into parsed ──
 function mergeLLM(parsed, llm) {
   const out = { ...parsed };
-  if (!out.brand && llm.brand && llm.brand !== 'Unknown') out.brand = llm.brand;
+  if (!out.brand && llm.brand && llm.brand !== 'Unknown') out.brand = normalizeBrand(llm.brand);
   if (!out.ref && llm.reference) out.ref = llm.reference;
   if (!out.dial && llm.dialColor && llm.dialColor !== 'Unknown') out.dial = llm.dialColor;
   if (!out.condition && llm.condition && llm.condition !== 'Unknown') out.condition = llm.condition;
@@ -542,7 +569,7 @@ export default async function handler(req, res) {
     results.push({
       id,
       verdict,
-      brand: parsed.brand || 'Unknown',
+      brand: normalizeBrand(parsed.brand) || 'Unknown',
       reference: parsed.ref || '',
       dialColor: parsed.dial || 'Unknown',
       condition: parsed.condition || 'Unknown',
