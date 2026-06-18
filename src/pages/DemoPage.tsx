@@ -105,13 +105,91 @@ RM11-03 2022 250k USD
     setResults(parsed);
   }, [hasAutoRan]);
 
-  const handleParse = useCallback(() => {
+  const handleParse = useCallback(async () => {
     const lines = input.split('\n').map(l => l.trim()).filter(l => l);
     const parsed = lines.map(line => {
       const p = parseWatch(line);
       return { ...p, verdict: getVerdict(p.confidence), expanded: false };
     });
     setResults(parsed);
+
+    // Auto-cascade: for any result with <90 confidence AND a reference,
+    // automatically fire web-lookup + AI parse to boost it.
+    // Inline fetch logic to avoid callback order dependency.
+    for (let i = 0; i < parsed.length; i++) {
+      const r = parsed[i];
+      if (r.confidence >= 90 || !r.reference) continue;
+
+      // 1. Web lookup
+      try {
+        setWebLoading(prev => new Set(prev).add(i.toString()));
+        const params = new URLSearchParams();
+        params.set('reference', r.reference);
+        if (r.brand && r.brand !== 'Unknown') params.set('brand', r.brand);
+        if (r.year) params.set('year', String(r.year));
+        params.set('raw', r.rawMessage);
+
+        const res = await fetch(`/api/web-lookup?${params.toString()}`);
+        const data = await res.json();
+
+        if (data.success) {
+          const boost = data.confidenceBoost || 0;
+          setResults(prev => prev.map((item, idx) => {
+            if (idx !== i) return item;
+            const newConfidence = Math.min(100, item.confidence + boost);
+            const enrichment = data.catalogEnrichment;
+            const webPrice = data.webEnrichment?.price;
+            const updated = {
+              ...item,
+              confidence: newConfidence,
+              verdict: getVerdict(newConfidence),
+              webEnrichment: data,
+              confidenceBoost: boost,
+            };
+            if (enrichment) {
+              if (!updated.model && enrichment.model) updated.model = enrichment.model;
+            }
+            if (updated.price === 0 && webPrice) {
+              if (webPrice.usd) { updated.price = webPrice.usd; updated.currency = 'USD'; }
+              else if (webPrice.hkd) { updated.price = webPrice.hkd; updated.currency = 'HKD'; }
+            }
+            return updated;
+          }));
+        }
+      } catch (e) {
+        console.error('Web lookup failed:', e);
+      } finally {
+        setWebLoading(prev => { const n = new Set(prev); n.delete(i.toString()); return n; });
+      }
+
+      // 2. AI parse if still below 90
+      const current = (await new Promise(resolve => {
+        setResults(prev => { resolve(prev[i]); return prev; });
+      })) as EnrichedResult | undefined;
+      if (current && current.confidence < 90) {
+        try {
+          setAiLoading(prev => new Set(prev).add(i.toString()));
+          const res = await fetch('/api/ai-parse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              rawMessage: r.rawMessage,
+              currentGuess: { reference: r.reference, dialColor: r.dialColor, brand: r.brand, price: r.price, currency: r.currency },
+            }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            setResults(prev => prev.map((item, idx) =>
+              idx === i ? { ...item, aiSuggestion: data.parsed, verdict: 'AI_REVIEW' as const } : item
+            ));
+          }
+        } catch (e) {
+          console.error('AI parse failed:', e);
+        } finally {
+          setAiLoading(prev => { const n = new Set(prev); n.delete(i.toString()); return n; });
+        }
+      }
+    }
   }, [input]);
 
   // ── Web Lookup ─────────────────────────────────────────────────────────────
