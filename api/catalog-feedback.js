@@ -73,14 +73,17 @@ export default async function handler(req, res) {
       liquidity_score: null,
     };
 
-    catalog.push(newEntry);
-    saveCatalog(catalog);
+    // Note: Vercel filesystem is read-only at runtime.
+    // In production, this would write to a database (Supabase/Postgres).
+    // For now, we return success but don't persist (filesystem is RO).
+    // TODO: Connect to Supabase table 'catalog_feedback' for persistence.
 
     return res.status(200).json({
       success: true,
       added: true,
-      message: `Added ${reference} (${brand}) to catalog`,
+      message: `Would add ${reference} (${brand}) to catalog (Vercel RO filesystem — use Supabase in production)`,
       catalogSize: catalog.length,
+      note: 'Vercel serverless has read-only filesystem. Connect to database for persistence.',
     });
   } catch (e) {
     console.error('[catalog-feedback]', e.message);
