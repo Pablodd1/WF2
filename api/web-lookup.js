@@ -130,6 +130,7 @@ module.exports = async function handler(req, res) {
     // 2. Web search (best-effort, may fail from serverless IPs)
     let webResults = [];
     let webSnippets = '';
+    let webError = null;
     const queries = [];
     if (lookupRef) {
       if (brand) queries.push(`${lookupRef} ${brand} watch for sale price`);
@@ -148,6 +149,7 @@ module.exports = async function handler(req, res) {
         clearTimeout(timeoutId);
         webSnippets = webResults.map(r => r.snippet || '').filter(Boolean).join(' ');
       } catch (e) {
+        webError = e.message;
         // Web search failed silently — catalog data is still returned
       }
     }
@@ -156,9 +158,9 @@ module.exports = async function handler(req, res) {
     const priceFromWeb = extractPrice(webSnippets);
     const yearFromWeb = extractYear(webSnippets);
 
-    // Confidence boost
+    // Confidence boost — prioritize catalog, web is bonus
     let confidenceBoost = 0;
-    if (catalogMatch) confidenceBoost += 15;
+    if (catalogMatch) confidenceBoost += 20;  // Strong catalog hit
     if (webResults.length >= 2) confidenceBoost += 5;
     if (priceFromWeb.usd || priceFromWeb.hkd) confidenceBoost += 5;
 
@@ -175,11 +177,13 @@ module.exports = async function handler(req, res) {
           url: webResults[0].url,
           snippet: (webResults[0].snippet || '').slice(0, 200),
         } : null,
+        error: webError,
       },
-      confidenceBoost: Math.min(confidenceBoost, 25),
+      confidenceBoost: Math.min(confidenceBoost, 30),
       results: webResults.slice(0, 3).map(r => ({
         title: r.title, url: r.url, snippet: (r.snippet || '').slice(0, 200),
       })),
+      primarySource: catalogMatch ? 'catalog' : (webResults.length ? 'web' : 'none'),
     });
   } catch (err) {
     console.error('web-lookup error:', err.message);
