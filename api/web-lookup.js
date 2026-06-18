@@ -177,17 +177,21 @@ module.exports = async function handler(req, res) {
       try {
         // Try DDG first
         webResults = await searchDuckDuckGo(queries[0]);
+        console.log(`[web-lookup] DDG returned ${webResults.length} results for "${queries[0]}"`);
         // If DDG returned nothing (blocked from serverless IP), fall back to Bing
         if (webResults.length === 0) {
           try {
             webResults = await searchBing(queries[0]);
+            console.log(`[web-lookup] Bing returned ${webResults.length} results`);
           } catch (bingErr) {
             webError = `DDG blocked, Bing failed: ${bingErr.message}`;
+            console.log(`[web-lookup] Bing error: ${bingErr.message}`);
           }
         }
         webSnippets = webResults.map(r => r.snippet || '').filter(Boolean).join(' ');
       } catch (e) {
         webError = e.message;
+        console.log(`[web-lookup] Outer error: ${e.message}`);
         // Web search failed silently — catalog data is still returned
       }
     }
