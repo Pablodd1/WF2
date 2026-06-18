@@ -56,16 +56,29 @@ function refMatch(text: string): string {
   m = text.match(/\b(\d{4,6}\/[A-Za-z0-9-]{1,6})\b/);
   if (m) return m[1];
 
-  // Pure numeric Rolex: 5-6 digit refs starting with known prefixes
-  m = text.match(/\b(116\d{3}|126\d{3}|114\d{3}|124\d{3}|226\d{3}|228\d{3}|279\d{3}|176\d{3}|184\d{3}|118\d{3}|155\d{3}|177\d{3}|816\d{3}|190\d{3}|268\d{3}|128\d{3})\b/);
-  if (m) return m[1];
+  // Rolex: 5-6 digit refs with optional letter suffix (116610LV, 126710BLRO, 1655, etc.)
+  // \b doesn't work between digits and letters — match the suffix explicitly
+  m = text.match(/\b(116\d{3}[A-Z]{0,4}|126\d{3}[A-Z]{0,4}|114\d{3}[A-Z]?|124\d{3}[A-Z]?|226\d{3}[A-Z]{0,4}|228\d{3}[A-Z]{0,4}|279\d{3}[A-Z]{0,4}|176\d{3}|184\d{3}|118\d{3}|155\d{3}[A-Z]{0,4}|177\d{3}|816\d{3}|190\d{3}|268\d{3}|128\d{3})(?![A-Z])/i);
+  if (m) return m[1].toUpperCase();
 
-  // Patek refs: 49xx, 50xx, 51xx, 52xx, 57xx, 59xx, 71xx, 72xx
+  // Patek refs: 49xx, 50xx, 51xx, 52xx, 57xx, 59xx, 71xx, 72xx with optional suffix
   m = text.match(/\b(49\d{2}[A-Za-z0-9\/]*|50\d{2}[A-Za-z0-9\/]*|51\d{2}[A-Za-z0-9\/]*|52\d{2}[A-Za-z0-9\/]*|57\d{2}[A-Za-z0-9\/]*|59\d{2}[A-Za-z0-9\/]*|71\d{2}[A-Za-z0-9\/]*|72\d{2}[A-Za-z0-9\/]*)\b/);
   if (m) return m[1];
 
-  // AP: 15xxx, 16xxx, 26xxx
+  // AP: 15xxx, 16xxx, 26xxx with optional suffix
   m = text.match(/\b(15\d{3}[A-Za-z]{0,4}|16\d{3}[A-Za-z]{0,4}|26\d{3}[A-Za-z]{0,4})\b/);
+  if (m) return m[1];
+
+  // Vacheron Constantin: 47xxx, 82xxx, 4300/4500/6000/7900/81180/85180/4010 patterns
+  m = text.match(/\b(47\d{3}[A-Z]?|82\d{3}[A-Z]?|43\d{2}[A-Z]?|45\d{2}[A-Z]?|60\d{2}[A-Z]?|79\d{2}[A-Z]?|81180[A-Z]?|85180[A-Z]?|4010[A-Z]?)\b/);
+  if (m) return m[1];
+
+  // IWC: IW followed by digits (IW328904, IW3777)
+  m = text.match(/\b(IW\d{4,6})\b/i);
+  if (m) return m[1].toUpperCase();
+
+  // Generic: 5-6 digit ref + 1-4 letter suffix (catches AP/RM/VC/Panerai/Omega/Hublot/Tudor)
+  m = text.match(/\b(\d{5,6}[A-Z]{1,4})\b/);
   if (m) return m[1];
 
   // 4-digit vintage refs (not years 1900-2029)
@@ -127,12 +140,20 @@ const CURRENCY_PATTERNS: [RegExp, string][] = [
 ];
 
 const PRICE_PATTERNS: RegExp[] = [
-  /(?:HKD|USD|EUR|CHF|GBP|SGD|USDT)\s*([\d,]+\.?\d*)\s*([MmKk])?/,
-  /([\d,]+\.?\d*)\s*[Mm]\s*(?:HKD|USD|EUR)/i,
-  /(\d+\.?\d*)\s*[Kk]/,
-  /\$\s*([\d,]+\.?\d*)/,
-  /¥\s*([\d,]+)/,
-  /([\d,]+\.?\d*)\s*(?:HKD|USD|EUR)/,
+  // "1.2M HKD", "250k USD", "1.5M USD", "3.5k EUR"
+  /([\d,]+\.?\d*)\s*([MmKk])\s*(?:HKD|USD|EUR|CHF|GBP|SGD|USDT|JPY|CNY|AED)\b/i,
+  // "HKD 850000", "USD 15000"
+  /(?:HKD|USD|EUR|CHF|GBP|SGD|USDT)\s*([\d,]+\.?\d*)\s*([MmKk])?/i,
+  // "$125,000", "$15k"
+  /\$\s*([\d,]+\.?\d*)\s*([MmKk])?/,
+  // "HK$ 970,000"
+  /HK\$\s*([\d,]+\.?\d*)\s*([MmKk])?/i,
+  // "¥1,200,000"
+  /¥\s*([\d,]+)\s*([MmKk])?/,
+  // Bare "850k", "1.2M" with no currency (USD default)
+  /([\d,]+\.?\d*)\s*([MmKk])\b/,
+  // "850000 HKD", "15000 USD" (no thousands suffix)
+  /([\d,]+\.?\d*)\s*(?:HKD|USD|EUR|CHF|GBP|SGD|USDT)\b/i,
 ];
 
 // ── Parser ──
@@ -230,7 +251,8 @@ export function parseWatch(raw: string): ParsedWatch {
       const suffix = (m[2] || '').toLowerCase();
       if (suffix === 'm') val *= 1_000_000;
       else if (suffix === 'k') val *= 1_000;
-      if (!isNaN(val) && val > 10 && val < 500_000_000) {
+      // Min 100 (watches start ~$1k), max 10B HKD or equivalent
+      if (!isNaN(val) && val >= 100 && val < 10_000_000_000) {
         price = val;
         break;
       }
