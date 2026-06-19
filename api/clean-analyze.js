@@ -22,6 +22,9 @@
  *   image MISMATCH               -> HUMAN (forced, CRITICAL)
  */
 
+import catalogLib from './_lib/catalog.js';
+const { lookupCatalog } = catalogLib;
+
 const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
@@ -78,57 +81,157 @@ function splitWatches(raw) {
     .filter(Boolean);
 }
 
-// Lightweight code-first parse (mirrors the dataset normalization intent)
+// Emoji brand markers used by dealers in WhatsApp/Telegram chats.
+const EMOJI_BRAND_MAP = {
+  '🔵': 'Patek Philippe', '⭕': 'Patek Philippe', '🏮': 'Patek Philippe',
+  '🟢': 'Rolex', '⚫': 'Rolex',
+  '🔴': 'Audemars Piguet', '🟠': 'Audemars Piguet',
+  '🟡': 'Richard Mille',
+  '⚪': 'Vacheron Constantin', '🔶': 'Vacheron Constantin',
+  '🟣': 'Omega', '🟤': 'IWC',
+};
+
+// Infer brand from a reference token when no brand text/emoji is present.
+function brandFromRef(ref) {
+  const r = String(ref || '').toUpperCase();
+  if (/^RM\d{2}/.test(r)) return 'Richard Mille';
+  if (/^IW\d{4,6}$/.test(r)) return 'IWC';
+  if (/^[3-7]\d{3}\//.test(r)) return 'Patek Philippe';                 // 5711/1A, 7118/1200A
+  if (/^(15|26|77)\d{3}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';  // 15500ST, 26579CE
+  if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180)/.test(r)) return 'Vacheron Constantin';
+  if (/^(79\d{4}|70\d{4})[A-Z]*$/.test(r)) return 'Tudor';
+  if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';                      // 116610LN, 126331
+  return 'Unknown';
+}
+
+// Lightweight code-first parse (mirrors src/utils/parseEngine.ts on the high-value
+// signals: emoji brand, brand-from-reference, suffix-aware refs, M/k prices).
 function regexParse(chunk) {
   const text = chunk;
   const out = { reference: null, brand: 'Unknown', dialColor: null, condition: 'Unknown', year: null, price: null, currency: null };
 
-  // Brand
-  const bl = text.toLowerCase();
-  if (/\bpatek|philippe|\bpp\b/.test(bl)) out.brand = 'Patek Philippe';
-  else if (/audemars|piguet|\bap\b/.test(bl)) out.brand = 'Audemars Piguet';
-  else if (/richard\s*mille|\brm\s?\d/.test(bl)) out.brand = 'Richard Mille';
-  else if (/rolex/.test(bl)) out.brand = 'Rolex';
+  // Brand — emoji first (dealers lead with these), then text patterns.
+  for (const [emoji, name] of Object.entries(EMOJI_BRAND_MAP)) {
+    if (text.includes(emoji)) { out.brand = name; break; }
+  }
+  if (out.brand === 'Unknown') {
+    const bl = text.toLowerCase();
+    if (/\bpatek|philippe|\bpp\b/.test(bl)) out.brand = 'Patek Philippe';
+    else if (/audemars|piguet|\bap\b/.test(bl)) out.brand = 'Audemars Piguet';
+    else if (/richard\s*mille|\brm\s?\d/.test(bl)) out.brand = 'Richard Mille';
+    else if (/rolex/.test(bl)) out.brand = 'Rolex';
+    else if (/vacheron|\bvc\b/.test(bl)) out.brand = 'Vacheron Constantin';
+    else if (/\biwc\b/.test(bl)) out.brand = 'IWC';
+    else if (/tudor/.test(bl)) out.brand = 'Tudor';
+    else if (/cartier/.test(bl)) out.brand = 'Cartier';
+    else if (/omega/.test(bl)) out.brand = 'Omega';
+  }
 
-  // Reference (brand-aware patterns)
+  // Reference (brand-aware patterns, ordered by specificity).
   let ref =
     (text.match(/\bRM\s?\d{2}[-\s]?\d{2}\b/i) || [])[0] ||
-    (text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i) || [])[0] ||
-    (text.match(/\b\d{4}[\/\s-]?\d?[A-Z]{1,3}\b/i) || [])[0] ||
+    (text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i) || [])[0] ||   // Patek 5711/1A, 7118/1200A
+    (text.match(/\b(?:116|126|114|124|226|228|279|128|336|268)\d{3}[A-Z]{0,4}\b/i) || [])[0] || // Rolex/VC 6-digit + suffix
     (text.match(/\b\d{6}[A-Z]{0,4}\b/i) || [])[0] ||
+    (text.match(/\b\d{4}[\/\s-]?\d?[A-Z]{1,3}\b/i) || [])[0] ||
+    (text.match(/\bIW\d{4,6}\b/i) || [])[0] ||
     (text.match(/\b\d{4,5}[A-Z]{1,4}\b/i) || [])[0];
-  if (ref) out.reference = ref.trim().toUpperCase();
+  if (ref) out.reference = ref.trim().toUpperCase().replace(/\s+/g, '');
+
+  // Brand from reference if still unknown.
+  if (out.brand === 'Unknown' && out.reference) {
+    const inferred = brandFromRef(out.reference);
+    if (inferred !== 'Unknown') out.brand = inferred;
+  }
 
   // Condition
-  if (/\bnew\b|unworn|\bbnib\b|sealed|full\s*set/i.test(text)) out.condition = 'New';
+  if (/\bnew\b|unworn|\bbnib\b|sealed|full\s*set|\bnos\b/i.test(text)) out.condition = 'New';
   else if (/\bused\b|pre[\s-]?owned|worn/i.test(text)) out.condition = 'Used';
 
   // Year
   const y = (text.match(/\b(20[12]\d)\b/) || [])[1];
   if (y) out.year = parseInt(y, 10);
 
-  // Price + currency
-  const priceM = text.match(/\b(\d{2,3})\s?[kK]\b/) || text.match(/([\d.,]{3,})\s?(usd|hkd|eur|usdt|\$|€)/i);
+  // Price + currency (handles "1.2M", "850k", "HKD 970,000", "$125,000").
+  const priceM =
+    text.match(/([\d.,]+)\s*([MmKk])\s*(?:HKD|USD|EUR|CHF|GBP|SGD|USDT)?\b/) ||
+    text.match(/(?:HKD|USD|EUR|CHF|GBP|SGD|USDT|HK\$|\$|€)\s*([\d.,]{3,})\s*([MmKk])?/i) ||
+    text.match(/([\d.,]{4,})\s*(?:HKD|USD|EUR|CHF|GBP|SGD|USDT)\b/i);
   if (priceM) {
-    if (/k/i.test(priceM[0]) && priceM[1]) out.price = parseInt(priceM[1], 10) * 1000;
-    else out.price = parseInt(String(priceM[1]).replace(/[.,]/g, ''), 10) || null;
+    let val = parseFloat(String(priceM[1]).replace(/,/g, ''));
+    const suf = (priceM[2] || '').toLowerCase();
+    if (suf === 'm') val *= 1_000_000;
+    else if (suf === 'k') val *= 1_000;
+    if (!isNaN(val) && val >= 100 && val < 10_000_000_000) out.price = Math.round(val);
   }
-  const cur = (text.match(/\b(hkd|usdt|usd|eur)\b/i) || [])[1] || (/€/.test(text) ? 'EUR' : (/\$/.test(text) ? 'USD' : null));
+  const cur = (text.match(/\b(hkd|usdt|usd|eur|chf|gbp|sgd)\b/i) || [])[1] ||
+    (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/\$/.test(text) ? 'USD' : null)));
   if (cur) out.currency = cur.toUpperCase();
 
   return out;
 }
 
 // confidence from a code parse alone (how completely did we identify it?)
+//
+// Re-weighted so a confirmed reference + known brand is enough to IDENTIFY a
+// watch even when the dealer omitted price/dial (common in inventory blasts).
+// ref(50) + brand(28) = 78 base; catalog agreement (see crossValidate) then
+// lifts a clean ID over the 85 gate WITHOUT paying for an LLM call.
+// Price/dial/condition/year remain useful but are no longer required for ID.
 function codeConfidence(p) {
   let c = 0;
-  if (p.reference) c += 45;
-  if (p.brand && p.brand !== 'Unknown') c += 25;
-  if (p.dialColor) c += 12;
-  if (p.condition && p.condition !== 'Unknown') c += 8;
+  if (p.reference) c += 50;
+  if (p.brand && p.brand !== 'Unknown') c += 28;
+  if (p.dialColor) c += 8;
+  if (p.condition && p.condition !== 'Unknown') c += 6;
   if (p.price) c += 6;
-  if (p.year) c += 4;
+  if (p.year) c += 2;
   return Math.min(c, 100);
+}
+
+// ── Cross-validation: combine independent signals (catalog / image / web) ──
+//
+// Ported from src/utils/parseEngine.ts applyCrossValidation — previously DEAD
+// on the live path. When multiple independent sources agree, we boost
+// confidence enough to auto-approve records that no single signal could.
+// This is the primary lever for reducing the HUMAN-review queue.
+function crossValidate(parsed, signals = {}) {
+  let boost = 0;
+  const agree = [];
+  const disagree = [];
+
+  // 1. Catalog agreement — ref exists AND brand matches the parser.
+  if (signals.catalogHit && signals.catalogBrand) {
+    const pb = (parsed.brand || '').toLowerCase();
+    const cb = signals.catalogBrand.toLowerCase();
+    if (parsed.brand && parsed.brand !== 'Unknown' &&
+        (pb === cb || pb.includes(cb) || cb.includes(pb))) {
+      agree.push('catalog'); boost += 14;            // ref+brand confirmed by curated data
+    } else if (!parsed.brand || parsed.brand === 'Unknown') {
+      agree.push('catalog-supplies-brand'); boost += 12;
+    } else {
+      disagree.push('catalog-vs-parser-brand'); boost -= 8;
+    }
+  } else if (signals.catalogHit) {
+    agree.push('catalog-ref'); boost += 8;           // ref verified, brand unknown in catalog
+  }
+
+  // 2. Image agreement — vision saw the same ref/brand.
+  if (signals.imageVerdict === 'MATCH') { agree.push('image-match'); boost += 12; }
+  else if (signals.imageVerdict === 'MISMATCH') { disagree.push('image-mismatch'); boost -= 30; }
+
+  // 3. Web search agreement.
+  if (signals.webSearchConfidence && signals.webSearchConfidence >= 70) {
+    if (signals.webSearchBrand && parsed.brand && parsed.brand !== 'Unknown' &&
+        signals.webSearchBrand.toLowerCase() !== parsed.brand.toLowerCase()) {
+      disagree.push('web-vs-parser-brand'); boost -= 10;
+    } else { agree.push('web-search'); boost += 8; }
+  }
+
+  // 4. Multi-signal convergence — 3+ independent sources agree → extra bump.
+  if (agree.length >= 3) boost += 8;
+
+  return { boost, agree, disagree };
 }
 
 // ───────────────────── external calls ─────────────────────
@@ -405,9 +508,38 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   let confidence = codeConfidence(parsed);
   stages.push({ stage: 'PARSE', engine: 'regex/code', confidence, data: { ...parsed }, note: 'code-first field extraction' });
 
-  // 2) AI TEXT (only if code couldn't resolve a clean brand+reference)
+  // 2) CATALOG (code-first, free) — look the reference up in the merged
+  //    catalog (catalog.json + enriched_refs.json, 3,556 refs) BEFORE any LLM.
+  //    Supplies/confirms brand, fills collection/model, and feeds crossValidate.
+  let catalog = { found: false, brand: null };
+  if (parsed.reference) {
+    catalog = lookupCatalog(parsed.reference);
+    if (catalog.found || catalog.brand) {
+      // Fill brand if the parser missed it; never overwrite a confident parser brand.
+      if ((!parsed.brand || parsed.brand === 'Unknown') && catalog.brand) {
+        parsed.brand = catalog.brand;
+      }
+      if (!parsed.dialColor && catalog.dialColors) {
+        parsed.dialColor = String(catalog.dialColors).split(/[;,]/)[0].trim();
+      }
+      // recompute base confidence now that brand may be filled
+      confidence = Math.max(confidence, codeConfidence(parsed));
+    }
+    stages.push({
+      stage: 'CATALOG', engine: 'catalog', confidence,
+      data: { found: catalog.found, matchType: catalog.matchType || null, brand: catalog.brand,
+              collection: catalog.collection || null, model: catalog.model || null,
+              liquidityScore: catalog.liquidityScore ?? null },
+      note: catalog.found ? `catalog ${catalog.matchType} hit: ${catalog.brand || 'brand?'} ${catalog.collection || ''}`.trim()
+                          : (catalog.brand ? `catalog miss; brand inferred: ${catalog.brand}` : 'catalog miss'),
+    });
+  }
+
+  // 3) AI TEXT — only when code+catalog STILL couldn't resolve a clean
+  //    brand+reference, or confidence is below the gate. Algorithmic-first.
   const hasAnyAiKey = ctx.deepseekKey || ctx.geminiKey || ctx.kimiKey || ctx.anthropicKey || ctx.openaiKey;
-  const needsAi = !parsed.reference || parsed.brand === 'Unknown' || confidence < APPROVE_THRESHOLD;
+  const catalogConfirmed = catalog.found && parsed.reference && parsed.brand && parsed.brand !== 'Unknown';
+  const needsAi = !catalogConfirmed && (!parsed.reference || parsed.brand === 'Unknown' || confidence < APPROVE_THRESHOLD);
   if (needsAi && hasAnyAiKey) {
     try {
       const ai = await aiTextParse(ctx, textOnly || chunk, parsed, providerWhitelist);
@@ -422,33 +554,61 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
         currency: ai.currency || parsed.currency,
       };
       confidence = Math.max(confidence, Math.min(ai.confidence ?? codeConfidence(parsed), 100));
+      // If AI surfaced a reference the parser missed, re-check the catalog.
+      if (ai.reference && (!catalog.found)) {
+        const recheck = lookupCatalog(parsed.reference);
+        if (recheck.found) {
+          catalog = recheck;
+          if ((!parsed.brand || parsed.brand === 'Unknown') && recheck.brand) parsed.brand = recheck.brand;
+        }
+      }
       stages.push({ stage: 'AI_TEXT', engine: ai._source || 'ai', confidence, data: { ...parsed }, note: `AI parsed messy text (${ai._source})` });
     } catch (e) {
       stages.push({ stage: 'AI_TEXT', engine: 'ai-fallback', confidence, error: e.message, note: 'AI parse failed, kept code result' });
     }
+  } else if (catalogConfirmed) {
+    stages.push({ stage: 'AI_TEXT', engine: 'skipped', confidence, note: 'AI skipped — catalog already confirmed brand+reference (cost saved)' });
   }
 
-  // 3) ONLINE cross-reference (text-only first, per cascade order)
+  // 4) ONLINE cross-reference — only when NOT already catalog-confirmed
+  //    (no point paying for a web lookup on a ref we already have curated).
   let online = { checked: false, found: false };
-  if (parsed.reference) {
+  let webSearchConfidence = 0, webSearchBrand = null;
+  if (parsed.reference && !catalogConfirmed && confidence < APPROVE_THRESHOLD) {
     online = await onlineCrossRef(parsed.brand, parsed.reference);
-    if (online.found) confidence = Math.min(100, confidence + 10);
+    if (online.found) {
+      if (online.confidence) { webSearchConfidence = online.confidence; webSearchBrand = online.web_data?.brand || null; }
+    }
     stages.push({ stage: 'ONLINE', engine: 'web', confidence, data: online, note: online.note });
   }
 
-  // 4) IMAGE / URL verification (online + picture)
+  // 5) IMAGE / URL verification (online + picture)
   let imageVerdict = null;
   const targetImage = imageUrls[0] || null;
   if (targetImage) {
     const v = await visionVerify(ctx.origin, targetImage, parsed.reference, parsed.brand);
     imageVerdict = v.verdict;
-    if (v.verdict === 'MATCH') confidence = Math.min(100, confidence + 12);
-    else if (v.verdict === 'MISMATCH') confidence = Math.min(confidence, 40); // force down
     stages.push({ stage: 'IMAGE', engine: v.source || 'vision', confidence, data: v.image || {}, verdict: v.verdict, note: v.reason });
   } else if (pageUrls.length) {
-    // Link present but not a direct image — note it (page scrape would go here)
     stages.push({ stage: 'IMAGE', engine: 'link', confidence, data: { pageUrl: pageUrls[0] }, note: 'link present (not a direct image URL); text-vs-link compare requires page scrape' });
   }
+
+  // 6) CROSS-VALIDATION — fuse catalog + image + web signals into one boost.
+  const cv = crossValidate(parsed, {
+    catalogHit: catalog.found,
+    catalogBrand: catalog.brand,
+    imageVerdict,
+    webSearchConfidence,
+    webSearchBrand,
+  });
+  confidence = Math.min(100, Math.max(0, confidence + cv.boost));
+  // Image MISMATCH always forces confidence down hard (safety).
+  if (imageVerdict === 'MISMATCH') confidence = Math.min(confidence, 40);
+  stages.push({
+    stage: 'CROSS_VAL', engine: 'multi-signal', confidence,
+    data: { boost: cv.boost, agree: cv.agree, disagree: cv.disagree },
+    note: `${cv.agree.length} signal(s) agree${cv.agree.length ? ': ' + cv.agree.join(', ') : ''}${cv.disagree.length ? ' | disagree: ' + cv.disagree.join(', ') : ''} (boost ${cv.boost >= 0 ? '+' : ''}${cv.boost})`,
+  });
 
   // ───────── VERDICT GATE ─────────
   const identified = !!parsed.reference && parsed.brand !== 'Unknown';
@@ -549,6 +709,8 @@ export default async function handler(req, res) {
       approved: results.filter(r => r.verdict === 'APPROVED').length,
       human: results.filter(r => r.verdict === 'HUMAN').length,
       recycle: results.filter(r => r.verdict === 'RECYCLE').length,
+      catalogHits: results.filter(r => r.stages?.some(s => s.stage === 'CATALOG' && s.data?.found)).length,
+      aiSkipped: results.filter(r => r.stages?.some(s => s.stage === 'AI_TEXT' && s.engine === 'skipped')).length,
       threshold: APPROVE_THRESHOLD,
       providerUsed: providerPref,
       latencyMs: Date.now() - (ctx.startTime || Date.now()),
