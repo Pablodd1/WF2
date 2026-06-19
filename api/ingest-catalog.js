@@ -19,10 +19,32 @@
 const fs = require('fs');
 const path = require('path');
 
-const CATALOG_PATH = path.resolve(process.cwd(), 'public', 'enriched_refs.json');
+// Vercel filesystem is read-only EXCEPT /tmp. On Vercel we write to /tmp
+// and the static asset won't update (it'd require a redeploy).
+// Locally we write to public/enriched_refs.json for immediate use.
+const isVercel = !!process.env.VERCEL;
+const CATALOG_PATH = isVercel
+  ? path.resolve('/tmp', 'enriched_refs.json')
+  : path.resolve(process.cwd(), 'public', 'enriched_refs.json');
 
 function loadCatalog() {
-  if (!fs.existsSync(CATALOG_PATH)) return [];
+  if (!fs.existsSync(CATALOG_PATH)) {
+    // On Vercel, /tmp is empty per-invocation, so seed from public/
+    if (isVercel) {
+      const sourcePath = path.resolve(process.cwd(), 'enriched_refs.json');
+      if (fs.existsSync(sourcePath)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(sourcePath, 'utf-8'));
+          fs.writeFileSync(CATALOG_PATH, JSON.stringify(data));
+          return data;
+        } catch (e) {
+          console.error('[ingest-catalog] Failed to seed from public:', e.message);
+          return [];
+        }
+      }
+    }
+    return [];
+  }
   try {
     return JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf-8'));
   } catch (e) {
