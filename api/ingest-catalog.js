@@ -192,15 +192,27 @@ module.exports = async function handler(req, res) {
       continue;
     }
 
+    // Normalize column names — CSV may use any of these variants
     const brand = row.brand || row.Brand || 'Unknown';
+    const model = row.model || row.Model || null;
+    // Combine collection (Patek uses model as collection e.g. "Nautilus", "Calatrava")
+    const collection = row.collection || row.Collection || model || null;
+    // image_url is sometimes "Image Link", "image_link", "imageUrl"
+    const image_url = row.image_url || row['Image Link'] || row.image_link || row.imageUrl || null;
+    // dial_colors could be "Dial Color" or comma-separated multi-color
+    const dial_colors = row.dial_colors || row['Dial Color'] || row.dialColor || row.DialColor || null;
+    const production_years = row.production_years || row.productionYears || null;
+    const case_metal = row.case_metal || row.caseMetal || row.material || null;
+
     const entry = {
       reference: ref,
       brand: brand,
-      model: row.model || row.Model || null,
-      collection: row.collection || row.Collection || null,
-      case_metal: row.case_metal || row.case_metal || row.CaseMetal || null,
-      dial_colors: row.dial_colors || row.DialColors || null,
-      production_years: row.production_years || row.ProductionYears || null,
+      model: model,
+      collection: collection,
+      case_metal: case_metal,
+      dial_colors: dial_colors,
+      production_years: production_years,
+      image_url: image_url,
       source: 'user-csv',
       added_at: new Date().toISOString(),
     };
