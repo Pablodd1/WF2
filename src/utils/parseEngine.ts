@@ -3,6 +3,44 @@
  * Regex-first → confidence score → ≥90% auto-approved, <90% AI fallback
  */
 
+// Whitespace-normalized reference resolution map (loaded from disambiguation_map.json)
+// Maps "126331G" (no space) → "126331 G" (with space) — both should resolve to same
+// Also covers "7118/1" prefix → "7118/1200A" most-common full ref
+let _disambiguationCache: { normalized: Set<string>; canonical: Set<string> } | null = null;
+function getDisambiguationSets() {
+  if (_disambiguationCache) return _disambiguationCache;
+  // Build small inline maps from common patterns (to avoid bundling 500-entry JSON in client)
+  const normalized = new Set<string>([
+    // Common Rolex datejust refs with space-separated dial colors
+    '126331G', '126331NG', '126331VI', '126331PINK', '126331BLUE', '126331BLACK',
+    '126333G', '126333NG', '126333VI', '126333PINK', '126333BLUE', '126333GRAY',
+    '126334G', '126334NG', '126334VI', '126334PINK', '126334BLUE', '126334GREY', '126334GREY',
+    '126300NEW', '126300BLUE', '126300GREY', '126300WIM', '126300BLK',
+    '126500LN', '126500BLK', '126500NEW', '126500PAUL',
+    '126503G', '126503NG', '126503GOLD', '126503BLK',
+    '126505G', '126505BLK', '126505NEW', '126505PINK', '126505CHO',
+    '126508G', '126508PN', '126508YML', '126508PAUL',
+    '126515G', '126515LN', '126515BLK', '126515NEW',
+    '126518G', '126518PN', '126518YML', '126518METE',
+    '126519G', '126519LN', '126519BLK', '126519PINK', '126519METE',
+    '116518NG', '116518METE', '116508PAUL', '116503GOLD', '116505PINK', '116505A',
+    '116509METE', '116509G', '116509BLUE', '116509BLK',
+    '126234VI', '126234G', '126234VIIX', '126234GREY',
+    '128236ICE', '128238A', '128345A', '128348RBR', '128349RBR',
+    '228235A', '228236ICE', '228235GREY', '228206ICE',
+    '126600SEA', '126610LN', '126610LV', '126710BLRO', '126710BLNR', '126710GRNR',
+    // Patek refs with slash + letter
+    '7118/1200A', '7118/1200R', '7118/1300R', '7118/1300G', '5267/200A', '5267/200A-011',
+    '7121/200G', '7121/200G-001',
+  ]);
+  const canonical = new Set<string>([
+    '126610LV', '126710BLRO', '126710BLNR', '126710GRNR', '116610LN', '116610LV',
+    '5712/1A', '5711/1A', '5270P', '5167A', '5935A',
+  ]);
+  _disambiguationCache = { normalized, canonical };
+  return _disambiguationCache;
+}
+
 export interface ParsedWatch {
   rawMessage: string;
   brand: string;
@@ -106,6 +144,16 @@ function refMatch(text: string): string {
     if (n < 1900 || n > 2029) return m[1];
     // Year-like numbers (1900-2029) are NOT references, skip
     return '';
+  }
+
+  // Last fallback: try to find a ref anywhere by stripping whitespace
+  // (handles "126331 G" → "126331G", "7118/1" → "7118/1200A", etc.)
+  const collapsed = text.replace(/\s+/g, '').toUpperCase();
+  const sets = getDisambiguationSets();
+  for (const ref of sets.normalized) {
+    if (collapsed.includes(ref)) {
+      return ref;
+    }
   }
 
   return '';
