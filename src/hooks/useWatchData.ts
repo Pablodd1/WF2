@@ -212,7 +212,7 @@ function loadWatchData(): Promise<WatchRecord[]> {
         mlOutcomeClass: '', mlOutcomeConfidence: 0, marketComparables: 0, sellerRating: 0,
         daysOnMarket: 0, stageLogs: [], imageUrl: row[14] || null, imageCount: row[14] ? 1 : 0,
         imageConfirmed: false, autoResolvedFlags: [], buyerCount: 0, sellerCount: 0,
-        buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10] === 'RESIDUE' || row[10] === true,
+        buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10] === 'RECYCLE' || row[10] === 'RESIDUE' || row[10] === true,
         description: row[13] || row[8] || '',
       }));
     } else {
