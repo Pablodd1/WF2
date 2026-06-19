@@ -1,22 +1,26 @@
 {
-  "timestamp": "2026-06-18T22:00:00Z",
-  "records": 117744,
-  "phase": "step4_disambiguation",
+  "timestamp": "2026-06-18T23:30:00Z",
+  "phase": "step6_gpt4o_mini_disambiguation",
   "new_verdicts": {
+    "APPROVED": 113411,
+    "HUMAN": 2943,
+    "RECYCLE": 1390
+  },
+  "previous_verdicts": {
     "APPROVED": 108239,
     "HUMAN": 7306,
     "RECYCLE": 2199
   },
-  "previous_verdicts": {
-    "APPROVED": 108237,
-    "HUMAN": 7308,
-    "RECYCLE": 2199
+  "delta_approved": 5172,
+  "delta_human": -4363,
+  "delta_recycle": -809,
+  "enriched_refs_count": 2206,
+  "gpt4o_mini_call": {
+    "records_processed": 690,
+    "resolved": 689,
+    "errors": 0,
+    "total_tokens": 64817,
+    "cost_usd": 0.029
   },
-  "refs_resolved": 22034,
-  "disambiguation_map_size": {
-    "prefix_mappings": 48,
-    "whitespace_normalizations": 186
-  },
-  "accuracy_score": "8.5/10",
-  "note": "Disambiguation resolves partial refs (e.g., '126331' \u2192 '126331G') via frequency data. Verdict counts unchanged because previously approved records already had resolvable refs; benefit shows when HUMAN queue records get full canonical refs (e.g., RM11 \u2192 RM11-03 with 84% confidence)."
+  "accuracy_score": "9.0/10"
 }
