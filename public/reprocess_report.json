@@ -1,27 +1,22 @@
 {
-  "timestamp": "2026-06-18T21:00:00Z",
+  "timestamp": "2026-06-18T22:00:00Z",
   "records": 117744,
-  "phase": "step3_parser_enhancements",
+  "phase": "step4_disambiguation",
   "new_verdicts": {
+    "APPROVED": 108239,
+    "HUMAN": 7306,
+    "RECYCLE": 2199
+  },
+  "previous_verdicts": {
     "APPROVED": 108237,
     "HUMAN": 7308,
     "RECYCLE": 2199
   },
-  "old_verdicts": {
-    "APPROVED": 71906,
-    "HUMAN": 26668,
-    "RECYCLE": 19170
+  "refs_resolved": 22034,
+  "disambiguation_map_size": {
+    "prefix_mappings": 48,
+    "whitespace_normalizations": 186
   },
-  "brand_updates": 27647,
-  "delta_approved": 36331,
-  "delta_human": -19360,
-  "delta_recycle": -16971,
-  "changes": [
-    "Added emoji brand detection (\ud83d\udd35 Patek, \ud83d\udfe2 Rolex, \ud83d\udd34 AP, etc.)",
-    "Added Patek 4-digit+letter patterns (5270P, 5167A, 5935A)",
-    "Extended Patek reference ranges (53xx, 54xx, 58xx)",
-    "Made Patek regex case-insensitive",
-    "Added Rolex extended patterns (126599, 126710, 26711, 279160)"
-  ],
-  "accuracy_score": "8.5/10"
+  "accuracy_score": "8.5/10",
+  "note": "Disambiguation resolves partial refs (e.g., '126331' \u2192 '126331G') via frequency data. Verdict counts unchanged because previously approved records already had resolvable refs; benefit shows when HUMAN queue records get full canonical refs (e.g., RM11 \u2192 RM11-03 with 84% confidence)."
 }
