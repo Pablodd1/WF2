@@ -117,8 +117,8 @@ function refMatch(text: string): string {
   m = text.match(/\b(116\d{3}[A-Z]{0,4}|126\d{3}[A-Z]{0,4}|114\d{3}[A-Z]?|124\d{3}[A-Z]?|226\d{3}[A-Z]{0,4}|228\d{3}[A-Z]{0,4}|279\d{3}[A-Z]{0,4}|176\d{3}|184\d{3}|118\d{3}|155\d{3}[A-Z]{0,4}|177\d{3}|816\d{3}|190\d{3}|268\d{3}|128\d{3})(?![A-Z])/i);
   if (m) return m[1].toUpperCase();
 
-  // Patek refs: 49xx, 50xx, 51xx, 52xx, 57xx, 59xx, 71xx, 72xx with 1-3 letter suffix (case-insensitive)
-  m = text.match(/\b(49\d{2}[A-Z]{1,4}|50\d{2}[A-Z]{1,4}|51\d{2}[A-Z]{1,4}|52\d{2}[A-Z]{1,4}|53\d{2}[A-Z]{1,4}|54\d{2}[A-Z]{1,4}|57\d{2}[A-Z]{1,4}|58\d{2}[A-Z]{1,4}|59\d{2}[A-Z]{1,4}|61\d{2}[A-Z]{1,4}|71\d{2}[A-Z]{1,4}|72\d{2}[A-Z]{1,4})\b/i);
+  // Patek refs: 49xx, 50xx, 51xx, 52xx, 53xx, 54xx, 55xx, 56xx, 57xx, 58xx, 59xx, 61xx, 71xx, 72xx with 1-4 letter suffix (case-insensitive)
+  m = text.match(/\b(49\d{2}[A-Z]{1,4}|50\d{2}[A-Z]{1,4}|51\d{2}[A-Z]{1,4}|52\d{2}[A-Z]{1,4}|53\d{2}[A-Z]{1,4}|54\d{2}[A-Z]{1,4}|55\d{2}[A-Z]{1,4}|56\d{2}[A-Z]{1,4}|57\d{2}[A-Z]{1,4}|58\d{2}[A-Z]{1,4}|59\d{2}[A-Z]{1,4}|61\d{2}[A-Z]{1,4}|71\d{2}[A-Z]{1,4}|72\d{2}[A-Z]{1,4})\b/i);
   if (m) return m[1].toUpperCase();
 
   // AP: 15xxx, 16xxx, 26xxx with optional suffix
@@ -245,8 +245,8 @@ export function parseWatch(raw: string): ParsedWatch {
   }
   // Brand from reference prefix if brand still unknown
   if (brand === 'Unknown') {
-    // Patek Philippe: 49xx, 50xx, 51xx, 52xx, 53xx, 54xx, 57xx, 58xx, 59xx, 61xx, 71xx, 72xx
-    if (/\b(49\d{2}|50\d{2}|51\d{2}|52\d{2}|53\d{2}|54\d{2}|57\d{2}|58\d{2}|59\d{2}|61\d{2}|71\d{2}|72\d{2})/.test(clean)) brand = 'Patek Philippe';
+    // Patek Philippe: 49xx, 50xx, 51xx, 52xx, 53xx, 54xx, 55xx, 56xx, 57xx, 58xx, 59xx, 61xx, 71xx, 72xx
+    if (/\b(49\d{2}|50\d{2}|51\d{2}|52\d{2}|53\d{2}|54\d{2}|55\d{2}|56\d{2}|57\d{2}|58\d{2}|59\d{2}|61\d{2}|71\d{2}|72\d{2})/.test(clean)) brand = 'Patek Philippe';
     // Rolex: ALL 6-digit refs starting with 1x, 2x, 3x, 8x are Rolex
     //  10xxxx (Datejust 36), 11xxxx (Datejust/Submariner/GMT/Daytona),
     //  12xxxx (Datejust 41/Daytona/Submariner), 13xxxx (Datejust 41 special dials),
@@ -416,6 +416,135 @@ export function parseWatch(raw: string): ParsedWatch {
     confidence: Math.min(100, Math.round(score)),
     flags,
     intent,
+  };
+}
+
+// ── Cross-validation: combine multiple independent signals ──
+//
+// When multiple independent signals agree, we can confidently auto-approve
+// even if individual confidence is below the 90% threshold.
+//
+// Signals:
+//   1. catalogHit — ref exists in enriched_refs.json with matching brand
+//   2. imageVerdict — Gemini Vision agrees on brand + reference ('MATCH')
+//   3. webSearchConfidence — GPT-4o-mini web search confidence (0-100)
+//   4. priceSanityCheck — price within typical market range for the brand/ref
+//   5. multipleSignals — count of independent agree-sources
+
+export interface CrossValSignals {
+  catalogHit?: boolean;
+  catalogBrand?: string;     // brand from catalog
+  imageVerdict?: 'MATCH' | 'MISMATCH' | 'UNVERIFIED';
+  imageConfidence?: number;
+  webSearchConfidence?: number;
+  webSearchBrand?: string;
+  hasImageUrl?: boolean;
+  rawTextLength?: number;
+}
+
+export interface CrossValResult {
+  baseConfidence: number;
+  boost: number;
+  newConfidence: number;
+  agreeSignals: number;
+  totalSignals: number;
+  reason: string;
+}
+
+export function applyCrossValidation(
+  parsed: ParsedWatch,
+  signals: CrossValSignals = {}
+): CrossValResult {
+  let boost = 0;
+  const agreeSignals: string[] = [];
+  const disagreeSignals: string[] = [];
+
+  // 1. Catalog agreement — ref exists AND brand matches
+  if (signals.catalogHit && signals.catalogBrand && signals.catalogBrand.length > 0) {
+    if (parsed.brand !== 'Unknown' && (
+      parsed.brand === signals.catalogBrand ||
+      parsed.brand.toLowerCase().includes(signals.catalogBrand.toLowerCase()) ||
+      signals.catalogBrand.toLowerCase().includes(parsed.brand.toLowerCase())
+    )) {
+      agreeSignals.push('catalog');
+      boost += 10;
+    } else if (parsed.brand === 'Unknown') {
+      // Catalog provides brand but parser missed it — moderate boost (don't penalize parser)
+      agreeSignals.push('catalog-supplies-brand');
+      boost += 8;
+    } else {
+      disagreeSignals.push('catalog-vs-parser-brand');
+      boost -= 15;  // strong disagreement
+    }
+  } else if (signals.catalogHit) {
+    // Catalog has ref but empty brand (GPT-disambiguated entry)
+    // Treat as reference confirmation only
+    agreeSignals.push('catalog-ref');
+    boost += 5;
+  }
+
+  // 2. Image agreement — Gemini Vision saw the same ref
+  if (signals.imageVerdict === 'MATCH') {
+    agreeSignals.push('image-match');
+    boost += 12;
+  } else if (signals.imageVerdict === 'MISMATCH') {
+    disagreeSignals.push('image-mismatch');
+    boost -= 30;  // image disagrees strongly → suspect text is wrong
+  } else if (signals.imageVerdict === 'UNVERIFIED') {
+    // no boost, no penalty — just no signal
+  }
+
+  // 3. Web search agreement — GPT-4o-mini found canonical info matching
+  if (signals.webSearchConfidence && signals.webSearchConfidence >= 70) {
+    if (signals.webSearchBrand && parsed.brand !== 'Unknown' &&
+        signals.webSearchBrand.toLowerCase() !== parsed.brand.toLowerCase()) {
+      disagreeSignals.push('web-vs-parser-brand');
+      boost -= 10;
+    } else {
+      agreeSignals.push('web-search');
+      boost += 8;
+    }
+  }
+
+  // 4. Price sanity — price within typical range for the reference (if known)
+  //    For luxury watches, typical range is 5K - 5M USD (or equivalent)
+  const basePrice = parsed.currency === 'USD' ? parsed.price :
+    parsed.currency === 'HKD' ? parsed.price / 7.8 :
+    parsed.currency === 'EUR' ? parsed.price * 1.1 :
+    parsed.currency === 'GBP' ? parsed.price * 1.27 :
+    parsed.currency === 'CHF' ? parsed.price * 1.15 :
+    parsed.price;  // default
+  if (parsed.price > 0) {
+    if (basePrice < 5000 && parsed.brand !== 'Unknown') {
+      // Very cheap for a known brand — possible but suspicious
+      // (don't penalize, just flag)
+    } else if (basePrice > 5_000_000) {
+      // Very expensive — possible but might be a typo
+      boost -= 3;
+    }
+  }
+
+  // 5. Multi-signal agreement bonus — if 3+ independent sources agree, big boost
+  const totalSignals = agreeSignals.length + disagreeSignals.length;
+  if (agreeSignals.length >= 3) {
+    boost += 8;  // multi-signal convergence
+  }
+
+  const newConfidence = Math.min(100, Math.max(0, parsed.confidence + boost));
+
+  let reason = `${agreeSignals.length} signal(s) agree: ${agreeSignals.join(', ') || 'none'}`;
+  if (disagreeSignals.length) {
+    reason += ` | ${disagreeSignals.length} disagree: ${disagreeSignals.join(', ')}`;
+  }
+  reason += ` | base=${parsed.confidence} boost=${boost >= 0 ? '+' : ''}${boost} → ${newConfidence}`;
+
+  return {
+    baseConfidence: parsed.confidence,
+    boost,
+    newConfidence,
+    agreeSignals: agreeSignals.length,
+    totalSignals,
+    reason,
   };
 }
 
