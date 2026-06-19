@@ -25,8 +25,12 @@
 const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const APPROVE_THRESHOLD = 85;   // >= this => auto approve
 const RECYCLE_FLOOR = 35;       // below this AND unidentified => recycle bin
+const BATCH_SIZE = 15;          // watches per parallel batch
+const BATCH_CONCURRENCY = 8;    // batches in flight at once (15×8 = 120 watches/request)
 
 // ───────────────────────── helpers ─────────────────────────
 
@@ -205,10 +209,88 @@ async function kimiParse(key, rawMessage, currentGuess) {
   return extractJson(content);
 }
 
-// Try AI providers in order: DeepSeek -> Gemini -> Kimi
-async function aiTextParse(ctx, rawMessage, currentGuess) {
+async function claudeParse(key, rawMessage, currentGuess) {
+  const r = await fetchT(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 512,
+      temperature: 0.3,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: buildUserPrompt(rawMessage, currentGuess) }],
+    }),
+  }, 8000);
+  if (!r.ok) throw new Error(`Claude ${r.status}`);
+  const d = await r.json();
+  const content = d.content?.[0]?.text || '';
+  return extractJson(content);
+}
+
+async function openaiParse(key, rawMessage, currentGuess) {
+  const r = await fetchT(OPENAI_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model: 'gpt-4o', temperature: 0.3, max_tokens: 512,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildUserPrompt(rawMessage, currentGuess) },
+      ],
+    }),
+  }, 8000);
+  if (!r.ok) throw new Error(`OpenAI ${r.status}`);
+  const d = await r.json();
+  const content = d.choices?.[0]?.message?.content || '';
+  return extractJson(content);
+}
+
+// ─── Provider router ────────────────────────────────────────────────────────
+// If whitelist is set, ONLY use that provider (no fallback).
+// Otherwise run the original DeepSeek → Gemini → Kimi cascade with Claude/GPT-4o
+// as premium first-try options when their keys are present.
+async function aiTextParse(ctx, rawMessage, currentGuess, whitelist = null) {
   const errors = [];
 
+  // ─── Single-provider mode (user explicitly chose one) ────────────────────
+  if (whitelist) {
+    const providerMap = {
+      claude: { key: ctx.anthropicKey, fn: claudeParse, name: 'claude' },
+      openai: { key: ctx.openaiKey, fn: openaiParse, name: 'openai' },
+      gemini: { key: ctx.geminiKey, fn: geminiParse, name: 'gemini' },
+      deepseek: { key: ctx.deepseekKey, fn: deepseekParse, name: 'deepseek' },
+      kimi: { key: ctx.kimiKey, fn: kimiParse, name: 'kimi' },
+    };
+    const p = providerMap[whitelist];
+    if (!p || !p.key) {
+      throw new Error(`Provider "${whitelist}" not configured (missing API key)`);
+    }
+    const result = await p.fn(p.key, rawMessage, currentGuess);
+    return { ...result, _source: p.name };
+  }
+
+  // ─── Auto-cascade mode (default) ──────────────────────────────────────────
+  // Try premium providers first if their keys exist, then cheap fallbacks.
+  if (ctx.anthropicKey) {
+    try {
+      const result = await claudeParse(ctx.anthropicKey, rawMessage, currentGuess);
+      return { ...result, _source: 'claude' };
+    } catch (e) {
+      errors.push(`Claude: ${e.message}`);
+    }
+  }
+  if (ctx.openaiKey) {
+    try {
+      const result = await openaiParse(ctx.openaiKey, rawMessage, currentGuess);
+      return { ...result, _source: 'openai' };
+    } catch (e) {
+      errors.push(`OpenAI: ${e.message}`);
+    }
+  }
   if (ctx.deepseekKey) {
     try {
       const result = await deepseekParse(ctx.deepseekKey, rawMessage, currentGuess);
@@ -217,7 +299,6 @@ async function aiTextParse(ctx, rawMessage, currentGuess) {
       errors.push(`DeepSeek: ${e.message}`);
     }
   }
-
   if (ctx.geminiKey) {
     try {
       const result = await geminiParse(ctx.geminiKey, rawMessage, currentGuess);
@@ -226,7 +307,6 @@ async function aiTextParse(ctx, rawMessage, currentGuess) {
       errors.push(`Gemini: ${e.message}`);
     }
   }
-
   if (ctx.kimiKey) {
     try {
       const result = await kimiParse(ctx.kimiKey, rawMessage, currentGuess);
@@ -243,6 +323,44 @@ async function aiTextParse(ctx, rawMessage, currentGuess) {
 // Uses DuckDuckGo Instant Answer (keyless, fast, serverless-safe).
 async function onlineCrossRef(brand, reference) {
   if (!reference) return { checked: false, found: false, note: 'no reference to look up' };
+  // First try: GPT-4o-mini web search for canonical info
+  // (replaces DDG HTML scrape which is blocked from serverless IPs)
+  const origin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+  try {
+    const r = await fetchT(`${origin}/api/online-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reference, brand }),
+    }, 20000);
+    if (r.ok) {
+      const data = await r.json();
+      if (data.success && data.confidence >= 70) {
+        return {
+          checked: true,
+          found: true,
+          query: `${brand} ${reference}`,
+          hits: 1,
+          confidence: data.confidence,
+          web_data: {
+            brand: data.brand,
+            reference: data.reference,
+            model: data.model,
+            collection: data.collection,
+            year: data.year,
+            caseMaterial: data.caseMaterial,
+            dialColors: data.dialColors,
+            priceRange: data.priceRange,
+            notes: data.notes,
+          },
+          note: `web search (${data.confidence}%): ${data.brand} ${data.reference} ${data.model || ''}`.trim(),
+        };
+      }
+      // Fall through to DDG if GPT confidence too low
+    }
+  } catch (e) {
+    // Continue to DDG fallback
+  }
+  // Fallback: DDG HTML (may be blocked from Vercel IPs but works elsewhere)
   const q = `${brand && brand !== 'Unknown' ? brand + ' ' : ''}${reference} watch`;
   try {
     const r = await fetchT(`https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
@@ -251,7 +369,6 @@ async function onlineCrossRef(brand, reference) {
     if (!r.ok) return { checked: true, found: false, note: `search ${r.status}` };
     const html = (await r.text()).toLowerCase();
     const refTokens = normRef(reference);
-    // Count how many result snippets reference the same ref core
     const core = (refTokens.match(/\d{4,6}/) || [refTokens])[0];
     const hits = core ? (html.split(core).length - 1) : 0;
     const found = hits >= 2;
@@ -275,7 +392,8 @@ async function visionVerify(origin, imageUrl, reference, brand) {
 
 // ───────────────────── per-watch pipeline ─────────────────────
 
-async function analyzeOne(chunk, ctx) {
+async function analyzeOne(chunk, ctx, providerWhitelist = null) {
+  ctx.startTime = ctx.startTime || Date.now();
   const stages = [];
   const urls = extractUrls(chunk);
   const imageUrls = urls.filter(isImageUrl);
@@ -288,10 +406,11 @@ async function analyzeOne(chunk, ctx) {
   stages.push({ stage: 'PARSE', engine: 'regex/code', confidence, data: { ...parsed }, note: 'code-first field extraction' });
 
   // 2) AI TEXT (only if code couldn't resolve a clean brand+reference)
+  const hasAnyAiKey = ctx.deepseekKey || ctx.geminiKey || ctx.kimiKey || ctx.anthropicKey || ctx.openaiKey;
   const needsAi = !parsed.reference || parsed.brand === 'Unknown' || confidence < APPROVE_THRESHOLD;
-  if (needsAi && (ctx.deepseekKey || ctx.geminiKey || ctx.kimiKey)) {
+  if (needsAi && hasAnyAiKey) {
     try {
-      const ai = await aiTextParse(ctx, textOnly || chunk, parsed);
+      const ai = await aiTextParse(ctx, textOnly || chunk, parsed, providerWhitelist);
       // Merge: prefer AI values where code was empty/unknown
       parsed = {
         reference: ai.reference || parsed.reference,
@@ -393,11 +512,37 @@ export default async function handler(req, res) {
     chunks = chunks.map((c, i) => (i === 0 && !extractUrls(c).some(isImageUrl)) ? `${c}\n${bodyImages.join('\n')}` : c);
   }
 
+  // ─── Provider selection ──────────────────────────────────────────────────
+  // Body-level preference overrides the cascade default.
+  const providerPref = (req.body && req.body.provider) || 'auto';
+  ctx.providerPref = providerPref;
+  ctx.anthropicKey = process.env.ANTHROPIC_API_KEY;
+  ctx.openaiKey = process.env.OPENAI_API_KEY;
+
+  // ─── Provider whitelist check ────────────────────────────────────────────
+  // If user picked a specific provider, ONLY use that one. No fallback cascade.
+  const providerWhitelist = providerPref === 'auto' ? null : providerPref;
+
   try {
-    // Run watches in PARALLEL (each is independent) to stay under the 60s limit.
-    // Cap at 8 watches per request so we never fan out too wide.
-    const capped = chunks.slice(0, 8);
-    const results = await Promise.all(capped.map(chunk => analyzeOne(chunk, ctx)));
+    // Batched parallel execution. 5 batches × 10 watches = 50 watches/request,
+    // still well under the 60s function budget with image timeouts capped.
+    const allChunks = chunks.slice(0, BATCH_SIZE * BATCH_CONCURRENCY);
+    const results = new Array(allChunks.length);
+
+    // Process in groups of BATCH_SIZE with BATCH_CONCURRENCY batches in flight
+    for (let i = 0; i < allChunks.length; i += BATCH_SIZE * BATCH_CONCURRENCY) {
+      const batchGroup = [];
+      for (let j = 0; j < BATCH_CONCURRENCY && i + j * BATCH_SIZE < allChunks.length; j++) {
+        const start = i + j * BATCH_SIZE;
+        const end = Math.min(start + BATCH_SIZE, allChunks.length);
+        batchGroup.push(
+          Promise.all(allChunks.slice(start, end).map(async (chunk, k) => {
+            results[start + k] = await analyzeOne(chunk, ctx, providerWhitelist);
+          }))
+        );
+      }
+      await Promise.all(batchGroup);
+    }
 
     const summary = {
       total: results.length,
@@ -405,6 +550,8 @@ export default async function handler(req, res) {
       human: results.filter(r => r.verdict === 'HUMAN').length,
       recycle: results.filter(r => r.verdict === 'RECYCLE').length,
       threshold: APPROVE_THRESHOLD,
+      providerUsed: providerPref,
+      latencyMs: Date.now() - (ctx.startTime || Date.now()),
     };
 
     return res.status(200).json({ success: true, summary, watches: results });

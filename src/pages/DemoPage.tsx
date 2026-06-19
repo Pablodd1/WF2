@@ -297,17 +297,40 @@ RM 35-03 Rafa 2023 2.4M USD`;
     if (!r) return;
     setWebLoading(prev => new Set(prev).add(idx.toString()));
     try {
-      const params = new URLSearchParams();
-      if (r.reference) params.set('reference', r.reference);
-      if (r.brand && r.brand !== 'Unknown') params.set('brand', r.brand);
-      if (r.year) params.set('year', String(r.year));
-      params.set('raw', r.rawMessage);
-      const res = await fetch(`/api/web-lookup?${params.toString()}`);
+      // Use new /api/online-search (GPT-4o-mini + structured output)
+      // Replaces the broken /api/web-lookup (DDG HTML blocked from Vercel IPs)
+      const res = await fetch('/api/online-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference: r.reference,
+          brand: r.brand !== 'Unknown' ? r.brand : undefined,
+          rawMessage: r.rawMessage,
+        }),
+      });
       const data = await res.json();
       if (data.success) {
-        const boost = data.confidenceBoost || 0;
+        const webConfidence = data.confidence || 70;
+        const boost = Math.max(0, webConfidence - r.confidence);
+        const newConf = Math.min(100, r.confidence + boost);
+        // If web search found valid info, apply it
+        const updates: Partial<EnrichedResult> = {
+          confidence: newConf,
+          verdict: getVerdict(newConf),
+          webEnrichment: data,
+          confidenceBoost: boost,
+        };
+        if (data.brand && data.brand !== 'Unknown' && (!r.brand || r.brand === 'Unknown')) {
+          updates.brand = data.brand;
+        }
+        if (data.model && !r.model) {
+          updates.model = data.model;
+        }
+        if (data.dialColors && (r.dialColor === 'UNKNOWN' || !r.dialColor)) {
+          updates.dialColor = data.dialColors.split(',')[0].trim();
+        }
         setResults(prev => prev.map((item, i) =>
-          i === idx ? { ...item, confidence: Math.min(100, item.confidence + boost), verdict: getVerdict(Math.min(100, item.confidence + boost)), webEnrichment: data, confidenceBoost: boost } : item
+          i === idx ? { ...item, ...updates } : item
         ));
       }
     } catch (e) {
