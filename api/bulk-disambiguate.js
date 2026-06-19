@@ -116,12 +116,24 @@ If reference is already complete, set confidence=1.0.`;
         continue;
       }
 
-      const results = parsed.results || parsed.resolved || parsed.disambiguations || (Array.isArray(parsed) ? parsed : []);
+      // Find the array of results — try common shapes
+      let results = [];
+      if (Array.isArray(parsed)) {
+        results = parsed;
+      } else {
+        // Look for any array property
+        for (const key of Object.keys(parsed)) {
+          if (Array.isArray(parsed[key])) {
+            results = parsed[key];
+            break;
+          }
+        }
+      }
       for (const r of results) {
         resolved.push({
           id: r.id,
           originalRef: batch.find(b => b.id === r.id)?.reference,
-          resolvedRef: r.resolved_ref || r.reference || r.ref,
+          resolvedRef: r.resolved_ref || r.reference || r.ref || r.resolvedRef,
           model: r.model || null,
           year: r.year || null,
           confidence: r.confidence || 0,
