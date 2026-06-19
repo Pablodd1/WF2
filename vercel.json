@@ -3,6 +3,9 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "functions": {
+    "api/bulk-disambiguate.js": {
+      "maxDuration": 300
+    },
     "api/*.js": {
       "maxDuration": 60
     }
