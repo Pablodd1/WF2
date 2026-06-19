@@ -1,21 +1,27 @@
 {
-  "timestamp": "2026-06-18T22:30:00Z",
+  "timestamp": "2026-06-18T23:00:00Z",
   "records": 117744,
-  "phase": "bug_fixes_v1",
-  "fixes_applied": [
-    "Bug 1: Year-as-Price \u2014 20,745 affected records re-parsed (221 prices auto-fixed)",
-    "Bug 2: 6-digit brand inference \u2014 added Rolex 10x-32x ranges, Vacheron 33x, Tudor 79x",
-    "Bug 3: Edition/country dial \u2014 Qatar/Italy/Le Mans/etc now recognized as 'Edition Dial'",
-    "CSV catalog ingest endpoint (/api/ingest-catalog) for user CSV uploads"
+  "phase": "csv_ingest_v3",
+  "catalog_size": 3379,
+  "csv_sources": [
+    "Patek Philippe Final Catalog (470 refs)",
+    "Cartier Final Catalog (762 refs)",
+    "Richard Mille Final Catalog (148 refs)"
   ],
   "new_verdicts": {
-    "APPROVED": 77861,
-    "HUMAN": 35294,
-    "RECYCLE": 4589
+    "APPROVED": 0,
+    "HUMAN": 0,
+    "RECYCLE": 0
   },
   "improvements": {
-    "prices_fixed": 221,
-    "rows_updated": 52714,
-    "approval_rate": 66.1
-  }
+    "brands_fixed": 0,
+    "refs_fixed": 0,
+    "rows_updated": 0
+  },
+  "key_fixes": [
+    "Cubitus 7128/1G-001 now resolves to Patek Philippe Cubitus",
+    "5524G-001 resolves to Calatrava Pilot Travel Time",
+    "All Cartier (HPI, WG, WE, WSSA) refs now in catalog",
+    "All Richard Mille (RMxxx, RMxxx-Vx) refs now in catalog"
+  ]
 }
