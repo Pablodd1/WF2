@@ -20,6 +20,24 @@ export interface ParsedWatch {
 
 // ── Brand catalog ──
 
+// Emoji-based brand markers used by dealers in WhatsApp/Telegram
+// (e.g., 🔵 = Patek Philippe, 🟢 = Rolex, 🔴 = Audemars Piguet)
+const EMOJI_BRAND_MAP: Record<string, string> = {
+  '🔵': 'Patek Philippe',        // blue circle
+  '🏮': 'Patek Philippe',        // red lantern (often Patek)
+  '🟢': 'Rolex',                 // green circle
+  '⚫': 'Rolex',                 // black circle (Submariner)
+  '🔴': 'Audemars Piguet',       // red circle
+  '🟠': 'Audemars Piguet',       // orange circle
+  '🟡': 'Richard Mille',         // yellow circle
+  '⚪': 'Vacheron Constantin',   // white circle
+  '🔶': 'Vacheron Constantin',   // orange diamond
+  '🟣': 'Omega',                 // purple circle
+  '🟤': 'IWC',                   // brown circle
+  '⚪️': 'Patek Philippe',        // white circle (some dealers use for PP)
+  '⭕': 'Patek Philippe',        // hollow circle (Patek Nautilus)
+};
+
 const BRAND_PATTERNS: [RegExp, string][] = [
   [/\b(?:patek\s*philippe|patek|pp)\b/i, 'Patek Philippe'],
   [/\b(?:audemars\s*piguet|audemars|ap)\b/i, 'Audemars Piguet'],
@@ -61,9 +79,9 @@ function refMatch(text: string): string {
   m = text.match(/\b(116\d{3}[A-Z]{0,4}|126\d{3}[A-Z]{0,4}|114\d{3}[A-Z]?|124\d{3}[A-Z]?|226\d{3}[A-Z]{0,4}|228\d{3}[A-Z]{0,4}|279\d{3}[A-Z]{0,4}|176\d{3}|184\d{3}|118\d{3}|155\d{3}[A-Z]{0,4}|177\d{3}|816\d{3}|190\d{3}|268\d{3}|128\d{3})(?![A-Z])/i);
   if (m) return m[1].toUpperCase();
 
-  // Patek refs: 49xx, 50xx, 51xx, 52xx, 57xx, 59xx, 71xx, 72xx with optional suffix
-  m = text.match(/\b(49\d{2}[A-Za-z0-9\/]*|50\d{2}[A-Za-z0-9\/]*|51\d{2}[A-Za-z0-9\/]*|52\d{2}[A-Za-z0-9\/]*|57\d{2}[A-Za-z0-9\/]*|59\d{2}[A-Za-z0-9\/]*|71\d{2}[A-Za-z0-9\/]*|72\d{2}[A-Za-z0-9\/]*)\b/);
-  if (m) return m[1];
+  // Patek refs: 49xx, 50xx, 51xx, 52xx, 57xx, 59xx, 71xx, 72xx with 1-3 letter suffix (case-insensitive)
+  m = text.match(/\b(49\d{2}[A-Z]{1,4}|50\d{2}[A-Z]{1,4}|51\d{2}[A-Z]{1,4}|52\d{2}[A-Z]{1,4}|53\d{2}[A-Z]{1,4}|54\d{2}[A-Z]{1,4}|57\d{2}[A-Z]{1,4}|58\d{2}[A-Z]{1,4}|59\d{2}[A-Z]{1,4}|61\d{2}[A-Z]{1,4}|71\d{2}[A-Z]{1,4}|72\d{2}[A-Z]{1,4})\b/i);
+  if (m) return m[1].toUpperCase();
 
   // AP: 15xxx, 16xxx, 26xxx with optional suffix
   m = text.match(/\b(15\d{3}[A-Za-z]{0,4}|16\d{3}[A-Za-z]{0,4}|26\d{3}[A-Za-z]{0,4})\b/);
@@ -159,19 +177,28 @@ const PRICE_PATTERNS: RegExp[] = [
 // ── Parser ──
 
 export function parseWatch(raw: string): ParsedWatch {
+  // 1. Brand from emoji (BEFORE emoji strip — emojis get removed below)
+  let brand = 'Unknown';
+  for (const [emoji, name] of Object.entries(EMOJI_BRAND_MAP)) {
+    if (raw.includes(emoji)) { brand = name; break; }
+  }
+
   const clean = raw.replace(/[\u{1F000}-\u{1FFFF}]/gu, '').trim();
 
-  // 1. Brand
-  let brand = 'Unknown';
-  for (const [re, name] of BRAND_PATTERNS) {
-    if (re.test(clean)) { brand = name; break; }
-  }
-  // Brand from reference prefix if brand unknown
+  // 2. Brand from text patterns
   if (brand === 'Unknown') {
-    // Patek Philippe: 49xx, 50xx, 51xx, 52xx, 57xx, 59xx, 61xx, 71xx, 72xx
-    if (/\b(49\d{2}|50\d{2}|51\d{2}|52\d{2}|57\d{2}|59\d{2}|61\d{2}|71\d{2}|72\d{2})/.test(clean)) brand = 'Patek Philippe';
+    for (const [re, name] of BRAND_PATTERNS) {
+      if (re.test(clean)) { brand = name; break; }
+    }
+  }
+  // Brand from reference prefix if brand still unknown
+  if (brand === 'Unknown') {
+    // Patek Philippe: 49xx, 50xx, 51xx, 52xx, 53xx, 54xx, 57xx, 58xx, 59xx, 61xx, 71xx, 72xx
+    if (/\b(49\d{2}|50\d{2}|51\d{2}|52\d{2}|53\d{2}|54\d{2}|57\d{2}|58\d{2}|59\d{2}|61\d{2}|71\d{2}|72\d{2})/.test(clean)) brand = 'Patek Philippe';
     // Rolex: 116xxx, 126xxx, 166xxx, 226xxx, 114xxx, 124xxx etc.
     else if (/\b(11[46]\d{3}|12[46]\d{3}|16[46]\d{3}|22[68]\d{3}|279\d{3}|118\d{3}|155\d{3}|176\d{3}|177\d{3}|184\d{3}|190\d{3}|268\d{3}|128\d{3}|816\d{3})/.test(clean)) brand = 'Rolex';
+    // Rolex extended: 126599, 126710, 26711, 279160, 26715, 26420 (any 6-digit+letter)
+    else if (/^\d{6}[A-Z]{2,4}$/.test(clean.trim()) || /\b\d{6}[A-Z]{2,4}\b/.test(clean)) brand = 'Rolex';
     // Audemars Piguet: 15xxx, 16xxx, 26xxx
     else if (/\b(15\d{3}[A-Z]|16\d{3}[A-Z]|26\d{3}[A-Z])/.test(clean)) brand = 'Audemars Piguet';
     // Richard Mille: RM followed by digits
