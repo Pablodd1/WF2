@@ -44,6 +44,9 @@ type EnrichedResult = ParsedWatch & {
   confidenceBoost?: number;
   pipeline?: PipelineResult;
   processing?: boolean;
+  persisted?: boolean;     // True once saved to Supabase via /api/persist
+  edited?: boolean;         // True if user has manually edited fields
+  _autoEdit?: boolean;      // Internal: trigger edit form in TestModePanel
 };
 
 // ── Lazy-load SheetJS ────────────────────────────────────────────────────────
@@ -225,6 +228,18 @@ RM 35-03 Rafa 2023 2.4M USD`;
       setResults(enriched);
       setLastLatencyMs(Date.now() - startTs);
       setProgress({ done: flat.length, total: flat.length });
+
+      // Auto-persist APPROVED records to Supabase live_ingest
+      const approved = enriched.filter(r => r.verdict === 'APPROVED');
+      if (approved.length > 0) {
+        const persisted = await persistApproved(approved);
+        setResults(prev => prev.map((r) => {
+          // Match by rawMessage since we iterate in the same order
+          const idx = approved.findIndex(a => a.rawMessage === r.rawMessage);
+          if (idx >= 0 && persisted[idx]) return { ...r, persisted: true };
+          return r;
+        }));
+      }
     } catch (e: any) {
       console.error('Analyze failed:', e);
       setResults(prev => prev.map(r => ({ ...r, processing: false })));
@@ -232,6 +247,49 @@ RM 35-03 Rafa 2023 2.4M USD`;
       setIsProcessing(false);
     }
   }, [input, provider]);
+
+  // ── Persist approved records to Supabase ────────────────────────────────
+  const persistApproved = useCallback(async (records: EnrichedResult[]): Promise<boolean[]> => {
+    const results: boolean[] = [];
+    // Send in batches of 20 (matches clean-analyze batch size)
+    for (let i = 0; i < records.length; i += 20) {
+      const batch = records.slice(i, i + 20);
+      try {
+        const resp = await fetch('/api/persist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'reprocess',
+            records: batch.map(r => ({
+              id: `demo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${i}`,
+              brand: r.brand,
+              reference: r.reference,
+              dial_color: r.dialColor,
+              condition: r.condition,
+              year: r.year,
+              price_raw: r.price,
+              price_usd: r.price,  // demo prices assumed USD
+              currency: r.currency,
+              confidence: r.confidence,
+              verdict: r.verdict,
+              source: 'demo-ui',
+              raw_message: r.rawMessage,
+              flags: r.flags || [],
+            })),
+          }),
+        });
+        const data = await resp.json();
+        const saved = data.saved || 0;
+        for (let j = 0; j < batch.length; j++) {
+          results.push(j < saved);
+        }
+      } catch (e) {
+        console.error('persist failed:', e);
+        for (let j = 0; j < batch.length; j++) results.push(false);
+      }
+    }
+    return results;
+  }, []);
 
   // ── Single-watch web lookup (legacy keep) ──────────────────────────────────
   const handleWebLookup = useCallback(async (idx: number) => {
@@ -313,6 +371,29 @@ RM 35-03 Rafa 2023 2.4M USD`;
     }
     return null;
   }, [results, testModeCache]);
+
+  // ── Inline field edit: open TestModePanel in edit mode for this record ─
+  const openEditFor = useCallback((idx: number) => {
+    // Ensure card is expanded
+    setResults(prev => prev.map((item, i) =>
+      i === idx ? { ...item, expanded: true, _autoEdit: true } : item
+    ));
+    // Load comparison if not loaded
+    if (!testModeCache[idx]) {
+      loadTestComparison(idx);
+    }
+    // Scroll the TestModePanel into view after a short delay
+    setTimeout(() => {
+      const el = document.querySelector(`[data-test-edit="${idx}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Clear autoEdit after 3 seconds
+      setTimeout(() => {
+        setResults(prev => prev.map((item, i) =>
+          i === idx ? { ...item, _autoEdit: false } : item
+        ));
+      }, 3000);
+    }, 200);
+  }, [testModeCache, loadTestComparison]);
 
   // ── Test Mode: re-launch pipeline with human-edited record ──────────────
   const handleTestRelaunch = useCallback(async (idx: number, edited: {
@@ -736,6 +817,9 @@ RM 35-03 Rafa 2023 2.4M USD`;
           <div className="flex gap-3 mb-4 text-xs flex-wrap">
             <div className="px-4 py-2 rounded-lg" style={{ backgroundColor: '#0a0a0a', border: '1px solid #1a1a1a', color: '#888' }}>
               <span className="font-bold" style={{ color: '#22c55e' }}>{results.filter(r => r.verdict === 'APPROVED').length}</span> Approved
+              <span className="ml-2 text-[10px]" style={{ color: '#60a5fa' }}>
+                ({results.filter(r => r.verdict === 'APPROVED' && r.persisted).length} saved)
+              </span>
             </div>
             <div className="px-4 py-2 rounded-lg" style={{ backgroundColor: '#0a0a0a', border: '1px solid #1a1a1a', color: '#888' }}>
               <span className="font-bold" style={{ color: '#eab308' }}>{results.filter(r => r.verdict === 'HUMAN').length}</span> Human Review
@@ -761,6 +845,7 @@ RM 35-03 Rafa 2023 2.4M USD`;
                   onToggle={() => toggleExpand(idx)}
                   onWebLookup={() => handleWebLookup(idx)}
                   onAskAI={() => handleAskAI(idx)}
+                  onFieldEdit={() => openEditFor(idx)}
                   webLoading={webLoading.has(idx.toString())}
                   aiLoading={aiLoading.has(idx.toString())}
                 />
@@ -812,10 +897,11 @@ RM 35-03 Rafa 2023 2.4M USD`;
 // Pipeline card — the visual showcase per watch
 // ──────────────────────────────────────────────────────────────────────────────
 function PipelineCard({
-  result: r, expanded, onToggle, onWebLookup, onAskAI, webLoading, aiLoading,
+  result: r, expanded, onToggle, onWebLookup, onAskAI, onFieldEdit, webLoading, aiLoading,
 }: {
   result: EnrichedResult; idx: number; expanded: boolean; onToggle: () => void;
   onWebLookup: () => void; onAskAI: () => void;
+  onFieldEdit?: () => void;
   webLoading: boolean; aiLoading: boolean;
 }) {
   const verdictColor = r.verdict === 'APPROVED' ? '#22c55e' : r.verdict === 'RECYCLE' ? '#ef4444' : '#eab308';
@@ -878,6 +964,16 @@ function PipelineCard({
               }}>
               {r.confidence}%
             </div>
+            {r.verdict === 'APPROVED' && (
+              <div className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex items-center gap-1"
+                style={{
+                  backgroundColor: r.persisted ? '#052e16' : '#1a2e05',
+                  color: r.persisted ? '#4ade80' : '#86efac',
+                  border: `1px solid ${r.persisted ? '#22c55e' : '#4ade80'}66`,
+                }}>
+                {r.persisted ? '✓ SAVED' : '⋯ saving'}
+              </div>
+            )}
             {expanded ? <ChevronUp className="w-4 h-4" style={{ color: '#666' }} /> : <ChevronDown className="w-4 h-4" style={{ color: '#666' }} />}
           </div>
         </div>
@@ -909,12 +1005,43 @@ function PipelineCard({
 
           {/* Parsed fields grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-            <FieldBox label="Brand" value={r.brand} good={r.brand !== 'Unknown'} />
-            <FieldBox label="Reference" value={r.reference || '—'} good={!!r.reference} mono />
-            <FieldBox label="Dial" value={r.dialColor || '—'} good={!!r.dialColor && r.dialColor !== 'UNKNOWN'} />
-            <FieldBox label="Price" value={r.price > 0 ? `${r.currency} ${r.price.toLocaleString()}` : '—'} good={r.price > 0} />
-            <FieldBox label="Condition" value={r.condition} good={r.condition !== 'Unknown'} />
-            <FieldBox label="Year" value={r.year ? String(r.year) : '—'} good={!!r.year} />
+            <FieldBox
+              label="Brand"
+              value={r.brand}
+              good={r.brand !== 'Unknown'}
+              onEdit={onFieldEdit}
+            />
+            <FieldBox
+              label="Reference"
+              value={r.reference || '—'}
+              good={!!r.reference}
+              mono
+              onEdit={onFieldEdit}
+            />
+            <FieldBox
+              label="Dial"
+              value={r.dialColor || '—'}
+              good={!!r.dialColor && r.dialColor !== 'UNKNOWN'}
+              onEdit={onFieldEdit}
+            />
+            <FieldBox
+              label="Price"
+              value={r.price > 0 ? `${r.currency} ${r.price.toLocaleString()}` : '—'}
+              good={r.price > 0}
+              onEdit={onFieldEdit}
+            />
+            <FieldBox
+              label="Condition"
+              value={r.condition}
+              good={r.condition !== 'Unknown'}
+              onEdit={onFieldEdit}
+            />
+            <FieldBox
+              label="Year"
+              value={r.year ? String(r.year) : '—'}
+              good={!!r.year}
+              onEdit={onFieldEdit}
+            />
             <FieldBox label="Verdict" value={r.verdict} good={r.verdict === 'APPROVED'} />
             <FieldBox label="Confidence" value={`${r.confidence}%`} good={r.confidence >= 85} />
           </div>
@@ -1036,11 +1163,19 @@ function PipelineArrow() {
   );
 }
 
-function FieldBox({ label, value, good, mono = false }: { label: string; value: string; good: boolean; mono?: boolean }) {
+function FieldBox({ label, value, good, mono = false, onEdit }: { label: string; value: string; good: boolean; mono?: boolean; onEdit?: () => void }) {
   return (
-    <div className="rounded-lg p-2.5" style={{ backgroundColor: '#111' }}>
+    <div
+      onClick={onEdit}
+      className={onEdit ? 'rounded-lg p-2.5 cursor-pointer transition-all hover:ring-1 hover:ring-purple-500' : 'rounded-lg p-2.5'}
+      style={{ backgroundColor: '#111', ...(onEdit ? { position: 'relative' } : {}) }}
+      title={onEdit ? 'Click to edit' : undefined}
+    >
       <div className="text-[10px] uppercase tracking-wide mb-0.5" style={{ color: '#666' }}>{label}</div>
       <div className={'text-sm font-medium truncate ' + (mono ? 'font-mono' : '')} style={{ color: good ? '#e8e8e8' : '#ef4444' }}>{value}</div>
+      {onEdit && (
+        <div className="absolute top-1 right-1 text-[8px] opacity-50" style={{ color: '#a78bfa' }}>✎</div>
+      )}
     </div>
   );
 }
