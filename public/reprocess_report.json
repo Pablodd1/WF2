@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-06-18T20:00:00Z",
+  "records": 117744,
+  "elapsed_seconds": 0.1412372589111328,
+  "rate_per_second": 833661,
+  "old_verdicts": {
+    "HUMAN": 45850,
+    "RECYCLE": 32200,
+    "APPROVED": 39694
+  },
+  "new_verdicts": {
+    "APPROVED": 71906,
+    "HUMAN": 26668,
+    "RECYCLE": 19170
+  },
+  "brand_inferences": 590,
+  "catalog_hits": 72502
+}
