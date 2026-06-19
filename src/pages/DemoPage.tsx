@@ -110,11 +110,12 @@ function verdictBg(v: string) {
 }
 
 // ── Input mode tabs ──────────────────────────────────────────────────────────
-type InputMode = 'text' | 'images' | 'chat';
+type InputMode = 'text' | 'images' | 'chat' | 'csv';
 const MODE_TABS: { id: InputMode; label: string; icon: any; hint: string }[] = [
   { id: 'text',   label: 'Paste Listings', icon: MessageSquare, hint: 'One watch per line — paste 1, 50, or 100 at once' },
   { id: 'chat',   label: 'Paste Chat Block', icon: Layers,        hint: 'Drop a full WhatsApp export — we split it' },
   { id: 'images', label: 'Image URLs',      icon: ImageIcon,     hint: 'Comma- or newline-separated image URLs (vision verify)' },
+  { id: 'csv',    label: 'Catalog CSV',     icon: FileSpreadsheet, hint: 'Paste catalog CSV: Brand,Model,Reference,Dial Color — expands enriched_refs.json' },
 ];
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -130,6 +131,7 @@ export default function DemoPage() {
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [testMode, setTestMode] = useState(true);   // Test mode ON by default for the demo
   const [testModeCache, setTestModeCache] = useState<Record<number, any>>({});  // cached 3-catalog comparison per record
+  const [csvStatus, setCsvStatus] = useState<{ stage: string; message: string; added?: number; updated?: number; catalogSize?: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-run demo with sample data on first load
@@ -363,6 +365,38 @@ RM 35-03 Rafa 2023 2.4M USD`;
       setAiLoading(prev => { const n = new Set(prev); n.delete(idx.toString()); return n; });
     }
   }, [results, provider]);
+
+  // ── Catalog CSV ingest ────────────────────────────────────────────────────
+  // POST a CSV string (Brand,Model,Reference,Dial Color,Image Link) to /api/ingest-catalog
+  const handleCsvIngest = useCallback(async () => {
+    const csv = input.trim();
+    if (!csv) return;
+    setIsProcessing(true);
+    setCsvStatus({ stage: 'sending', message: 'Posting CSV to /api/ingest-catalog...' });
+    try {
+      const res = await fetch('/api/ingest-catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCsvStatus({
+          stage: 'done',
+          message: data.message,
+          added: data.added,
+          updated: data.updated,
+          catalogSize: data.catalogSize,
+        });
+      } else {
+        setCsvStatus({ stage: 'error', message: data.error || 'Ingest failed' });
+      }
+    } catch (e: any) {
+      setCsvStatus({ stage: 'error', message: e?.message || String(e) });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [input]);
 
   const toggleExpand = useCallback((idx: number) => {
     setResults(prev => prev.map((item, i) => i === idx ? { ...item, expanded: !item.expanded } : item));
@@ -767,6 +801,8 @@ RM 35-03 Rafa 2023 2.4M USD`;
                 ? 'One watch per line:\n🏮5712/1A Blue N5/2026 New 850k HKD\n🔥116610LV Green 2021 1.2M HKD'
                 : inputMode === 'images'
                 ? 'Paste image URLs (one per line):\nhttps://example.com/watch1.jpg\nhttps://example.com/watch2.jpg'
+                : inputMode === 'csv'
+                ? 'Paste catalog CSV (first row = header):\nBrand,Model,Reference,Dial Color\nPatek Philippe,Nautilus,5711/110P-001,Black\nRolex,Submariner,116610LV,Green'
                 : 'Paste a full WhatsApp chat export here — we auto-split into individual watches'
             }
             className="w-full h-40 rounded-lg p-4 text-sm font-mono outline-none resize-none"
@@ -786,7 +822,7 @@ RM 35-03 Rafa 2023 2.4M USD`;
           />
 
           <div className="flex gap-3 mt-4 flex-wrap items-center">
-            <button onClick={handleAnalyze}
+            <button onClick={inputMode === 'csv' ? handleCsvIngest : handleAnalyze}
               disabled={isProcessing || !input.trim()}
               className="px-6 py-2.5 rounded-lg font-semibold text-sm transition-all disabled:opacity-40 hover:opacity-90"
               style={{ backgroundColor: '#d4af37', color: '#050505' }}>
@@ -795,10 +831,31 @@ RM 35-03 Rafa 2023 2.4M USD`;
                   <span className="animate-spin w-3.5 h-3.5 border-2 rounded-full inline-block" style={{ borderColor: '#050505', borderTopColor: 'transparent' }} />
                   Processing {progress.done}/{progress.total}...
                 </span>
+              ) : inputMode === 'csv' ? (
+                <><FileSpreadsheet className="inline w-4 h-4 mr-2" />Ingest Catalog</>
               ) : (
                 <><Sparkles className="inline w-4 h-4 mr-2" />Run Pipeline</>
               )}
             </button>
+
+            {/* CSV status panel */}
+            {inputMode === 'csv' && csvStatus && (
+              <div className="ml-3 px-3 py-1.5 rounded-lg text-xs" style={{
+                backgroundColor: csvStatus.stage === 'done' ? '#052e16' : csvStatus.stage === 'error' ? '#450a0a' : '#1a2e05',
+                color: csvStatus.stage === 'done' ? '#4ade80' : csvStatus.stage === 'error' ? '#fca5a5' : '#86efac',
+                border: `1px solid ${csvStatus.stage === 'done' ? '#22c55e' : csvStatus.stage === 'error' ? '#ef4444' : '#4ade80'}66`,
+              }}>
+                <div className="font-semibold">
+                  {csvStatus.stage === 'done' ? '✓ Catalog Updated' : csvStatus.stage === 'error' ? '✗ Error' : '⋯ ' + csvStatus.stage}
+                </div>
+                <div className="mt-0.5">
+                  {csvStatus.message}
+                  {csvStatus.catalogSize && (
+                    <span className="ml-2 opacity-75">| total: {csvStatus.catalogSize} refs</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             <button onClick={() => fileInputRef.current?.click()}
               className="px-3 py-2.5 rounded-lg text-xs font-medium flex items-center gap-1.5"

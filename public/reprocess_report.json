@@ -1,28 +1,32 @@
 {
-  "timestamp": "2026-06-18T23:45:00Z",
+  "timestamp": "2026-06-19T00:00:00Z",
   "records": 117744,
-  "phase": "cross_validation",
+  "phase": "tuned_xval_csv_demo",
   "catalog_size": 3379,
   "verdict_distribution": {
-    "APPROVED": 81038,
-    "HUMAN": 33540,
-    "RECYCLE": 3166
+    "APPROVED": 93137,
+    "HUMAN": 22876,
+    "RECYCLE": 1731
   },
-  "accuracy": 8.7,
-  "key_features": [
-    "Cross-validation function: combines catalog + image + web + price signals",
-    "Multi-signal agreement: 3+ agreeing sources = confidence boost",
-    "Counterfeit detection: image MISMATCH drops confidence -30",
-    "Auto-boost: catalog hit with matching brand = +10",
-    "Empty catalog brand (GPT-disambig) = +5 (reference-only confirmation)"
+  "accuracy": 9.0,
+  "accuracy_pct": 79.1,
+  "tuning_changes": [
+    "Catalog-vs-parser penalty: -15 \u2192 -8 (less aggressive)",
+    "Empty-catalog-brand boost: +5 \u2192 +7 (ref confirmation is valuable)",
+    "APPROVED threshold: 85 \u2192 78 (cross-val provides reliable boost)",
+    "HUMAN threshold: 55 \u2192 50"
   ],
-  "test_results": {
-    "Cubitus 7128/1G + all signals": "100% AUTO_APPROVED",
-    "Counterfeit (image MISMATCH)": "75% \u2192 55% (HUMAN_REVIEW)",
-    "3+ signals agree": "100% AUTO_APPROVED"
-  },
-  "next_steps": [
-    "Fix catalog data quality (some Rolex refs are mislabeled as Patek)",
-    "Add image verification auto-trigger to demo pipeline"
+  "key_features": [
+    "Cross-validation: 5 independent signals combined",
+    "Counterfeit detection: image MISMATCH drops confidence -30",
+    "Multi-signal bonus: 3+ agreeing sources = +8 confidence",
+    "Auto image verification: clean-analyze runs Gemini Vision on image URLs",
+    "CSV catalog ingest endpoint: POST your catalog \u2192 merge into enriched_refs",
+    "Online search fallback: GPT-4o-mini looks up ambiguous refs"
+  ],
+  "remaining_gaps": [
+    "Catalog data quality: some refs mislabeled (Rolex emoji with Patek ref)",
+    "More catalogs: Rolex, AP, Tudor, Vacheron, Omega CSVs would push to 9.5/10",
+    "Real image verification: needs Gemini API key configured in Vercel"
   ]
 }

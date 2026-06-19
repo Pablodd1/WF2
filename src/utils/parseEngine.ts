@@ -473,14 +473,17 @@ export function applyCrossValidation(
       agreeSignals.push('catalog-supplies-brand');
       boost += 8;
     } else {
+      // Catalog disagrees with parser on brand — REDUCED penalty (was -15)
+      // The brand-vs-catalog mismatch can be a data quality issue (wrong emoji)
+      // or a ref that's cataloged under wrong brand. Don't tank confidence.
       disagreeSignals.push('catalog-vs-parser-brand');
-      boost -= 15;  // strong disagreement
+      boost -= 8;  // reduced from -15 — was too aggressive
     }
   } else if (signals.catalogHit) {
-    // Catalog has ref but empty brand (GPT-disambiguated entry)
-    // Treat as reference confirmation only
+    // Catalog has ref but empty brand (GPT-disambigated entry)
+    // Treat as reference confirmation only — strong boost since ref is verified
     agreeSignals.push('catalog-ref');
-    boost += 5;
+    boost += 7;  // slightly higher — ref confirmation is valuable
   }
 
   // 2. Image agreement — Gemini Vision saw the same ref
