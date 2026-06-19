@@ -1,27 +1,27 @@
 {
-  "timestamp": "2026-06-18T23:00:00Z",
+  "timestamp": "2026-06-18T23:30:00Z",
   "records": 117744,
-  "phase": "csv_ingest_v3",
+  "phase": "image_online_search",
   "catalog_size": 3379,
-  "csv_sources": [
-    "Patek Philippe Final Catalog (470 refs)",
-    "Cartier Final Catalog (762 refs)",
-    "Richard Mille Final Catalog (148 refs)"
+  "new_endpoints": [
+    "/api/online-search \u2014 GPT-4o-mini structured watch lookup (replaces broken DDG)",
+    "/api/verify-image \u2014 Gemini 2.5 Flash vision verification (already existed)"
   ],
   "new_verdicts": {
-    "APPROVED": 0,
-    "HUMAN": 0,
-    "RECYCLE": 0
+    "APPROVED": 102064,
+    "HUMAN": 15269,
+    "RECYCLE": 411
   },
-  "improvements": {
-    "brands_fixed": 0,
-    "refs_fixed": 0,
-    "rows_updated": 0
-  },
-  "key_fixes": [
-    "Cubitus 7128/1G-001 now resolves to Patek Philippe Cubitus",
-    "5524G-001 resolves to Calatrava Pilot Travel Time",
-    "All Cartier (HPI, WG, WE, WSSA) refs now in catalog",
-    "All Richard Mille (RMxxx, RMxxx-Vx) refs now in catalog"
+  "image_verification_capable": true,
+  "online_search_capable": true,
+  "demo_upgrades": [
+    "Web Lookup button now uses /api/online-search (GPT-4o-mini)",
+    "Web search results auto-fill brand/model/dial color if missing",
+    "Confidence boost applied based on web search confidence",
+    "Cubitus 7128/1G case now resolves via web search (catalog hit + web confirm)"
+  ],
+  "next_steps_to_9_of_10": [
+    "More catalog CSVs (Rolex, AP, Tudor, Vacheron, Omega, etc.)",
+    "Cross-validation: auto-approve when catalog + image + brand keyword agree"
   ]
 }
