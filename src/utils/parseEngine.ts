@@ -371,11 +371,13 @@ export function parseWatch(raw: string): ParsedWatch {
   let intent: 'SELL' | 'BUY' | 'INQUIRY' = 'SELL';
   const lc = clean.toLowerCase();
   // Buy intent: looking for, WTB, want to buy, looking, ISO (in search of), need, NTQ
-  if (/\b(wtb|want.*buy|looking for|iso |in search of|need |ntq\b|looking to buy|want.*find|hunt|searching for|anyone.*have|who.*sell|where.*buy)\b/i.test(lc)) {
+  // Use \b only at start/end of full pattern, not inside alternatives — that's the source of bugs
+  const buyPattern = /\b(wtb|want\b.*\bbuy|looking\s+for|iso\b|in\s+search\s+of|need\b|ntq\b|looking\s+to\s+buy|want\b.*\bfind|hunt\b|searching\s+for|anyone\b.*\bhave|who\b.*\bsell|where\b.*\bbuy)\b/i;
+  if (buyPattern.test(lc)) {
     intent = 'BUY';
   }
   // Inquiry: what is, how much, price check, valuation, worth, question mark
-  else if (/\b(how much|what.*price|valuation|worth|price check|quote|pm me|dm me|interested|\\?)\b/i.test(lc)) {
+  else if (/\b(how\s+much|what\b.*\bprice|valuation|worth\b|price\s+check|quote\b|pm\s+me|dm\s+me|interested|\?)\b/i.test(lc)) {
     intent = 'INQUIRY';
   }
   // "NTQ" specifically (No Text Quick) — buyer signaling
