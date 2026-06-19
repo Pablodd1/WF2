@@ -33,50 +33,41 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'records array required' });
   }
 
-  const resolved = [];
-  const errors = [];
-  let totalTokens = 0;
-  let totalCost = 0;
-
-  // Process in batches
+  // Split into batches
+  const batches = [];
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
-    const batch = records.slice(i, i + BATCH_SIZE);
+    batches.push(records.slice(i, i + BATCH_SIZE));
+  }
+
+  // Process all batches in PARALLEL (with concurrency limit)
+  const CONCURRENCY = 5; // OpenAI rate limits: ~500 RPM on tier 1
+  const systemPrompt = useWebSearch
+    ? `You are a luxury watch expert. For each partial/ambiguous reference below, identify the most likely complete reference using your knowledge. Watch naming conventions:
+- Rolex 126xxx/116xxx = 6-digit + 1-4 letter suffix (e.g., 126610LV = Submariner Date)
+- Rolex suffix: LN=Black, LV=Green, LB=Blue, BLNR=Batman, BLRO=Pepsi
+- Patek 5xxx/xxxx = 4-digit + slash + 1-4 letters (e.g., 5712/1A = Nautilus Moon Phase)
+- Patek 5270P = Annual Calendar Chronograph Platinum, 5167A = Steel Annual Calendar
+- RM 11-01/02/03/04 = Felipe Massa editions (RM 11-03 most common 2024)
+- RM 67-01/02 = Sprint ladies editions
+- AP 15500ST, 15510ST, 16202ST = Royal Oak variants
+- VC 336xxx = Overseas
+
+Return JSON object with "results" array. Each entry: { "id": "...", "resolved_ref": "5712/1A", "model": "Nautilus Moon Phase", "year": 2024, "confidence": 0.95, "notes": "..." }
+If already complete and correct, set confidence=1.0.`
+    : `You are a luxury watch expert. For each partial/ambiguous reference, identify the most likely canonical full reference. Use your training data only.
+
+Return JSON object with "results" array. Each entry: { "id": "...", "resolved_ref": "5712/1A", "model": "Nautilus Moon Phase", "year": 2024, "confidence": 0.95, "notes": "..." }
+If reference is already complete, set confidence=1.0.`;
+
+  async function processBatch(batch, batchIdx) {
     try {
       const inputData = batch.map(r => ({
         id: r.id,
         reference: r.reference,
         brand: r.brand,
         dial: r.dial || null,
-        source: (r.source || '').slice(0, 200),
+        occurrences: r.occurrences || null,
       }));
-
-      const systemPrompt = useWebSearch
-        ? `You are a luxury watch expert with access to web search. For each partial/ambiguous reference below, use your knowledge AND optionally search to find the canonical full reference. Watch naming conventions:
-- Rolex 126xxx/116xxx = 6-digit + 1-4 letter suffix (e.g., 126610LV = Submariner Date "Hulk")
-- Rolex 6-digit refs with suffix (LN=Black, LV=Green, LB=Blue, BLNR=Batman, BLRO=Pepsi)
-- Patek 5xxx/xxxx = 4-digit + slash + 1-4 letters (e.g., 5712/1A = Nautilus Moon Phase)
-- Patek 5270P = Annual Calendar Chronograph Platinum
-- Patek 5167A, 5935A = Annual Calendar Steel, Chronograph Steel
-- RM 11-01/02/03/04 = Felipe Massa editions (RM 11-03 most common 2024)
-- RM 67-01/02 = Sprint ladies editions
-- AP 15500ST, 15510ST, 16202ST = Royal Oak variants
-- VC 336xxx = Overseas collection
-
-Return JSON array with same id, fields:
-{ "id": "...", "resolved_ref": "5712/1A", "model": "Nautilus Moon Phase", "year": 2024, "confidence": 0.95, "notes": "canonical full ref" }
-If the reference is already complete and correct, set confidence=1.0.`
-        : `You are a luxury watch expert. For each partial/ambiguous reference, identify the most likely canonical full reference. Use your training data only.
-
-Watch naming conventions:
-- Rolex 6-digit + 1-4 letters (LN=Black, LV=Green, LB=Blue, BLNR=Batman, BLRO=Pepsi)
-- Patek 4-digit + slash + letters (5270P, 5167A, 5935A, 5712/1A)
-- RM 11-03 (most common 2024 Felipe Massa)
-- AP 15500ST/15510ST/16202ST
-- VC 336xxx Overseas
-
-Return JSON array with same id, fields:
-{ "id": "...", "resolved_ref": "5712/1A", "model": "Nautilus Moon Phase", "year": 2024, "confidence": 0.95, "notes": "..." }
-If reference is already complete, set confidence=1.0.`;
 
       const resp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -97,31 +88,25 @@ If reference is already complete, set confidence=1.0.`;
 
       if (!resp.ok) {
         const errText = await resp.text();
-        errors.push({ batch_start: i, error: `OpenAI HTTP ${resp.status}: ${errText.slice(0, 200)}` });
-        continue;
+        return { batchIdx, error: `OpenAI HTTP ${resp.status}: ${errText.slice(0, 200)}`, results: [] };
       }
 
       const data = await resp.json();
-      totalTokens += data.usage?.total_tokens || 0;
-      // gpt-4o-mini: $0.15/1M input, $0.60/1M output
-      totalCost += ((data.usage?.prompt_tokens || 0) * 0.15 + (data.usage?.completion_tokens || 0) * 0.60) / 1_000_000;
+      const tokens = data.usage?.total_tokens || 0;
+      const cost = ((data.usage?.prompt_tokens || 0) * 0.15 + (data.usage?.completion_tokens || 0) * 0.60) / 1_000_000;
 
-      // Parse response - should be a JSON object with "results" or "resolved" array
       const content = data.choices?.[0]?.message?.content || '{}';
       let parsed;
       try {
         parsed = JSON.parse(content);
       } catch (e) {
-        errors.push({ batch_start: i, error: `JSON parse: ${content.slice(0, 200)}` });
-        continue;
+        return { batchIdx, error: `JSON parse: ${content.slice(0, 200)}`, results: [], tokens, cost };
       }
 
-      // Find the array of results — try common shapes
       let results = [];
       if (Array.isArray(parsed)) {
         results = parsed;
       } else {
-        // Look for any array property
         for (const key of Object.keys(parsed)) {
           if (Array.isArray(parsed[key])) {
             results = parsed[key];
@@ -129,30 +114,50 @@ If reference is already complete, set confidence=1.0.`;
           }
         }
       }
-      for (const r of results) {
-        resolved.push({
-          id: r.id,
-          originalRef: batch.find(b => b.id === r.id)?.reference,
-          resolvedRef: r.resolved_ref || r.reference || r.ref || r.resolvedRef,
-          model: r.model || null,
-          year: r.year || null,
-          confidence: r.confidence || 0,
-          notes: r.notes || '',
-        });
-      }
+
+      const mapped = results.map(r => ({
+        id: r.id,
+        originalRef: batch.find(b => b.id === r.id)?.reference,
+        resolvedRef: r.resolved_ref || r.reference || r.ref || r.resolvedRef,
+        model: r.model || null,
+        year: r.year || null,
+        confidence: r.confidence || 0,
+        notes: r.notes || '',
+      }));
+
+      return { batchIdx, results: mapped, tokens, cost, error: null };
     } catch (e) {
-      errors.push({ batch_start: i, error: e.message });
+      return { batchIdx, error: e.message, results: [] };
+    }
+  }
+
+  // Run with limited concurrency
+  const allResults = [];
+  let totalTokens = 0;
+  let totalCost = 0;
+  const errors = [];
+
+  for (let i = 0; i < batches.length; i += CONCURRENCY) {
+    const window = batches.slice(i, i + CONCURRENCY);
+    const windowResults = await Promise.all(
+      window.map((batch, idx) => processBatch(batch, i + idx))
+    );
+    for (const r of windowResults) {
+      totalTokens += r.tokens || 0;
+      totalCost += r.cost || 0;
+      allResults.push(...r.results);
+      if (r.error) errors.push({ batch: r.batchIdx, error: r.error });
     }
   }
 
   return res.status(200).json({
     success: true,
     total: records.length,
-    resolved: resolved.length,
+    resolved: allResults.length,
     errors: errors.length,
     totalTokens,
     estimatedCost: Math.round(totalCost * 10000) / 10000,
-    resolved_records: resolved,
+    resolved_records: allResults,
     errors_detail: errors,
   });
 };
