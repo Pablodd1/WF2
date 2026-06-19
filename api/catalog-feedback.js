@@ -20,7 +20,8 @@ function normalizeRef(ref) {
 }
 
 async function persistToSupabase(record, supabaseUrl, serviceKey) {
-  const resp = await fetch(`${supabaseUrl}/rest/v1/catalog_feedback`, {
+  // Try catalog_feedback table first
+  let resp = await fetch(`${supabaseUrl}/rest/v1/catalog_feedback`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -30,14 +31,47 @@ async function persistToSupabase(record, supabaseUrl, serviceKey) {
     },
     body: JSON.stringify([record]),
   });
+  if (resp.ok) return 'catalog_feedback';
+
+  // Fallback: store as a live_ingest row with source='catalog_feedback' so it still persists
+  const liveRow = {
+    id: record.id,
+    raw_message: `[CATALOG_FEEDBACK] ${record.reference} → ${record.brand}` + (record.dial_color ? ` (${record.dial_color})` : ''),
+    brand: record.brand,
+    reference: record.reference,
+    dial_color: record.dial_color,
+    condition: null,
+    year: null,
+    price_raw: null,
+    price_usd: null,
+    currency: null,
+    confidence: 100,
+    verdict: 'APPROVED',
+    source: 'catalog_feedback',
+    channel_id: 'reviewer:' + (record.reviewer_id || 'anonymous'),
+    llm_used: false,
+    received_at: record.created_at,
+  };
+  resp = await fetch(`${supabaseUrl}/rest/v1/live_ingest`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': serviceKey,
+      'Authorization': `Bearer ${serviceKey}`,
+      'Prefer': 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify([liveRow]),
+  });
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`Supabase HTTP ${resp.status}: ${text.slice(0, 200)}`);
+    throw new Error(`Both tables failed. live_ingest HTTP ${resp.status}: ${text.slice(0, 200)}`);
   }
+  return 'live_ingest_fallback';
 }
 
 async function fetchRecentFeedback(supabaseUrl, serviceKey, limit = 100) {
-  const resp = await fetch(
+  // Try catalog_feedback first
+  let resp = await fetch(
     `${supabaseUrl}/rest/v1/catalog_feedback?order=created_at.desc&limit=${limit}`,
     {
       headers: {
@@ -46,8 +80,19 @@ async function fetchRecentFeedback(supabaseUrl, serviceKey, limit = 100) {
       },
     }
   );
-  if (!resp.ok) return [];
-  return resp.json();
+  if (resp.ok) return { entries: await resp.json(), source: 'catalog_feedback' };
+  // Fallback: query live_ingest with source=catalog_feedback
+  resp = await fetch(
+    `${supabaseUrl}/rest/v1/live_ingest?source=eq.catalog_feedback&order=received_at.desc&limit=${limit}`,
+    {
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+      },
+    }
+  );
+  if (!resp.ok) return { entries: [], source: 'none' };
+  return { entries: await resp.json(), source: 'live_ingest_fallback' };
 }
 
 module.exports = async function handler(req, res) {
@@ -70,10 +115,11 @@ module.exports = async function handler(req, res) {
       });
     }
     try {
-      const entries = await fetchRecentFeedback(supabaseUrl, serviceKey, 100);
+      const result = await fetchRecentFeedback(supabaseUrl, serviceKey, 100);
       return res.status(200).json({
-        entries,
-        count: entries.length,
+        entries: result.entries,
+        count: result.entries.length,
+        source: result.source,
         status: 'ok',
       });
     } catch (e) {
@@ -120,19 +166,19 @@ module.exports = async function handler(req, res) {
   // Persist to Supabase if configured
   if (supabaseConfigured) {
     try {
-      await persistToSupabase(record, supabaseUrl, serviceKey);
+      const stored = await persistToSupabase(record, supabaseUrl, serviceKey);
       return res.status(200).json({
         success: true,
         added: true,
-        message: `Saved ${reference} (${brand}) to catalog_feedback`,
-        persisted: 'supabase',
+        message: `Saved ${reference} (${brand}) to ${stored}`,
+        persisted: stored,
         id: record.id,
       });
     } catch (e) {
       return res.status(500).json({
         success: false,
         error: e.message,
-        note: 'Supabase write failed. Check that catalog_feedback table exists.',
+        note: 'Both catalog_feedback and live_ingest fallback failed.',
       });
     }
   }
