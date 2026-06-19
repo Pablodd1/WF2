@@ -188,6 +188,10 @@ const DIAL_KEYWORDS: [RegExp, string][] = [
   [/\b(?:orange)\s*(?:dial)?\b/i, 'Orange'],
   [/\b(?:champagne|champ)\s*(?:dial)?\b/i, 'Champagne'],
   [/\bred\s*(?:dial)?\b/i, 'Red'],
+  // Limited editions / country-named dials (RM, AP, Rolex special)
+  // These appear in dealer messages like "RM67-02 Qatar Edition" or "AP Qatar"
+  // When the message has a country/edition name AND no standard color, treat the ref as the dial
+  [/\b(?:qatar|abu\s*dhabi|spa|monaco|le\s*mans|italy|japan|singapore|dubai|mexico|usa|america|france|germany|swiss|switzerland|la\s*villa|mykonos|cannes|st\s*tropez|monte\s*carlo|new\s*york|sahara|arctic|antarctic|equator|tropic|cocoa)\b/i, 'Edition Dial'],
 ];
 
 const CONDITION_PATTERNS: [RegExp, string][] = [
@@ -243,19 +247,33 @@ export function parseWatch(raw: string): ParsedWatch {
   if (brand === 'Unknown') {
     // Patek Philippe: 49xx, 50xx, 51xx, 52xx, 53xx, 54xx, 57xx, 58xx, 59xx, 61xx, 71xx, 72xx
     if (/\b(49\d{2}|50\d{2}|51\d{2}|52\d{2}|53\d{2}|54\d{2}|57\d{2}|58\d{2}|59\d{2}|61\d{2}|71\d{2}|72\d{2})/.test(clean)) brand = 'Patek Philippe';
-    // Rolex: 116xxx, 126xxx, 166xxx, 226xxx, 114xxx, 124xxx etc.
-    else if (/\b(11[46]\d{3}|12[46]\d{3}|16[46]\d{3}|22[68]\d{3}|279\d{3}|118\d{3}|155\d{3}|176\d{3}|177\d{3}|184\d{3}|190\d{3}|268\d{3}|128\d{3}|816\d{3})/.test(clean)) brand = 'Rolex';
-    // Rolex extended: 126599, 126710, 26711, 279160, 26715, 26420 (any 6-digit+letter)
+    // Rolex: ALL 6-digit refs starting with 1x, 2x, 3x, 8x are Rolex
+    //  10xxxx (Datejust 36), 11xxxx (Datejust/Submariner/GMT/Daytona),
+    //  12xxxx (Datejust 41/Daytona/Submariner), 13xxxx (Datejust 41 special dials),
+    //  14xxxx (Datejust), 15xxxx (Cellini/Cosmograph), 16xxxx (Datejust 36),
+    //  17xxxx (Day-Date), 18xxxx (Day-Date), 19xxxx (Cosmograph),
+    //  21xxxx (Day-Date II), 22xxxx (Sky-Dweller/Day-Date), 26xxxx (Sea-Dweller),
+    //  27xxxx (GMT-Master II / Lady-Datejust), 28xxxx (GMT-Master/Day-Date),
+    //  31xxxx (Oyster Perpetual), 32xxxx (Oyster Perpetual), 81xxxx (Pearlmaster)
+    else if (/\b(10[1-9]\d{3}|11[0-9]\d{3}|12[0-9]\d{3}|13[0-9]\d{3}|14[0-9]\d{3}|15[0-9]\d{3}|16[0-9]\d{3}|17[0-9]\d{3}|18[0-9]\d{3}|19[0-9]\d{3}|21[0-9]\d{3}|22[0-9]\d{3}|26[0-9]\d{3}|27[0-9]\d{3}|28[0-9]\d{3}|31[0-9]\d{3}|32[0-9]\d{3}|81[0-9]\d{3})/.test(clean)) brand = 'Rolex';
+    // Rolex 5-digit vintage: 1675, 16700, 14060, 5513, etc.
+    else if (/\b(1675\d?|16700|14060|5513|16610|1665\d?|14270|1657\d?)\b/.test(clean)) brand = 'Rolex';
+    // Rolex extended: 6-digit+letter (e.g., 126599, 126710, 116610LV)
     else if (/^\d{6}[A-Z]{2,4}$/.test(clean.trim()) || /\b\d{6}[A-Z]{2,4}\b/.test(clean)) brand = 'Rolex';
-    // Audemars Piguet: 15xxx, 16xxx, 26xxx
-    else if (/\b(15\d{3}[A-Z]|16\d{3}[A-Z]|26\d{3}[A-Z])/.test(clean)) brand = 'Audemars Piguet';
-    // Richard Mille: RM followed by digits
+    // Audemars Piguet: 15xxxx, 16xxxx, 26xxxx (Royal Oak & Offshore) — need \d{4} for 6-digit refs
+    else if (/\b(15\d{4}[A-Z]?|16\d{4}[A-Z]?|26\d{4}[A-Z]?|77\d{4}[A-Z]?|15468[A-Z]+|26240[A-Z]+|26320[A-Z]+|26393[A-Z]+|67651[A-Z]+|26579[A-Z]+)\b/.test(clean)) brand = 'Audemars Piguet';
+    // Vacheron Constantin: 33xxxx (Overseas), 30xxxx (Traditionnelle), 47xxxx (Malte), 85xxxx (Patrimony), 81180, 85180
+    // Need \d{4} for 6-digit refs (336235, 336934, etc.)
+    else if (/\b(33\d{4}[A-Z]?|30\d{4}[A-Z]?|47\d{4}[A-Z]?|85\d{4}[A-Z]?|81180[A-Z]?|85180[A-Z]?|40\d{4}[A-Z]?|60\d{4}[A-Z]?|79\d{4}[A-Z]?|200\d{2}|222[A-Z]?)\b/.test(clean)) brand = 'Vacheron Constantin';
+    // Richard Mille: RM followed by digits (RM11-03, RM67-02, etc.)
     else if (/RM\d{2,4}/i.test(clean)) brand = 'Richard Mille';
-    // IWC: IW followed by digits (IW328904, IW3777)
+    // IWC: IW followed by digits (IW328904, IW3777, IW379403)
     else if (/\bIW\d{4,6}\b/i.test(clean)) brand = 'IWC';
+    // Tudor: 79xxxx (Black Bay), 70xxxx (Pelagos), 77xxxx (Heritage Chronograph)
+    else if (/\b(79\d{4}[A-Z]+|70\d{4}[A-Z]+|77\d{4}[A-Z]+|7925\d[A-Z]+|701\d{2}[A-Z]+)\b/.test(clean)) brand = 'Tudor';
     // Cartier: starts with CR, WG, HP, or ends in xxx/xxxx
-    else if (/\b(CR\d{3}|WG\d{4}|HP\d{3}|SANTOS|BALLON|TANK|PANTHERE)\b/i.test(clean)) brand = 'Cartier';
-    // Omega: starts with 311, 321, 331, special patterns
+    else if (/\b(CR\d{3}|WG\d{4}|HP\d{3}|SANTOS|BALLON|TANK|PANTHERE|WE\d{4}|WSSA)\b/i.test(clean)) brand = 'Cartier';
+    // Omega: 31xxxx, 32xxxx, 33xxxx (Seamaster/Speedmaster/Seamaster)
     else if (/\b(31[0139]\d{3}|32[013]\d{3}|33[012]\d{3}|SEAMASTER|SPEEDMASTER)\b/i.test(clean)) brand = 'Omega';
     // Hublot: HUB, HH, or 301/302/303/304/305 patterns
     else if (/\b(HUB\d{2}|30[12345]\d{3}|CLASSIC|BIG BANG)\b/i.test(clean)) brand = 'Hublot';
