@@ -75,13 +75,43 @@ export default function ReviewPage() {
     setEditForm({});
   }, []);
 
-  const saveEdit = useCallback(() => {
+  const saveEdit = useCallback(async () => {
     if (!editingRecord) return;
-    // In real app: send to backend + catalog.train()
-    setSavedIds(prev => new Set(prev).add(editingRecord.id));
-    setEditingRecord(null);
-    setEditForm({});
-  }, [editingRecord]);
+    // POST to catalog-feedback API → Supabase catalog_feedback table
+    // This is the training signal that improves future parse accuracy
+    try {
+      const resp = await fetch('/api/catalog-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference: editForm.reference || editingRecord.reference,
+          brand: editForm.brand || editingRecord.brand,
+          collection: editForm.family || null,
+          model: (editForm as any).model || null,
+          dialColor: editForm.dialColor || editingRecord.dialColor,
+          source: 'human_approval',
+          originalGuess: {
+            brand: editingRecord.brand,
+            reference: editingRecord.reference,
+            dialColor: editingRecord.dialColor,
+          },
+          rawMessage: editingRecord.rawMessage,
+        }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setSavedIds(prev => new Set(prev).add(editingRecord.id));
+        setEditingRecord(null);
+        setEditForm({});
+      } else {
+        console.error('[saveEdit] API returned error:', data);
+        alert(`Save failed: ${data.error || 'unknown error'}`);
+      }
+    } catch (e: any) {
+      console.error('[saveEdit] Network error:', e);
+      alert(`Save failed: ${e?.message || String(e)}`);
+    }
+  }, [editingRecord, editForm]);
 
   // Build field-level suggestions from a Kimi parse result vs the current record.
   const buildSuggestions = useCallback((record: WatchRecord, parsed: any, source: string): Suggestion[] => {

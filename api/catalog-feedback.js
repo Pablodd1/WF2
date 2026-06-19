@@ -2,91 +2,146 @@
  * CATALOG FEEDBACK API
  * POST /api/catalog-feedback
  *
- * When human approves a record, add ref+brand to catalog for future auto-recognition.
- * This creates a feedback loop: human review → catalog training → better auto-parse.
+ * When human approves a record, add ref+brand to Supabase catalog_feedback table.
+ * Creates a feedback loop: human review → catalog training → better auto-parse.
  *
- * Request: { reference, brand, collection?, model?, source: 'human_approval' }
- * Response: { success, added, message }
+ * Request: { reference, brand, collection?, model?, dialColor?, source: 'human_approval' | 'bulk' }
+ * Response: { success, added, message, totalFeedback }
+ *
+ * GET /api/catalog-feedback — returns recent feedback entries (last 100)
+ *
+ * Environment variables required:
+ *   SUPABASE_URL              – Supabase project URL
+ *   SUPABASE_SERVICE_ROLE_KEY – service-role JWT
  */
 
-const fs = require('fs');
-const path = require('path');
+function normalizeRef(ref) {
+  return String(ref || '').toUpperCase().replace(/[^A-Z0-9/]/g, '');
+}
 
-const CATALOG_PATH = path.resolve(process.cwd(), 'public', 'enriched_refs.json');
-
-function loadCatalog() {
-  if (!fs.existsSync(CATALOG_PATH)) return [];
-  try {
-    return JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf-8'));
-  } catch {
-    return [];
+async function persistToSupabase(record, supabaseUrl, serviceKey) {
+  const resp = await fetch(`${supabaseUrl}/rest/v1/catalog_feedback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': serviceKey,
+      'Authorization': `Bearer ${serviceKey}`,
+      'Prefer': 'resolution=ignore-duplicates,return=minimal',
+    },
+    body: JSON.stringify([record]),
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Supabase HTTP ${resp.status}: ${text.slice(0, 200)}`);
   }
 }
 
-function saveCatalog(catalog) {
-  fs.writeFileSync(CATALOG_PATH, JSON.stringify(catalog, null, 2), 'utf-8');
+async function fetchRecentFeedback(supabaseUrl, serviceKey, limit = 100) {
+  const resp = await fetch(
+    `${supabaseUrl}/rest/v1/catalog_feedback?order=created_at.desc&limit=${limit}`,
+    {
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+      },
+    }
+  );
+  if (!resp.ok) return [];
+  return resp.json();
 }
 
-function normalizeRef(ref) {
-  return String(ref || '').toUpperCase().replace(/[^A-Z0-9\/]/g, '');
-}
-
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseConfigured = !!(supabaseUrl && serviceKey);
+
+  // GET: return recent feedback entries
+  if (req.method === 'GET') {
+    if (!supabaseConfigured) {
+      return res.status(200).json({
+        entries: [],
+        count: 0,
+        status: 'supabase_not_configured',
+      });
+    }
+    try {
+      const entries = await fetchRecentFeedback(supabaseUrl, serviceKey, 100);
+      return res.status(200).json({
+        entries,
+        count: entries.length,
+        status: 'ok',
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { reference, brand, collection, model, dialColor, source = 'human_approval' } = req.body || {};
+  const {
+    reference,
+    brand,
+    collection,
+    model,
+    dialColor,
+    source = 'human_approval',
+    reviewerId = null,
+    originalGuess = null,
+    rawMessage = null,
+  } = req.body || {};
 
   if (!reference || !brand) {
-    return res.status(400).json({ success: false, error: 'reference and brand required' });
-  }
-
-  try {
-    const catalog = loadCatalog();
-    const normRef = normalizeRef(reference);
-
-    // Check if already exists
-    const exists = catalog.some(e => normalizeRef(e.reference) === normRef);
-    if (exists) {
-      return res.status(200).json({ success: true, added: false, message: 'Reference already in catalog' });
-    }
-
-    // Add new entry
-    const newEntry = {
-      reference: reference.toUpperCase(),
-      brand: brand,
-      collection: collection || null,
-      model: model || null,
-      dial_color: dialColor || null,
-      source: source,
-      added_at: new Date().toISOString(),
-      // Default values for optional fields
-      case_metal: null,
-      production_years: null,
-      status: null,
-      total_mentions: 1,
-      buyer_ratio: null,
-      seller_ratio: null,
-      liquidity_score: null,
-    };
-
-    // Note: Vercel filesystem is read-only at runtime.
-    // In production, this would write to a database (Supabase/Postgres).
-    // For now, we return success but don't persist (filesystem is RO).
-    // TODO: Connect to Supabase table 'catalog_feedback' for persistence.
-
-    return res.status(200).json({
-      success: true,
-      added: true,
-      message: `Would add ${reference} (${brand}) to catalog (Vercel RO filesystem — use Supabase in production)`,
-      catalogSize: catalog.length,
-      note: 'Vercel serverless has read-only filesystem. Connect to database for persistence.',
+    return res.status(400).json({
+      success: false,
+      error: 'reference and brand required',
     });
-  } catch (e) {
-    console.error('[catalog-feedback]', e.message);
-    return res.status(500).json({ success: false, error: e.message });
   }
-}
+
+  const record = {
+    id: `fb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    reference: reference.toUpperCase(),
+    brand,
+    collection: collection || null,
+    model: model || null,
+    dial_color: dialColor || null,
+    source,
+    reviewer_id: reviewerId,
+    original_guess: originalGuess,
+    raw_message: rawMessage ? rawMessage.slice(0, 500) : null,
+    norm_ref: normalizeRef(reference),
+    created_at: new Date().toISOString(),
+  };
+
+  // Persist to Supabase if configured
+  if (supabaseConfigured) {
+    try {
+      await persistToSupabase(record, supabaseUrl, serviceKey);
+      return res.status(200).json({
+        success: true,
+        added: true,
+        message: `Saved ${reference} (${brand}) to catalog_feedback`,
+        persisted: 'supabase',
+        id: record.id,
+      });
+    } catch (e) {
+      return res.status(500).json({
+        success: false,
+        error: e.message,
+        note: 'Supabase write failed. Check that catalog_feedback table exists.',
+      });
+    }
+  }
+
+  // Fallback: no Supabase configured
+  return res.status(200).json({
+    success: true,
+    added: false,
+    persisted: 'none',
+    message: 'Supabase not configured. Add SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to Vercel env.',
+  });
+};
