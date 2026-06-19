@@ -492,7 +492,7 @@ RM 35-03 Rafa 2023 2.4M USD`;
             s: { font: { sz: 9, italic: true, color: { rgb: 'FF666666' } } },
           }]);
     ws1.push([]);
-    const COLS = ['Raw Message', 'Brand', 'Reference', 'Dial', 'Price', 'Currency', 'Condition', 'Year', 'Confidence', 'Verdict', 'AI Engine'];
+    const COLS = ['Raw Message', 'Brand', 'Reference', 'Dial', 'Price', 'Currency', 'Condition', 'Year', 'Confidence', 'Verdict', 'Intent', 'Model', 'AI Engine'];
     ws1.push(COLS.map(hCell));
     for (const r of results) {
       const bg = verdictBg(r.verdict);
@@ -508,31 +508,53 @@ RM 35-03 Rafa 2023 2.4M USD`;
         dCell(r.year ?? '—', bg, 'center'),
         dCell(r.confidence, bg, 'right'),
         dCell(r.verdict, bg, 'center'),
+        dCell(r.intent || '—', bg, 'center'),
+        dCell(r.model || '—', bg),
         dCell(engine, bg, 'center'),
       ]);
     }
     const ws1Sheet = XLSX.utils.aoa_to_sheet(ws1);
     ws1Sheet['!cols'] = [
       {wch:55},{wch:18},{wch:16},{wch:12},{wch:12},{wch:10},
-      {wch:12},{wch:6},{wch:11},{wch:14},{wch:12},
+      {wch:12},{wch:6},{wch:11},{wch:14},{wch:10},{wch:18},{wch:14},
     ];
     ws1Sheet['!merges'] = [
-      { s:{r:0,c:0}, e:{r:0,c:10} },
-      { s:{r:1,c:0}, e:{r:1,c:10} },
+      { s:{r:0,c:0}, e:{r:0,c:12} },
+      { s:{r:1,c:0}, e:{r:1,c:12} },
     ];
     ws1Sheet['!freeze'] = { xSplit: 0, ySplit: 4 };
     XLSX.utils.book_append_sheet(wb, ws1Sheet, 'All Records');
 
-    // Summary sheet
+    // Summary sheet — by verdict AND by intent
     const ws2: any[][] = [];
     ws2.push([titleCell('Summary')]);
     ws2.push([]);
-    ws2.push(['Status','Count','Pct','Avg Confidence','Avg Price'].map(hCell));
-    for (const [label, group, bg] of [
+    ws2.push(['By Verdict', 'Count', 'Pct', 'Avg Confidence', 'Avg Price'].map(hCell));
+    const verdictGroups: [string, EnrichedResult[], any][] = [
       ['APPROVED', approved, C.green],
       ['HUMAN', human, C.orange],
       ['RECYCLE', recycle, C.red],
-    ] as [string, EnrichedResult[], any][]) {
+    ];
+    for (const [label, group, bg] of verdictGroups) {
+      const avgConf = group.length ? Math.round(group.reduce((s, r) => s + r.confidence, 0) / group.length) : 0;
+      const priced = group.filter(r => r.price > 0);
+      const avgPrice = priced.length ? Math.round(priced.reduce((s, r) => s + r.price, 0) / priced.length) : 0;
+      ws2.push([
+        dCell(label, bg, 'center'),
+        dCell(group.length, bg, 'right'),
+        dCell(`${Math.round(group.length / Math.max(1, results.length) * 100)}%`, bg, 'right'),
+        dCell(avgConf, bg, 'right'),
+        dCell(avgPrice, bg, 'right'),
+      ]);
+    }
+    ws2.push([]);
+    ws2.push(['By Intent', 'Count', 'Pct', 'Avg Confidence', 'Avg Price'].map(hCell));
+    const intentGroups: [string, EnrichedResult[], any][] = [
+      ['SELLERS (have stock)', results.filter(r => r.intent === 'SELL' || !r.intent), { rgb: 'FFD8B4FE' }],
+      ['BUYERS (looking to buy)', results.filter(r => r.intent === 'BUY'), { rgb: 'FFFB923C' }],
+      ['INQUIRIES (asking)', results.filter(r => r.intent === 'INQUIRY'), { rgb: 'FF60A5FA' }],
+    ];
+    for (const [label, group, bg] of intentGroups) {
       const avgConf = group.length ? Math.round(group.reduce((s, r) => s + r.confidence, 0) / group.length) : 0;
       const priced = group.filter(r => r.price > 0);
       const avgPrice = priced.length ? Math.round(priced.reduce((s, r) => s + r.price, 0) / priced.length) : 0;
@@ -545,7 +567,7 @@ RM 35-03 Rafa 2023 2.4M USD`;
       ]);
     }
     const ws2Sheet = XLSX.utils.aoa_to_sheet(ws2);
-    ws2Sheet['!cols'] = [{wch:16},{wch:10},{wch:8},{wch:16},{wch:14}];
+    ws2Sheet['!cols'] = [{wch:24},{wch:10},{wch:8},{wch:16},{wch:14}];
     ws2Sheet['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:4} }];
     XLSX.utils.book_append_sheet(wb, ws2Sheet, 'Summary');
 
@@ -830,6 +852,59 @@ RM 35-03 Rafa 2023 2.4M USD`;
             <div className="px-4 py-2 rounded-lg" style={{ backgroundColor: '#0a0a0a', border: '1px solid #1a1a1a', color: '#888' }}>
               <span className="font-bold" style={{ color: '#60a5fa' }}>{results.filter(r => r.pipeline).length}</span> With Pipeline Trace
             </div>
+            <div className="px-4 py-2 rounded-lg" style={{ backgroundColor: '#0a0a0a', border: '1px solid #7c2d12', color: '#fed7aa' }}>
+              <span className="font-bold" style={{ color: '#fb923c' }}>{results.filter(r => r.intent === 'BUY').length}</span> 🛒 Buyers
+            </div>
+            <div className="px-4 py-2 rounded-lg" style={{ backgroundColor: '#0a0a0a', border: '1px solid #581c87', color: '#d8b4fe' }}>
+              <span className="font-bold" style={{ color: '#c084fc' }}>{results.filter(r => r.intent === 'SELL' || !r.intent).length}</span> 🏷️ Sellers
+            </div>
+            <div className="px-4 py-2 rounded-lg" style={{ backgroundColor: '#0a0a0a', border: '1px solid #1e3a8a', color: '#bfdbfe' }}>
+              <span className="font-bold" style={{ color: '#60a5fa' }}>{results.filter(r => r.intent === 'INQUIRY').length}</span> ❓ Inquiries
+            </div>
+          </div>
+        )}
+
+        {/* ── Demand Panel (BUYER signals) ─────────────────────────────────────── */}
+        {results.length > 0 && results.filter(r => r.intent === 'BUY').length > 0 && (
+          <div className="rounded-xl p-4 mb-4" style={{ backgroundColor: '#1c0f0a', border: '1px solid #7c2d12' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-base">🛒</span>
+              <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: '#fb923c' }}>
+                DEMAND SIGNALS — Buyers Looking For
+              </h2>
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-bold" style={{ backgroundColor: '#7c2d12', color: '#fed7aa' }}>
+                {results.filter(r => r.intent === 'BUY').length} ACTIVE
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-400 mb-3">
+              These records represent <strong style={{ color: '#fb923c' }}>buyer demand</strong> — people looking to buy specific watches.
+              Use this for matching inventory to demand or contacting buyers with stock.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {results.filter(r => r.intent === 'BUY').slice(0, 6).map((r, i) => (
+                <div key={i} className="p-2 rounded-lg" style={{ backgroundColor: '#0a0a0a', border: '1px solid #7c2d12' }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold" style={{ color: '#fb923c' }}>WANTED</span>
+                    <span className="text-[10px] text-gray-500">{r.confidence}%</span>
+                  </div>
+                  <div className="text-sm mt-1 truncate" style={{ color: '#fed7aa' }}>
+                    {r.brand !== 'Unknown' && <span style={{ color: '#d4af37' }}>{r.brand}</span>}
+                    {r.reference && <span className="font-mono ml-1">{r.reference}</span>}
+                  </div>
+                  {r.dialColor && r.dialColor !== 'UNKNOWN' && (
+                    <div className="text-[11px] text-gray-400">{r.dialColor}</div>
+                  )}
+                  <div className="text-[10px] text-gray-500 truncate mt-1" title={r.rawMessage}>
+                    "{r.rawMessage.slice(0, 80)}{r.rawMessage.length > 80 ? '...' : ''}"
+                  </div>
+                </div>
+              ))}
+            </div>
+            {results.filter(r => r.intent === 'BUY').length > 6 && (
+              <div className="text-center text-[10px] text-gray-500 mt-2">
+                +{results.filter(r => r.intent === 'BUY').length - 6} more buyer signals — see Results below
+              </div>
+            )}
           </div>
         )}
 
@@ -940,11 +1015,22 @@ function PipelineCard({
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm truncate" style={{ color: '#e8e8e8' }}>{r.rawMessage}</div>
-            <div className="text-xs mt-1 flex gap-2 flex-wrap" style={{ color: '#888' }}>
+            <div className="text-xs mt-1 flex gap-2 flex-wrap items-center" style={{ color: '#888' }}>
               <span style={{ color: r.brand !== 'Unknown' ? '#d4af37' : '#ef4444' }}>{r.brand}</span>
               {r.reference && <span className="font-mono">{r.reference}</span>}
               {r.dialColor !== 'UNKNOWN' && <span>{r.dialColor}</span>}
               {r.price > 0 && <span>{r.currency} {r.price.toLocaleString()}</span>}
+              {/* Intent badge: SELL = purple, BUY = orange, INQUIRY = blue */}
+              {r.intent && r.intent !== 'SELL' && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase"
+                  style={{
+                    backgroundColor: r.intent === 'BUY' ? '#7c2d12' : '#1e3a8a',
+                    color: r.intent === 'BUY' ? '#fed7aa' : '#bfdbfe',
+                    border: `1px solid ${r.intent === 'BUY' ? '#ea580c' : '#3b82f6'}`,
+                  }}>
+                  {r.intent === 'BUY' ? '🛒 BUYER' : r.intent === 'INQUIRY' ? '❓ INQUIRY' : r.intent}
+                </span>
+              )}
               {r.pipeline && (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-mono" style={{
                   backgroundColor: '#1a1a1a',
