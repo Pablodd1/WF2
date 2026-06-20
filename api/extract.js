@@ -347,6 +347,9 @@ module.exports = async (req, res) => {
       const msg = (messages[i] || '').trim();
       if (!msg) continue;
       
+      // Check if this line has a reference
+      const hasRef = /\b(\d{4,6}[A-Za-z]{0,6}|RM\d|\d{2,3}[-]\d{2,3})\b/i.test(msg);
+      
       // Detect multi-line continuation: line with ONLY price/year (no reference)
       if (pending && /^\s*(\d{2,4}y|HKD|USDT|USD|hkd|usdt|usd|\$|[\d,]+[km])\b/i.test(msg) && !hasRef) {
         pending = pending + ' ' + msg;
@@ -366,8 +369,6 @@ module.exports = async (req, res) => {
         }
       }
       
-      // Check if this line has a reference (start of new listing)
-      const hasRef = /\b(\d{4,6}[A-Za-z]{0,6}|RM\d|\d{2,3}[-]\d{2,3})\b/i.test(msg);
       if (hasRef) {
         pending = msg;
       } else {
