@@ -1,0 +1,2 @@
+# WatchFacts Vercel Python dependencies
+# No external deps — extraction engine uses stdlib only (re, json, os, sys)
