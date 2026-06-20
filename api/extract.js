@@ -22,7 +22,7 @@ const BRANDS = {
 
 const ROLEX_PREFIXES = ['126','116','228','226','278','279','336','277','128','127','124','134','118'];
 const PATEK_PREFIXES = ['57','59','51','52','53','58','61','70','71','72','73','49'];
-const AP_PREFIXES = ['15','26','77','67'];
+const AP_PREFIXES = ['15','16','25','26','67','77'];
 const VC_PREFIXES = ['4000','4300','4500','4520','4600','5500','6000','7700'];
 
 const MATERIAL_SUFFIX = {
@@ -59,9 +59,11 @@ function normalizeText(text) {
 function extractReference(text) {
   const clean = normalizeText(text);
   
-  // RM format: 07-01, 11-03, RM35-01
-  let m = clean.match(/\b(?:RM)?(\d{2,3}[-]\d{2})\b/i);
-  if (m) return { ref: `RM${m[1]}`, conf: 0.85 };
+  // RM format: 07-01, 11-03, RM35-01, or standalone 3-digit (055, 004, 011)
+  let m = clean.match(/\b(?:RM)?(\d{2,3}[-]\d{2,3})\b/i);
+  if (!m) m = clean.match(/\bRM(\d{3})\b/i);
+  if (!m) m = clean.match(/\b(\d{3})\b(?=.*(?:ntpt|ceramic|naked|full set|ti\b|Rg\b))/i);
+  if (m) return { ref: m[1].startsWith('RM') ? m[1] : `RM${m[1]}`, conf: m[1].length >= 5 ? 0.85 : 0.70 };
   
   // AP full format: 15720ST.OO.A052CA.01
   m = clean.match(/\b(\d{5}[A-Za-z]{2,4}(?:\.[A-Za-z]{2}\.[A-Za-z0-9]{5,6}\.\d{2}))\b/);
@@ -303,15 +305,51 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
   
   try {
-    const { messages = [] } = req.body || {};
+    const { messages = [], enrichVision = false } = req.body || {};
     if (!messages.length) return res.status(400).json({ error: 'messages array required' });
     
     const listings = [];
-    const stats = { total_messages: messages.length, extracted: 0, high: 0, medium: 0, low: 0 };
+    const stats = { total_messages: messages.length, extracted: 0, high: 0, medium: 0, low: 0, visionEnriched: 0 };
     
-    for (const msg of messages) {
-      if (!msg || !msg.trim()) continue;
-      const result = extractWatch(msg);
+    // Multi-line buffer — group messages by sender/time proximity
+    // If message looks like a continuation (price/year line after ref line), merge
+    let pending = null;
+    
+    for (let i = 0; i < messages.length; i++) {
+      const msg = (messages[i] || '').trim();
+      if (!msg) continue;
+      
+      // Detect multi-line pattern: line with only price/year after a ref line
+      if (pending && /^(HKD|USDT|USD|hkd|usdt|usd|\$|[\d,]+[km]?$|\d{2,4}y)/i.test(msg)) {
+        pending = pending + ' ' + msg;
+        continue;
+      }
+      
+      // Flush pending
+      if (pending) {
+        const result = extractWatch(pending);
+        if (result) {
+          listings.push(result);
+          stats.extracted++;
+          const c = result.extraction_confidence.overall;
+          if (c >= 0.80) stats.high++;
+          else if (c >= 0.50) stats.medium++;
+          else stats.low++;
+        }
+      }
+      
+      // Check if this line has a reference (start of new listing)
+      const hasRef = /\b(\d{4,6}[A-Za-z]|RM\d|\d{2,3}[-]\d{2,3})\b/i.test(msg);
+      if (hasRef) {
+        pending = msg;
+      } else {
+        pending = null;
+      }
+    }
+    
+    // Flush last pending
+    if (pending) {
+      const result = extractWatch(pending);
       if (result) {
         listings.push(result);
         stats.extracted++;
@@ -319,6 +357,24 @@ module.exports = async (req, res) => {
         if (c >= 0.80) stats.high++;
         else if (c >= 0.50) stats.medium++;
         else stats.low++;
+      }
+    }
+    
+    // Vision enrichment for listings without dial color
+    if (enrichVision) {
+      for (const listing of listings) {
+        if (!listing.dial_color && listing.reference) {
+          const refDial = inferDialFromRef(listing.reference);
+          if (refDial) {
+            listing.dial_color = refDial;
+            listing.dial_confidence = 0.40;
+            listing.dial_source = 'reference-suffix';
+            listing.extraction_confidence.overall = Math.round(
+              Math.min(listing.extraction_confidence.overall + 0.05, 1.0) * 100
+            ) / 100;
+            stats.visionEnriched++;
+          }
+        }
       }
     }
     
