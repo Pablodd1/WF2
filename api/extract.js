@@ -148,23 +148,25 @@ function extractPrice(text) {
     m = lower.match(/\b(hkd|usdt|usd)\s*([\d,.]+)\s*[kK]\b/i);
     if (m) result = { price: parseFloat(m[2].replace(/,/g,'')) * 1000, currency: m[1].toUpperCase(), conf: 0.90, flags: [] };
   }
-  
-  // 240k hkd
+  // FIX #2B: European comma format "1,48m" → 1.48 million (MUST come before standard k/m pattern)
   if (!result.price) {
-    m = lower.match(/\b([\d,.]+)\s*([km])\s*(hkd|usdt|usd|uadt)\b/i);
+    m = lower.match(/\b(\d+),(\d+)\s*([mM])\s*(hkd|usdt|usd)?\b/i);
     if (m) {
-      let amt = parseFloat(m[1].replace(/,/g,''));
-      if (m[2].toLowerCase() === 'k') amt *= 1000; else amt *= 1000000;
-      result = { price: amt, currency: m[3].toUpperCase().replace('UADT','USDT'), conf: 0.90, flags: [] };
+      const euroAmount = parseFloat(m[1] + '.' + m[2]);
+      const mult = m[3].toLowerCase() === 'm' ? 1000000 : 1000;
+      result = { price: euroAmount * mult, currency: (m[4] || '').toUpperCase() || null, conf: 0.65, flags: ['european_comma_format'] };
     }
   }
   
-  // FIX #2B: European comma format "1,48m" → 1.48 million
+  // 240k hkd (standard — AFTER European comma check)
   if (!result.price) {
-    m = lower.match(/\b(\d+),(\d+)\s*[mM]\b/);
+    m = lower.match(/\b([\d,.]+)\s*([km])\s*(hkd|usdt|usd|uadt)\b/i);
     if (m) {
-      const euroAmount = parseFloat(m[1] + '.' + m[2]);
-      result = { price: euroAmount * 1000000, currency: null, conf: 0.65, flags: ['european_comma_format'] };
+      // Skip if this looks like European comma (digit,digit pattern)
+      if (/,/.test(m[1]) && !/,\d{3}/.test(m[1])) continue_price = false;
+      let amt = parseFloat(m[1].replace(/,/g,''));
+      if (m[2].toLowerCase() === 'k') amt *= 1000; else amt *= 1000000;
+      result = { price: amt, currency: m[3].toUpperCase().replace('UADT','USDT'), conf: 0.90, flags: [] };
     }
   }
   
@@ -312,7 +314,31 @@ function detectCaseMaterial(text, ref, brand) {
 function extractWatch(text) {
   const clean = normalizeText(text);
   const { ref, conf: refConf } = extractReference(clean);
-  if (!ref) return null;
+  
+  // Fallback: no reference but has price → create partial listing
+  if (!ref) {
+    const priceData = extractPrice(clean);
+    if (priceData.price && priceData.price > 0) {
+      const { brand, conf: bConf } = detectBrand(clean, null);
+      return {
+        brand, reference: null, model_name: null, year: null, manufacture_month: null,
+        price_original: priceData.price, currency_original: priceData.currency || 'HKD',
+        condition: null, dial_color: null, case_material: null,
+        bracelet_material: null, papers: null, box: null, full_set: null,
+        movement_type: null, case_size_mm: null,
+        seller_notes: null, collaboration: null,
+        message_type: 'FS',
+        extraction_confidence: { brand: bConf, reference: 0, price: priceData.conf, year: 0, overall: Math.round(Math.max(0.10, priceData.conf - 0.20) * 100) / 100 },
+        price_flags: priceData.flags,
+        dial_source: null,
+        what_i_needed_but_didnt_have: ['reference_number'],
+        errors_or_ambiguities: ['price_only_no_reference'].concat(priceData.flags.length ? [] : []),
+        normalization_notes: priceData.flags.length ? priceData.flags.join('; ') : null,
+        raw_text: text,
+      };
+    }
+    return null;
+  }
   
   const { brand, conf: brandConf } = detectBrand(clean, ref);
   const { year, month, conf: yearConf } = extractYear(clean);
