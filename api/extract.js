@@ -296,6 +296,34 @@ function extractWatch(text) {
 
 // ─── Vercel Handler ───
 
+const REF_SUFFIX_DIAL = {
+  LN: 'Black', LB: 'Blue', LV: 'Green', CHNR: 'Brown/Black',
+  BLNR: 'Blue/Black', BLRO: 'Blue/Red', VTNR: 'Black/Green',
+  GRNR: 'Black/Grey', SARU: 'Orange',
+};
+
+const REF_DIAL_OVERRIDES = {
+  '116500LN': 'White', '126500LN': 'White',
+  '116518': 'Champagne', '116519': 'Meteorite',
+  '5711/1A': 'Blue', '5712/1A': 'Blue', '5167A': 'Black',
+  '5164A': 'Black', '5968A': 'Black', '5968G': 'Green',
+  '126334': 'Grey', '126234': 'Grey',
+};
+
+function inferDialFromRef(ref) {
+  if (!ref) return null;
+  const clean = ref.toUpperCase();
+  for (const [key, color] of Object.entries(REF_DIAL_OVERRIDES)) {
+    if (clean.includes(key.toUpperCase())) return color;
+  }
+  for (const [suffix, color] of Object.entries(REF_SUFFIX_DIAL)) {
+    if (clean.endsWith(suffix.toUpperCase()) || clean.includes('/' + suffix.toUpperCase())) {
+      return color;
+    }
+  }
+  return null;
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
