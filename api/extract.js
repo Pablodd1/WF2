@@ -20,7 +20,7 @@ const BRANDS = {
 };
 
 const ROLEX_PREFIXES = ['126','116','228','226','278','279','336','277','128','127','124','134','118'];
-const PATEK_PREFIXES = ['57','59','51','52','53','58','61','70','71','72','73','49','53','61'];
+const PATEK_PREFIXES = ['57','59','51','52','53','58','61','70','71','72','73','49','50','53','61','60'];
 const AP_PREFIXES = ['15','16','25','26','67','77'];
 const VC_PREFIXES = ['4000','4300','4500','4520','4600','5500','6000','7700','4200','7930'];
 
@@ -193,10 +193,27 @@ function extractPrice(text) {
     }
   }
   
-  // Plain number with currency word nearby
+  // Plain number: "178 hkd", "395 hkd", "HKD 583,000"
   if (!result.price) {
+    // Currency first: HKD 583,000
     m = lower.match(/\b(hkd|usdt|usd)\s+([\d,.]+)\b(?!\s*[km])/i);
     if (m) result = { price: parseFloat(m[2].replace(/,/g,'')), currency: m[1].toUpperCase(), conf: 0.70, flags: ['plain_number'] };
+  }
+  if (!result.price) {
+    // Number then currency: 178 hkd, 395 hkd
+    m = lower.match(/\b([\d,.]+)\s+(hkd|usdt|usd)\b(?!\s*[km])/i);
+    if (m) result = { price: parseFloat(m[1].replace(/,/g,'')), currency: m[2].toUpperCase(), conf: 0.70, flags: ['plain_number'] };
+  }
+  
+  // Bare number >= 10000 that looks like a price (no ref pattern)
+  if (!result.price) {
+    m = lower.match(/\b(\d{5,7})\b(?!\s*(?:[kKmM]|hkd|HKD|usdt|USDT|[A-Za-z]{2}))/);
+    if (m) {
+      const n = parseInt(m[1]);
+      if (n >= 10000 && n % 500 === 0) {
+        result = { price: n, currency: 'HKD', conf: 0.50, flags: ['bare_number_guessed_hkd'] };
+      }
+    }
   }
   
   // FIX #2A: Missing K suffix — if price < 1000 and luxury watch, multiply by 1000
