@@ -487,7 +487,7 @@ module.exports = async (req, res) => {
       if (!msg) continue;
       
       const hasRef = /\b(\d{4,6}[A-Za-z]{0,6}|RM\d|\d{2,3}[-]\d{2,3})\b/i.test(msg);
-      const hasPrice = /(?:HKD|USDT|USD|hkd|usdt|usd)\s*[:=]?\s*[\d,.]+[km]?\b|\$[\d,.]+|[\d,.]+[km]\s*(?:hkd|usdt|usd)/i.test(msg);
+      const hasPrice = /(?:HKD|USDT|USD|hkd|usdt|usd)\s*[:=]?\s*[\d,.]+[km]?\b|\$[\d,.]+|[\d,.]+[km]?\s+(?:hkd|usdt|usd)|[\d,.]+[km]\b/i.test(msg);
       
       // FIX #3: If pending has ref but no price, accumulate lines
       if (pending && !hasRef && pendingLines < 5) {
@@ -542,6 +542,18 @@ module.exports = async (req, res) => {
           pendingLines = 0;
         }
       } else {
+        // No reference — try price-only extraction
+        if (hasPrice && !pending) {
+          const result = extractWatch(msg);
+          if (result) {
+            listings.push(result);
+            stats.extracted++;
+            const c = result.extraction_confidence.overall;
+            if (c >= 0.85) stats.high++;
+            else if (c >= 0.50) stats.medium++;
+            else stats.low++;
+          }
+        }
         pending = null;
         pendingLines = 0;
       }
