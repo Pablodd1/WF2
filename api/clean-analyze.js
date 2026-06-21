@@ -680,15 +680,22 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
     try {
       const ai = await aiTextParse(ctx, textOnly || chunk, parsed, providerWhitelist);
       // Merge: prefer AI values where code was empty/unknown
+      // Use nullish coalescing so falsy code values (Unknown, 0) don't get
+      // overwritten by AI nulls, but missing values do.
       parsed = {
         reference: ai.reference || parsed.reference,
-        brand: (ai.brand && ai.brand !== 'Unknown') ? ai.brand : parsed.brand,
+        brand: (ai.brand && ai.brand !== 'Unknown' && ai.brand !== null) ? ai.brand : parsed.brand,
         dialColor: ai.dialColor || parsed.dialColor,
-        condition: (ai.condition && ai.condition !== 'Unknown') ? ai.condition : parsed.condition,
+        condition: (ai.condition && ai.condition !== 'Unknown' && ai.condition !== null) ? ai.condition : parsed.condition,
         year: ai.year ?? parsed.year,
         price: ai.price ?? parsed.price,
         currency: ai.currency || parsed.currency,
+        intent: parsed.intent || 'UNKNOWN',  // preserve regex intent (AI doesn't know this)
       };
+      // Fix up null brand from AI if catalog already supplied it
+      if ((!parsed.brand || parsed.brand === 'Unknown') && catalog.brand) {
+        parsed.brand = catalog.brand;
+      }
       confidence = Math.max(confidence, Math.min(ai.confidence ?? codeConfidence(parsed), 100));
       // If AI surfaced a reference the parser missed, re-check the catalog.
       if (ai.reference && (!catalog.found)) {
