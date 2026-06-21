@@ -77,7 +77,57 @@ function splitWatches(raw) {
   // 1) Double-newline blocks first
   let blocks = text.split(/\n\s*\n+/).map(b => b.trim()).filter(Boolean);
 
-  // 2) If it came as one block, try per-line splitting when MULTIPLE lines
+  // 2) ORPHAN TOKEN REASSEMBLY — when a single watch spans multiple lines
+  //    (e.g. "5327G-001\n2017 full set\nusdt57,650 HKD447k"), the middle lines
+  //    lack a reference and look like orphans. Merge them back into the watch
+  //    that has the reference.
+  //    Heuristic: if a block has a reference on one line but subsequent lines
+  //    have only prices, conditions, or years (no reference), merge them.
+  if (blocks.length === 1) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const HAS_REF = /\b\d{3,6}[A-Z]{0,6}\b|RM\d{2}|\/\d/i;
+    const HAS_PRICE = /\b(\d{2,3}\s?[kKmM]|\$|usd|hkd|eur|usdt|€|[\d,]{4,}\s*(?:hkd|usd|usdt|eur|gbp))\b/i;
+    const IS_ORPHAN = /^(?:20\d{2}|full\s*set|new|unworn|used|bnib|complete|box|papers)\b/i;
+
+    // Reassemble: find the first ref-bearing line, then merge all following
+    // orphan lines (no ref, has price or condition/year) into it.
+    const healed = [];
+    let buffer = null;
+    for (const line of lines) {
+      const hasRef = HAS_REF.test(line);
+      if (hasRef) {
+        if (buffer) healed.push(buffer);
+        buffer = line;
+      } else if (buffer) {
+        // Orphan: append to buffer if it looks like watch metadata
+        if (HAS_PRICE.test(line) || IS_ORPHAN.test(line)) {
+          buffer += ' ' + line;
+        } else {
+          // Could be a second watch. Check if it starts a pattern.
+          if (healed.length === 0 && lines.length <= 4) {
+            // Small block — likely all one watch, just merge
+            buffer += ' ' + line;
+          } else {
+            // Push buffer and start new potential watch
+            healed.push(buffer);
+            buffer = line;
+          }
+        }
+      } else {
+        // No buffer yet, no ref — just push as-is
+        healed.push(line);
+      }
+    }
+    if (buffer) healed.push(buffer);
+
+    // Only use reassembled result if it reduced the line count
+    // (meaning we actually merged something)
+    if (healed.length < lines.length && healed.length >= 1) {
+      blocks = healed;
+    }
+  }
+
+  // 3) If it came as one block, try per-line splitting when MULTIPLE lines
   //    each look like a standalone listing (have a price or a reference).
   if (blocks.length === 1) {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -189,7 +239,7 @@ function brandFromRef(ref) {
 // signals: emoji brand, brand-from-reference, suffix-aware refs, M/k prices).
 function regexParse(chunk) {
   const text = chunk;
-  const out = { reference: null, brand: 'Unknown', dialColor: null, condition: 'Unknown', year: null, price: null, currency: null };
+  const out = { reference: null, brand: 'Unknown', dialColor: null, condition: 'Unknown', year: null, price: null, currency: null, priceMatrix: [] };
 
   // Brand — emoji first (dealers lead with these), then text patterns.
   for (const [emoji, name] of Object.entries(EMOJI_BRAND_MAP)) {
@@ -315,29 +365,129 @@ function regexParse(chunk) {
   const y = (text.match(/\b(20[12]\d)\b/) || [])[1];
   if (y) out.year = parseInt(y, 10);
 
-  // Price + currency (handles "1.2M", "850k", "HKD 970,000", "$125,000",
-  // and right-side currency: "152000hkd", "138000USD").
-  let priceM =
-    text.match(/([\d.,]+)\s*([MmKk])\s*(?:HKD|USD|EUR|CHF|GBP|SGD|USDT)?\b/) ||
-    text.match(/(?:HKD|USD|EUR|CHF|GBP|SGD|USDT|HK\$|\$|€)\s*([\d.,]{3,})\s*([MmKk])?/i) ||
-    text.match(/([\d.,]{4,})\s*(?:HKD|USD|EUR|CHF|GBP|SGD|USDT)\b/i);
-  if (priceM) {
-    let val = parseFloat(String(priceM[1]).replace(/,/g, ''));
-    const suf = (priceM[2] || '').toLowerCase();
+  // ── Multi-Currency Price Matrix ──────────────────────────────────────
+  // Dealers often list dual pricing: "usdt57,650 HKD447k" or "$8,500 / €7,900".
+  // Instead of picking one and discarding the rest, capture ALL price+currency
+  // pairs into a priceMatrix array, then cross-validate to pick the primary.
+  //
+  // Patterns matched (in order):
+  //  1. LEFT-SIDE currency:  "HKD 447k", "$125,000", "USDT 57,650"
+  //  2. RIGHT-SIDE currency: "447k HKD", "57,650 USDT", "152000hkd"
+  //  3. K/M shorthand:       "447k", "1.2m" (currency inferred from context)
+  //  4. Bare number >= 1000: "125000" (infer from other prices)
+
+  const ALL_CURRENCIES = ['HKD', 'USD', 'USDT', 'EUR', 'CHF', 'GBP', 'SGD', 'JPY', 'AED'];
+  const CUR_RE = ALL_CURRENCIES.join('|');
+
+  // Cross-rate lookup (approximate — to validate dual-pricing is same watch)
+  const FX = { HKD: 7.8, USD: 1, USDT: 1, EUR: 0.92, GBP: 0.79, CHF: 0.89, SGD: 1.35, JPY: 150, AED: 3.67 };
+
+  // Extract ALL price mentions from the text with their currencies
+  const priceEntries = [];
+
+  // Pattern A: "CURRENCY AMOUNT" (left-side) — "HKD 447k", "$125,000", "USDT 57,650"
+  const leftCurRe = new RegExp(
+    `(?:${CUR_RE}|HK\$|\\$|€|£)\s*([\d.,]+)\s*([MmKk])?(?=\s|$|[,.;]|\b(?:${CUR_RE})\b)`, 'gi'
+  );
+  let m;
+  while ((m = leftCurRe.exec(text)) !== null) {
+    let cur = m[0].match(new RegExp(CUR_RE, 'i'))?.[0]?.toUpperCase()
+      || (m[0].includes('HK$') ? 'HKD' : m[0].includes('$') ? 'USD' : m[0].includes('€') ? 'EUR' : m[0].includes('£') ? 'GBP' : null);
+    if (!cur) continue;
+    let val = parseFloat(m[1].replace(/,/g, ''));
+    const suf = (m[2] || '').toLowerCase();
     if (suf === 'm') val *= 1_000_000;
     else if (suf === 'k') val *= 1_000;
-    if (!isNaN(val) && val >= 100 && val < 10_000_000_000) out.price = Math.round(val);
+    if (!isNaN(val) && val >= 100 && val < 100_000_000) {
+      priceEntries.push({ value: Math.round(val), currency: cur, raw: m[0] });
+    }
   }
-  // Currency: check standalone ("138k hkd"), suffixed ("152000hkd"),
-  // and symbol-based patterns.
-  let cur = (text.match(/\b(hkd|usdt|usd|eur|chf|gbp|sgd)\b/i) || [])[1];
-  if (!cur) {
-    cur = (text.match(/[\d.,]+\s*(hkd|usdt|usd|eur|chf|gbp|sgd)\b/i) || [])[1];
+
+  // Pattern B: "AMOUNT CURRENCY" (right-side) — "447k HKD", "57,650 USDT", "152000hkd"
+  const rightCurRe = new RegExp(
+    `([\d.,]+)\s*([MmKk])?\s*(?:${CUR_RE})\b`, 'gi'
+  );
+  while ((m = rightCurRe.exec(text)) !== null) {
+    let cur = m[0].match(new RegExp(CUR_RE, 'i'))?.[0]?.toUpperCase();
+    if (!cur) continue;
+    let val = parseFloat(m[1].replace(/,/g, ''));
+    const suf = (m[2] || '').toLowerCase();
+    if (suf === 'm') val *= 1_000_000;
+    else if (suf === 'k') val *= 1_000;
+    if (!isNaN(val) && val >= 100 && val < 100_000_000) {
+      // Avoid duplicate — if we already have this currency from Pattern A
+      if (!priceEntries.some(e => e.currency === cur && Math.abs(e.value - Math.round(val)) / Math.max(e.value, 1) < 0.1)) {
+        priceEntries.push({ value: Math.round(val), currency: cur, raw: m[0] });
+      }
+    }
   }
-  if (!cur) {
-    cur = (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/\$/.test(text) ? 'USD' : null)));
+
+  // Pattern C: "AMOUNT k/m" without explicit currency — infer if other prices present
+  if (priceEntries.length === 0) {
+    const bareM = text.match(/([\d.,]+)\s*([MmKk])/i);
+    if (bareM) {
+      let val = parseFloat(bareM[1].replace(/,/g, ''));
+      const suf = bareM[2].toLowerCase();
+      if (suf === 'm') val *= 1_000_000;
+      else if (suf === 'k') val *= 1_000;
+      if (!isNaN(val) && val >= 100 && val < 100_000_000) {
+        // Infer currency: HKD from HK phone, else USD
+        const inferredCur = CURRENCY_FROM_TEXT || 'USD';
+        priceEntries.push({ value: Math.round(val), currency: inferredCur, raw: bareM[0] });
+      }
+    }
   }
-  if (cur) out.currency = cur.toUpperCase();
+
+  // Store in priceMatrix
+  out.priceMatrix = priceEntries;
+
+  // ── Cross-rate validation to pick primary price ────────────────────────
+  // If two prices in different currencies roughly match the same USD value
+  // (within 10%), they're the SAME watch listed with dual pricing.
+  // Pick the one in the more standard currency (USD > HKD > EUR).
+  if (priceEntries.length >= 2) {
+    const usdValues = priceEntries.map(e => ({
+      ...e,
+      usdEquivalent: e.value / (FX[e.currency] || 1)
+    }));
+    // Check if all prices convert to roughly the same USD value
+    const usdRange = usdValues.map(e => e.usdEquivalent);
+    const minUsd = Math.min(...usdRange);
+    const maxUsd = Math.max(...usdRange);
+    const spread = (maxUsd - minUsd) / Math.max(minUsd, 1);
+    
+    if (spread < 0.15) {
+      // Within 15% — same watch, dual pricing. Pick USD-equivalent or HKD as primary.
+      const usdEntry = usdValues.find(e => e.currency === 'USD' || e.currency === 'USDT');
+      const hkdEntry = usdValues.find(e => e.currency === 'HKD');
+      const primary = usdEntry || hkdEntry || usdValues[0];
+      out.price = primary.value;
+      out.currency = primary.currency;
+      // Add validation note
+      out._priceValidated = true;
+      out._priceNote = `cross-rate validated: ${priceEntries.map(e => `${e.value} ${e.currency}`).join(' ≈ ')}`;
+    } else {
+      // Different prices (maybe listing two watches on one line?)
+      // Pick the HKD price as primary (most common in dealer market)
+      const hkdEntry = usdValues.find(e => e.currency === 'HKD');
+      const primary = hkdEntry || usdValues[0];
+      out.price = primary.value;
+      out.currency = primary.currency;
+      out._priceNote = `multiple prices detected (spread ${Math.round(spread * 100)}%)`;
+    }
+  } else if (priceEntries.length === 1) {
+    out.price = priceEntries[0].value;
+    out.currency = priceEntries[0].currency;
+  }
+
+  // Fallback currency detection if priceMatrix is empty
+  if (!out.currency && priceEntries.length === 0) {
+    let cur = (text.match(new RegExp(`\b(${CUR_RE})\b`, 'i')) || [])[1];
+    if (!cur) {
+      cur = (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/\$/.test(text) ? 'USD' : null)));
+    }
+    if (cur) out.currency = cur.toUpperCase();
+  }
 
   // Intent detection — classify dealer message as SELL/BUY/INQUIRY/TRADE/ALERT.
   // Must run AFTER brand/reference extraction so we don't confuse intent words
@@ -376,6 +526,8 @@ function codeConfidence(p) {
   if (p.condition && p.condition !== 'Unknown') c += 6;
   if (p.price) c += 6;
   if (p.year) c += 2;
+  // Cross-rate validated dual pricing is a strong signal of listing quality
+  if (p._priceValidated && p.priceMatrix && p.priceMatrix.length >= 2) c += 4;
   return Math.min(c, 100);
 }
 
@@ -748,6 +900,9 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
         price: ai.price ?? parsed.price,
         currency: ai.currency || parsed.currency,
         intent: parsed.intent || 'UNKNOWN',  // preserve regex intent (AI doesn't know this)
+        priceMatrix: parsed.priceMatrix || [],  // preserve multi-currency price data
+        _priceValidated: parsed._priceValidated,
+        _priceNote: parsed._priceNote,
       };
       // Fix up null brand from AI if catalog already supplied it
       if ((!parsed.brand || parsed.brand === 'Unknown') && catalog.brand) {
