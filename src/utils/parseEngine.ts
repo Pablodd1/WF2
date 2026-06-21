@@ -178,13 +178,13 @@ const DIAL_KEYWORDS: [RegExp, string][] = [
   [/\b(?:blue\s*(?:dial)?)(?!\s*(?:strap|box|card|papers))\b/i, 'Blue'],
   [/\b(?:black\s*(?:dial)?)(?!\s*(?:strap|box|card|papers))\b/i, 'Black'],
   [/\b(?:green\s*(?:dial)?)(?!\s*(?:strap|box|card|papers))\b/i, 'Green'],
-  [/\b(?:white\s*(?:dial)?)(?!\s*(?:strap|box|card|papers))\b/i, 'White'],
+  [/\b(?:white\s*(?:dial)?)(?!\s*(?:strap|box|card|papers|gold|steel|platinum|rotor))\b/i, 'White'],
   [/\b(?:silver\s*(?:dial)?)\b/i, 'Silver'],
   [/\b(?:grey|gray)\s*(?:dial)?\b/i, 'Grey'],
   [/\b(?:brown|chocolate|zebra)\s*(?:dial)?\b/i, 'Brown'],
   [/\b(?:pink|rose)\s*(?:dial)?\b/i, 'Pink'],
   [/\b(?:purple|violet|plum)\s*(?:dial)?\b/i, 'Purple'],
-  [/\b(?:yellow|gold)\s*(?:dial)?\b/i, 'Yellow'],
+  [/\byellow\s*(?:dial)?(?!\s*gold)\b/i, 'Yellow'],
   [/\b(?:orange)\s*(?:dial)?\b/i, 'Orange'],
   [/\b(?:champagne|champ)\s*(?:dial)?\b/i, 'Champagne'],
   [/\bred\s*(?:dial)?\b/i, 'Red'],
@@ -302,12 +302,18 @@ export function parseWatch(raw: string): ParsedWatch {
   for (const [re, color] of DIAL_KEYWORDS) {
     if (re.test(clean)) { dialColor = color; break; }
   }
-  // Infer from reference suffix if no dial found
+  // Infer from reference suffix if no dial found (Rolex-only — Patek/AP/RM
+  // suffixes mean case material, not dial color: 5164R = Rose Gold, not Brown)
   if (!dialColor && reference) {
     const upperRef = reference.toUpperCase();
-    for (const [suffix, color] of Object.entries(SUFFIX_DIAL)) {
-      if (upperRef.endsWith(suffix)) { dialColor = color; break; }
-      if (upperRef.includes(suffix)) { dialColor = color; break; }
+    // Only apply suffix dial inference to Rolex 6-digit refs (e.g. 116610LN, 126710BLNR)
+    const isRolexRef = /^\d{6}[A-Z]{2,5}$/.test(upperRef);
+    if (isRolexRef) {
+      // Try longest suffix match first
+      const suffixes = Object.keys(SUFFIX_DIAL).sort((a, b) => b.length - a.length);
+      for (const suf of suffixes) {
+        if (upperRef.endsWith(suf)) { dialColor = SUFFIX_DIAL[suf]; break; }
+      }
     }
   }
 

@@ -149,7 +149,7 @@ function regexParse(chunk) {
   }
 
   // Condition
-  if (/\bnew\b|unworn|\bbnib\b|sealed|full\s*set|\bnos\b/i.test(text)) out.condition = 'New';
+  if (/\bnew\b|unworn|\bbnib\b|sealed|full\s*set|\bnos\b|\bmint\b/i.test(text)) out.condition = 'New';
   else if (/\bused\b|pre[\s-]?owned|worn/i.test(text)) out.condition = 'Used';
 
   // Dial color — explicit text first (mirrors parseEngine.ts patterns)
@@ -160,13 +160,13 @@ function regexParse(chunk) {
     [/\b(?:blue\s*(?:dial)?)(?!\s*(?:strap|box|card|papers))\b/i, 'Blue'],
     [/\b(?:black\s*(?:dial)?)(?!\s*(?:strap|box|card|papers))\b/i, 'Black'],
     [/\b(?:green\s*(?:dial)?)(?!\s*(?:strap|box|card|papers))\b/i, 'Green'],
-    [/\b(?:white\s*(?:dial)?)(?!\s*(?:strap|box|card|papers))\b/i, 'White'],
+    [/\b(?:white\s*(?:dial)?)(?!\s*(?:strap|box|card|papers|gold|steel|platinum|rotor))\b/i, 'White'],
     [/\b(?:silver\s*(?:dial)?)\b/i, 'Silver'],
     [/\b(?:grey|gray)\s*(?:dial)?\b/i, 'Grey'],
     [/\b(?:brown|chocolate|zebra)\s*(?:dial)?\b/i, 'Brown'],
     [/\b(?:pink|rose)\s*(?:dial)?\b/i, 'Pink'],
     [/\b(?:purple|violet|plum)\s*(?:dial)?\b/i, 'Purple'],
-    [/\b(?:yellow|gold)\s*(?:dial)?\b/i, 'Yellow'],
+    [/\byellow\s*(?:dial)?(?!\s*gold)\b/i, 'Yellow'],
     [/\b(?:orange)\s*(?:dial)?\b/i, 'Orange'],
     [/\b(?:champagne|champ)\s*(?:dial)?\b/i, 'Champagne'],
     [/\bred\s*(?:dial)?\b/i, 'Red'],
@@ -174,20 +174,23 @@ function regexParse(chunk) {
   for (const [re, color] of DIAL_PATTERNS) {
     if (re.test(text)) { out.dialColor = color; break; }
   }
-  // Infer from reference suffix if no explicit dial color found
+  // Infer from reference suffix if no explicit dial color found (Rolex-only)
   if (!out.dialColor && out.reference) {
     const SUFFIX_DIAL = {
       'BLNR': 'Blue Black', 'BLRO': 'Red Blue', 'GRNR': 'Green Black',
       'CHNR': 'Brown', 'RBOW': 'Rainbow',
       'LB': 'Blue', 'LV': 'Green', 'LN': 'Black', 'ST': 'Blue',
       'OR': 'Pink', 'TI': 'Grey', 'BC': 'Black',
-      'A': 'Black', 'R': 'Brown', 'G': 'Blue', 'J': 'Champagne', 'P': 'Blue',
     };
     const refUpper = out.reference.toUpperCase();
-    // Try longest suffix match first
-    const suffixes = Object.keys(SUFFIX_DIAL).sort((a, b) => b.length - a.length);
-    for (const suf of suffixes) {
-      if (refUpper.endsWith(suf)) { out.dialColor = SUFFIX_DIAL[suf]; break; }
+    // Only apply to Rolex 6-digit refs (e.g. 116610LN, 126710BLNR)
+    // Patek/AP/RM suffixes = case material (R=Rose Gold, ST=Steel), NOT dial color
+    const isRolexRef = /^\d{6}[A-Z]{2,5}$/.test(refUpper);
+    if (isRolexRef) {
+      const suffixes = Object.keys(SUFFIX_DIAL).sort((a, b) => b.length - a.length);
+      for (const suf of suffixes) {
+        if (refUpper.endsWith(suf)) { out.dialColor = SUFFIX_DIAL[suf]; break; }
+      }
     }
   }
 
