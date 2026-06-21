@@ -429,7 +429,15 @@ RM 35-03 Rafa 2023 2.4M USD`;
     return null;
   }, [results, testModeCache]);
 
-  // ── Inline field edit: open TestModePanel in edit mode for this record ─
+  // ── Auto-load 3-catalog comparisons when results change (fixes 3-CATALOG 0/10) ──
+  useEffect(() => {
+    if (!testMode || results.length === 0) return;
+    const indices = results.map((_, i) => i).filter(i => !testModeCache[i]);
+    if (indices.length === 0) return;
+    Promise.all(indices.map(i => loadTestComparison(i, true))).catch(() => {});
+  }, [results, testMode, testModeCache, loadTestComparison]);
+
+  // ── Inline field edit: open TestModePanel in edit mode for this record ──
   const openEditFor = useCallback((idx: number) => {
     // Ensure card is expanded
     setResults(prev => prev.map((item, i) =>

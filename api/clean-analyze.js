@@ -716,7 +716,17 @@ export default async function handler(req, res) {
       latencyMs: Date.now() - (ctx.startTime || Date.now()),
     };
 
-    return res.status(200).json({ success: true, summary, watches: results });
+    // Anti-hallucination: convert "Unknown" sentinels to null in client-facing response
+    const cleanResults = results.map(r => {
+      if (!r.parsed) return r;
+      const p = { ...r.parsed };
+      if (p.brand === 'Unknown') p.brand = null;
+      if (p.condition === 'Unknown') p.condition = null;
+      if (p.dialColor === 'UNKNOWN') p.dialColor = null;
+      return { ...r, parsed: p };
+    });
+
+    return res.status(200).json({ success: true, summary, watches: cleanResults });
   } catch (e) {
     console.error('[clean-analyze]', e.message);
     return res.status(500).json({ error: e.message });
