@@ -24,6 +24,8 @@
 
 import catalogLib from './_lib/catalog.js';
 const { lookupCatalog } = catalogLib;
+import visionLib from './_lib/vision.js';
+const { analyzeImage } = visionLib;
 
 const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
@@ -481,16 +483,11 @@ async function onlineCrossRef(brand, reference) {
   }
 }
 
-// Vision verify (reused logic from verify-image): reads image blind, compares to text.
+// Vision analyze (inlined from _lib/vision.js): reads image blind, extracts dial
+// color + brand + reference, compares to text. NO self-HTTP call.
 async function visionVerify(origin, imageUrl, reference, brand) {
-  const r = await fetchT(`${origin}/api/verify-image`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageUrl, reference: reference || 'UNKNOWN', brand }),
-  }, 25000);
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) return { verdict: 'UNVERIFIED', reason: data.error || `verify-image ${r.status}`, error: true };
-  return data;
+  const v = await analyzeImage(imageUrl, reference, brand);
+  return v;
 }
 
 // ───────────────────── per-watch pipeline ─────────────────────
@@ -587,8 +584,22 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   const targetImage = imageUrls[0] || null;
   if (targetImage) {
     const v = await visionVerify(ctx.origin, targetImage, parsed.reference, parsed.brand);
-    imageVerdict = v.verdict;
-    stages.push({ stage: 'IMAGE', engine: v.source || 'vision', confidence, data: v.image || {}, verdict: v.verdict, note: v.reason });
+    imageVerdict = v.verificationVerdict || v.verdict;
+
+    // Fill dial color from vision if text parser didn't get it
+    if (v.dialColor && v.dialColor !== 'UNKNOWN' && (!parsed.dialColor || parsed.dialColor === 'UNKNOWN')) {
+      parsed.dialColor = v.dialColor;
+      // Boost confidence — vision confirmed a field the parser missed
+      confidence = Math.min(100, confidence + 8);
+    }
+
+    // Fill brand from vision if parser missed it
+    if (v.brand && (!parsed.brand || parsed.brand === 'Unknown')) {
+      parsed.brand = v.brand;
+      confidence = Math.min(100, confidence + 5);
+    }
+
+    stages.push({ stage: 'IMAGE', engine: v.source || 'vision', confidence, data: v.image || {}, verdict: imageVerdict, note: v.reason, dialColor: v.dialColor, dialConfidence: v.dialConfidence });
   } else if (pageUrls.length) {
     stages.push({ stage: 'IMAGE', engine: 'link', confidence, data: { pageUrl: pageUrls[0] }, note: 'link present (not a direct image URL); text-vs-link compare requires page scrape' });
   }

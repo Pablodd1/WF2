@@ -6,6 +6,9 @@
     "api/bulk-disambiguate.js": {
       "maxDuration": 300
     },
+    "api/clean-analyze.js": {
+      "maxDuration": 120
+    },
     "api/*.js": {
       "maxDuration": 60
     }
