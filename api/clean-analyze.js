@@ -209,14 +209,54 @@ function regexParse(chunk) {
   }
 
   // Reference (brand-aware patterns, ordered by specificity).
+  // HIGHEST specificity first — Patek slash-format, then RM/IWC prefix,
+  // then Rolex 6-digit, then generic patterns.
+  // CRITICAL: 4-5 digit + letter patterns (5296R, 5196R, 5205R) must run
+  // BEFORE bare 6-digit patterns (which would otherwise eat "152000HKD"
+  // as a reference when it's clearly a price+currency token).
+  //
+  // Pre-extract currency from the raw text so we can reject reference
+  // candidates that are actually price+currency tokens.
+  const CURRENCY_FROM_TEXT = (text.match(/\b(hkd|usdt|usd|eur|chf|gbp|sgd)\b/i) || [])[1] ||
+    (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/\$/.test(text) ? 'USD' : null)));
+  
   let ref =
     (text.match(/\bRM\s?\d{2}[-\s]?\d{2}\b/i) || [])[0] ||
     (text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i) || [])[0] ||   // Patek 5711/1A, 7118/1200A
-    (text.match(/\b(?:116|126|114|124|226|228|279|128|336|268)\d{3}[A-Z]{0,4}\b/i) || [])[0] || // Rolex/VC 6-digit + suffix
-    (text.match(/\b\d{6}[A-Z]{0,4}\b/i) || [])[0] ||
-    (text.match(/\b\d{4}[\/\s-]?\d?[A-Z]{1,3}\b/i) || [])[0] ||
     (text.match(/\bIW\d{4,6}\b/i) || [])[0] ||
-    (text.match(/\b\d{4,5}[A-Z]{1,4}\b/i) || [])[0];
+    (text.match(/\b(?:116|126|114|124|226|228|279|128|336|268)\d{3}[A-Z]{0,4}\b/i) || [])[0]; // Rolex/VC 6-digit + suffix
+  
+  // Only fall back to generic digit patterns if we haven't found anything.
+  // 4-5 digit + letter comes BEFORE bare 6-digit to avoid price smashing.
+  if (!ref) {
+    ref = (text.match(/\b\d{4,5}[A-Z]{1,4}\b/i) || [])[0];  // 5296R, 5205R, 15500ST
+  }
+  if (!ref) {
+    ref = (text.match(/\b\d{4}[\s\/-]?\d?[A-Z]{1,3}\b/i) || [])[0];   // 1166 10LN, 5712 1A
+  }
+  if (!ref) {
+    ref = (text.match(/\b\d{6}[A-Z]{0,4}\b/i) || [])[0];              // bare 6-digit (only as last resort)
+  }
+  
+  // REJECT reference candidates that are obviously prices.
+  // A 5-6 digit token followed immediately by a known currency suffix
+  // (e.g. "152000hkd") is a PRICE, not a reference. Also reject 6-digit
+  // pure-number tokens >= 100,000 that appear with a currency indicator.
+  if (ref) {
+    const refClean = ref.trim().toUpperCase();
+    // Pattern: "152000HKD" — 5-6 digits + known currency suffix
+    if (/^\d{5,6}(?:HKD|USD|EUR|CHF|GBP|SGD|USDT|JPY|AED)$/i.test(refClean)) {
+      ref = null;  // This is a price+currency, not a reference
+    }
+    // Pattern: pure 6-digit number >= 100,000 with currency nearby
+    if (ref && /^\d{6}$/.test(refClean)) {
+      const val = parseInt(refClean, 10);
+      if (val >= 100000 && val <= 5000000 && CURRENCY_FROM_TEXT) {
+        ref = null;  // This is a price in HKD/USD/etc.
+      }
+    }
+  }
+
   if (ref) out.reference = ref.trim().toUpperCase().replace(/\s+/g, '');
 
   // Brand from reference if still unknown.
@@ -275,8 +315,9 @@ function regexParse(chunk) {
   const y = (text.match(/\b(20[12]\d)\b/) || [])[1];
   if (y) out.year = parseInt(y, 10);
 
-  // Price + currency (handles "1.2M", "850k", "HKD 970,000", "$125,000").
-  const priceM =
+  // Price + currency (handles "1.2M", "850k", "HKD 970,000", "$125,000",
+  // and right-side currency: "152000hkd", "138000USD").
+  let priceM =
     text.match(/([\d.,]+)\s*([MmKk])\s*(?:HKD|USD|EUR|CHF|GBP|SGD|USDT)?\b/) ||
     text.match(/(?:HKD|USD|EUR|CHF|GBP|SGD|USDT|HK\$|\$|€)\s*([\d.,]{3,})\s*([MmKk])?/i) ||
     text.match(/([\d.,]{4,})\s*(?:HKD|USD|EUR|CHF|GBP|SGD|USDT)\b/i);
@@ -287,8 +328,15 @@ function regexParse(chunk) {
     else if (suf === 'k') val *= 1_000;
     if (!isNaN(val) && val >= 100 && val < 10_000_000_000) out.price = Math.round(val);
   }
-  const cur = (text.match(/\b(hkd|usdt|usd|eur|chf|gbp|sgd)\b/i) || [])[1] ||
-    (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/\$/.test(text) ? 'USD' : null)));
+  // Currency: check standalone ("138k hkd"), suffixed ("152000hkd"),
+  // and symbol-based patterns.
+  let cur = (text.match(/\b(hkd|usdt|usd|eur|chf|gbp|sgd)\b/i) || [])[1];
+  if (!cur) {
+    cur = (text.match(/[\d.,]+\s*(hkd|usdt|usd|eur|chf|gbp|sgd)\b/i) || [])[1];
+  }
+  if (!cur) {
+    cur = (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/\$/.test(text) ? 'USD' : null)));
+  }
   if (cur) out.currency = cur.toUpperCase();
 
   // Intent detection — classify dealer message as SELL/BUY/INQUIRY/TRADE/ALERT.
@@ -356,6 +404,14 @@ function crossValidate(parsed, signals = {}) {
     }
   } else if (signals.catalogHit) {
     agree.push('catalog-ref'); boost += 6;           // ref verified, brand unknown in catalog
+  } else if (parsed.reference) {
+    // Catalog MISS on the reference — the parser found a string that looks
+    // like a ref but our curated database doesn't know it. This is a strong
+    // signal that the parser grabbed a price token or garbled the reference.
+    // Penalize to prevent blind brand-from-ref-inference (the "Rolex default").
+    if (!signals.catalogHit && signals.catalogSearched) {
+      disagree.push('catalog-miss'); boost -= 12;
+    }
   }
 
   // 2. Image agreement — vision saw the same ref/brand.
@@ -805,6 +861,7 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   const cv = crossValidate(parsed, {
     catalogHit: catalog.found,
     catalogBrand: catalog.brand,
+    catalogSearched: !!(parsed.reference),  // true if we attempted a catalog lookup
     imageVerdict,
     webSearchConfidence,
     webSearchBrand,
