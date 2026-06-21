@@ -178,7 +178,7 @@ function brandFromRef(ref) {
   if (/^(?:11[4-9]|12[0-6]|22[6-8]|228|336|268)\d{3}[A-Z]{0,4}$/.test(r)) return 'Rolex';  // 6-digit Rolex refs
   if (/^(?:79|70)\d{4}[A-Z]*$/.test(r)) return 'Tudor';
   if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180)/.test(r)) return 'Vacheron Constantin';
-  if (/^(?:CR|WE|WL|WI|WS|WH|WP|WJ|WC|W4|W6|WG)\w{0,5}\d{3,5}/.test(r)) return 'Cartier';  // CRWSR0004, WSSA0029, WGTA0011
+  if (/^(?:CR|WE|WL|WI|WS|WH|WP|WJ|WC|W4|W6|WG)\w*?\d{3,5}/.test(r)) return 'Cartier';  // CRWSR0004, WSSA0029, WGTA0011
   if (/^(?:Q1[3-9]|Q2[5-9]|Q3[2-9]|Q7|Q8|Q9)\d{4}/.test(r)) return 'Jaeger-LeCoultre';
   if (/^[A-Z]{2}\d{4}[A-Z]?\d?$/.test(r)) return 'Breitling';           // AB0121, A13380
   if (/^(?:PAM|PAM0|PAM00)\d{3,5}$/.test(r)) return 'Panerai';
