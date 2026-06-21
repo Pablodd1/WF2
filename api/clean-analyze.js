@@ -172,12 +172,13 @@ function brandFromRef(ref) {
   const r = String(ref || '').toUpperCase();
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
   if (/^IW\d{4,6}$/.test(r)) return 'IWC';
-  if (/^[3-7]\d{3}\//.test(r)) return 'Patek Philippe';                 // 5711/1A, 7118/1200A
+  if (/^(5[12]\d{2}[A-Z]{1,3}|7[01]\d{2}[A-Z]{1,3}|5990|6007|6300|5303|5374|5524|5968|5520|5920|5320|5370)\d{0,3}$/i.test(r)) return 'Patek Philippe';  // 5167A, 5711/1A, 7118/1200A
+  if (/^[3-7]\d{3}\//.test(r)) return 'Patek Philippe';                 // 5711/1A-014, 7118/1200A-001
   if (/^(?:15|26|77|16|41|67)\d{3}[A-Z]{0,4}$/.test(r)) return 'Audemars Piguet';  // 15500ST, 26579CE, 15407ST, 16202ST, 26240OR
   if (/^(?:11[4-9]|12[0-6]|22[6-8]|228|336|268)\d{3}[A-Z]{0,4}$/.test(r)) return 'Rolex';  // 6-digit Rolex refs
   if (/^(?:79|70)\d{4}[A-Z]*$/.test(r)) return 'Tudor';
   if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180)/.test(r)) return 'Vacheron Constantin';
-  if (/^(?:CRW|WE|WL|WI|WS|WH|WP|WJ|WC|W4|W6)\d{4}/.test(r)) return 'Cartier';
+  if (/^(?:CR|WE|WL|WI|WS|WH|WP|WJ|WC|W4|W6|WG)\w{1,2}\d{3,4}/.test(r)) return 'Cartier';  // CRWSR0004, WSSA0029, WGTA0011
   if (/^(?:Q1[3-9]|Q2[5-9]|Q3[2-9]|Q7|Q8|Q9)\d{4}/.test(r)) return 'Jaeger-LeCoultre';
   if (/^[A-Z]{2}\d{4}[A-Z]?\d?$/.test(r)) return 'Breitling';           // AB0121, A13380
   if (/^(?:PAM|PAM0|PAM00)\d{3,5}$/.test(r)) return 'Panerai';
@@ -297,7 +298,7 @@ function regexParse(chunk) {
   if (/\b(wtb|want\b.*\bbuy|looking\s+for|in\s+search\s+of|iso\b|seeking|need\b.*\bwatch)\b/i.test(tL)
       && !/\b(model|reference|ref|daytona|submariner|nautilus)\b/i.test(tL)) {
     out.intent = 'BUY';
-  } else if (/\b(ft|f\/t|for\s+trade|trade\s+(for|with))\b/i.test(tL)) {
+  } else if (/\b(ft|f\/t|for\s+trade|trade[\s:]+(for|with))\b/i.test(tL)) {
     out.intent = 'TRADE';
   } else if (/\b(inquiry|inquire|what.?s? the price|info\b.*\bpls|tell me about)\b/i.test(tL)) {
     out.intent = 'INQUIRY';
