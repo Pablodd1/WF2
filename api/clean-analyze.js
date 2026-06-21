@@ -45,12 +45,14 @@ function normRef(s) {
 
 const URL_RE = /(https?:\/\/[^\s"'<>)\]]+)/gi;
 const IMG_EXT_RE = /\.(jpe?g|png|webp|gif|bmp|avif)(\?|#|$)/i;
+// Known image CDN domains that serve images without file extensions
+const IMG_CDN_RE = /images\.unsplash\.com|cdn\.pixabay\.com|firebasestorage|googleusercontent|cloudinary|imgur\.com\/|telegra\.ph\/file|tme\.co\/|api\.telegram\.org\/file|pps\.whatsapp\.net\/mm|cdn\.instagram/i;
 
 function extractUrls(text) {
   const urls = (text.match(URL_RE) || []).map(u => u.replace(/[.,;]+$/, ''));
   return [...new Set(urls)];
 }
-function isImageUrl(u) { return IMG_EXT_RE.test(u); }
+function isImageUrl(u) { return IMG_EXT_RE.test(u) || IMG_CDN_RE.test(u); }
 
 /**
  * Split a pasted block into individual watch chunks.
