@@ -581,17 +581,39 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
     stages.push({ stage: 'ONLINE', engine: 'web', confidence, data: online, note: online.note });
   }
 
-  // 5) IMAGE / URL verification (online + picture)
+  // 5) IMAGE / URL verification (online + picture) — multi-image support
   let imageVerdict = null;
+  let bestVisionResult = null;
+  const imageResults = [];
+
+  // Process ALL image URLs (up to 3 to avoid timeout), pick the best legible result
+  for (let imgIdx = 0; imgIdx < Math.min(imageUrls.length, 3); imgIdx++) {
+    const img = imageUrls[imgIdx];
+    const v = await visionVerify(ctx.origin, img, parsed.reference, parsed.brand);
+    v._imageUrl = img;
+    imageResults.push(v);
+
+    // Track the best result (prefer legible + highest confidence)
+    if (v.legible && (!bestVisionResult || v.confidence > bestVisionResult.confidence)) {
+      bestVisionResult = v;
+    }
+
+    // If we found a MISMATCH, stop — this is a safety signal
+    if ((v.verificationVerdict || v.verdict) === 'MISMATCH') {
+      imageVerdict = 'MISMATCH';
+      break;
+    }
+  }
+
   const targetImage = imageUrls[0] || null;
-  if (targetImage) {
-    const v = await visionVerify(ctx.origin, targetImage, parsed.reference, parsed.brand);
-    imageVerdict = v.verificationVerdict || v.verdict;
+
+  if (bestVisionResult) {
+    const v = bestVisionResult;
+    imageVerdict = imageVerdict || v.verificationVerdict || v.verdict;
 
     // Fill dial color from vision if text parser didn't get it
     if (v.dialColor && v.dialColor !== 'UNKNOWN' && (!parsed.dialColor || parsed.dialColor === 'UNKNOWN')) {
       parsed.dialColor = v.dialColor;
-      // Boost confidence — vision confirmed a field the parser missed
       confidence = Math.min(100, confidence + 8);
     }
 
@@ -601,7 +623,30 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
       confidence = Math.min(100, confidence + 5);
     }
 
-    stages.push({ stage: 'IMAGE', engine: v.source || 'vision', confidence, data: v.image || {}, verdict: imageVerdict, note: v.reason, dialColor: v.dialColor, dialConfidence: v.dialConfidence });
+    const imgCount = imageResults.length;
+    stages.push({
+      stage: 'IMAGE',
+      engine: v.source || 'vision',
+      confidence,
+      data: v.image || {},
+      verdict: imageVerdict,
+      note: v.reason + (imgCount > 1 ? ` (best of ${imgCount} images)` : ''),
+      dialColor: v.dialColor,
+      dialConfidence: v.dialConfidence,
+      imagesAnalyzed: imgCount,
+    });
+  } else if (imageResults.length > 0) {
+    // Images were processed but none legible
+    const v = imageResults[0];
+    imageVerdict = v.verificationVerdict || v.verdict;
+    stages.push({
+      stage: 'IMAGE',
+      engine: v.source || 'vision',
+      confidence,
+      data: v.image || {},
+      verdict: imageVerdict,
+      note: v.reason + (imageResults.length > 1 ? ` (${imageResults.length} images analyzed, none legible)` : ''),
+    });
   } else if (pageUrls.length) {
     stages.push({ stage: 'IMAGE', engine: 'link', confidence, data: { pageUrl: pageUrls[0] }, note: 'link present (not a direct image URL); text-vs-link compare requires page scrape' });
   }

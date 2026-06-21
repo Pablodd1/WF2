@@ -25,6 +25,41 @@
 
 'use strict';
 
+// ── Image resize (sharp) — prevents 4MB+ images from breaking Gemini/HTTP ──
+let _sharp = null;
+async function getSharp() {
+  if (_sharp) return _sharp;
+  try {
+    _sharp = require('sharp');
+    return _sharp;
+  } catch (e) {
+    console.warn('[vision] sharp not available — images sent at original size');
+    return null;
+  }
+}
+
+// Resize to max 1024px JPEG q0.85 (~100-200KB). Returns {base64, mime} or null.
+async function resizeToBase64(buf) {
+  const sharp = await getSharp();
+  if (!sharp) {
+    // No sharp — return original as base64 if under 4MB
+    if (buf.length > 4 * 1024 * 1024) return null;
+    return { base64: buf.toString('base64'), mime: 'image/jpeg' };
+  }
+  try {
+    const resized = await sharp(buf)
+      .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    return { base64: resized.toString('base64'), mime: 'image/jpeg' };
+  } catch (e) {
+    console.error('[vision] sharp resize error:', e.message);
+    // Fall back to original if resize fails
+    if (buf.length < 4 * 1024 * 1024) return { base64: buf.toString('base64'), mime: 'image/jpeg' };
+    return null;
+  }
+}
+
 // ── Reference normalization (shared with verify-image logic) ─────────────────
 function normRef(s) {
   return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -114,18 +149,17 @@ async function analyzeWithGPT4o(imageUrl, textReference, textBrand) {
   ], textReference, textBrand);
   if (result) return result;
 
-  // Attempt 2: Download + base64 (fallback for CDNs that block OpenAI's fetcher)
-  console.log('[vision] GPT-4o URL passthrough failed, trying download+base64...');
+  // Attempt 2: Download + resize + base64 (fallback for CDNs that block OpenAI)
+  console.log('[vision] GPT-4o URL passthrough failed, trying download+resize+base64...');
   try {
     const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
     if (imgRes.ok) {
       const buf = Buffer.from(await imgRes.arrayBuffer());
-      if (buf.length < 4 * 1024 * 1024) {
-        const mime = imgRes.headers.get('content-type') || 'image/jpeg';
-        const b64 = buf.toString('base64');
+      const resized = await resizeToBase64(buf);
+      if (resized) {
         result = await gpt4oCall(apiKey, [
           { type: 'text', text: userText },
-          { type: 'image_url', image_url: { url: `data:${mime};base64,${b64}` } },
+          { type: 'image_url', image_url: { url: `data:${resized.mime};base64,${resized.base64}` } },
         ], textReference, textBrand);
         if (result) return result;
       }
@@ -188,16 +222,15 @@ async function analyzeWithGemini(imageUrl, textReference, textBrand) {
   }
 
   const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
-  const imgSize = imgBuffer.length;
 
-  // Size gate — skip if > 4MB (base64 would be ~5.3MB, too large for serverless)
-  if (imgSize > 4 * 1024 * 1024) {
-    console.error('[vision] Gemini image too large:', (imgSize / 1024 / 1024).toFixed(1) + 'MB');
+  // Resize via sharp (removes 4MB size gate — phone photos now work)
+  const resized = await resizeToBase64(imgBuffer);
+  if (!resized) {
+    console.error('[vision] Gemini resize failed, image too large or unreadable');
     return null;
   }
-
-  const base64 = imgBuffer.toString('base64');
-  const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
+  const base64 = resized.base64;
+  const mimeType = resized.mime;
 
   const userText = textReference
     ? `Analyze this watch image. The text listing claims reference "${textReference}"${textBrand ? ` and brand "${textBrand}"` : ''}. Report what YOU see in the image independently.`
