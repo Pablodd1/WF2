@@ -697,6 +697,11 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
       if ((!parsed.brand || parsed.brand === 'Unknown') && catalog.brand) {
         parsed.brand = catalog.brand;
       }
+      // Fix up null brand from AI: re-run brandFromRef on any new reference
+      if ((!parsed.brand || parsed.brand === 'Unknown') && parsed.reference) {
+        const inferred = brandFromRef(parsed.reference);
+        if (inferred !== 'Unknown') parsed.brand = inferred;
+      }
       confidence = Math.max(confidence, Math.min(ai.confidence ?? codeConfidence(parsed), 100));
       // If AI surfaced a reference the parser missed, re-check the catalog.
       if (ai.reference && (!catalog.found)) {
