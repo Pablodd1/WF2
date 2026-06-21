@@ -27,7 +27,7 @@ const { lookupCatalog } = catalogLib;
 import visionLib from './_lib/vision.js';
 const { analyzeImage } = visionLib;
 
-const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
+const KIMI_API_URL = 'https://api.moonshot.cn/v1/chat/completions';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -56,11 +56,20 @@ function isImageUrl(u) { return IMG_EXT_RE.test(u) || IMG_CDN_RE.test(u); }
 
 /**
  * Split a pasted block into individual watch chunks.
- * Heuristics tuned for WhatsApp dealer messages:
+ * Heuristics tuned for WhatsApp/Telegram dealer messages:
  *  - blank lines separate watches
- *  - emoji/bullet separators (• ▪ ✅ 🔹 -, numbered "1." "2)")
+ *  - emoji markers mid-line (🔥🏮🔵🟢🔴 etc.) — each emoji starts a new watch
+ *  - comma-separated listings on one line (when each part has a ref or price)
+ *  - bullet separators (• ▪ ✅ 🔹 -, numbered "1." "2)")
  *  - each line that starts a new reference-looking token
+ *
+ * Also separates trailing image URLs from the text so they can be
+ * distributed to all watches in the original block (shared gallery image).
  */
+
+// Emoji that dealers use as brand markers / bullet points mid-line
+const EMOJI_SPLIT_RE = /([🔥🏮🔵⭕🟢⚫🔴🟠🟡⚪🔶🟣🟤✅🔹🔸▶►])/u;
+
 function splitWatches(raw) {
   const text = String(raw || '').replace(/\r\n/g, '\n').trim();
   if (!text) return [];
@@ -79,7 +88,70 @@ function splitWatches(raw) {
     if (lines.length >= 2 && listingLike.length >= 2) blocks = lines;
   }
 
-  // 3) Strip leading bullet/emoji/number separators
+  // 3) EMOJI SPLIT — if a single block has multiple watch-emoji markers
+  //    mid-line, split on each emoji. Each emoji starts a new watch.
+  //    Example: "🔥7010R Purple 538K 🔥5712/1A Blue 970K" → 2 watches
+  //    Only fires when the block has NO newlines (multi-line blocks already
+  //    split correctly via step 2).
+  const expanded = [];
+  for (const block of blocks) {
+    // Skip emoji split for multi-line blocks — they're already split by line
+    if (block.includes('\n')) { expanded.push(block); continue; }
+    const emojiParts = block.split(EMOJI_SPLIT_RE);
+    if (emojiParts.length > 2) {
+      let current = '';
+      let foundMultiple = false;
+      for (let i = 0; i < emojiParts.length; i++) {
+        const part = emojiParts[i];
+        if (EMOJI_SPLIT_RE.test(part)) {
+          if (current.trim()) {
+            expanded.push(current.trim());
+          }
+          current = part;
+          foundMultiple = true;
+        } else {
+          current += part;
+        }
+      }
+      if (current.trim()) expanded.push(current.trim());
+      if (foundMultiple && expanded.length > 1) {
+        continue;
+      }
+    }
+    expanded.push(block);
+  }
+  blocks = expanded.length > 1 ? expanded : blocks;
+
+  // 4) COMMA / PIPE SPLIT — if a single block has multiple reference-like tokens
+  //    separated by commas or pipes, split on them. Each part must look like a watch.
+  //    Example: "5712/1A Blue 970K, 5167A 583K, 5968G 930K" → 3 watches
+  //    Example: "116500LN 105k | 126710BLNR 98k | 5711/1A 1.2m" → 3 watches
+  //    But NOT: "5712/1A, Blue, 970K" (one watch, comma-separated fields)
+  const sepSplit = [];
+  for (const block of blocks) {
+    // Check for comma OR pipe separated listings
+    const usesPipe = block.includes('|') && !block.includes(',');
+    const usesComma = block.includes(',');
+    if (!usesComma && !usesPipe) { sepSplit.push(block); continue; }
+    
+    const sep = usesPipe ? '|' : ',';
+    const parts = block.split(sep).map(p => p.trim()).filter(Boolean);
+    if (parts.length < 2) { sepSplit.push(block); continue; }
+    
+    // Each part must look like a watch (have a reference OR a price)
+    const watchLike = parts.filter(p =>
+      /\b\d{3,4}[\/\-]?\d?[A-Z]{1,4}\b/i.test(p) ||  // reference-ish
+      /\b(\d{2,3}\s?k|\$|usd|hkd|eur|usdt|€)\b/i.test(p)  // price-ish
+    );
+    if (watchLike.length >= 2) {
+      sepSplit.push(...parts);
+    } else {
+      sepSplit.push(block); // keep as one watch
+    }
+  }
+  blocks = sepSplit;
+
+  // 5) Strip leading bullet/number separators (but keep emoji brand markers)
   return blocks
     .map(b => b.replace(/^\s*([0-9]+[.)]|[•▪◦‣·\-–—✅🔹🔸▶►*]+)\s*/u, '').trim())
     .filter(Boolean);
@@ -101,10 +173,14 @@ function brandFromRef(ref) {
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
   if (/^IW\d{4,6}$/.test(r)) return 'IWC';
   if (/^[3-7]\d{3}\//.test(r)) return 'Patek Philippe';                 // 5711/1A, 7118/1200A
-  if (/^(15|26|77)\d{3}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';  // 15500ST, 26579CE
+  if (/^(?:15|26|77|16|41|67)\d{3}[A-Z]{0,4}$/.test(r)) return 'Audemars Piguet';  // 15500ST, 26579CE, 15407ST, 16202ST, 26240OR
+  if (/^(?:11[4-9]|12[0-6]|22[6-8]|228|336|268)\d{3}[A-Z]{0,4}$/.test(r)) return 'Rolex';  // 6-digit Rolex refs
+  if (/^(?:79|70)\d{4}[A-Z]*$/.test(r)) return 'Tudor';
   if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180)/.test(r)) return 'Vacheron Constantin';
-  if (/^(79\d{4}|70\d{4})[A-Z]*$/.test(r)) return 'Tudor';
-  if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';                      // 116610LN, 126331
+  if (/^(?:CRW|WE|WL|WI|WS|WH|WP|WJ|WC|W4|W6)\d{4}/.test(r)) return 'Cartier';
+  if (/^(?:Q1[3-9]|Q2[5-9]|Q3[2-9]|Q7|Q8|Q9)\d{4}/.test(r)) return 'Jaeger-LeCoultre';
+  if (/^[A-Z]{2}\d{4}[A-Z]?\d?$/.test(r)) return 'Breitling';           // AB0121, A13380
+  if (/^(?:PAM|PAM0|PAM00)\d{3,5}$/.test(r)) return 'Panerai';
   return 'Unknown';
 }
 
@@ -214,6 +290,25 @@ function regexParse(chunk) {
     (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/\$/.test(text) ? 'USD' : null)));
   if (cur) out.currency = cur.toUpperCase();
 
+  // Intent detection — classify dealer message as SELL/BUY/INQUIRY/TRADE/ALERT.
+  // Must run AFTER brand/reference extraction so we don't confuse intent words
+  // with watch brand names.
+  const tL = text.toLowerCase();
+  if (/\b(wtb|want\b.*\bbuy|looking\s+for|in\s+search\s+of|iso\b|seeking|need\b.*\bwatch)\b/i.test(tL)
+      && !/\b(model|reference|ref|daytona|submariner|nautilus)\b/i.test(tL)) {
+    out.intent = 'BUY';
+  } else if (/\b(ft|f\/t|for\s+trade|trade\s+(for|with))\b/i.test(tL)) {
+    out.intent = 'TRADE';
+  } else if (/\b(inquiry|inquire|what.?s? the price|info\b.*\bpls|tell me about)\b/i.test(tL)) {
+    out.intent = 'INQUIRY';
+  } else if (/\b(sold|gone|on hold|reserved)\b/i.test(tL)) {
+    out.intent = 'ALERT';
+  } else if (out.price > 0) {
+    out.intent = 'SELL';
+  } else {
+    out.intent = 'UNKNOWN';
+  }
+
   return out;
 }
 
@@ -252,14 +347,14 @@ function crossValidate(parsed, signals = {}) {
     const cb = signals.catalogBrand.toLowerCase();
     if (parsed.brand && parsed.brand !== 'Unknown' &&
         (pb === cb || pb.includes(cb) || cb.includes(pb))) {
-      agree.push('catalog'); boost += 14;            // ref+brand confirmed by curated data
+      agree.push('catalog'); boost += 10;            // ref+brand confirmed by curated data
     } else if (!parsed.brand || parsed.brand === 'Unknown') {
-      agree.push('catalog-supplies-brand'); boost += 12;
+      agree.push('catalog-supplies-brand'); boost += 10;
     } else {
       disagree.push('catalog-vs-parser-brand'); boost -= 8;
     }
   } else if (signals.catalogHit) {
-    agree.push('catalog-ref'); boost += 8;           // ref verified, brand unknown in catalog
+    agree.push('catalog-ref'); boost += 6;           // ref verified, brand unknown in catalog
   }
 
   // 2. Image agreement — vision saw the same ref/brand.
@@ -729,6 +824,7 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
 
   return {
     input: chunk,
+    rawEntry: chunk,              // original text preserved for human review
     parsed,
     confidence: Math.round(confidence),
     verdict,                       // APPROVED | HUMAN | RECYCLE
@@ -767,9 +863,30 @@ export default async function handler(req, res) {
   let chunks = splitWatches(text);
   if (chunks.length === 0) chunks = [text.trim()];
 
-  // Attach any explicitly-uploaded image URLs to the first chunk that has none
+  // Separate trailing image URLs from the raw text — these are shared
+  // gallery images that should be attached to ALL watches in the paste.
+  const sharedImages = [];
+  // Extract image URLs from the full raw text that appear AFTER the last watch-like token
+  const allUrls = extractUrls(text);
+  const sharedImgUrls = allUrls.filter(isImageUrl);
+
+  // Attach shared images to every chunk that doesn't already have its own image
+  if (sharedImgUrls.length > 0 && chunks.length > 1) {
+    chunks = chunks.map(c => {
+      const hasOwnImage = extractUrls(c).some(isImageUrl);
+      if (!hasOwnImage) {
+        return c + '\n' + sharedImgUrls.join('\n');
+      }
+      return c;
+    });
+  }
+
+  // Also attach any explicitly-uploaded image URLs from the request body
   if (Array.isArray(bodyImages) && bodyImages.length) {
-    chunks = chunks.map((c, i) => (i === 0 && !extractUrls(c).some(isImageUrl)) ? `${c}\n${bodyImages.join('\n')}` : c);
+    chunks = chunks.map(c => {
+      const hasOwnImage = extractUrls(c).some(isImageUrl);
+      return !hasOwnImage ? `${c}\n${bodyImages.join('\n')}` : c;
+    });
   }
 
   // ─── Provider selection ──────────────────────────────────────────────────
