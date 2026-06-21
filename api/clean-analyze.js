@@ -376,7 +376,8 @@ function regexParse(chunk) {
   //  3. K/M shorthand:       "447k", "1.2m" (currency inferred from context)
   //  4. Bare number >= 1000: "125000" (infer from other prices)
 
-  const ALL_CURRENCIES = ['HKD', 'USD', 'USDT', 'EUR', 'CHF', 'GBP', 'SGD', 'JPY', 'AED'];
+  // Sort currencies longest-first so "USDT" matches before "USD"
+  const ALL_CURRENCIES = ['USDT', 'HKD', 'USD', 'EUR', 'CHF', 'GBP', 'SGD', 'JPY', 'AED'];
   const CUR_RE = ALL_CURRENCIES.join('|');
 
   // Cross-rate lookup (approximate — to validate dual-pricing is same watch)
@@ -387,15 +388,19 @@ function regexParse(chunk) {
 
   // Pattern A: "CURRENCY AMOUNT" (left-side) — "HKD 447k", "$125,000", "USDT 57,650"
   const leftCurRe = new RegExp(
-    `(?:${CUR_RE}|HK\$|\\$|€|£)\s*([\d.,]+)\s*([MmKk])?(?=\s|$|[,.;]|\b(?:${CUR_RE})\b)`, 'gi'
+    `(?:(${CUR_RE})|(HK\\$)|(\\$)|(€)|(£))\\s*([\\d.,]+)\\s*([MmKk])?(?=\\s|$|[,.;]|\\b(?:${CUR_RE})\\b)`, 'gi'
   );
   let m;
   while ((m = leftCurRe.exec(text)) !== null) {
-    let cur = m[0].match(new RegExp(CUR_RE, 'i'))?.[0]?.toUpperCase()
-      || (m[0].includes('HK$') ? 'HKD' : m[0].includes('$') ? 'USD' : m[0].includes('€') ? 'EUR' : m[0].includes('£') ? 'GBP' : null);
+    // Extract currency from capture groups (m[1]-m[5])
+    let cur = (m[1] || '').toUpperCase()  // named currency
+      || (m[2] ? 'HKD' : '')              // HK$
+      || (m[3] ? 'USD' : '')              // $
+      || (m[4] ? 'EUR' : '')              // €
+      || (m[5] ? 'GBP' : '');             // £
     if (!cur) continue;
-    let val = parseFloat(m[1].replace(/,/g, ''));
-    const suf = (m[2] || '').toLowerCase();
+    let val = parseFloat((m[6] || '').replace(/,/g, ''));
+    const suf = (m[7] || '').toLowerCase();
     if (suf === 'm') val *= 1_000_000;
     else if (suf === 'k') val *= 1_000;
     if (!isNaN(val) && val >= 100 && val < 100_000_000) {
@@ -405,12 +410,12 @@ function regexParse(chunk) {
 
   // Pattern B: "AMOUNT CURRENCY" (right-side) — "447k HKD", "57,650 USDT", "152000hkd"
   const rightCurRe = new RegExp(
-    `([\d.,]+)\s*([MmKk])?\s*(?:${CUR_RE})\b`, 'gi'
+    `([\\d.,]+)\\s*([MmKk])?\\s*(${CUR_RE})\\b`, 'gi'
   );
   while ((m = rightCurRe.exec(text)) !== null) {
-    let cur = m[0].match(new RegExp(CUR_RE, 'i'))?.[0]?.toUpperCase();
+    let cur = (m[3] || '').toUpperCase();  // capture group 3 = currency name
     if (!cur) continue;
-    let val = parseFloat(m[1].replace(/,/g, ''));
+    let val = parseFloat((m[1] || '').replace(/,/g, ''));
     const suf = (m[2] || '').toLowerCase();
     if (suf === 'm') val *= 1_000_000;
     else if (suf === 'k') val *= 1_000;
