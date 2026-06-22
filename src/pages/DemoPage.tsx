@@ -134,26 +134,6 @@ export default function DemoPage() {
   const [csvStatus, setCsvStatus] = useState<{ stage: string; message: string; added?: number; updated?: number; catalogSize?: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-run demo with sample data on first load
-  useEffect(() => {
-    const demoText = `🏮5712/1A Blue N5/2026 New 850k HKD
-🔥116610LV Green Submariner 2021 1.2M HKD
-RM11-03 2022 250k USD
-5146R Annual Calendar 2023 Brown 350k HKD
-📥 WTB 5164R 2023 Aquanaut full set
-5711/1A-014 Blue 2024 1.8M HKD
-15500ST Blue 2023 780k HKD
-116500LN Daytona White Gold 2022 620k HKD
-26331ST Blue 2021 480k HKD
-RM 35-03 Rafa 2023 2.4M USD`;
-    setInput(demoText);
-    const parsed = demoText.split('\n').map(l => {
-      const p = parseWatch(l.trim());
-      return { ...p, verdict: getVerdict(p.confidence), expanded: false };
-    });
-    setResults(parsed);
-  }, []);
-
   // ── File upload (for chat block mode) ─────────────────────────────────────
   const handleFileUpload = useCallback((file: File) => {
     const reader = new FileReader();
