@@ -375,8 +375,8 @@ function regexParse(chunk) {
     }
   }
 
-  // Year
-  const y = (text.match(/\b(20[12]\d)\b/) || [])[1];
+  // Year — allow optional trailing Y/y suffix ("2020Y", "2020 Y") as dealers write it.
+  const y = (text.match(/\b(20[12]\d)\s*[Yy]?\b/) || [])[1];
   if (y) out.year = parseInt(y, 10);
 
   // ── Multi-Currency Price Matrix ──────────────────────────────────────
