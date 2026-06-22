@@ -376,7 +376,10 @@ function regexParse(chunk) {
   }
 
   // Year — allow optional trailing Y/y suffix ("2020Y", "2020 Y") as dealers write it.
-  const y = (text.match(/\b(20[12]\d)\s*[Yy]?\b/) || [])[1];
+  // BUT reject a year token that's part of a batch/stock code like "N5/2026" or "B3/2025"
+  // (letter+digits+slash prefix) — that's a listing series, not the manufacture year.
+  // Anti-hallucination: if the only year-like token is a batch code, leave year null.
+  const y = (text.match(/(?<![A-Za-z]\d{0,3}\/)\b(20[12]\d)\s*[Yy]?\b/) || [])[1];
   if (y) out.year = parseInt(y, 10);
 
   // ── Multi-Currency Price Matrix ──────────────────────────────────────
