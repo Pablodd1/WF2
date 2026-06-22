@@ -314,8 +314,26 @@ function brandFromRef(ref) {
 // Lightweight code-first parse (mirrors src/utils/parseEngine.ts on the high-value
 // signals: emoji brand, brand-from-reference, suffix-aware refs, M/k prices).
 function regexParse(chunk) {
-  const text = chunk;
-  const out = { reference: null, brand: 'Unknown', dialColor: null, condition: 'Unknown', year: null, price: null, currency: null, priceMatrix: [] };
+  // ── P2 INPUT NORMALIZATION (WF_NORM_PREPASS) ─────────────────────────
+  // Full-width punctuation/digits -> ascii, and split glued tokens so the
+  // downstream regexes see clean boundaries.  e.g. "2013Full"->"2013 Full",
+  // "HKD2.09m"->"HKD 2.09m", "45500USD"->"45500 USD".
+  let text = chunk;
+  if (typeof text === 'string') {
+    // full-width punctuation
+    text = text
+      .replace(/\uFF0C/g, ',').replace(/\uFF1B/g, ';').replace(/\uFF1A/g, ':')
+      .replace(/\u3001/g, ',').replace(/\uFF0F/g, '/').replace(/\uFF0D/g, '-');
+    // full-width digits FF10-FF19 -> 0-9
+    text = text.replace(/[\uFF10-\uFF19]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
+    // currency-word glued to a number: "HKD2.09m" -> "HKD 2.09m", "USD255k"->"USD 255k"
+    text = text.replace(/\b(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED)(\d)/gi, '$1 $2');
+    // number glued to currency-word: "45500USD" -> "45500 USD", "152000hkd"->"152000 hkd"
+    text = text.replace(/(\d)(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED)\b/gi, '$1 $2');
+    // digits glued to a following Word starting with a capital: "2013Full"->"2013 Full"
+    text = text.replace(/(\d)([A-Z][a-z]{2,})/g, '$1 $2');
+  }
+  const out = { reference: null, brand: 'Unknown', dialColor: null, condition: 'Unknown', year: null, price: null, currency: null, priceMatrix: [], warranty: null };
 
   // Brand — emoji first (dealers lead with these), then text patterns.
   for (const [emoji, name] of Object.entries(EMOJI_BRAND_MAP)) {
@@ -350,10 +368,28 @@ function regexParse(chunk) {
   const candidates = [];
   const addCandidate = (m) => { if (m && !candidates.includes(m)) candidates.push(m); };
   
+  // WF_OMEGA_REF — Omega dotted format e.g. 210.20.42.20.01.001 (must run first; very specific)
+  addCandidate((text.match(/\b\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3}\b/) || [])[0]);
   addCandidate((text.match(/\bRM\s?\d{2}[-\s]?\d{2}\b/i) || [])[0]);
+  // WF_REF_SUFFIX: preserve trailing -NNN suffix (5089G-131, 7129J-001, 5961R-010)
+  addCandidate((text.match(/\b\d{4}[A-Z]{1,3}-\d{2,3}\b/i) || [])[0]);
+  // WF_REF_SLASHSUFFIX: slash-format with trailing -letters/digits (4200H/222A-B934 -> 4200H/222A)
+  // Capture slash-format ref; strip a trailing -Bxxx (VC dial code) but keep -NNN (Patek).
+  (() => {
+    const mm = text.match(/\b(\d{4}[A-Z]?\/\d{1,4}[A-Z]{1,2})(-[A-Z0-9]{2,5})?\b/i);
+    if (mm) {
+      const base = mm[1];
+      const suf = mm[2] || '';
+      // Keep purely-numeric suffixes (-001), drop letter-led variant codes (-B934).
+      if (suf && /^-\d{2,4}$/.test(suf)) addCandidate(base + suf);
+      else addCandidate(base);
+    }
+  })();
   addCandidate((text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i) || [])[0]);   // Patek 5711/1A
   addCandidate((text.match(/\bIW\d{4,6}\b/i) || [])[0]);
   addCandidate((text.match(/\b(?:116|126|114|124|226|228|279|128|336|268)\d{3}[A-Z]{0,4}\b/i) || [])[0]); // Rolex
+  // WF_ROLEX6: broaden 6-digit Rolex prefixes (incl 276/336/124/126200 series)
+  addCandidate((text.match(/\b(?:11[46]|12[0-9]|22[0-9]|228|279|336|268|278|276)\d{3}[A-Z]{0,4}\b/i) || [])[0]);
   addCandidate((text.match(/\b\d{4,5}[A-Z]{1,4}\b/i) || [])[0]);  // 5296R, 5205R, 15500ST
   addCandidate((text.match(/\b\d{4}[\s\/-]?\d?[A-Z]{1,3}\b/i) || [])[0]);   // 1166 10LN, 5712 1A
   addCandidate((text.match(/\b\d{6}[A-Z]{0,4}\b/i) || [])[0]);              // bare 6-digit
@@ -370,8 +406,11 @@ function regexParse(chunk) {
     const refClean = c.trim().toUpperCase();
     if (/^\d{5,6}(?:HKD|USD|EUR|CHF|GBP|SGD|USDT|JPY|AED)$/i.test(refClean)) return false;
     if (/^\d{6}$/.test(refClean)) {
+      // WF_REF6_PRICEGUARD: a bare 6-digit token is only a price (not a ref)
+      // when it does NOT start with a known Rolex 6-digit prefix.
+      const isRolexPrefix = /^(?:11[46]|12[0-9]|22[0-9]|228|279|336|268|278|276)\d{3}$/.test(refClean);
       const val = parseInt(refClean, 10);
-      if (val >= 100000 && val <= 5000000 && CURRENCY_FROM_TEXT) return false;
+      if (!isRolexPrefix && val >= 100000 && val <= 5000000 && CURRENCY_FROM_TEXT) return false;
     }
     // Reject if the suffix letters are common English words (e.g., "5039 OR" where OR = "or")
     const suffixLetters = refClean.match(/[A-Z]+$/);
@@ -381,13 +420,20 @@ function regexParse(chunk) {
   
   let ref = null;
   if (validCandidates.length > 0) {
-    // Try catalog lookup on each candidate — pick the first one with a catalog hit
-    for (const c of validCandidates) {
-      const cat = lookupCatalog(c);
-      if (cat.found) { ref = c; break; }
+    // WF_REF_SELECT: prefer a candidate that hits the catalog either directly OR
+    // via its base (suffix stripped). Among catalog-valid candidates, keep the
+    // LONGEST (so "5089G-131" beats bare "5089G", preserving the dealer suffix).
+    const baseOf = (c) => c.replace(/-[A-Z0-9]{2,5}$/i, '');
+    const catValid = validCandidates.filter(c => {
+      if (lookupCatalog(c).found) return true;
+      const b = baseOf(c);
+      return b !== c && lookupCatalog(b).found;
+    });
+    if (catValid.length > 0) {
+      ref = catValid.reduce((a, b) => (b.length > a.length ? b : a));
+    } else {
+      ref = validCandidates[0];
     }
-    // Fallback: pick first valid candidate
-    if (!ref) ref = validCandidates[0];
   }
 
   if (ref) out.reference = ref.trim().toUpperCase().replace(/\s+/g, '');
@@ -404,6 +450,17 @@ function regexParse(chunk) {
 
   // Dial color — explicit text first (mirrors parseEngine.ts patterns)
   const DIAL_PATTERNS = [
+    // WF_DIAL_ALIASES: dealer shorthand / typos -> canonical colour.
+    [/\bblk\b/i, 'Black'],
+    [/\b(?:choco|chocolate|brn|brown)\b/i, 'Brown'],
+    [/\bsalmon\b/i, 'Salmon'],
+    [/\b(?:pistachio|turquoise)\b/i, 'Turquoise'],
+    [/\b(?:mop|m\.o\.p)\b/i, 'MOP'],
+    [/\bgree\b/i, 'Green'],
+    [/\bblu\b/i, 'Blue'],
+    // NOTE: in this dealer dataset 'champ' denotes a chocolate-brown Patek dial
+    // (the ground-truth sheet maps champ -> Brown), not a champagne dial.
+    [/\bchamp\b/i, 'Brown'],
     [/\b(?:tiffany|tiffanie|tiff)\s*(?:blue|dial)?\b/i, 'Tiffany'],
     [/\b(?:ice\s*blue|icy\s*blue|light\s*blue|powder\s*blue)\b/i, 'Ice Blue'],
     [/\bdiamond\s*(?:dial|set|pave)?\b/i, 'Diamond'],
@@ -444,11 +501,33 @@ function regexParse(chunk) {
     }
   }
 
-  // Year — allow optional trailing Y/y suffix ("2020Y", "2020 Y") as dealers write it.
-  // BUT reject a year token that's part of a batch/stock code like "N5/2026" or "B3/2025"
-  // (letter+digits+slash prefix) — that's a listing series, not the manufacture year.
-  // Anti-hallucination: if the only year-like token is a batch code, leave year null.
-  const y = (text.match(/(?<![A-Za-z]\d{0,3}\/)\b(20[12]\d)\s*[Yy]?\b/) || [])[1];
+  // ── YEAR + WARRANTY (WF_YEAR_WARRANTY) ───────────────────────────────
+  // Product-owner rule: batch / warranty-card codes (N5/26, 5/2026, n2.26,
+  // 05-26, N11) are NOT the manufacture year — they identify the warranty
+  // series.  We capture those into `warranty` and keep them OUT of `year`.
+  // `year` is ONLY a standalone 4-digit 19xx/20xx token.
+  out.warranty = null;
+  // 1) Capture batch / warranty codes into out.warranty.  These include
+  //    "N5", "N5/26", "n2.26", "N11", "05-26", and warranty-card dates that
+  //    are CURRENT/FUTURE month-year stamps ("5/2026", "11/2025").
+  const WARRANTY_RE = /\b(?:N\d{1,2}(?:[\/.\-]\d{1,4})?|\d{1,2}[\/.\-](?:20)?2[5-9])\b/i;
+  const wm = text.match(WARRANTY_RE);
+  if (wm) out.warranty = wm[0].toUpperCase();
+  // 2) Manufacture year.  Two accepted forms:
+  //    (a) a standalone 4-digit 1950-2039 token NOT inside a slash/dash code; OR
+  //    (b) a PAST full-4-digit year after a month slash ("3/2009") — dealers do
+  //        write the real production date this way, and the owner's rule only
+  //        excludes CURRENT/FUTURE warranty-card stamps (2025/2026), captured above.
+  let y = null;
+  const yStd = text.match(/(?<![A-Za-z0-9][\/.\-])\b(19[5-9]\d|20[0-3]\d)\s*[Yy]?\b(?![\/.\-]\d)/);
+  if (yStd) y = yStd[1];
+  if (!y) {
+    const ySlash = text.match(/\b\d{1,2}\/(19[5-9]\d|20[0-2]\d)\b/);
+    if (ySlash) {
+      const yr = parseInt(ySlash[1], 10);
+      if (yr <= 2024) y = ySlash[1];   // past year = real manufacture year
+    }
+  }
   if (y) out.year = parseInt(y, 10);
 
   // ── Multi-Currency Price Matrix ──────────────────────────────────────
@@ -559,15 +638,17 @@ function regexParse(chunk) {
   if (priceEntries.length === 0 || hasOnlyTrash) {
     // If we have trash entries, clear them first
     if (hasOnlyTrash) priceEntries.length = 0;
-    // Try multiple patterns for bare K/M without currency
-    const bareM = text.match(/\b(\d{2,4}(?:[.,]\d+)?)\s*([MmKk])\b/);
+    // WF_BAREKM_DECIMAL: allow 1-4 digit integer part so decimals like
+    // "2.88M", "1.4M", "1.16m" parse correctly (previously \d{2,4} skipped the
+    // leading "2." and matched "88M" -> 88,000,000).
+    const bareM = text.match(/\b(\d{1,4}(?:\.\d+)?)\s*([MmKk])\b/);
     if (bareM) {
-      let val = parseFloat(bareM[1].replace(/,/g, ''));
+      let val = parseFloat(bareM[1]);
       const suf = bareM[2].toLowerCase();
       if (suf === 'm') val *= 1_000_000;
       else if (suf === 'k') val *= 1_000;
       if (!isNaN(val) && val >= 100 && val < 100_000_000) {
-        const inferredCur = CURRENCY_FROM_TEXT || 'USD';
+        const inferredCur = CURRENCY_FROM_TEXT || 'HKD';  // WF_BARE_CCY_HKD
         priceEntries.push({ value: Math.round(val), currency: inferredCur, raw: bareM[0], index: bareM.index });
       }
     }
