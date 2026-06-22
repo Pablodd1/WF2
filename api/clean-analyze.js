@@ -387,20 +387,24 @@ function regexParse(chunk) {
   const priceEntries = [];
 
   // Pattern A: "CURRENCY AMOUNT" (left-side) — "HKD 447k", "$125,000", "USDT 57,650"
-  const leftCurRe = new RegExp(
-    `(?:(${CUR_RE})|(HK\$)|(\$)|(€)|(£))\s*([\d.,]+)\s*([MmKk])?(?=\s|$|[,.;]|\b(?:${CUR_RE})\b)`, 'gi'
-  );
+  // Using regex literal to avoid template-literal escaping issues in build
+  const LEFT_CUR_RE = /(?:USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED|HK\$|\$|€|£)\s*([\d.,]+)\s*([MmKk])?(?=\s|$|[,.;])/gi;
+  const CUR_NAME_RE = /(USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED)/i;
   let m;
-  while ((m = leftCurRe.exec(text)) !== null) {
-    // Extract currency from capture groups (m[1]-m[5])
-    let cur = (m[1] || '').toUpperCase()  // named currency
-      || (m[2] ? 'HKD' : '')              // HK$
-      || (m[3] ? 'USD' : '')              // $
-      || (m[4] ? 'EUR' : '')              // €
-      || (m[5] ? 'GBP' : '');             // £
+  while ((m = LEFT_CUR_RE.exec(text)) !== null) {
+    // Extract currency: m[0] contains the full match like "USDT 57,650" or "$12,500"
+    const curMatch = m[0].match(CUR_NAME_RE);
+    let cur = curMatch ? curMatch[0].toUpperCase() : null;
+    if (!cur) {
+      // Symbol-based fallback
+      if (m[0].includes('HK$')) cur = 'HKD';
+      else if (m[0].includes('$')) cur = 'USD';
+      else if (m[0].includes('€')) cur = 'EUR';
+      else if (m[0].includes('£')) cur = 'GBP';
+    }
     if (!cur) continue;
-    let val = parseFloat((m[6] || '').replace(/,/g, ''));
-    const suf = (m[7] || '').toLowerCase();
+    let val = parseFloat((m[1] || '').replace(/,/g, ''));
+    const suf = (m[2] || '').toLowerCase();
     if (suf === 'm') val *= 1_000_000;
     else if (suf === 'k') val *= 1_000;
     if (!isNaN(val) && val >= 100 && val < 100_000_000) {
@@ -409,10 +413,9 @@ function regexParse(chunk) {
   }
 
   // Pattern B: "AMOUNT CURRENCY" (right-side) — "447k HKD", "57,650 USDT", "152000hkd"
-  const rightCurRe = new RegExp(
-    `([\d.,]+)\s*([MmKk])?\s*(${CUR_RE})\b`, 'gi'
-  );
-  while ((m = rightCurRe.exec(text)) !== null) {
+  // Using regex literal to avoid template-literal escaping issues
+  const RIGHT_CUR_RE = /([\d.,]+)\s*([MmKk])?\s*(USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED)\b/gi;
+  while ((m = RIGHT_CUR_RE.exec(text)) !== null) {
     let cur = (m[3] || '').toUpperCase();  // capture group 3 = currency name
     if (!cur) continue;
     let val = parseFloat((m[1] || '').replace(/,/g, ''));
