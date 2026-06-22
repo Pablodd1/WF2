@@ -208,6 +208,75 @@ function splitWatches(raw) {
   }
   blocks = sepSplit;
 
+  // 4b) MID-LINE SECOND-REFERENCE SPLIT — two different watches typed on one
+  //     space-separated line (no comma/emoji/newline), e.g.:
+  //       "5167A 2020 full set HKD 588,000 usdt 75,300 IW328904 2026 fresh HKD103000"
+  //     → ["5167A 2020 full set HKD 588,000 usdt 75,300", "IW328904 2026 fresh HKD103000"]
+  //
+  //     CONSERVATIVE — fires ONLY when ALL hold, to avoid shredding one watch:
+  //       (1) block has NO newline (multi-line continuation handled in step 2)
+  //       (2) 2+ DISTINCT strong, brand-identifiable reference tokens are present
+  //       (3) a price/currency token sits BETWEEN the refs (signals a new listing)
+  //     Uses only high-specificity ref patterns — never bare 4-digit / year /
+  //     price tokens — so "38.8mm", "2026", "588,000" can't be mistaken for refs.
+  const STRONG_REF_RE = new RegExp(
+    '(' +
+      '\\bRM\\s?\\d{2}[-\\s]?\\d{2}\\b' +                                  // Richard Mille
+      '|\\b\\d{4}\\/\\d{1,4}[A-Z]{0,2}(?:-\\d{3})?\\b' +                   // Patek slash 5711/1A
+      '|\\bIW\\d{4,6}\\b' +                                               // IWC
+      '|\\b(?:116|126|114|124|226|228|279|128|336|268)\\d{3}[A-Z]{0,4}\\b' + // Rolex 6-digit
+      '|\\b\\d{4,5}[A-Z]{1,4}\\b' +                                       // PP/AP 5167A,15500ST
+    ')', 'gi'
+  );
+  const PRICE_TOKEN_RE = /\d{2,3}\s?[kKmM]\b|[$€£]|\b(?:hkd|usd|usdt|eur|chf|gbp|sgd)\b|[\d,]{4,}/i;
+
+  const midSplit = [];
+  for (const block of blocks) {
+    if (block.includes('\n')) { midSplit.push(block); continue; }
+    // Find all strong-ref match positions
+    const hits = [];
+    let m;
+    STRONG_REF_RE.lastIndex = 0;
+    while ((m = STRONG_REF_RE.exec(block)) !== null) {
+      // Skip year-like tokens that masquerade as refs: "2024Y", "2020y", "2019".
+      // \d{4}[A-Z] would otherwise treat "2024Y" as a Patek/AP reference.
+      if (/^(?:19|20)\d{2}[Yy]?$/.test(m[0])) continue;
+      hits.push({ ref: m[0], idx: m.index });
+    }
+    // Need 2+ DISTINCT refs (by normalized form)
+    const distinct = [...new Set(hits.map(h => normRef(h.ref)))];
+    if (hits.length < 2 || distinct.length < 2) { midSplit.push(block); continue; }
+
+    // Build cut points: only cut before a ref if a price/currency appears between
+    // it and the previous ref (i.e. the previous listing already "closed").
+    const cuts = [hits[0].idx];
+    for (let i = 1; i < hits.length; i++) {
+      const between = block.slice(hits[i - 1].idx, hits[i].idx);
+      // skip if this ref is the same as the immediately preceding one (e.g. "-014" re-match)
+      if (normRef(hits[i].ref) === normRef(hits[i - 1].ref)) continue;
+      if (PRICE_TOKEN_RE.test(between)) cuts.push(hits[i].idx);
+    }
+    if (cuts.length < 2) { midSplit.push(block); continue; }
+
+    // Slice the block at each cut point
+    const parts = [];
+    for (let i = 0; i < cuts.length; i++) {
+      const start = cuts[i];
+      const end = i + 1 < cuts.length ? cuts[i + 1] : block.length;
+      const seg = block.slice(start, end).trim();
+      if (seg) parts.push(seg);
+    }
+    // Preserve any leading text before the first ref (brand prefix etc.) by
+    // prepending it to the first part.
+    if (cuts[0] > 0) {
+      const lead = block.slice(0, cuts[0]).trim();
+      if (lead) parts[0] = (lead + ' ' + parts[0]).trim();
+    }
+    if (parts.length >= 2) midSplit.push(...parts);
+    else midSplit.push(block);
+  }
+  blocks = midSplit;
+
   // 5) Strip leading bullet/number separators (but keep emoji brand markers)
   return blocks
     .map(b => b.replace(/^\s*([0-9]+[.)]|[•▪◦‣·\-–—✅🔹🔸▶►*]+)\s*/u, '').trim())
