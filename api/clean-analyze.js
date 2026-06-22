@@ -83,8 +83,11 @@ function splitWatches(raw) {
     .trim();
   if (!text) return [];
 
-  // 1) Double-newline blocks first
-  let blocks = text.split(/\n\s*\n+/).map(b => b.trim()).filter(Boolean);
+  // 1) Start with the whole text as ONE block. Step 2 decides single-vs-multi
+  //    watch by counting STRONG references — blank lines (\n\n) inside one
+  //    listing must NOT pre-split it (dealers use blank lines as cosmetic
+  //    spacing: "5268/461G\n\n38.8mm\n\n$570,000" is ONE watch).
+  let blocks = [text];
 
   // 2) ORPHAN TOKEN REASSEMBLY — when a single watch spans multiple lines
   //    (e.g. "5327G-001\n2017 full set\nusdt57,650 HKD447k"), the middle lines
@@ -94,58 +97,63 @@ function splitWatches(raw) {
   //    have only prices, conditions, or years (no reference), merge them.
   if (blocks.length === 1) {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const HAS_REF = /\b\d{3,6}[A-Z]{0,6}\b|RM\d{2}|\/\d/i;
-    const HAS_PRICE = /\b(\d{2,3}\s?[kKmM]|\$|usd|hkd|eur|usdt|€|[\d,]{4,}\s*(?:hkd|usd|usdt|eur|gbp))\b/i;
-    const IS_ORPHAN = /^(?:20\d{2}|full\s*set|new|unworn|used|bnib|complete|box|papers)\b/i;
-
-    // Reassemble: find the first ref-bearing line, then merge all following
-    // orphan lines (no ref, has price or condition/year) into it.
-    const healed = [];
-    let buffer = null;
-    for (const line of lines) {
-      const hasRef = HAS_REF.test(line);
-      if (hasRef) {
-        if (buffer) healed.push(buffer);
-        buffer = line;
-      } else if (buffer) {
-        // Orphan: append to buffer if it looks like watch metadata
-        if (HAS_PRICE.test(line) || IS_ORPHAN.test(line)) {
-          buffer += ' ' + line;
-        } else {
-          // Could be a second watch. Check if it starts a pattern.
-          if (healed.length === 0 && lines.length <= 4) {
-            // Small block — likely all one watch, just merge
-            buffer += ' ' + line;
-          } else {
-            // Push buffer and start new potential watch
-            healed.push(buffer);
-            buffer = line;
-          }
-        }
-      } else {
-        // No buffer yet, no ref — just push as-is
-        healed.push(line);
-      }
-    }
-    if (buffer) healed.push(buffer);
-
-    // Only use reassembled result if it reduced the line count
-    // (meaning we actually merged something)
-    if (healed.length < lines.length && healed.length >= 1) {
-      blocks = healed;
-    }
-  }
-
-  // 3) If it came as one block, try per-line splitting when MULTIPLE lines
-  //    each look like a standalone listing (have a price or a reference).
-  if (blocks.length === 1) {
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const listingLike = lines.filter(l =>
-      /\b\d{3,4}[\/\-]?\d?[A-Z]{1,4}\b/i.test(l) ||         // reference-ish
-      /\b(\d{2,3}\s?k|\$|usd|hkd|eur|usdt|€)\b/i.test(l)    // price-ish
+    // WF_STRONGREF_LINE — a line counts as starting a NEW watch only if it carries
+    // a real, brand-identifiable reference (not a bare year/price/size). This is
+    // the dealer multi-line format: ref on one line, then year/condition/price on
+    // following lines. Mirrors the strong-ref patterns used elsewhere.
+    const STRONG_REF_LINE = new RegExp(
+      '(' +
+        '\\bRM\\s?\\d{2}[-\\s]?\\d{2}\\b' +
+        '|\\b\\d{4}\\/\\d{1,4}[A-Za-z]{0,3}(?:-\\d{3})?\\b' +      // 5711/1A, 5268/461G
+        '|\\bIW\\d{4,6}\\b' +
+        '|\\b\\d{3}\\.\\d{2}\\.\\d{2}\\.\\d{2}\\.\\d{2}\\.\\d{3}\\b' + // Omega dotted
+        '|\\b(?:116|126|114|124|226|228|279|128|336|268)\\d{3}[A-Za-z]{0,4}\\b' + // Rolex 6-digit
+        '|\\b\\d{4,5}[A-Za-z]{1,4}(?:-\\d{1,3})?\\b' +                 // 5167A, 5089G-131
+      ')'
     );
-    if (lines.length >= 2 && listingLike.length >= 2) blocks = lines;
+    const isRefLine = (l) => {
+      const m = l.match(STRONG_REF_LINE);
+      if (!m) return false;
+      const tok = m[0];
+      if (/^(?:19|20)\d{2}[A-Za-z]?$/.test(tok)) return false;        // year token
+      if (/^\d{3,6}(?:HKD|USD|USDT|EUR|CHF|GBP|SGD|JPY|AED)$/i.test(tok)) return false; // price+ccy
+      return true;
+    };
+
+    // Count how many lines independently bear a STRONG reference.
+    const refLineCount = lines.filter(isRefLine).length;
+
+    if (refLineCount <= 1) {
+      // ZERO or ONE reference in the whole block => it is ONE watch. Merge every
+      // line. Fixes single multi-line listings being shredded into ref / junk /
+      // price fragments (e.g. "5164R\n2023 new movement\nFull set retail ready\n$130,000").
+      blocks = [lines.join(' ')];
+    } else {
+      // 2+ reference lines => multiple watches stacked. Start a new buffer at each
+      // ref-bearing line; merge following non-ref (orphan) lines into the current one.
+      const healed = [];
+      let buffer = null;
+      for (const line of lines) {
+        if (isRefLine(line)) {
+          if (buffer) healed.push(buffer);
+          buffer = line;
+        } else if (buffer) {
+          buffer += ' ' + line;       // orphan detail line -> current watch
+        } else {
+          healed.push(line);          // leading non-ref text
+        }
+      }
+      if (buffer) healed.push(buffer);
+      if (healed.length >= 1) blocks = healed;
+    }
   }
+
+  // 3) DISABLED — step 2 (WF_STRONGREF_LINE ref-counting) now owns multi-line
+  //    splitting. The old per-line split here re-shredded single multi-line
+  //    listings that step 2 had correctly merged (it read the ORIGINAL text,
+  //    ignoring step 2's result). Step 2 already: merges to 1 watch when <=1
+  //    reference, or splits per ref-bearing line when 2+. No further line split.
+
 
   // 3) EMOJI SPLIT — if a single block has multiple watch-emoji markers
   //    mid-line, split on each emoji. Each emoji starts a new watch.
