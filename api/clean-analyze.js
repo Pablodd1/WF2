@@ -658,8 +658,10 @@ function regexParse(chunk) {
   // Must run AFTER brand/reference extraction so we don't confuse intent words
   // with watch brand names.
   const tL = text.toLowerCase();
-  if (/\b(wtb|want\b.*\bbuy|looking\s+for|in\s+search\s+of|iso\b|seeking|need\b.*\bwatch)\b/i.test(tL)
-      && !/\b(model|reference|ref|daytona|submariner|nautilus)\b/i.test(tL)) {
+  if (/\b(wtb|want\b.*\bbuy|looking\s+for|in\s+search\s+of|iso\b|seeking|need\b.*\bwatch)\b/i.test(tL)) {
+    // Buyer wants are real demand signals — "looking for ref X" is still a BUY.
+    // (Removed the model/ref/daytona negative guard: it wrongly cancelled genuine
+    // buyer lines like "Looking for Patek Philippe Ref 3729".)
     out.intent = 'BUY';
   } else if (/\b(ft|f\/t|for\s+trade|trade[\s:].*?\b(for|with))\b/i.test(tL)) {
     out.intent = 'TRADE';
@@ -1304,6 +1306,17 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   if (imageVerdict === 'MISMATCH') {
     verdict = 'HUMAN';
     reason = 'Image disagrees with text (CRITICAL mismatch) — needs human review.';
+  } else if (parsed.intent === 'ALERT') {
+    // "Sold / gone / on hold / reserved" — NOT live inventory. Keep out of the
+    // approved sellable pool so closed listings don't pollute stock.
+    verdict = 'RECYCLE';
+    reason = 'Listing is sold/closed (ALERT) — excluded from live inventory.';
+  } else if (parsed.intent === 'BUY' || parsed.intent === 'TRADE' || parsed.intent === 'INQUIRY') {
+    // Buyer demand / trade / inquiry — real signal but NOT seller stock.
+    // Route to human lane so it lands in the demand bucket, never auto-approved
+    // as inventory.
+    verdict = 'HUMAN';
+    reason = `Buyer/inquiry intent (${parsed.intent}) — demand signal, not sellable inventory.`;
   } else if (!identified && confidence < RECYCLE_FLOOR) {
     verdict = 'RECYCLE';
     reason = 'Not enough information to identify the watch (no clear brand/reference).';
