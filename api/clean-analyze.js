@@ -414,7 +414,7 @@ function regexParse(chunk) {
 
   // Pattern B: "AMOUNT CURRENCY" (right-side) — "447k HKD", "57,650 USDT", "152000hkd"
   // Using regex literal to avoid template-literal escaping issues
-  const RIGHT_CUR_RE = /([\d.,]+)\s*([MmKk])?\s*(USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED)\b/gi;
+  const RIGHT_CUR_RE = /\b([\d.,]+)\s*([MmKk])?\s*(USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED)\b/gi;
   while ((m = RIGHT_CUR_RE.exec(text)) !== null) {
     let cur = (m[3] || '').toUpperCase();  // capture group 3 = currency name
     if (!cur) continue;
