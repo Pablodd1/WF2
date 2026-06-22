@@ -288,6 +288,12 @@ function regexParse(chunk) {
   addCandidate((text.match(/\b\d{4,5}[A-Z]{1,4}\b/i) || [])[0]);  // 5296R, 5205R, 15500ST
   addCandidate((text.match(/\b\d{4}[\s\/-]?\d?[A-Z]{1,3}\b/i) || [])[0]);   // 1166 10LN, 5712 1A
   addCandidate((text.match(/\b\d{6}[A-Z]{0,4}\b/i) || [])[0]);              // bare 6-digit
+  // 4-digit bare number — lowest priority, reject obvious years (19xx-20xx)
+  const bare4 = (text.match(/\b\d{4}\b/g) || []).filter(d => {
+    const n = parseInt(d, 10);
+    return n < 1900 || n > 2030;  // not a year
+  });
+  if (bare4.length > 0) addCandidate(bare4[0]);
   
   // Filter out price-like AND word-like candidates (e.g., "152000HKD", "5039 or")
   const ENGLISH_WORDS = /^(OR|AND|IN|OF|THE|FOR|NEW|OLD|NOS|NIB|BNIB|WTB|WTS|NTQ|ISO|FULL|SET|BOX|PAPERS|YEAR|FRESH|USED|UNWORN|COMPLETE|RETAIL|READY|STOCK)$/i;
@@ -1031,8 +1037,31 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
       // Merge: prefer AI values where code was empty/unknown
       // Use nullish coalescing so falsy code values (Unknown, 0) don't get
       // overwritten by AI nulls, but missing values do.
+      //
+      // CRITICAL: AI reference REPLACES parser reference ONLY when:
+      //   - Parser has NO reference (ai fills a gap)
+      //   - AI reference matches the catalog (validated)
+      // Otherwise, keep the parser's reference — AI can hallucinate.
+      let aiRef = ai.reference || null;
+      if (aiRef && parsed.reference) {
+        // Both parser and AI have references — validate AI's against catalog
+        const aiCat = lookupCatalog(aiRef);
+        const parserCat = lookupCatalog(parsed.reference);
+        if (!aiCat.found && parserCat.found) {
+          // AI reference has no catalog match but parser's does — keep parser's
+          aiRef = null;
+        } else if (aiCat.found && !parserCat.found) {
+          // AI found a catalog match the parser missed — use AI's
+          aiRef = ai.reference;
+        } else if (!aiCat.found && !parserCat.found) {
+          // Neither found — keep parser's (code is more stable than AI)
+          aiRef = null;
+        }
+        // Both found or both missed: use parser's (code-first principle)
+      }
+      
       parsed = {
-        reference: ai.reference || parsed.reference,
+        reference: aiRef || parsed.reference,
         brand: (ai.brand && ai.brand !== 'Unknown' && ai.brand !== null) ? ai.brand : parsed.brand,
         dialColor: ai.dialColor || parsed.dialColor,
         condition: (ai.condition && ai.condition !== 'Unknown' && ai.condition !== null) ? ai.condition : parsed.condition,
