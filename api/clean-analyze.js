@@ -533,8 +533,15 @@ function regexParse(chunk) {
       out._priceNote = `cross-rate validated: ${priceEntries.map(e => `${e.value} ${e.currency}`).join(' ≈ ')}`;
     } else {
       // Different prices (maybe listing two watches on one line?)
-      // Pick the HKD price as primary (most common in dealer market)
-      const hkdEntry = usdValues.find(e => e.currency === 'HKD');
+      // Pick the HKD price as primary (most common in dealer market).
+      // If multiple same-currency entries with large spread, pick the HIGHEST —
+      // lower values are likely partial matches (e.g., "65,000" from "510,000 HKD 65,000 USD").
+      let hkdEntry = usdValues.find(e => e.currency === 'HKD');
+      // If multiple HKD entries, pick the highest value
+      const hkdEntries = usdValues.filter(e => e.currency === 'HKD');
+      if (hkdEntries.length > 1) {
+        hkdEntry = hkdEntries.reduce((a, b) => a.value > b.value ? a : b);
+      }
       const primary = hkdEntry || usdValues[0];
       out.price = primary.value;
       out.currency = primary.currency;
