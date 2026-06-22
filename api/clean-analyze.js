@@ -71,7 +71,16 @@ function isImageUrl(u) { return IMG_EXT_RE.test(u) || IMG_CDN_RE.test(u); }
 const EMOJI_SPLIT_RE = /([🔥🏮🔵⭕🟢⚫🔴🟠🟡⚪🔶🟣🟤✅🔹🔸▶►])/u;
 
 function splitWatches(raw) {
-  const text = String(raw || '').replace(/\r\n/g, '\n').trim();
+  // WF_SPLIT_FULLWIDTH — normalize full-width punctuation to ASCII BEFORE any
+  // comma/separator splitting, so the thousands-separator guard and watch-like
+  // checks work on full-width input. Fixes "AP 26320，2013Full set，45500USD"
+  // being wrongly split into 2 watches on the full-width comma "，".
+  const text = String(raw || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[\uFF0C\u3001]/g, ',')   // ，、 -> ,
+    .replace(/[\uFF1B]/g, ';')          // ； -> ;
+    .replace(/[\uFF1A]/g, ':')          // ： -> :
+    .trim();
   if (!text) return [];
 
   // 1) Double-newline blocks first
@@ -195,11 +204,20 @@ function splitWatches(raw) {
     const parts = blockForSplit.split(sep).map(p => p.trim().replace(/#THOUSEP#/g, ',')).filter(Boolean);
     if (parts.length < 2) { sepSplit.push(block); continue; }
     
-    // Each part must look like a watch (have a reference OR a price)
-    const watchLike = parts.filter(p =>
-      /\b\d{3,4}[\/\-]?\d?[A-Z]{1,4}\b/i.test(p) ||  // reference-ish
-      /\b(\d{2,3}\s?k|\$|usd|hkd|eur|usdt|€)\b/i.test(p)  // price-ish
-    );
+    // WF_COMMA_REFREQ — each part must have its OWN REFERENCE to count as a
+    // separate watch. A real comma-list of watches has a ref per part
+    // ("5712/1A 970K, 5167A 583K"). A single watch with stray commas
+    // ("AP 26320, 2013 Full set, 45500USD") has the ref in only ONE part —
+    // a bare price fragment is NOT a standalone watch. Require >=2 ref-bearing parts.
+    const watchLike = parts.filter(p => {
+      // Strip price+currency tokens first so "45500USD"/"722HKD"/"$45000" don't
+      // masquerade as references (they're prices, not refs).
+      const pNoPrice = p
+        .replace(/\b\d[\d,\.]*\s?(?:k|m|hkd|usd|usdt|eur|chf|gbp|sgd|jpy|aed)\b/gi, ' ')
+        .replace(/[$€£]\s?\d[\d,\.]*/g, ' ');
+      return /\b\d{3,4}[\/\-]?\d?[A-Z]{1,4}\b/i.test(pNoPrice) ||  // reference-ish
+             /\b\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3}\b/.test(pNoPrice);  // Omega dotted
+    });
     if (watchLike.length >= 2) {
       sepSplit.push(...parts);
     } else {
@@ -241,6 +259,10 @@ function splitWatches(raw) {
       // Skip year-like tokens that masquerade as refs: "2024Y", "2020y", "2019".
       // \d{4}[A-Z] would otherwise treat "2024Y" as a Patek/AP reference.
       if (/^(?:19|20)\d{2}[Yy]?$/.test(m[0])) continue;
+      // WF_4B_PRICEGUARD — skip price+currency tokens ("45500USD","722HKD") and
+      // year+word tokens ("2013Full") that \d{4,5}[A-Z]+ falsely matches as refs.
+      if (/^\d{3,6}(?:HKD|USD|USDT|EUR|CHF|GBP|SGD|JPY|AED)$/i.test(m[0])) continue;
+      if (/^(?:19|20)\d{2}[A-Za-z]{2,}$/.test(m[0])) continue;
       hits.push({ ref: m[0], idx: m.index });
     }
     // Need 2+ DISTINCT refs (by normalized form)
