@@ -574,6 +574,27 @@ function crossValidate(parsed, signals = {}) {
   // 2. Image agreement — vision saw the same ref/brand.
   if (signals.imageVerdict === 'MATCH') { agree.push('image-match'); boost += 12; }
   else if (signals.imageVerdict === 'MISMATCH') { disagree.push('image-mismatch'); boost -= 30; }
+  else if (signals.imagePresent && !signals.imageVerdict) {
+    // Image was provided but vision couldn't verify it (timeout, illegible,
+    // or no verdict returned). Penalize — we can't confirm the text matches
+    // what's actually in the photo.
+    disagree.push('image-unverified'); boost -= 8;
+  }
+  // If vision detected a different brand than the text parser, penalize
+  // even without an explicit MISMATCH verdict (vision may be conservative).
+  if (signals.visionBrand && parsed.brand && parsed.brand !== 'Unknown' &&
+      signals.visionBrand.toLowerCase() !== parsed.brand.toLowerCase()) {
+    if (signals.imageVerdict !== 'MATCH') {
+      disagree.push('image-brand-mismatch'); boost -= 18;
+    }
+  }
+  // If vision detected a different reference than the text parser
+  if (signals.visionRef && parsed.reference &&
+      normRef(signals.visionRef) !== normRef(parsed.reference)) {
+    if (signals.imageVerdict !== 'MATCH') {
+      disagree.push('image-ref-mismatch'); boost -= 18;
+    }
+  }
 
   // 3. Web search agreement.
   if (signals.webSearchConfidence && signals.webSearchConfidence >= 70) {
@@ -1018,11 +1039,19 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   }
 
   // 6) CROSS-VALIDATION — fuse catalog + image + web signals into one boost.
+  // Extract vision-detected brand and reference for cross-checking
+  const visionBrand = bestVisionResult?.brand || null;
+  const visionRef = bestVisionResult?.reference || null;
+  const imagePresent = imageUrls.length > 0;
+
   const cv = crossValidate(parsed, {
     catalogHit: catalog.found,
     catalogBrand: catalog.brand,
     catalogSearched: !!(parsed.reference),  // true if we attempted a catalog lookup
     imageVerdict,
+    imagePresent,
+    visionBrand,
+    visionRef,
     webSearchConfidence,
     webSearchBrand,
   });
