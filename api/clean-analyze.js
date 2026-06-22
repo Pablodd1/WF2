@@ -574,7 +574,7 @@ function crossValidate(parsed, signals = {}) {
   // 2. Image agreement — vision saw the same ref/brand.
   if (signals.imageVerdict === 'MATCH') { agree.push('image-match'); boost += 12; }
   else if (signals.imageVerdict === 'MISMATCH') { disagree.push('image-mismatch'); boost -= 30; }
-  else if (signals.imagePresent && !signals.imageVerdict) {
+  else if (signals.imagePresent && (!signals.imageVerdict || signals.imageVerdict === 'UNVERIFIED')) {
     // Image was provided but vision couldn't verify it (timeout, illegible,
     // or no verdict returned). Penalize — we can't confirm the text matches
     // what's actually in the photo.
