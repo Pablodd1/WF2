@@ -408,14 +408,22 @@ function regexParse(chunk) {
     if (suf === 'm') val *= 1_000_000;
     else if (suf === 'k') val *= 1_000;
     if (!isNaN(val) && val >= 100 && val < 100_000_000) {
-      priceEntries.push({ value: Math.round(val), currency: cur, raw: m[0] });
+      priceEntries.push({ value: Math.round(val), currency: cur, raw: m[0], index: m.index });
     }
   }
+
+  // Track which token ranges Pattern A consumed so Pattern B doesn't re-match
+  const consumedRanges = priceEntries.map(e => ({ start: e.index, end: e.index + e.raw.length }));
 
   // Pattern B: "AMOUNT CURRENCY" (right-side) — "447k HKD", "57,650 USDT", "152000hkd"
   // Using regex literal to avoid template-literal escaping issues
   const RIGHT_CUR_RE = /\b([\d.,]+)\s*([MmKk])?\s*(USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED)\b/gi;
   while ((m = RIGHT_CUR_RE.exec(text)) !== null) {
+    // Skip if this match overlaps with text already consumed by Pattern A
+    const matchStart = m.index;
+    const matchEnd = matchStart + m[0].length;
+    if (consumedRanges.some(r => matchStart < r.end && matchEnd > r.start)) continue;
+    
     let cur = (m[3] || '').toUpperCase();  // capture group 3 = currency name
     if (!cur) continue;
     let val = parseFloat((m[1] || '').replace(/,/g, ''));
