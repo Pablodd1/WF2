@@ -388,7 +388,7 @@ function regexParse(chunk) {
 
   // Pattern A: "CURRENCY AMOUNT" (left-side) — "HKD 447k", "$125,000", "USDT 57,650"
   const leftCurRe = new RegExp(
-    `(?:(${CUR_RE})|(HK\\$)|(\\$)|(€)|(£))\\s*([\\d.,]+)\\s*([MmKk])?(?=\\s|$|[,.;]|\\b(?:${CUR_RE})\\b)`, 'gi'
+    `(?:(${CUR_RE})|(HK\$)|(\$)|(€)|(£))\s*([\d.,]+)\s*([MmKk])?(?=\s|$|[,.;]|\b(?:${CUR_RE})\b)`, 'gi'
   );
   let m;
   while ((m = leftCurRe.exec(text)) !== null) {
@@ -410,7 +410,7 @@ function regexParse(chunk) {
 
   // Pattern B: "AMOUNT CURRENCY" (right-side) — "447k HKD", "57,650 USDT", "152000hkd"
   const rightCurRe = new RegExp(
-    `([\\d.,]+)\\s*([MmKk])?\\s*(${CUR_RE})\\b`, 'gi'
+    `([\d.,]+)\s*([MmKk])?\s*(${CUR_RE})\b`, 'gi'
   );
   while ((m = rightCurRe.exec(text)) !== null) {
     let cur = (m[3] || '').toUpperCase();  // capture group 3 = currency name
