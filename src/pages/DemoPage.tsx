@@ -206,26 +206,34 @@ RM 35-03 Rafa 2023 2.4M USD`;
         if (resp?.watches) flat.push(...resp.watches);
       }
 
-      // Merge pipeline results onto optimistic cards
-      const enriched: EnrichedResult[] = optimistic.slice(0, flat.length).map((opt, i) => {
-        const r = flat[i];
-        if (!r) return { ...opt, processing: false };
+      // Build the final cards DIRECTLY from the API watches — NOT by zipping
+      // against the per-line optimistic array. A single input line can explode
+      // into multiple watches (e.g. the "🔥A 🔥B 🔥C" emoji line → 3 watches),
+      // so index i in `optimistic` (one per line) does NOT correspond to index i
+      // in `flat` (one per watch). Each API watch carries its OWN raw text in
+      // `input`/`rawEntry`; that is the authoritative pairing. We re-derive the
+      // card's base fields from that exact raw text so the displayed raw and the
+      // parsed result always belong to the same watch.
+      const enriched: EnrichedResult[] = flat.map((r) => {
+        const ownRaw = (r as any).rawEntry || r.input || '';
+        const base = parseWatch(ownRaw);   // base parse from THIS watch's own text
         const merged: EnrichedResult = {
-          ...opt,
-          brand: r.parsed.brand || opt.brand,
-          reference: r.parsed.reference || opt.reference,
-          dialColor: r.parsed.dialColor || opt.dialColor,
-          condition: r.parsed.condition || opt.condition,
-          year: r.parsed.year ?? opt.year,
-          price: r.parsed.price ?? opt.price,
-          currency: r.parsed.currency || opt.currency,
+          ...base,
+          rawMessage: ownRaw,              // display + persist key = this watch's raw
+          brand: r.parsed.brand || base.brand,
+          reference: r.parsed.reference || base.reference,
+          dialColor: r.parsed.dialColor || base.dialColor,
+          condition: r.parsed.condition || base.condition,
+          year: r.parsed.year ?? base.year,
+          price: r.parsed.price ?? base.price,
+          currency: r.parsed.currency || base.currency,
           confidence: r.confidence,
           verdict: r.verdict,
           pipeline: r,
           processing: false,
           expanded: r.verdict === 'HUMAN',   // auto-expand so users see the stages
-          _aiChangedRef: r.parsed._aiChangedRef || false,
-          _parserRef: r.parsed._parserRef || null,
+          _aiChangedRef: (r.parsed as any)._aiChangedRef || false,
+          _parserRef: (r.parsed as any)._parserRef || null,
         };
         return merged;
       });
