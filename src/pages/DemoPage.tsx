@@ -1229,6 +1229,26 @@ function PipelineCard({
             <FieldBox label="Confidence" value={`${r.confidence}%`} good={r.confidence >= 85} />
           </div>
 
+          {/* DISCREPANCY WARNING — AI changed the reference from what the parser found */}
+          {r._aiChangedRef && r._parserRef && (
+            <div className="mt-3 px-3 py-2 rounded-lg text-xs flex items-start gap-2" style={{
+              backgroundColor: '#450a0a',
+              border: '1px solid #7f1d1d',
+              color: '#fca5a5',
+            }}>
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#ef4444' }} />
+              <div>
+                <span className="font-bold">AI Discrepancy — Needs Human Review</span>
+                <br />
+                Parser found: <span className="font-mono font-bold" style={{ color: '#f87171' }}>{r._parserRef}</span>
+                {' → '}
+                AI suggests: <span className="font-mono font-bold" style={{ color: '#fbbf24' }}>{r.reference}</span>
+                <br />
+                <span style={{ color: '#f87171' }}>Confidence capped at 84% to prevent auto-approval.</span>
+              </div>
+            </div>
+          )}
+
           {/* Reason */}
           {r.pipeline?.reason && (
             <div className="mt-3 px-3 py-2 rounded-lg text-xs" style={{

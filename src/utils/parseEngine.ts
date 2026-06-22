@@ -55,6 +55,8 @@ export interface ParsedWatch {
   confidence: number;
   flags: string[];
   intent: 'SELL' | 'BUY' | 'INQUIRY';
+  _aiChangedRef?: boolean;
+  _parserRef?: string | null;
 }
 
 // ── Brand catalog ──

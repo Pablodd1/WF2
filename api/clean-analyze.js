@@ -996,6 +996,9 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   // 1) PARSE (code)
   let parsed = regexParse(textOnly || chunk);
   let confidence = codeConfidence(parsed);
+  // Preserve parser's original reference for discrepancy detection
+  const parserRef = parsed.reference || null;
+  const parserBrand = parsed.brand || null;
   stages.push({ stage: 'PARSE', engine: 'regex/code', confidence, data: { ...parsed }, note: 'code-first field extraction' });
 
   // 2) CATALOG (code-first, free) — look the reference up in the merged
@@ -1092,6 +1095,21 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
         }
       }
       stages.push({ stage: 'AI_TEXT', engine: ai._source || 'ai', confidence, data: { ...parsed }, note: `AI parsed messy text (${ai._source})` });
+      // DISCREPANCY DETECTION: If AI changed the reference from what the parser
+      // originally extracted, cap confidence below approval threshold (84 max).
+      // The visual model is for human review — AI-suggested changes need eyes on them.
+      if (parserRef && parsed.reference && normRef(parserRef) !== normRef(parsed.reference)) {
+        parsed._aiChangedRef = true;
+        parsed._parserRef = parserRef;
+        confidence = Math.min(confidence, 84);  // force HUMAN review
+        stages.push({
+          stage: 'DISCREPANCY',
+          engine: 'guard',
+          confidence,
+          data: { parserRef, aiRef: parsed.reference },
+          note: `⚠️ AI changed reference: parser="${parserRef}" → AI="${parsed.reference}". Capped confidence for human review.`
+        });
+      }
     } catch (e) {
       stages.push({ stage: 'AI_TEXT', engine: 'ai-fallback', confidence, error: e.message, note: 'AI parse failed, kept code result' });
     }
