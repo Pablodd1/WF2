@@ -180,6 +180,7 @@ function splitWatches(raw) {
   //    Example: "5712/1A Blue 970K, 5167A 583K, 5968G 930K" → 3 watches
   //    Example: "116500LN 105k | 126710BLNR 98k | 5711/1A 1.2m" → 3 watches
   //    But NOT: "5712/1A, Blue, 970K" (one watch, comma-separated fields)
+  //    Also NOT: "HKD 588,000" (comma is thousands separator in price)
   const sepSplit = [];
   for (const block of blocks) {
     // Check for comma OR pipe separated listings
@@ -188,7 +189,10 @@ function splitWatches(raw) {
     if (!usesComma && !usesPipe) { sepSplit.push(block); continue; }
     
     const sep = usesPipe ? '|' : ',';
-    const parts = block.split(sep).map(p => p.trim()).filter(Boolean);
+    // Don't split on commas that are between digits (thousands separators)
+    // Replace d,d with d#THOUSEP#d temporarily, split, then restore
+    const blockForSplit = usesComma ? block.replace(/(\d),(\d)/g, '$1#THOUSEP#$2') : block;
+    const parts = blockForSplit.split(sep).map(p => p.trim().replace(/#THOUSEP#/g, ',')).filter(Boolean);
     if (parts.length < 2) { sepSplit.push(block); continue; }
     
     // Each part must look like a watch (have a reference OR a price)
@@ -446,7 +450,7 @@ function regexParse(chunk) {
   }
 
   // Pattern C: "$" suffix — "450000$", "39200usd" (no space between number and $/currency)
-  const DOLLAR_SUFFIX_RE = /\b(\d{4,7})\s*(\$|usdt?|usd|hkd|eur|euro?|gbp)\b/gi;
+  const DOLLAR_SUFFIX_RE = /\b(\d{4,7})\s*(\$|usdt?|usd|hkd|eur|euro?|gbp)(?=\s|$|[,.;/\-]|\b)/gi;
   while ((m = DOLLAR_SUFFIX_RE.exec(text)) !== null) {
     const matchStart = m.index;
     const matchEnd = matchStart + m[0].length;
