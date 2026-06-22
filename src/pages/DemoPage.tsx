@@ -224,6 +224,8 @@ RM 35-03 Rafa 2023 2.4M USD`;
           pipeline: r,
           processing: false,
           expanded: r.verdict === 'HUMAN',   // auto-expand so users see the stages
+          _aiChangedRef: r.parsed._aiChangedRef || false,
+          _parserRef: r.parsed._parserRef || null,
         };
         return merged;
       });
