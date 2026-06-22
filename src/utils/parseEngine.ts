@@ -49,6 +49,7 @@ export interface ParsedWatch {
   dialColor: string;
   price: number;
   currency: string;
+  usdEquivalent?: number;
   condition: string;
   year: number | null;
   confidence: number;

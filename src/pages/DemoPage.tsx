@@ -1107,7 +1107,7 @@ function PipelineCard({
               <span style={{ color: r.brand !== 'Unknown' ? '#d4af37' : '#ef4444' }}>{r.brand}</span>
               {r.reference && <span className="font-mono">{r.reference}</span>}
               {r.dialColor !== 'UNKNOWN' && <span>{r.dialColor}</span>}
-              {r.price > 0 && <span>{r.currency} {r.price.toLocaleString()}</span>}
+              {r.price > 0 && <span>{r.currency} {r.price.toLocaleString()}{r.usdEquivalent && r.currency !== 'USD' && r.currency !== 'USDT' ? <span style={{color:'#666'}}> (~${r.usdEquivalent.toLocaleString()})</span> : null}</span>}
               {/* Intent badge: SELL = purple, BUY = orange, INQUIRY = blue */}
               {r.intent && r.intent !== 'SELL' && (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase"
@@ -1200,7 +1200,16 @@ function PipelineCard({
             />
             <FieldBox
               label="Price"
-              value={r.price > 0 ? `${r.currency} ${r.price.toLocaleString()}` : '—'}
+              value={r.price > 0 ? (
+                <span>
+                  {r.currency} {r.price.toLocaleString()}
+                  {r.usdEquivalent && r.currency !== 'USD' && r.currency !== 'USDT' && (
+                    <span style={{ color: '#666', fontSize: '11px', marginLeft: '4px' }}>
+                      (~${r.usdEquivalent.toLocaleString()})
+                    </span>
+                  )}
+                </span>
+              ) : '—'}
               good={r.price > 0}
               onEdit={onFieldEdit}
             />
@@ -1337,7 +1346,7 @@ function PipelineArrow() {
   );
 }
 
-function FieldBox({ label, value, good, mono = false, onEdit }: { label: string; value: string; good: boolean; mono?: boolean; onEdit?: () => void }) {
+function FieldBox({ label, value, good, mono = false, onEdit }: { label: string; value: React.ReactNode; good: boolean; mono?: boolean; onEdit?: () => void }) {
   return (
     <div
       onClick={onEdit}

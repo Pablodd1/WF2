@@ -103,7 +103,7 @@ function loadCatalogs() {
  */
 function lookupCatalog(reference) {
   loadCatalogs();
-  const empty = { found: false, brand: null, source: null, matchType: null };
+  const empty = { found: false, brand: null, source: null, matchType: null, matchedRef: null };
   if (!reference) return empty;
 
   const ref = normalizeRef(reference);
@@ -111,13 +111,13 @@ function lookupCatalog(reference) {
 
   // Tier 1 — exact normalized (catalog wins over enriched: it's curated).
   let hit = _catalog.get(ref) || _enriched.get(ref);
-  if (hit) return Object.assign({ found: true, matchType: 'exact' }, hit);
+  if (hit) return Object.assign({ found: true, matchType: 'exact', matchedRef: reference }, hit);
 
   // Tier 2 — whitespace/slash-collapsed variant (126331 G -> 126331G).
   const collapsed = collapseRef(reference);
   for (const map of [_catalog, _enriched]) {
     for (const [key, val] of map) {
-      if (collapseRef(key) === collapsed) return Object.assign({ found: true, matchType: 'collapsed' }, val);
+      if (collapseRef(key) === collapsed) return Object.assign({ found: true, matchType: 'collapsed', matchedRef: key }, val);
     }
   }
 
@@ -126,7 +126,7 @@ function lookupCatalog(reference) {
     for (const [key, val] of map) {
       const shorter = ref.length <= key.length ? ref : key;
       if (shorter.length >= 4 && (key.startsWith(ref) || ref.startsWith(key))) {
-        return Object.assign({ found: true, matchType: 'partial' }, val);
+        return Object.assign({ found: true, matchType: 'partial', matchedRef: key }, val);
       }
     }
   }

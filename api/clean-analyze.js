@@ -143,6 +143,9 @@ function splitWatches(raw) {
   //    Example: "🔥7010R Purple 538K 🔥5712/1A Blue 970K" → 2 watches
   //    Only fires when the block has NO newlines (multi-line blocks already
   //    split correctly via step 2).
+  //    GUARD: Only accept emoji split if at least 2 resulting parts contain
+  //    a reference-like token. Decorative emoji (✅ before "Full Set") are
+  //    NOT watch separators.
   const expanded = [];
   for (const block of blocks) {
     // Skip emoji split for multi-line blocks — they're already split by line
@@ -150,21 +153,21 @@ function splitWatches(raw) {
     const emojiParts = block.split(EMOJI_SPLIT_RE);
     if (emojiParts.length > 2) {
       let current = '';
-      let foundMultiple = false;
+      const parts = [];
       for (let i = 0; i < emojiParts.length; i++) {
         const part = emojiParts[i];
         if (EMOJI_SPLIT_RE.test(part)) {
-          if (current.trim()) {
-            expanded.push(current.trim());
-          }
+          if (current.trim()) parts.push(current.trim());
           current = part;
-          foundMultiple = true;
         } else {
           current += part;
         }
       }
-      if (current.trim()) expanded.push(current.trim());
-      if (foundMultiple && expanded.length > 1) {
+      if (current.trim()) parts.push(current.trim());
+      // Only accept if >= 2 parts contain a reference-like token
+      const refLike = /\b\d{4,}[/\s]?\d?[A-Z]{1,4}\b/i;
+      if (parts.filter(p => refLike.test(p)).length >= 2) {
+        expanded.push(...parts);
         continue;
       }
     }
@@ -417,7 +420,7 @@ function regexParse(chunk) {
 
   // Pattern B: "AMOUNT CURRENCY" (right-side) — "447k HKD", "57,650 USDT", "152000hkd"
   // Using regex literal to avoid template-literal escaping issues
-  const RIGHT_CUR_RE = /\b([\d.,]+)\s*([MmKk])?\s*(USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED)\b/gi;
+  const RIGHT_CUR_RE = /\b([\d.,]+)\s*([MmKk])?\s*(USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED|euro?)\b/gi;
   while ((m = RIGHT_CUR_RE.exec(text)) !== null) {
     // Skip if this match overlaps with text already consumed by Pattern A
     const matchStart = m.index;
@@ -425,6 +428,7 @@ function regexParse(chunk) {
     if (consumedRanges.some(r => matchStart < r.end && matchEnd > r.start)) continue;
     
     let cur = (m[3] || '').toUpperCase();  // capture group 3 = currency name
+    if (cur === 'EURO') cur = 'EUR';
     if (!cur) continue;
     let val = parseFloat((m[1] || '').replace(/,/g, ''));
     const suf = (m[2] || '').toLowerCase();
@@ -436,23 +440,62 @@ function regexParse(chunk) {
     if (!isNaN(val) && val >= 100 && val < 100_000_000) {
       // Avoid duplicate — if we already have this currency from Pattern A
       if (!priceEntries.some(e => e.currency === cur && Math.abs(e.value - Math.round(val)) / Math.max(e.value, 1) < 0.1)) {
-        priceEntries.push({ value: Math.round(val), currency: cur, raw: m[0] });
+        priceEntries.push({ value: Math.round(val), currency: cur, raw: m[0], index: m.index });
       }
     }
   }
 
-  // Pattern C: "AMOUNT k/m" without explicit currency — infer if other prices present
-  if (priceEntries.length === 0) {
-    const bareM = text.match(/([\d.,]+)\s*([MmKk])/i);
+  // Pattern C: "$" suffix — "450000$", "39200usd" (no space between number and $/currency)
+  const DOLLAR_SUFFIX_RE = /\b(\d{4,7})\s*(\$|usdt?|usd|hkd|eur|euro?|gbp)\b/gi;
+  while ((m = DOLLAR_SUFFIX_RE.exec(text)) !== null) {
+    const matchStart = m.index;
+    const matchEnd = matchStart + m[0].length;
+    // Skip if already consumed by A or B
+    const allRanges = [...consumedRanges, ...priceEntries.filter(e => e.index !== undefined).map(e => ({ start: e.index, end: e.index + e.raw.length }))];
+    if (allRanges.some(r => matchStart < r.end && matchEnd > r.start)) continue;
+    
+    let rawCur = (m[2] || '').toLowerCase();
+    let cur;
+    if (rawCur === '$') cur = 'USD';
+    else if (rawCur === 'euro') cur = 'EUR';
+    else cur = rawCur.toUpperCase();
+    let val = parseFloat((m[1] || '').replace(/,/g, ''));
+    if (!isNaN(val) && val >= 100 && val < 100_000_000) {
+      if (!priceEntries.some(e => e.currency === cur && Math.abs(e.value - Math.round(val)) / Math.max(e.value, 1) < 0.1)) {
+        priceEntries.push({ value: Math.round(val), currency: cur, raw: m[0], index: m.index });
+      }
+    }
+  }
+
+  // Pattern D: "AMOUNT k/m" without explicit currency — also fires when Pattern A
+  // consumed a partial match (e.g., emoji in "🔥7010R Purple 538K" was grabbed as "$538").
+  // Run this whenever we have 0 entries OR the only entries look wrong (value < 1000).
+  const hasOnlyTrash = priceEntries.length > 0 && priceEntries.every(e => e.value < 1000 && e.currency === 'USD');
+  if (priceEntries.length === 0 || hasOnlyTrash) {
+    // If we have trash entries, clear them first
+    if (hasOnlyTrash) priceEntries.length = 0;
+    // Try multiple patterns for bare K/M without currency
+    const bareM = text.match(/\b(\d{2,4}(?:[.,]\d+)?)\s*([MmKk])\b/);
     if (bareM) {
       let val = parseFloat(bareM[1].replace(/,/g, ''));
       const suf = bareM[2].toLowerCase();
       if (suf === 'm') val *= 1_000_000;
       else if (suf === 'k') val *= 1_000;
       if (!isNaN(val) && val >= 100 && val < 100_000_000) {
-        // Infer currency: HKD from HK phone, else USD
         const inferredCur = CURRENCY_FROM_TEXT || 'USD';
-        priceEntries.push({ value: Math.round(val), currency: inferredCur, raw: bareM[0] });
+        priceEntries.push({ value: Math.round(val), currency: inferredCur, raw: bareM[0], index: bareM.index });
+      }
+    }
+  }
+
+  // Pattern E: European decimal format — "41.500 euro" (period = thousands, comma = decimal)
+  // Also handles "$ 393,000/-" (slash suffix)
+  if (priceEntries.length === 0) {
+    const euroNum = text.match(/\b(\d{1,3}(?:\.\d{3})+)\s*(euro?)\b/i);
+    if (euroNum) {
+      let val = parseFloat(euroNum[1].replace(/\./g, '').replace(/,/g, ''));
+      if (!isNaN(val) && val >= 100 && val < 100_000_000) {
+        priceEntries.push({ value: Math.round(val), currency: 'EUR', raw: euroNum[0], index: euroNum.index });
       }
     }
   }
@@ -497,6 +540,17 @@ function regexParse(chunk) {
   } else if (priceEntries.length === 1) {
     out.price = priceEntries[0].value;
     out.currency = priceEntries[0].currency;
+  }
+
+  // Compute USD equivalent for display — always available on the frontend
+  if (out.price && out.currency) {
+    const fxRate = FX[out.currency] || 1;
+    out.usdEquivalent = Math.round(out.price / fxRate);
+    // Also add usdEquivalent to each priceMatrix entry
+    out.priceMatrix = priceEntries.map(e => ({
+      ...e,
+      usdEquivalent: Math.round(e.value / (FX[e.currency] || 1))
+    }));
   }
 
   // Fallback currency detection if priceMatrix is empty
@@ -562,10 +616,34 @@ function crossValidate(parsed, signals = {}) {
   const disagree = [];
 
   // 1. Catalog agreement — ref exists AND brand matches the parser.
+  //    Also check that the catalog's matched reference is the SAME as parsed.
   if (signals.catalogHit && signals.catalogBrand) {
     const pb = (parsed.brand || '').toLowerCase();
     const cb = signals.catalogBrand.toLowerCase();
-    if (parsed.brand && parsed.brand !== 'Unknown' &&
+    
+    // Reference mismatch check: catalog returned a hit for a DIFFERENT ref
+    // than what the parser extracted (e.g., parser got "3729", catalog matched "3729/1").
+    // This is a data quality flag — the catalog may have wrong brand data.
+    if (signals.catalogMatchedRef && parsed.reference) {
+      const parsedNorm = normRef(parsed.reference);
+      const catNorm = normRef(signals.catalogMatchedRef);
+      // Allow partial matches (3729 vs 3729/1) if the base reference is the same
+      const parsedBase = parsedNorm.replace(/[\/\-].*$/, '');
+      const catBase = catNorm.replace(/[\/\-].*$/, '');
+      if (parsedBase !== catBase && parsedNorm !== catNorm) {
+        // Completely different reference — catalog returned wrong data
+        disagree.push('catalog-ref-mismatch');
+        boost -= 15;
+        // Don't apply brand from mismatched reference
+      } else if (parsed.brand && parsed.brand !== 'Unknown' &&
+          (pb === cb || pb.includes(cb) || cb.includes(pb))) {
+        agree.push('catalog'); boost += 10;
+      } else if (!parsed.brand || parsed.brand === 'Unknown') {
+        agree.push('catalog-supplies-brand'); boost += 10;
+      } else {
+        disagree.push('catalog-vs-parser-brand'); boost -= 8;
+      }
+    } else if (parsed.brand && parsed.brand !== 'Unknown' &&
         (pb === cb || pb.includes(cb) || cb.includes(pb))) {
       agree.push('catalog'); boost += 10;            // ref+brand confirmed by curated data
     } else if (!parsed.brand || parsed.brand === 'Unknown') {
@@ -912,7 +990,8 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
     }
     stages.push({
       stage: 'CATALOG', engine: 'catalog', confidence,
-      data: { found: catalog.found, matchType: catalog.matchType || null, brand: catalog.brand,
+      data: { found: catalog.found, matchType: catalog.matchType || null, matchedRef: catalog.matchedRef || null,
+              brand: catalog.brand,
               collection: catalog.collection || null, model: catalog.model || null,
               liquidityScore: catalog.liquidityScore ?? null },
       note: catalog.found ? `catalog ${catalog.matchType} hit: ${catalog.brand || 'brand?'} ${catalog.collection || ''}`.trim()
@@ -1061,6 +1140,7 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   const cv = crossValidate(parsed, {
     catalogHit: catalog.found,
     catalogBrand: catalog.brand,
+    catalogMatchedRef: catalog.matchedRef || null,
     catalogSearched: !!(parsed.reference),  // true if we attempted a catalog lookup
     imageVerdict,
     imagePresent,
