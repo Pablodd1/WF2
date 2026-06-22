@@ -417,6 +417,9 @@ function regexParse(chunk) {
     if (!cur) continue;
     let val = parseFloat((m[1] || '').replace(/,/g, ''));
     const suf = (m[2] || '').toLowerCase();
+    // Reject small bare numbers without k/m suffix — they're likely years (2024)
+    // or other metadata, not prices. Real watch prices are never under $10k.
+    if (!suf && val < 10000) continue;
     if (suf === 'm') val *= 1_000_000;
     else if (suf === 'k') val *= 1_000;
     if (!isNaN(val) && val >= 100 && val < 100_000_000) {
