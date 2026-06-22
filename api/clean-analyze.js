@@ -277,41 +277,38 @@ function regexParse(chunk) {
   const CURRENCY_FROM_TEXT = (text.match(/\b(hkd|usdt|usd|eur|chf|gbp|sgd)\b/i) || [])[1] ||
     (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/\$/.test(text) ? 'USD' : null)));
   
-  let ref =
-    (text.match(/\bRM\s?\d{2}[-\s]?\d{2}\b/i) || [])[0] ||
-    (text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i) || [])[0] ||   // Patek 5711/1A, 7118/1200A
-    (text.match(/\bIW\d{4,6}\b/i) || [])[0] ||
-    (text.match(/\b(?:116|126|114|124|226|228|279|128|336|268)\d{3}[A-Z]{0,4}\b/i) || [])[0]; // Rolex/VC 6-digit + suffix
+  // Collect ALL candidate references, then pick the best one (catalog match > first match)
+  const candidates = [];
+  const addCandidate = (m) => { if (m && !candidates.includes(m)) candidates.push(m); };
   
-  // Only fall back to generic digit patterns if we haven't found anything.
-  // 4-5 digit + letter comes BEFORE bare 6-digit to avoid price smashing.
-  if (!ref) {
-    ref = (text.match(/\b\d{4,5}[A-Z]{1,4}\b/i) || [])[0];  // 5296R, 5205R, 15500ST
-  }
-  if (!ref) {
-    ref = (text.match(/\b\d{4}[\s\/-]?\d?[A-Z]{1,3}\b/i) || [])[0];   // 1166 10LN, 5712 1A
-  }
-  if (!ref) {
-    ref = (text.match(/\b\d{6}[A-Z]{0,4}\b/i) || [])[0];              // bare 6-digit (only as last resort)
-  }
+  addCandidate((text.match(/\bRM\s?\d{2}[-\s]?\d{2}\b/i) || [])[0]);
+  addCandidate((text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i) || [])[0]);   // Patek 5711/1A
+  addCandidate((text.match(/\bIW\d{4,6}\b/i) || [])[0]);
+  addCandidate((text.match(/\b(?:116|126|114|124|226|228|279|128|336|268)\d{3}[A-Z]{0,4}\b/i) || [])[0]); // Rolex
+  addCandidate((text.match(/\b\d{4,5}[A-Z]{1,4}\b/i) || [])[0]);  // 5296R, 5205R, 15500ST
+  addCandidate((text.match(/\b\d{4}[\s\/-]?\d?[A-Z]{1,3}\b/i) || [])[0]);   // 1166 10LN, 5712 1A
+  addCandidate((text.match(/\b\d{6}[A-Z]{0,4}\b/i) || [])[0]);              // bare 6-digit
   
-  // REJECT reference candidates that are obviously prices.
-  // A 5-6 digit token followed immediately by a known currency suffix
-  // (e.g. "152000hkd") is a PRICE, not a reference. Also reject 6-digit
-  // pure-number tokens >= 100,000 that appear with a currency indicator.
-  if (ref) {
-    const refClean = ref.trim().toUpperCase();
-    // Pattern: "152000HKD" — 5-6 digits + known currency suffix
-    if (/^\d{5,6}(?:HKD|USD|EUR|CHF|GBP|SGD|USDT|JPY|AED)$/i.test(refClean)) {
-      ref = null;  // This is a price+currency, not a reference
-    }
-    // Pattern: pure 6-digit number >= 100,000 with currency nearby
-    if (ref && /^\d{6}$/.test(refClean)) {
+  // Filter out price-like candidates (e.g., "152000HKD")
+  const validCandidates = candidates.filter(c => {
+    const refClean = c.trim().toUpperCase();
+    if (/^\d{5,6}(?:HKD|USD|EUR|CHF|GBP|SGD|USDT|JPY|AED)$/i.test(refClean)) return false;
+    if (/^\d{6}$/.test(refClean)) {
       const val = parseInt(refClean, 10);
-      if (val >= 100000 && val <= 5000000 && CURRENCY_FROM_TEXT) {
-        ref = null;  // This is a price in HKD/USD/etc.
-      }
+      if (val >= 100000 && val <= 5000000 && CURRENCY_FROM_TEXT) return false;
     }
+    return true;
+  });
+  
+  let ref = null;
+  if (validCandidates.length > 0) {
+    // Try catalog lookup on each candidate — pick the first one with a catalog hit
+    for (const c of validCandidates) {
+      const cat = lookupCatalog(c);
+      if (cat.found) { ref = c; break; }
+    }
+    // Fallback: pick first valid candidate
+    if (!ref) ref = validCandidates[0];
   }
 
   if (ref) out.reference = ref.trim().toUpperCase().replace(/\s+/g, '');
