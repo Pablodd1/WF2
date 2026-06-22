@@ -289,7 +289,8 @@ function regexParse(chunk) {
   addCandidate((text.match(/\b\d{4}[\s\/-]?\d?[A-Z]{1,3}\b/i) || [])[0]);   // 1166 10LN, 5712 1A
   addCandidate((text.match(/\b\d{6}[A-Z]{0,4}\b/i) || [])[0]);              // bare 6-digit
   
-  // Filter out price-like candidates (e.g., "152000HKD")
+  // Filter out price-like AND word-like candidates (e.g., "152000HKD", "5039 or")
+  const ENGLISH_WORDS = /^(OR|AND|IN|OF|THE|FOR|NEW|OLD|NOS|NIB|BNIB|WTB|WTS|NTQ|ISO|FULL|SET|BOX|PAPERS|YEAR|FRESH|USED|UNWORN|COMPLETE|RETAIL|READY|STOCK)$/i;
   const validCandidates = candidates.filter(c => {
     const refClean = c.trim().toUpperCase();
     if (/^\d{5,6}(?:HKD|USD|EUR|CHF|GBP|SGD|USDT|JPY|AED)$/i.test(refClean)) return false;
@@ -297,6 +298,9 @@ function regexParse(chunk) {
       const val = parseInt(refClean, 10);
       if (val >= 100000 && val <= 5000000 && CURRENCY_FROM_TEXT) return false;
     }
+    // Reject if the suffix letters are common English words (e.g., "5039 OR" where OR = "or")
+    const suffixLetters = refClean.match(/[A-Z]+$/);
+    if (suffixLetters && ENGLISH_WORDS.test(suffixLetters[0])) return false;
     return true;
   });
   
@@ -637,10 +641,17 @@ function crossValidate(parsed, signals = {}) {
     if (signals.catalogMatchedRef && parsed.reference) {
       const parsedNorm = normRef(parsed.reference);
       const catNorm = normRef(signals.catalogMatchedRef);
-      // Allow partial matches (3729 vs 3729/1) if the base reference is the same
-      const parsedBase = parsedNorm.replace(/[\/\-].*$/, '');
-      const catBase = catNorm.replace(/[\/\-].*$/, '');
-      if (parsedBase !== catBase && parsedNorm !== catNorm) {
+      // Extract the numeric base: "5072G-001" -> "5072", "3729/1" -> "3729"
+      const parsedBase = (parsedNorm.match(/^(\d+)/) || [])[1] || parsedNorm;
+      const catBase = (catNorm.match(/^(\d+)/) || [])[1] || catNorm;
+      // Also allow exact suffix match after normRef (e.g., 5072G vs 5072G001 -> both start 5072)
+      const parsedStripped = parsedNorm.replace(/[\/\-].*$/, '');
+      const catStripped = catNorm.replace(/[\/\-].*$/, '');
+      const suffixMatch = parsedStripped === catStripped ||
+        (parsedNorm.length >= 4 && catNorm.startsWith(parsedNorm)) ||
+        (catNorm.length >= 4 && parsedNorm.startsWith(catNorm));
+      
+      if (parsedBase !== catBase && !suffixMatch) {
         // Completely different reference — catalog returned wrong data
         disagree.push('catalog-ref-mismatch');
         boost -= 15;
