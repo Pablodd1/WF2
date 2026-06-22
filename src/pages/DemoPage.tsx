@@ -129,7 +129,7 @@ export default function DemoPage() {
   const [aiLoading, setAiLoading] = useState<Set<string>>(new Set());
   const [webLoading, setWebLoading] = useState<Set<string>>(new Set());
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
-  const [testMode, setTestMode] = useState(true);   // Test mode ON by default for the demo
+  const [testMode, setTestMode] = useState(false);  // OFF by default — show real pipeline results
   const [testModeCache, setTestModeCache] = useState<Record<number, any>>({});  // cached 3-catalog comparison per record
   const [csvStatus, setCsvStatus] = useState<{ stage: string; message: string; added?: number; updated?: number; catalogSize?: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
