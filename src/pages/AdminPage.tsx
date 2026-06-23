@@ -171,12 +171,38 @@ export default function AdminPage() {
   const exportData = async (format: 'excel' | 'csv') => {
     setActionLoading(`export-${format}`);
     try {
-      const res = await fetch(`/api/export-report?format=${format}`);
+      // Fetch parsed watches first
+      const watchesRes = await fetch('/parsedWatches.json');
+      const watchesData = await watchesRes.json();
+      const rows = Array.isArray(watchesData) ? watchesData : [];
+      
+      // Convert rows to watches format for export-report
+      const watches = rows.map(row => ({
+        parsed: {
+          reference: row[2] || '',
+          brand: row[1] || '',
+          dialColor: row[3] || '',
+          condition: row[5] || '',
+          year: row[12] || '',
+          price: row[4] || '',
+          currency: row[6] || '',
+        },
+        confidence: row[9] || 0,
+        verdict: row[10] || 'RECYCLE',
+        reason: row[11] || '',
+        input: row[0] || '',
+      }));
+      
+      const res = await fetch('/api/export-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watches, format }),
+      });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `watchfacts-${format === 'excel' ? 'report.xlsx' : 'export.csv'}`;
+      a.download = `watchfacts-report-${new Date().toISOString().slice(0,10)}.${format === 'excel' ? 'xlsx' : 'csv'}`;
       a.click();
       URL.revokeObjectURL(url);
       setMessage(`Exported ${format.toUpperCase()}`);

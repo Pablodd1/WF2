@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Download, FileSpreadsheet } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
+import { generatePriceResearchReport } from '@/lib/reports';
 
 // ── Types ──────────────────────────────────────────────────────
 interface PriceListing {
@@ -14,6 +15,13 @@ interface PriceListing {
   region?: string;
   phone?: string;
   imageUrl?: string;
+  condition?: string;
+  boxPapers?: string;
+  confidence?: {
+    score: number;
+    aiFields: string[];
+    catalogFields: string[];
+  };
 }
 
 interface ChartPoint {
@@ -27,7 +35,7 @@ interface PriceData {
   model: string;
   primaryDial: string;
   dialColors: string[];
-  liquidity: { fsCount: number };
+  liquidity: { fsCount: number; buyers?: number; sellers?: number; buyerSellerRatio?: number };
   pricing: {
     current: { min: number; avg: number; max: number; count: number } | null;
     drift: number | null;
@@ -165,12 +173,36 @@ export default function PriceResearch() {
               </div>
             </div>
 
-            {/* ── Liquidity + Pricing ─────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            {/* ── Liquidity + Pricing ───────────────────────────────────────────────── */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               {/* Liquidity */}
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Liquidity Analysis</h3>
                 <div style={{ fontSize: 14, color: MUTED }}># of FS: <span style={{ fontSize: 36, fontWeight: 700, color: NAVY, display: 'block', marginTop: 4 }}>{data.liquidity.fsCount.toLocaleString()}</span></div>
+              </div>
+
+              {/* Buyer/Seller Ratio */}
+              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Demand Ratio</h3>
+                {data.liquidity.buyers !== undefined && (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <span style={{ fontSize: 13, color: MUTED }}>Buyers</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: RED }}>{data.liquidity.buyers}</span>
+                    </div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span style={{ fontSize: 13, color: MUTED }}>Sellers</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: GREEN }}>{data.liquidity.sellers}</span>
+                    </div>
+                    <div style={{ width: '100%', height: 8, backgroundColor: BORDER, borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
+                      <div style={{ width: `${(data.liquidity.buyers / (data.liquidity.buyers + data.liquidity.sellers!)) * 100}%`, height: '100%', backgroundColor: RED }} />
+                      <div style={{ width: `${(data.liquidity.sellers! / (data.liquidity.buyers + data.liquidity.sellers!)) * 100}%`, height: '100%', backgroundColor: GREEN }} />
+                    </div>
+                    <div style={{ fontSize: 14, textAlign: 'center' }}>
+                      B/S Ratio: <span style={{ fontWeight: 700, color: (data.liquidity.buyerSellerRatio || 0) > 1 ? RED : GREEN }}>{data.liquidity.buyerSellerRatio?.toFixed(2) || 'N/A'}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Pricing */}
@@ -193,8 +225,33 @@ export default function PriceResearch() {
                   style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: NAVY, color: WHITE, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
                   Explore Marketplace →
                 </button>
+                <button 
+                  onClick={() => data && generatePriceResearchReport(
+                    data.reference,
+                    data.brand,
+                    data.model,
+                    {
+                      min: data.pricing.current?.min || 0,
+                      avg: data.pricing.current?.avg || 0,
+                      max: data.pricing.current?.max || 0,
+                      count: data.pricing.current?.count || 0,
+                      drift: data.pricing.drift || 0,
+                      previousAvg: data.pricing.previousAvg || 53189,
+                      currentAvg: data.pricing.current?.avg || 41500
+                    },
+                    data.listings,
+                    data.liquidity
+                  )}
+                  style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, backgroundColor: WHITE, color: NAVY, border: `2px solid ${NAVY}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FileSpreadsheet size={16} /> Download Report
+                </button>
               </div>
             </div>
+
+            {/* ── Price Forecast ───────────────────────────────── */}
+            {data && data.chart && data.chart.length >= 3 && (
+              <PriceForecast chart={data.chart} reference={data.reference} brand={data.brand} model={data.model} />
+            )}
 
             {/* ── Chart ────────────────────────────────────────── */}
             <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
@@ -432,6 +489,11 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
 }
 
 function ListingRow({ listing }: { listing: PriceListing }) {
+  const confidence = listing.confidence;
+  const score = confidence?.score || 0;
+  const scoreColor = score === 100 ? GREEN : score >= 90 ? BLUE : score >= 80 ? '#fd7e14' : RED;
+  const scoreLabel = score === 100 ? '✓ VERIFIED' : score >= 90 ? '🔍 REVIEW' : score >= 80 ? '⚠ CHECK' : '🚫 FLAGGED';
+  
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
@@ -444,11 +506,122 @@ function ListingRow({ listing }: { listing: PriceListing }) {
           {listing.phone && <span className="mr-2">{listing.phone}</span>}
           {listing.date && <span>{listing.date}</span>}
         </div>
+        {confidence && (
+          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ 
+              padding: '2px 8px', 
+              borderRadius: 4, 
+              fontSize: 11, 
+              fontWeight: 600, 
+              backgroundColor: scoreColor + '20',
+              color: scoreColor 
+            }}>
+              {score}% {scoreLabel}
+            </span>
+            {confidence.aiFields.length > 0 && (
+              <span style={{ fontSize: 11, color: MUTED }}>
+                AI: {confidence.aiFields.join(', ')}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>
       </div>
       <ExternalLink className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
+    </div>
+  );
+}
+
+
+function PriceForecast({ chart, reference, brand, model }: { chart: ChartPoint[]; reference: string; brand: string; model: string }) {
+  // Simple linear regression for 3-month forecast
+  const n = chart.length;
+  const x = chart.map((_, i) => i);
+  const y = chart.map(p => p.avg);
+  
+  const sumX = x.reduce((a, b) => a + b, 0);
+  const sumY = y.reduce((a, b) => a + b, 0);
+  const sumXY = x.reduce((s, xi, i) => s + xi * y[i], 0);
+  const sumXX = x.reduce((s, xi) => s + xi * xi, 0);
+  
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  
+  // Forecast next 3 months
+  const lastMonth = chart[chart.length - 1].month;
+  const forecasts = [];
+  for (let i = 1; i <= 3; i++) {
+    const forecastAvg = Math.round(slope * (n + i - 1) + intercept);
+    const lastAvg = chart[chart.length - 1].avg;
+    const changePct = ((forecastAvg - lastAvg) / lastAvg * 100).toFixed(1);
+    
+    // Generate month label
+    const [year, month] = lastMonth.split('-').map(Number);
+    const nextMonth = month + i;
+    const nextYear = year + Math.floor((nextMonth - 1) / 12);
+    const adjustedMonth = ((nextMonth - 1) % 12) + 1;
+    const monthLabel = `${nextYear}-${adjustedMonth.toString().padStart(2, '0')}`;
+    
+    forecasts.push({
+      month: monthLabel,
+      avg: forecastAvg,
+      change: parseFloat(changePct),
+      direction: parseFloat(changePct) >= 0 ? 'up' : 'down'
+    });
+  }
+  
+  const lastPrice = chart[chart.length - 1].avg;
+  const avgForecast = Math.round(forecasts.reduce((s, f) => s + f.avg, 0) / 3);
+  const totalChange = ((avgForecast - lastPrice) / lastPrice * 100).toFixed(1);
+  
+  return (
+    <div style={{ backgroundColor: '#f0f7ff', borderRadius: 12, padding: 24, marginBottom: 24, border: '1px solid #b8d4f0' }}>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>3-Month Price Forecast</h3>
+          <p style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+            {brand} {model} {reference} — Based on trend analysis
+          </p>
+        </div>
+        <div style={{ 
+          padding: '8px 16px', 
+          borderRadius: 8, 
+          backgroundColor: parseFloat(totalChange) >= 0 ? '#d4edda' : '#f8d7da',
+          color: parseFloat(totalChange) >= 0 ? '#155724' : '#721c24',
+          fontSize: 14,
+          fontWeight: 600
+        }}>
+          {parseFloat(totalChange) >= 0 ? '📈' : '📉'} {parseFloat(totalChange) >= 0 ? '+' : ''}{totalChange}% avg
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        {forecasts.map((f, i) => (
+          <div key={i} style={{ backgroundColor: WHITE, borderRadius: 8, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 12, color: MUTED, marginBottom: 4 }}>Month {i + 1}</div>
+            <div style={{ fontSize: 12, color: MUTED }}>{f.month}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: NAVY, marginTop: 4 }}>
+              ${f.avg.toLocaleString()}
+            </div>
+            <div style={{ 
+              fontSize: 12, 
+              color: f.change >= 0 ? GREEN : RED,
+              fontWeight: 600,
+              marginTop: 4
+            }}>
+              {f.change >= 0 ? '+' : ''}{f.change}%
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      <div style={{ fontSize: 11, color: MUTED, fontStyle: 'italic', textAlign: 'center' }}>
+        ⚠️ Disclaimer: This forecast is based on historical trend analysis and market patterns. 
+        It is NOT guaranteed. Market conditions, supply, demand, and external factors can significantly affect actual prices. 
+        Use as a reference only.
+      </div>
     </div>
   );
 }

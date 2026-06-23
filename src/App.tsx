@@ -7,6 +7,8 @@ import ReprocessPage from '@/pages/ReprocessPage';
 import DemoPage from '@/pages/DemoPage';
 import AdminPage from '@/pages/AdminPage';
 import PriceResearch from '@/pages/PriceResearch';
+import DemandSignals from '@/pages/DemandSignals';
+import InsightDetails from '@/pages/InsightDetails';
 
 export default function App() {
   return (
@@ -19,6 +21,8 @@ export default function App() {
       <Route path="/demo" element={<DemoPage />} />
       <Route path="/admin" element={<AdminPage />} />
       <Route path="/price-research" element={<PriceResearch />} />
+      <Route path="/demand" element={<DemandSignals />} />
+      <Route path="/insight" element={<InsightDetails />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
