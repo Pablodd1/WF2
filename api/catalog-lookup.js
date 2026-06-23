@@ -7,9 +7,9 @@
  */
 
 const { readFileSync } = require('fs');
-const { resolve } = require('path');
+const { resolve, join } = require('path');
 
-const __dirname = resolve(process.cwd(), 'public');
+const PUBLIC_DIR = resolve(process.cwd(), 'public');
 
 let catalogMap = null;
 let enrichedMap = null;
@@ -21,7 +21,7 @@ function loadCatalogs() {
   enrichedMap = new Map();
 
   try {
-    const catalog = JSON.parse(readFileSync(resolve(__dirname, 'catalog.json'), 'utf8'));
+    const catalog = JSON.parse(readFileSync(resolve(PUBLIC_DIR, 'catalog.json'), 'utf8'));
     for (const item of catalog) {
       const ref = normalizeRef(item.reference);
       catalogMap.set(ref, {
@@ -40,7 +40,7 @@ function loadCatalogs() {
   }
 
   try {
-    const enriched = JSON.parse(readFileSync(resolve(__dirname, 'enriched_refs.json'), 'utf8'));
+    const enriched = JSON.parse(readFileSync(resolve(PUBLIC_DIR, 'enriched_refs.json'), 'utf8'));
     for (const item of enriched) {
       const ref = normalizeRef(item.reference);
       const existing = enrichedMap.get(ref);
