@@ -345,10 +345,14 @@ function getData(ref) {
   // Detect outliers
   const outlierPrices = prices.filter(p => p < lowerBound || p > upperBound);
 
+  // Compute forecast using linear regression
+  const forecast = computeForecast(d.chart);
+
   return { 
     success: true, 
     reference: ref, 
     ...d,
+    forecast,
     listings: listingsWithConfidence,
     statsBefore: {
       min: Math.min(...prices),
@@ -364,5 +368,79 @@ function getData(ref) {
     },
     duplicates: dupCount,
     outliers: outlierPrices.length
+  };
+}
+
+function computeForecast(chart) {
+  const n = chart.length;
+  if (n < 2) return null;
+  
+  const x = chart.map((_, i) => i);
+  const y = chart.map(p => p.avg);
+  const yMin = chart.map(p => p.min);
+  const yMax = chart.map(p => p.max);
+  
+  const sumX = x.reduce((a, b) => a + b, 0);
+  const sumY = y.reduce((a, b) => a + b, 0);
+  const sumXY = x.reduce((s, xi, i) => s + xi * y[i], 0);
+  const sumXX = x.reduce((s, xi) => s + xi * xi, 0);
+  
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  
+  // Standard error for confidence interval
+  const residuals = y.map((yi, i) => yi - (slope * x[i] + intercept));
+  const mse = residuals.reduce((s, r) => s + r * r, 0) / (n - 2);
+  const stdError = Math.sqrt(mse);
+  
+  // Forecast next 3 months
+  const lastMonth = chart[chart.length - 1].month;
+  const [lastYear, lastMonthNum] = lastMonth.split('-').map(Number);
+  
+  const forecasts = [];
+  for (let i = 1; i <= 3; i++) {
+    const xi = n + i - 1;
+    const forecastAvg = Math.round(slope * xi + intercept);
+    const lastAvg = chart[chart.length - 1].avg;
+    const changePct = ((forecastAvg - lastAvg) / lastAvg * 100);
+    
+    // Confidence interval (95%)
+    const margin = Math.round(1.96 * stdError * Math.sqrt(1 + 1/n + Math.pow(xi - sumX/n, 2) / (sumXX - sumX*sumX/n)));
+    
+    // Month label
+    const nextMonth = lastMonthNum + i;
+    const nextYear = lastYear + Math.floor((nextMonth - 1) / 12);
+    const adjustedMonth = ((nextMonth - 1) % 12) + 1;
+    const monthLabel = `${nextYear}-${adjustedMonth.toString().padStart(2, '0')}`;
+    
+    forecasts.push({
+      month: monthLabel,
+      avg: forecastAvg,
+      min: Math.max(0, forecastAvg - margin),
+      max: forecastAvg + margin,
+      change: parseFloat(changePct.toFixed(1)),
+      direction: changePct >= 0 ? 'up' : 'down',
+      confidenceInterval: margin,
+    });
+  }
+  
+  const lastPrice = chart[chart.length - 1].avg;
+  const avgForecast = Math.round(forecasts.reduce((s, f) => s + f.avg, 0) / 3);
+  const totalChange = ((avgForecast - lastPrice) / lastPrice * 100);
+  
+  return {
+    method: 'linear_regression',
+    months: 3,
+    forecasts,
+    trend: {
+      direction: totalChange >= 0 ? 'up' : 'down',
+      percent: parseFloat(totalChange.toFixed(1)),
+      slope: parseFloat(slope.toFixed(2)),
+    },
+    confidence: {
+      level: 0.95,
+      stdError: parseFloat(stdError.toFixed(2)),
+    },
+    disclaimer: 'This forecast is based on historical trend analysis and is NOT guaranteed. Market conditions can significantly affect actual prices.',
   };
 }

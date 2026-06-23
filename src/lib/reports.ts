@@ -14,7 +14,8 @@ export function generatePriceResearchReport(
   model: string,
   stats: { min: number; avg: number; max: number; count: number; drift: number; previousAvg: number; currentAvg: number },
   listings: any[],
-  liquidity?: { buyers?: number; sellers?: number; buyerSellerRatio?: number }
+  liquidity?: { buyers?: number; sellers?: number; buyerSellerRatio?: number },
+  forecast?: any
 ) {
   const timestamp = new Date().toISOString().split('T')[0];
   const report = {
@@ -37,6 +38,16 @@ export function generatePriceResearchReport(
       sellers: liquidity?.sellers || 0,
       buyerSellerRatio: liquidity?.buyerSellerRatio?.toFixed(2) || 'N/A'
     },
+    forecast: forecast ? {
+      method: forecast.method,
+      trend: `${forecast.trend.direction === 'up' ? '+' : ''}${forecast.trend.percent}%`,
+      months: forecast.forecasts.map((f: any) => ({
+        month: f.month,
+        predicted: f.avg,
+        range: `$${f.min.toLocaleString()} - $${f.max.toLocaleString()}`,
+        change: `${f.change >= 0 ? '+' : ''}${f.change}%`
+      }))
+    } : null,
     listings: listings.map(l => ({
       title: l.title,
       priceNative: `${l.price?.toLocaleString()} ${l.currency}`,
@@ -77,6 +88,22 @@ export function generatePriceResearchReport(
     ['Sellers', liquidity?.sellers || 'N/A'],
     ['B/S Ratio', liquidity?.buyerSellerRatio?.toFixed(2) || 'N/A']
   ];
+  
+  // Add forecast to summary if available
+  if (forecast) {
+    summaryData.push(['', '']);
+    summaryData.push(['Forecast', '']);
+    summaryData.push(['Method', forecast.method]);
+    summaryData.push(['Trend', `${forecast.trend.direction === 'up' ? '+' : ''}${forecast.trend.percent}%`]);
+    summaryData.push(['Confidence Level', `${(forecast.confidence.level * 100).toFixed(0)}%`]);
+    summaryData.push(['Std Error', `$${forecast.confidence.stdError}`]);
+    summaryData.push(['', '']);
+    summaryData.push(['Month', 'Predicted (USD)', 'Range (USD)', 'Change']);
+    forecast.forecasts.forEach((f: any) => {
+      summaryData.push([f.month, f.avg, `$${f.min.toLocaleString()} - $${f.max.toLocaleString()}`, `${f.change >= 0 ? '+' : ''}${f.change}%`]);
+    });
+  }
+  
   const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
   XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
 

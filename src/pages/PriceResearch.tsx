@@ -48,6 +48,22 @@ interface PriceData {
   duplicates: number;
   statsBefore?: { min: number; avg: number; max: number; count: number };
   statsAfter?: { min: number; avg: number; max: number; count: number };
+  forecast?: {
+    method: string;
+    months: number;
+    forecasts: Array<{
+      month: string;
+      avg: number;
+      min: number;
+      max: number;
+      change: number;
+      direction: string;
+      confidenceInterval: number;
+    }>;
+    trend: { direction: string; percent: number; slope: number };
+    confidence: { level: number; stdError: number };
+    disclaimer: string;
+  };
 }
 
 const QUICK_REFS = ['52506', '126334', '5711/1A'];
@@ -240,7 +256,8 @@ export default function PriceResearch() {
                       currentAvg: data.pricing.current?.avg || 41500
                     },
                     data.listings,
-                    data.liquidity
+                    data.liquidity,
+                    data.forecast
                   )}
                   style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, backgroundColor: WHITE, color: NAVY, border: `2px solid ${NAVY}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileSpreadsheet size={16} /> Download Report
@@ -250,7 +267,7 @@ export default function PriceResearch() {
 
             {/* ── Price Forecast ───────────────────────────────── */}
             {data && data.chart && data.chart.length >= 3 && (
-              <PriceForecast chart={data.chart} reference={data.reference} brand={data.brand} model={data.model} />
+              <PriceForecast chart={data.chart} reference={data.reference} brand={data.brand} model={data.model} forecastData={data.forecast} />
             )}
 
             {/* ── Chart ────────────────────────────────────────── */}
@@ -535,8 +552,17 @@ function ListingRow({ listing }: { listing: PriceListing }) {
 }
 
 
-function PriceForecast({ chart, reference, brand, model }: { chart: ChartPoint[]; reference: string; brand: string; model: string }) {
-  // Simple linear regression for 3-month forecast
+function PriceForecast({ chart, reference, brand, model, forecastData }: { 
+  chart: ChartPoint[]; 
+  reference: string; 
+  brand: string; 
+  model: string;
+  forecastData?: PriceData['forecast'];
+}) {
+  // Use API forecast data if available, otherwise compute locally
+  const hasApiForecast = forecastData && forecastData.forecasts.length > 0;
+  
+  // Simple linear regression for 3-month forecast (fallback)
   const n = chart.length;
   const x = chart.map((_, i) => i);
   const y = chart.map(p => p.avg);
@@ -549,32 +575,55 @@ function PriceForecast({ chart, reference, brand, model }: { chart: ChartPoint[]
   const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
   const intercept = (sumY - slope * sumX) / n;
   
-  // Forecast next 3 months
-  const lastMonth = chart[chart.length - 1].month;
-  const forecasts = [];
-  for (let i = 1; i <= 3; i++) {
-    const forecastAvg = Math.round(slope * (n + i - 1) + intercept);
-    const lastAvg = chart[chart.length - 1].avg;
-    const changePct = ((forecastAvg - lastAvg) / lastAvg * 100).toFixed(1);
-    
-    // Generate month label
-    const [year, month] = lastMonth.split('-').map(Number);
-    const nextMonth = month + i;
-    const nextYear = year + Math.floor((nextMonth - 1) / 12);
-    const adjustedMonth = ((nextMonth - 1) % 12) + 1;
-    const monthLabel = `${nextYear}-${adjustedMonth.toString().padStart(2, '0')}`;
-    
-    forecasts.push({
-      month: monthLabel,
-      avg: forecastAvg,
-      change: parseFloat(changePct),
-      direction: parseFloat(changePct) >= 0 ? 'up' : 'down'
+  // Build combined chart data (historical + forecast)
+  const combinedChart = [...chart];
+  const forecastPoints = [];
+  
+  const forecasts = hasApiForecast 
+    ? forecastData.forecasts 
+    : (() => {
+        const lastMonth = chart[chart.length - 1].month;
+        const f = [];
+        for (let i = 1; i <= 3; i++) {
+          const forecastAvg = Math.round(slope * (n + i - 1) + intercept);
+          const lastAvg = chart[chart.length - 1].avg;
+          const changePct = ((forecastAvg - lastAvg) / lastAvg * 100);
+          const [year, month] = lastMonth.split('-').map(Number);
+          const nextMonth = month + i;
+          const nextYear = year + Math.floor((nextMonth - 1) / 12);
+          const adjustedMonth = ((nextMonth - 1) % 12) + 1;
+          f.push({
+            month: `${nextYear}-${adjustedMonth.toString().padStart(2, '0')}`,
+            avg: forecastAvg,
+            min: Math.round(forecastAvg * 0.9),
+            max: Math.round(forecastAvg * 1.1),
+            change: parseFloat(changePct.toFixed(1)),
+            direction: changePct >= 0 ? 'up' : 'down',
+            confidenceInterval: Math.round(forecastAvg * 0.1),
+          });
+        }
+        return f;
+      })();
+
+  // Add forecast points to chart
+  forecasts.forEach((f, i) => {
+    combinedChart.push({
+      month: f.month,
+      min: f.min,
+      avg: f.avg,
+      max: f.max,
+      count: 0,
     });
-  }
+    forecastPoints.push({
+      month: f.month,
+      avg: f.avg,
+      index: chart.length + i,
+    });
+  });
   
   const lastPrice = chart[chart.length - 1].avg;
   const avgForecast = Math.round(forecasts.reduce((s, f) => s + f.avg, 0) / 3);
-  const totalChange = ((avgForecast - lastPrice) / lastPrice * 100).toFixed(1);
+  const totalChange = ((avgForecast - lastPrice) / lastPrice * 100);
   
   return (
     <div style={{ backgroundColor: '#f0f7ff', borderRadius: 12, padding: 24, marginBottom: 24, border: '1px solid #b8d4f0' }}>
@@ -582,28 +631,58 @@ function PriceForecast({ chart, reference, brand, model }: { chart: ChartPoint[]
         <div>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>3-Month Price Forecast</h3>
           <p style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-            {brand} {model} {reference} — Based on trend analysis
+            {brand} {model} {reference} — Linear regression with 95% confidence interval
           </p>
         </div>
         <div style={{ 
           padding: '8px 16px', 
           borderRadius: 8, 
-          backgroundColor: parseFloat(totalChange) >= 0 ? '#d4edda' : '#f8d7da',
-          color: parseFloat(totalChange) >= 0 ? '#155724' : '#721c24',
+          backgroundColor: totalChange >= 0 ? '#d4edda' : '#f8d7da',
+          color: totalChange >= 0 ? '#155724' : '#721c24',
           fontSize: 14,
           fontWeight: 600
         }}>
-          {parseFloat(totalChange) >= 0 ? '📈' : '📉'} {parseFloat(totalChange) >= 0 ? '+' : ''}{totalChange}% avg
+          {totalChange >= 0 ? '📈' : '📉'} {totalChange >= 0 ? '+' : ''}{totalChange.toFixed(1)}% avg
         </div>
+      </div>
+      
+      {/* Forecast Chart */}
+      <div style={{ height: 200, marginBottom: 20 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={combinedChart}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
+            <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#6c757d' }} />
+            <YAxis tick={{ fontSize: 10, fill: '#6c757d' }} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+            <Tooltip 
+              contentStyle={{ backgroundColor: '#fff', border: '1px solid #e9ecef', borderRadius: 8 }}
+              formatter={(value: number) => `$${value.toLocaleString()}`}
+            />
+            <Area type="monotone" dataKey="max" stroke="none" fill="#b8d4f0" fillOpacity={0.3} />
+            <Area type="monotone" dataKey="min" stroke="none" fill="#fff" fillOpacity={1} />
+            <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 3 }} />
+            <Line 
+              type="monotone" 
+              dataKey="avg" 
+              stroke={totalChange >= 0 ? GREEN : RED} 
+              strokeWidth={2} 
+              strokeDasharray="5 5"
+              dot={{ r: 4, fill: totalChange >= 0 ? GREEN : RED }}
+              data={combinedChart.slice(chart.length - 1)}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
       
       <div className="grid grid-cols-3 gap-4 mb-4">
         {forecasts.map((f, i) => (
-          <div key={i} style={{ backgroundColor: WHITE, borderRadius: 8, padding: 16, textAlign: 'center' }}>
+          <div key={i} style={{ backgroundColor: WHITE, borderRadius: 8, padding: 16, textAlign: 'center', border: '1px solid #e9ecef' }}>
             <div style={{ fontSize: 12, color: MUTED, marginBottom: 4 }}>Month {i + 1}</div>
-            <div style={{ fontSize: 12, color: MUTED }}>{f.month}</div>
+            <div style={{ fontSize: 11, color: MUTED }}>{f.month}</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: NAVY, marginTop: 4 }}>
               ${f.avg.toLocaleString()}
+            </div>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
+              Range: ${f.min.toLocaleString()} - ${f.max.toLocaleString()}
             </div>
             <div style={{ 
               fontSize: 12, 
@@ -617,10 +696,14 @@ function PriceForecast({ chart, reference, brand, model }: { chart: ChartPoint[]
         ))}
       </div>
       
+      {forecastData && (
+        <div style={{ fontSize: 11, color: MUTED, textAlign: 'center', marginBottom: 8 }}>
+          Method: {forecastData.method} | Confidence: {(forecastData.confidence.level * 100).toFixed(0)}% | Std Error: ${forecastData.confidence.stdError}
+        </div>
+      )}
+      
       <div style={{ fontSize: 11, color: MUTED, fontStyle: 'italic', textAlign: 'center' }}>
-        ⚠️ Disclaimer: This forecast is based on historical trend analysis and market patterns. 
-        It is NOT guaranteed. Market conditions, supply, demand, and external factors can significantly affect actual prices. 
-        Use as a reference only.
+        ⚠️ {forecastData?.disclaimer || 'This forecast is based on historical trend analysis and is NOT guaranteed. Market conditions can significantly affect actual prices.'}
       </div>
     </div>
   );
