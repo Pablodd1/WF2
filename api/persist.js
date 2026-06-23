@@ -106,7 +106,7 @@ async function upsertBatch(supabaseUrl, serviceKey, batch) {
  * @param {import('@vercel/node').VercelRequest}  req
  * @param {import('@vercel/node').VercelResponse} res
  */
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // ── Method guard ────────────────────────────────────────────
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });

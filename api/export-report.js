@@ -12,7 +12,7 @@
  * Colors: conditional row coloring per verdict
  */
 
-import XLSX from 'xlsx';
+const XLSX = require('xlsx');
 
 const COLORS = {
   APPROVED: { fg: { rgb: '006100' }, bg: { rgb: 'C6EFCE' } },   // green
@@ -48,7 +48,7 @@ function addLegend(ws, startRow) {
   }
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

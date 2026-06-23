@@ -2,7 +2,7 @@
  * GET /api/health
  * Health check endpoint for WatchFacts monitoring.
  */
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const fs = require('fs');
   const path = require('path');
 

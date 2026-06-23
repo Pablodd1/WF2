@@ -12,60 +12,7 @@
  * - 80%  = 2 AI interventions (e.g., reference updated + dial updated)
  * - <80% = 3+ interventions or garbage (manual review required)
  */
-
-// Live FX rate cache
-let _rates = {
-  USD: 1.0,
-  HKD: 0.128,
-  AED: 0.272,
-  EUR: 1.08,
-  GBP: 1.27,
-  CHF: 1.13,
-  JPY: 0.0066,
-  SGD: 0.74,
-  AUD: 0.65,
-  CAD: 0.73,
-  USDT: 1.0,
-  CNY: 0.138,
-};
-let _ratesExpiry = 0;
-
-async function refreshRates() {
-  if (Date.now() < _ratesExpiry) return _rates;
-  try {
-    const ctrl = new AbortController();
-    setTimeout(() => ctrl.abort(), 5000);
-    const r = await fetch('https://api.exchangerate-api.com/v4/latest/USD', { signal: ctrl.signal });
-    const d = await r.json();
-    if (d.rates) {
-      _rates = {
-        USD: 1.0,
-        HKD: d.rates.HKD ? 1 / d.rates.HKD : 0.128,
-        AED: d.rates.AED ? 1 / d.rates.AED : 0.272,
-        EUR: d.rates.EUR ? 1 / d.rates.EUR : 1.08,
-        GBP: d.rates.GBP ? 1 / d.rates.GBP : 1.27,
-        CHF: d.rates.CHF ? 1 / d.rates.CHF : 1.13,
-        JPY: d.rates.JPY ? 1 / d.rates.JPY : 0.0066,
-        SGD: d.rates.SGD ? 1 / d.rates.SGD : 0.74,
-        AUD: d.rates.AUD ? 1 / d.rates.AUD : 0.65,
-        CAD: d.rates.CAD ? 1 / d.rates.CAD : 0.73,
-        USDT: 1.0,
-        CNY: d.rates.CNY ? 1 / d.rates.CNY : 0.138,
-      };
-      _ratesExpiry = Date.now() + 3600000; // 1 hour cache
-    }
-  } catch (e) {
-    console.log('FX fetch failed, using cached/static rates:', e.message);
-  }
-  return _rates;
-}
-
-function toUSD(amount, currency) {
-  const rate = _rates[currency?.toUpperCase()] || 1.0;
-  return Math.round(amount * rate);
-}
-
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) { (fix: ESM/CJS mismatch — all 15 ESM API files converted to CJS)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

@@ -6,8 +6,8 @@
  * Returns brand, collection, model, liquidity data for any reference.
  */
 
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+const { readFileSync } = require('fs');
+const { resolve } = require('path');
 
 const __dirname = resolve(process.cwd(), 'public');
 
@@ -85,7 +85,7 @@ function inferBrand(ref) {
   return null;
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
