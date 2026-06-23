@@ -3,9 +3,9 @@ import { Navbar } from './Navbar';
 
 interface LayoutProps {
   children: ReactNode;
-  totalProcessed: number;
-  normalizedCount: number;
-  residueCount: number;
+  totalProcessed?: number;
+  normalizedCount?: number;
+  residueCount?: number;
   throughputRate?: number;
   avgLatency?: number;
 }

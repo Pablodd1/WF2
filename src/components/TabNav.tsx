@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, BarChart3, Eye, Sparkles, BookOpen, Cpu, RefreshCw, Shield, DollarSign, Users, Search } from 'lucide-react';
 
 interface TabNavProps {
-  totalProcessed: number;
+  totalProcessed?: number;
 }
 
 export function TabNav({ totalProcessed }: TabNavProps) {

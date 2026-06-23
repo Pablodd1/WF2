@@ -3,17 +3,17 @@ import { StatusPill } from './ui/StatusPill';
 import { motion } from 'framer-motion';
 
 interface NavbarProps {
-  totalProcessed: number;
-  normalizedCount: number;
-  residueCount: number;
+  totalProcessed?: number;
+  normalizedCount?: number;
+  residueCount?: number;
   throughputRate?: number;
   avgLatency?: number;
 }
 
 export function Navbar({
-  totalProcessed,
-  normalizedCount,
-  residueCount,
+  totalProcessed = 0,
+  normalizedCount = 0,
+  residueCount = 0,
   throughputRate = 142,
   avgLatency = 847,
 }: NavbarProps) {
