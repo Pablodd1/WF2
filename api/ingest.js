@@ -110,7 +110,6 @@ function parsePrice(text, knownRef) {
 
 function parseCurrency(text) {
   const t = text.toUpperCase();
-  // FIX 2: Proper $ detection — $ is NOT a regex anchor here
   if (/\bUSDT\b/.test(t)) return 'USDT';
   if (/\bHKD\b|HK\$/.test(t)) return 'HKD';
   if (/\bEUR\b|€/.test(t)) return 'EUR';
@@ -120,6 +119,8 @@ function parseCurrency(text) {
   if (/\bAED\b/.test(t)) return 'AED';
   if (/\bJPY\b/.test(t)) return 'JPY';
   if (/\bUSD\b|\$/.test(t)) return 'USD';
+  // WhatsApp format: 💰 followed by number without currency = HKD
+  if (/💰/.test(t)) return 'HKD';
   return null;
 }
 
