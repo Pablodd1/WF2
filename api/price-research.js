@@ -7,18 +7,20 @@
 const { getClient } = require('./_lib/supabase');
 
 // Inline brand inference — no catalog dependency needed
+// Matches ingest.js inferBrandFromRef pattern order: Patek, AP, Rolex, RM, VC, Tudor, IWC, Cartier
 function inferBrand(ref) {
-  const r = String(ref || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (!r) return null;
-  if (/^[3-7]\d{3}\//.test(ref)) return 'Patek Philippe';
+  if (!ref) return null;
+  const r = String(ref).toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
+  if (/^[345]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
+  if (/^[345]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
+  if (/^\d{5}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';
+  // 5-6 digit refs → Rolex (supports 4/5/6 digit: 16233, 52506, 116520, 126710BLRO, etc.)
+  if (/^\d{5,6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
+  if (/^(85|47|49)\d{3}[A-Z\/]/.test(r)) return 'Vacheron Constantin';
+  if (/^(79|70)\d{4}[A-Z]*$/.test(r)) return 'Tudor';
   if (/^IW\d{4,6}$/.test(r)) return 'IWC';
   if (/^(WSSA|WSNM|WGNM|WJSA|CRWS|CRWG)/.test(r)) return 'Cartier';
-  if (/^(15|26|77)\d{3}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';
-  if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180|4500V|4300V|6000V)/.test(r)) return 'Vacheron Constantin';
-  if (/^\d{5,6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
-  if (/^(79\d{4}|70\d{4})[A-Z]*$/.test(r)) return 'Tudor';
-  if (/^3\d{4}\.\d/.test(String(ref || ''))) return 'Omega';
   return null;
 }
 
@@ -81,6 +83,7 @@ module.exports = async function handler(req, res) {
         resolvedRef: targetRef !== rawRef ? targetRef : null,
         model: null, dialColors: null,
         totalListings: 0, count: 0,
+        analytics_ready: false, listing_count: 0,
         stats: null, liquidity: null, monthly: [], prices: [], rows: []
       });
     }
@@ -143,9 +146,11 @@ module.exports = async function handler(req, res) {
       resolvedRef: targetRef !== rawRef ? targetRef : null,
       model: null, dialColors: null,
       totalListings: rows.length,
+      listing_count: listedRows.length,
       count: prices.length,
       rawCount: listedRows.length,
       outliersRemoved: rawPrices.length - prices.length,
+      analytics_ready: prices.length >= 4,
       stats: { avg, median, min, max, range: max - min },
       monthly, prices,
       rows: listedRows.map(r => ({
