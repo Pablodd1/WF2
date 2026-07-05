@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Home from '@/pages/Home';
+import TradingFloor from '@/pages/TradingFloor';
 import AnalyticsPage from '@/pages/AnalyticsPage';
 import AnalyticsDashboard from '@/pages/AnalyticsDashboard';
 import ReviewPage from '@/pages/ReviewPage';
@@ -17,6 +18,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/trading" element={<TradingFloor />} />
       <Route path="/analytics" element={<AnalyticsPage />} />
       <Route path="/analytics-dashboard" element={<AnalyticsDashboard />} />
       <Route path="/review" element={<ReviewPage />} />

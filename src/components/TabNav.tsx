@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, BarChart3, Eye, Sparkles, BookOpen, Cpu, RefreshCw, Shield, DollarSign, Users, Search } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Eye, Sparkles, BookOpen, Cpu, RefreshCw, Shield, DollarSign, Users, Search, ShoppingBag } from 'lucide-react';
 
 interface TabNavProps {
   totalProcessed?: number;
@@ -160,6 +160,23 @@ export function TabNav({ totalProcessed }: TabNavProps) {
           Demand
           <span className="text-[9px] bg-bg-elevated text-text-muted px-1.5 py-0.5 rounded ml-1">
             WTB/NTQ
+          </span>
+        </NavLink>
+
+        <NavLink
+          to="/trading"
+          className={({ isActive }) =>
+            `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
+              isActive
+                ? 'text-gold-primary border-gold-primary'
+                : 'text-text-muted border-transparent hover:text-text-secondary'
+            }`
+          }
+        >
+          <ShoppingBag size={14} />
+          Trading
+          <span className="text-[9px] bg-bg-elevated text-text-muted px-1.5 py-0.5 rounded ml-1">
+            Floor
           </span>
         </NavLink>
 
