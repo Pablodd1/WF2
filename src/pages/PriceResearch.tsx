@@ -1,74 +1,53 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ExternalLink, Download, FileSpreadsheet } from 'lucide-react';
+import { ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
 import { generatePriceResearchReport } from '@/lib/reports';
 
 // ── Types ──────────────────────────────────────────────────────
-interface PriceListing {
-  title: string;
-  price: number;
-  currency: string;
-  priceUSD: number;
-  dial: string;
-  date: string;
-  region?: string;
-  phone?: string;
-  imageUrl?: string;
-  condition?: string;
-  boxPapers?: string;
-  confidence?: {
-    score: number;
-    aiFields: string[];
-    catalogFields: string[];
-  };
+interface RowData {
+  price_usd: number;
+  created_at: string;
+  dial_color: string | null;
+  condition: string | null;
+  source: string;
+  year: number | null;
+  raw_message: string;
 }
 
-interface ChartPoint {
-  month: string; min: number; avg: number; max: number; count: number;
+interface MonthlyPoint {
+  month: string; count: number; avg_price: number; min_price: number; max_price: number;
+}
+
+interface LiquidityData {
+  totalListings: number;
+  uniqueSellers: number;
+  estimatedBuyers: number;
+  buyerSellerRatio: number | null;
 }
 
 interface PriceData {
   success: boolean;
-  reference: string;
   brand: string;
-  model: string;
-  primaryDial: string;
-  dialColors: string[];
-  liquidity: { fsCount: number; buyers?: number; sellers?: number; buyerSellerRatio?: number };
-  pricing: {
-    current: { min: number; avg: number; max: number; count: number } | null;
-    drift: number | null;
-    previousAvg?: number;
-  };
-  chart: ChartPoint[];
-  listings: PriceListing[];
+  reference: string;
+  resolvedRef: string | null;
+  model: string | null;
+  collection: string | null;
+  dialColors: string[] | null;
   totalListings: number;
-  outliers: number;
-  duplicates: number;
-  statsBefore?: { min: number; avg: number; max: number; count: number };
-  statsAfter?: { min: number; avg: number; max: number; count: number };
-  forecast?: {
-    method: string;
-    months: number;
-    forecasts: Array<{
-      month: string;
-      avg: number;
-      min: number;
-      max: number;
-      change: number;
-      direction: string;
-      confidenceInterval: number;
-    }>;
-    trend: { direction: string; percent: number; slope: number };
-    confidence: { level: number; stdError: number };
-    disclaimer: string;
-  };
+  count: number;
+  rawCount: number;
+  outliersRemoved: number;
+  stats: {
+    avg: number; median: number; min: number; max: number; range: number;
+    drift: number; previousAvg: number;
+  } | null;
+  liquidity: LiquidityData | null;
+  monthly: MonthlyPoint[];
+  prices: number[];
+  rows: RowData[];
 }
 
-const QUICK_REFS = ['52506', '126334', '5711/1A'];
-
-// ── Colors (production palette) ─────────────────────────────────
 const NAVY = '#1a2744';
 const GOLD = '#c9a03a';
 const WHITE = '#ffffff';
@@ -87,14 +66,10 @@ export default function PriceResearch() {
   const [data, setData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-  const [selectedListing, setSelectedListing] = useState<PriceListing | null>(null);
 
   const fetchData = useCallback(async (ref: string) => {
     setLoading(true);
     setError('');
-    setSelectedMonth(null);
-    setSelectedListing(null);
     try {
       const r = await fetch(`/api/price-research?reference=${encodeURIComponent(ref)}`);
       const d = await r.json();
@@ -106,6 +81,39 @@ export default function PriceResearch() {
 
   useEffect(() => { fetchData(query); }, [query, fetchData]);
 
+  // ── Derived stats ─────────────────────────────────────────
+  const stats = data?.stats
+    ? {
+        currentAvg: data.stats.avg,
+        previousAvg: data.stats.previousAvg,
+        drift: data.stats.drift,
+        min: data.stats.min,
+        max: data.stats.max,
+        count: data.count,
+      }
+    : null;
+
+  // Chart data: combine monthly + forecast placeholder
+  const chartData = (data?.monthly || []).map(m => ({
+    month: m.month,
+    min: m.min_price,
+    avg: m.avg_price,
+    max: m.max_price,
+    count: m.count,
+  }));
+
+  const listings = (data?.rows || []).map(r => ({
+    title: r.raw_message,
+    priceUSD: r.price_usd,
+    price: r.price_usd,
+    currency: 'USD',
+    dial: r.dial_color || 'N/A',
+    date: r.created_at ? r.created_at.split('T')[0] : '',
+    condition: r.condition || 'N/A',
+  }));
+
+  const displayRef = data?.resolvedRef || data?.reference || query;
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: WHITE }}>
@@ -116,22 +124,18 @@ export default function PriceResearch() {
 
   return (
     <div style={{ backgroundColor: WHITE, color: TEXT, fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh' }}>
-      
-      {/* ── Top Nav ─────────────────────────────────────────── */}
       <NavBar />
 
-      {/* ── Page Header ──────────────────────────────────────── */}
       <div style={{ backgroundColor: NAVY, color: WHITE, padding: '32px 0' }}>
         <div className="max-w-6xl mx-auto px-4">
           <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
-            This feature is currently optimized for Rolex references only. Additional brands are planned for upcoming releases.
+            Live market pricing from dealer database — enter a reference to see current offers, historical trends, and volume.
           </p>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
-        
         {/* ── Search ─────────────────────────────────────────── */}
         <div className="mb-8">
           <div className="flex gap-2 mb-3">
@@ -150,7 +154,7 @@ export default function PriceResearch() {
             </button>
           </div>
           <div className="flex gap-2 flex-wrap">
-            {QUICK_REFS.map(ref => (
+            {['52506', '126334', '5711/1A'].map(ref => (
               <button key={ref} onClick={() => { setQuery(ref); fetchData(ref); }}
                 style={{
                   padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: 'none',
@@ -178,178 +182,178 @@ export default function PriceResearch() {
                 {data.brand}
               </div>
               <div className="flex items-baseline gap-3 mb-3">
-                <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
-                <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{data.reference}</span>
+                <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model || 'Unknown Model'}</h2>
+                <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{displayRef}</span>
+                {data.collection && <span style={{ fontSize: 13, color: MUTED }}>{data.collection}</span>}
               </div>
-              <div style={{ fontSize: 14, color: MUTED }}>
-                Dial: <span style={{ color: TEXT, fontWeight: 500 }}>{data.dialColors.join(', ')}</span>
-              </div>
-              <div style={{ fontSize: 32, fontWeight: 700, marginTop: 8, color: NAVY }}>
-                {data.brand} {data.model} {data.reference}
-              </div>
+              {data.dialColors && data.dialColors.length > 0 && (
+                <div style={{ fontSize: 14, color: MUTED }}>
+                  Dial colors: <span style={{ color: TEXT, fontWeight: 500 }}>{data.dialColors.join(', ')}</span>
+                </div>
+              )}
             </div>
 
-            {/* ── Liquidity + Pricing ───────────────────────────────────────────────── */}
+            {/* ── Stats Cards ──────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              {/* Liquidity */}
+              {/* Volume */}
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Liquidity Analysis</h3>
-                <div style={{ fontSize: 14, color: MUTED }}># of FS: <span style={{ fontSize: 36, fontWeight: 700, color: NAVY, display: 'block', marginTop: 4 }}>{data.liquidity.fsCount.toLocaleString()}</span></div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Market Volume</h3>
+                <div style={{ fontSize: 14, color: MUTED }}>
+                  # of Listings:{' '}
+                  <span style={{ fontSize: 36, fontWeight: 700, color: NAVY, display: 'block', marginTop: 4 }}>
+                    {data.totalListings.toLocaleString()}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
+                  {data.count} after filtering · {data.outliersRemoved} outliers removed
+                </div>
               </div>
 
-              {/* Buyer/Seller Ratio */}
+              {/* Liquidity */}
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Demand Ratio</h3>
-                {data.liquidity.buyers !== undefined && (
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Dealer Activity</h3>
+                {data.liquidity && (
                   <>
                     <div className="flex items-center justify-between mb-2">
-                      <span style={{ fontSize: 13, color: MUTED }}>Buyers</span>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: RED }}>{data.liquidity.buyers}</span>
+                      <span style={{ fontSize: 13, color: MUTED }}>Unique Sellers</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: RED }}>{data.liquidity.uniqueSellers}</span>
                     </div>
                     <div className="flex items-center justify-between mb-3">
-                      <span style={{ fontSize: 13, color: MUTED }}>Sellers</span>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: GREEN }}>{data.liquidity.sellers}</span>
+                      <span style={{ fontSize: 13, color: MUTED }}>Est. Buyers</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: GREEN }}>{data.liquidity.estimatedBuyers}</span>
                     </div>
-                    <div style={{ width: '100%', height: 8, backgroundColor: BORDER, borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
-                      <div style={{ width: `${(data.liquidity.buyers / (data.liquidity.buyers + data.liquidity.sellers!)) * 100}%`, height: '100%', backgroundColor: RED }} />
-                      <div style={{ width: `${(data.liquidity.sellers! / (data.liquidity.buyers + data.liquidity.sellers!)) * 100}%`, height: '100%', backgroundColor: GREEN }} />
-                    </div>
-                    <div style={{ fontSize: 14, textAlign: 'center' }}>
-                      B/S Ratio: <span style={{ fontWeight: 700, color: (data.liquidity.buyerSellerRatio || 0) > 1 ? RED : GREEN }}>{data.liquidity.buyerSellerRatio?.toFixed(2) || 'N/A'}</span>
-                    </div>
+                    {data.liquidity.buyerSellerRatio != null && (
+                      <div style={{ fontSize: 14, textAlign: 'center' }}>
+                        B/S Ratio:{' '}
+                        <span style={{ fontWeight: 700, color: data.liquidity.buyerSellerRatio > 1 ? RED : GREEN }}>
+                          {data.liquidity.buyerSellerRatio.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
 
-              {/* Pricing */}
+              {/* Pricing Summary */}
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing Analysis</h3>
-                <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
-                  Previous vs Current Avg Price:{' '}
-                  <span style={{ color: RED, textDecoration: 'line-through' }}>${data.pricing.previousAvg?.toLocaleString() || '53,189'}</span>
-                  {' → '}
-                  <span style={{ color: GREEN, fontWeight: 600 }}>${data.pricing.current?.avg?.toLocaleString() || '41,500'}</span>
-                </div>
-                <div style={{ fontSize: 14 }}>
-                  Price Drift:{' '}
-                  <span style={{ color: (data.pricing.drift || 0) < 0 ? RED : GREEN, fontWeight: 600, fontSize: 18 }}>
-                    {(data.pricing.drift || 0) > 0 ? '+' : ''}{data.pricing.drift}%
-                  </span>
-                </div>
-                <button 
-                  onClick={() => window.open('#', '_blank')}
-                  style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: NAVY, color: WHITE, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
-                  Explore Marketplace →
-                </button>
-                <button 
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing</h3>
+                {stats && (
+                  <>
+                    <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
+                      Avg:{' '}
+                      <span style={{ color: 'inherit', textDecoration: stats.drift < 0 ? 'line-through' : 'none' }}>
+                        ${stats.previousAvg.toLocaleString()}
+                      </span>
+                      {' → '}
+                      <span style={{ color: stats.drift < 0 ? RED : GREEN, fontWeight: 600 }}>
+                        ${stats.currentAvg.toLocaleString()}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 14 }}>
+                      Drift:{' '}
+                      <span style={{ color: stats.drift < 0 ? RED : GREEN, fontWeight: 600, fontSize: 18 }}>
+                        {stats.drift > 0 ? '+' : ''}{stats.drift}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between mt-3" style={{ fontSize: 12, color: MUTED }}>
+                      <span>Min: ${stats.min.toLocaleString()}</span>
+                      <span>Max: ${stats.max.toLocaleString()}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+                      Median: ${data.stats?.median?.toLocaleString()}
+                    </div>
+                  </>
+                )}
+                <button
                   onClick={() => data && generatePriceResearchReport(
                     data.reference,
                     data.brand,
-                    data.model,
+                    data.model || 'Unknown',
                     {
-                      min: data.pricing.current?.min || 0,
-                      avg: data.pricing.current?.avg || 0,
-                      max: data.pricing.current?.max || 0,
-                      count: data.pricing.current?.count || 0,
-                      drift: data.pricing.drift || 0,
-                      previousAvg: data.pricing.previousAvg || 53189,
-                      currentAvg: data.pricing.current?.avg || 41500
+                      min: stats?.min || 0,
+                      avg: stats?.currentAvg || 0,
+                      max: stats?.max || 0,
+                      count: stats?.count || 0,
+                      drift: stats?.drift || 0,
+                      previousAvg: stats?.previousAvg || 0,
+                      currentAvg: stats?.currentAvg || 0,
                     },
-                    data.listings,
-                    data.liquidity,
-                    data.forecast
+                    listings,
+                    data.liquidity || undefined,
                   )}
-                  style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, backgroundColor: WHITE, color: NAVY, border: `2px solid ${NAVY}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: WHITE, color: NAVY, border: `2px solid ${NAVY}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileSpreadsheet size={16} /> Download Report
                 </button>
               </div>
             </div>
 
-            {/* ── Price Forecast ───────────────────────────────── */}
-            {data && data.chart && data.chart.length >= 3 && (
-              <PriceForecast chart={data.chart} reference={data.reference} brand={data.brand} model={data.model} forecastData={data.forecast} />
-            )}
+            {/* ── Price Chart ───────────────────────────────── */}
+            {chartData.length >= 2 && (
+              <>
+                <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Price History (Monthly)</h3>
+                    <div className="flex gap-3">
+                      <span style={{ fontSize: 13, color: MUTED }}>Min / Avg / Max</span>
+                    </div>
+                  </div>
 
-            {/* ── Chart ────────────────────────────────────────── */}
-            <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex gap-4">
-                  <span style={{ fontSize: 13, fontWeight: 600, color: NAVY, cursor: 'pointer', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>Date</span>
-                  <span style={{ fontSize: 13, color: MUTED, cursor: 'pointer' }}>6M</span>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <ComposedChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#dee2e6" />
+                      <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
+                      <YAxis stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                        formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                      />
+                      <Area type="monotone" dataKey="max" stroke="none" fill={RED} fillOpacity={0.05} />
+                      <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
+                      <Line type="monotone" dataKey="max" stroke={RED} strokeWidth={1} dot={false} />
+                      <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: WHITE, strokeWidth: 2 }} />
+                      <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+
+                  <div className="flex items-center gap-6 mt-3" style={{ fontSize: 13, color: MUTED }}>
+                    <span className="flex items-center gap-1.5">
+                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: GREEN, display: 'inline-block' }} />
+                      ${stats?.min?.toLocaleString() || 'N/A'} MIN
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: BLUE, display: 'inline-block' }} />
+                      ${stats?.currentAvg?.toLocaleString() || 'N/A'} AVERAGE
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: RED, display: 'inline-block' }} />
+                      ${stats?.max?.toLocaleString() || 'N/A'} MAX
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
+                    Based on {data.count} listings from the dealer database — IQR outlier filtering applied.
+                  </div>
                 </div>
-                <div className="flex gap-3">
-                  <span style={{ fontSize: 13, color: MUTED, cursor: 'pointer' }}>Presentation</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: NAVY, cursor: 'pointer', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>All</span>
-                </div>
-              </div>
-              
-              <ResponsiveContainer width="100%" height={280}>
-                <ComposedChart data={data.chart} onClick={(e: any) => {
-                  if (e?.activeTooltipIndex !== undefined) setSelectedMonth(e.activeTooltipIndex);
-                }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#dee2e6" />
-                  <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
-                  <YAxis stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                    formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                  />
-                  <Area type="monotone" dataKey="max" stroke="none" fill={RED} fillOpacity={0.05} />
-                  <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
-                  <Line type="monotone" dataKey="max" stroke={RED} strokeWidth={1} dot={false} />
-                  <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: WHITE, strokeWidth: 2 }} />
-                  <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-
-              <div className="flex items-center gap-6 mt-3" style={{ fontSize: 13, color: MUTED }}>
-                <span className="flex items-center gap-1.5">
-                  <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: GREEN, display: 'inline-block' }} />
-                  ${data.pricing.current?.min?.toLocaleString()} MIN
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: BLUE, display: 'inline-block' }} />
-                  ${data.pricing.current?.avg?.toLocaleString()} AVERAGE
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: RED, display: 'inline-block' }} />
-                  ${data.pricing.current?.max?.toLocaleString()} MAX
-                </span>
-              </div>
-
-              <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
-                Based on our chats — This is a summary of how the price is composed. To view the detailed breakdown and see the listings, click the blue dot.
-              </div>
-            </div>
-
-            {/* ── Insight Detail Panel ────────────────────────── */}
-            {selectedMonth !== null && data.chart[selectedMonth] && (
-              <InsightPanel
-                data={data}
-                month={data.chart[selectedMonth]}
-                onClose={() => setSelectedMonth(null)}
-                onSelectListing={(l: PriceListing) => setSelectedListing(l)}
-              />
-            )}
-
-            {/* ── Listing Detail Modal ────────────────────────── */}
-            {selectedListing && (
-              <ListingModal listing={selectedListing} data={data} onClose={() => setSelectedListing(null)} />
+              </>
             )}
 
             {/* ── Listings Table ──────────────────────────────── */}
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
               <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
-                Listings ({data.listings.length} of {data.totalListings})
+                Recent Listings ({listings.length} of {data.totalListings})
               </div>
-              {data.listings.map((l, i) => (
+              {listings.length === 0 && (
+                <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: 14 }}>
+                  No recent listings found.
+                </div>
+              )}
+              {listings.slice(0, 100).map((l, i) => (
                 <ListingRow key={i} listing={l} />
               ))}
             </div>
           </>
         )}
 
-        {/* ── Footer ─────────────────────────────────────────── */}
         <Footer />
       </div>
     </div>
@@ -367,8 +371,8 @@ function NavBar() {
         </div>
         <div className="flex gap-6" style={{ fontSize: 14 }}>
           {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => (
-            <a key={item} href="#" style={{ 
-              color: item === 'Price Research' ? GOLD : MUTED, 
+            <a key={item} href="#" style={{
+              color: item === 'Price Research' ? GOLD : MUTED,
               fontWeight: item === 'Price Research' ? 600 : 400,
               textDecoration: 'none',
               borderBottom: item === 'Price Research' ? `2px solid ${GOLD}` : 'none',
@@ -381,136 +385,7 @@ function NavBar() {
   );
 }
 
-function InsightPanel({ data, month, onClose, onSelectListing }: {
-  data: PriceData; month: ChartPoint; onClose: () => void; onSelectListing: (l: PriceListing) => void;
-}) {
-  const outlierCount = data.outliers;
-  const dupCount = data.duplicates;
-  const beforeCount = month.count + outlierCount + dupCount;
-  
-  return (
-    <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, marginBottom: 24, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-      <div style={{ backgroundColor: NAVY, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ color: WHITE, fontSize: 16, fontWeight: 600 }}>Insight Details</h3>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 18 }}>×</button>
-      </div>
-      
-      <div style={{ padding: 24 }}>
-        {/* Header info */}
-        <div style={{ fontSize: 14, color: NAVY, marginBottom: 16 }}>
-          <div><strong>Reference:</strong> {data.reference}</div>
-          <div><strong>Dial Color:</strong> {data.primaryDial}</div>
-          <div><strong>Condition Category:</strong> Any</div>
-          <div style={{ color: MUTED, marginTop: 4 }}>Listings created from month range</div>
-        </div>
-
-        {/* Before/After stats */}
-        <div className="grid grid-cols-2 gap-6 mb-6">
-          <div style={{ backgroundColor: '#fff8f0', borderRadius: 8, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 12 }}>Stats (Original)</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Data Points: {beforeCount}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Min: ${(data.statsBefore?.min || month.min - 2000).toLocaleString()}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Avg: ${(data.statsBefore?.avg || month.avg + 2700).toLocaleString()}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Max: ${(data.statsBefore?.max || month.max + 3000).toLocaleString()}</div>
-          </div>
-          <div style={{ backgroundColor: '#f0f8f0', borderRadius: 8, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 12 }}>Stats (Filtered by custom math)</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Data Points: {month.count}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Min: ${month.min.toLocaleString()}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Avg: ${month.avg.toLocaleString()}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Max: ${month.max.toLocaleString()}</div>
-          </div>
-        </div>
-
-        {/* Outlier/Dupe info */}
-        <div style={{ backgroundColor: '#fef2f2', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: RED, marginBottom: 8 }}>Duplicated — Removed: {dupCount}</div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: RED }}>Outliers — Removed: {outlierCount}</div>
-        </div>
-
-        {/* Listings */}
-        <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: NAVY, marginBottom: 12 }}>Listings</div>
-          {data.listings.slice(0, 10).map((l, i) => (
-            <div key={i} 
-              onClick={() => onSelectListing(l)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}>
-              <div style={{ width: 56, height: 56, borderRadius: 6, backgroundColor: LIGHT_GRAY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: MUTED, flexShrink: 0 }}>
-                🖼
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.title}</div>
-                <div className="flex gap-2 mt-0.5" style={{ fontSize: 12, color: MUTED }}>
-                  {l.region && <span>{l.region}</span>}
-                  {l.phone && <span>{l.phone}</span>}
-                  {l.date && <span>Posted: {l.date}</span>}
-                </div>
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${l.priceUSD?.toLocaleString()}</div>
-                <div style={{ fontSize: 12, color: MUTED }}>{l.price?.toLocaleString()} {l.currency}</div>
-              </div>
-              <ExternalLink className="w-3.5 h-3.5" style={{ color: MUTED }} />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ListingModal({ listing, data, onClose }: { listing: PriceListing; data: PriceData; onClose: () => void }) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ backgroundColor: WHITE, borderRadius: 12, maxWidth: 560, width: '90%', maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: 24 }}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: NAVY }}>Post Information</h3>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: MUTED, cursor: 'pointer' }}>×</button>
-          </div>
-          
-          <div style={{ fontSize: 14, color: TEXT, marginBottom: 16, lineHeight: 1.6 }}>{listing.title}</div>
-          
-          <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-            <div style={{ flex: 1, backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 12, textAlign: 'center' }}>
-              <div style={{ fontSize: 12, color: MUTED }}>Native Price</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: NAVY }}>{listing.price?.toLocaleString()} {listing.currency}</div>
-            </div>
-            <div style={{ flex: 1, backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 12, textAlign: 'center' }}>
-              <div style={{ fontSize: 12, color: MUTED }}>USD Equivalent</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>
-            </div>
-          </div>
-
-          <div style={{ fontSize: 13, color: MUTED }}>
-            <div>Reference: {data.reference}</div>
-            <div>Dial: {listing.dial}</div>
-            {listing.date && <div>Posted: {listing.date}</div>}
-            {listing.region && <div>Region: {listing.region}</div>}
-            {listing.phone && <div>Phone: {listing.phone}</div>}
-          </div>
-
-          <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 16, paddingTop: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 8 }}>Seller Info</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Member since 2025 · {listing.region}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>12 WTS · 12 WTB</div>
-            <div className="flex gap-2 mt-3">
-              <button style={{ padding: '8px 16px', borderRadius: 6, backgroundColor: NAVY, color: WHITE, border: 'none', fontSize: 13, cursor: 'pointer' }}>Check availability</button>
-              <button style={{ padding: '8px 16px', borderRadius: 6, backgroundColor: LIGHT_GRAY, color: NAVY, border: `1px solid ${BORDER}`, fontSize: 13, cursor: 'pointer' }}>See User Profile</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ListingRow({ listing }: { listing: PriceListing }) {
-  const confidence = listing.confidence;
-  const score = confidence?.score || 0;
-  const scoreColor = score === 100 ? GREEN : score >= 90 ? BLUE : score >= 80 ? '#fd7e14' : RED;
-  const scoreLabel = score === 100 ? '✓ VERIFIED' : score >= 90 ? '🔍 REVIEW' : score >= 80 ? '⚠ CHECK' : '🚫 FLAGGED';
-  
+function ListingRow({ listing }: { listing: { title: string; priceUSD: number; dial: string; date: string; condition: string } }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
@@ -519,192 +394,15 @@ function ListingRow({ listing }: { listing: PriceListing }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{listing.title}</div>
         <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-          {listing.region && <span className="mr-2">{listing.region}</span>}
-          {listing.phone && <span className="mr-2">{listing.phone}</span>}
-          {listing.date && <span>{listing.date}</span>}
+          {listing.dial && <span className="mr-2">Dial: {listing.dial}</span>}
+          {listing.condition && <span className="mr-2">· {listing.condition}</span>}
+          {listing.date && <span>· {listing.date}</span>}
         </div>
-        {confidence && (
-          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ 
-              padding: '2px 8px', 
-              borderRadius: 4, 
-              fontSize: 11, 
-              fontWeight: 600, 
-              backgroundColor: scoreColor + '20',
-              color: scoreColor 
-            }}>
-              {score}% {scoreLabel}
-            </span>
-            {confidence.aiFields.length > 0 && (
-              <span style={{ fontSize: 11, color: MUTED }}>
-                AI: {confidence.aiFields.join(', ')}
-              </span>
-            )}
-          </div>
-        )}
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>
       </div>
       <ExternalLink className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
-    </div>
-  );
-}
-
-
-function PriceForecast({ chart, reference, brand, model, forecastData }: { 
-  chart: ChartPoint[]; 
-  reference: string; 
-  brand: string; 
-  model: string;
-  forecastData?: PriceData['forecast'];
-}) {
-  // Use API forecast data if available, otherwise compute locally
-  const hasApiForecast = forecastData && forecastData.forecasts.length > 0;
-  
-  // Simple linear regression for 3-month forecast (fallback)
-  const n = chart.length;
-  const x = chart.map((_, i) => i);
-  const y = chart.map(p => p.avg);
-  
-  const sumX = x.reduce((a, b) => a + b, 0);
-  const sumY = y.reduce((a, b) => a + b, 0);
-  const sumXY = x.reduce((s, xi, i) => s + xi * y[i], 0);
-  const sumXX = x.reduce((s, xi) => s + xi * xi, 0);
-  
-  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-  const intercept = (sumY - slope * sumX) / n;
-  
-  // Build combined chart data (historical + forecast)
-  const combinedChart = [...chart];
-  const forecastPoints = [];
-  
-  const forecasts = hasApiForecast 
-    ? forecastData.forecasts 
-    : (() => {
-        const lastMonth = chart[chart.length - 1].month;
-        const f = [];
-        for (let i = 1; i <= 3; i++) {
-          const forecastAvg = Math.round(slope * (n + i - 1) + intercept);
-          const lastAvg = chart[chart.length - 1].avg;
-          const changePct = ((forecastAvg - lastAvg) / lastAvg * 100);
-          const [year, month] = lastMonth.split('-').map(Number);
-          const nextMonth = month + i;
-          const nextYear = year + Math.floor((nextMonth - 1) / 12);
-          const adjustedMonth = ((nextMonth - 1) % 12) + 1;
-          f.push({
-            month: `${nextYear}-${adjustedMonth.toString().padStart(2, '0')}`,
-            avg: forecastAvg,
-            min: Math.round(forecastAvg * 0.9),
-            max: Math.round(forecastAvg * 1.1),
-            change: parseFloat(changePct.toFixed(1)),
-            direction: changePct >= 0 ? 'up' : 'down',
-            confidenceInterval: Math.round(forecastAvg * 0.1),
-          });
-        }
-        return f;
-      })();
-
-  // Add forecast points to chart
-  forecasts.forEach((f, i) => {
-    combinedChart.push({
-      month: f.month,
-      min: f.min,
-      avg: f.avg,
-      max: f.max,
-      count: 0,
-    });
-    forecastPoints.push({
-      month: f.month,
-      avg: f.avg,
-      index: chart.length + i,
-    });
-  });
-  
-  const lastPrice = chart[chart.length - 1].avg;
-  const avgForecast = Math.round(forecasts.reduce((s, f) => s + f.avg, 0) / 3);
-  const totalChange = ((avgForecast - lastPrice) / lastPrice * 100);
-  
-  return (
-    <div style={{ backgroundColor: '#f0f7ff', borderRadius: 12, padding: 24, marginBottom: 24, border: '1px solid #b8d4f0' }}>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>3-Month Price Forecast</h3>
-          <p style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-            {brand} {model} {reference} — Linear regression with 95% confidence interval
-          </p>
-        </div>
-        <div style={{ 
-          padding: '8px 16px', 
-          borderRadius: 8, 
-          backgroundColor: totalChange >= 0 ? '#d4edda' : '#f8d7da',
-          color: totalChange >= 0 ? '#155724' : '#721c24',
-          fontSize: 14,
-          fontWeight: 600
-        }}>
-          {totalChange >= 0 ? '📈' : '📉'} {totalChange >= 0 ? '+' : ''}{totalChange.toFixed(1)}% avg
-        </div>
-      </div>
-      
-      {/* Forecast Chart */}
-      <div style={{ height: 200, marginBottom: 20 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={combinedChart}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
-            <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#6c757d' }} />
-            <YAxis tick={{ fontSize: 10, fill: '#6c757d' }} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-            <Tooltip 
-              contentStyle={{ backgroundColor: '#fff', border: '1px solid #e9ecef', borderRadius: 8 }}
-              formatter={(value: number) => `$${value.toLocaleString()}`}
-            />
-            <Area type="monotone" dataKey="max" stroke="none" fill="#b8d4f0" fillOpacity={0.3} />
-            <Area type="monotone" dataKey="min" stroke="none" fill="#fff" fillOpacity={1} />
-            <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 3 }} />
-            <Line 
-              type="monotone" 
-              dataKey="avg" 
-              stroke={totalChange >= 0 ? GREEN : RED} 
-              strokeWidth={2} 
-              strokeDasharray="5 5"
-              dot={{ r: 4, fill: totalChange >= 0 ? GREEN : RED }}
-              data={combinedChart.slice(chart.length - 1)}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-      
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        {forecasts.map((f, i) => (
-          <div key={i} style={{ backgroundColor: WHITE, borderRadius: 8, padding: 16, textAlign: 'center', border: '1px solid #e9ecef' }}>
-            <div style={{ fontSize: 12, color: MUTED, marginBottom: 4 }}>Month {i + 1}</div>
-            <div style={{ fontSize: 11, color: MUTED }}>{f.month}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: NAVY, marginTop: 4 }}>
-              ${f.avg.toLocaleString()}
-            </div>
-            <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
-              Range: ${f.min.toLocaleString()} - ${f.max.toLocaleString()}
-            </div>
-            <div style={{ 
-              fontSize: 12, 
-              color: f.change >= 0 ? GREEN : RED,
-              fontWeight: 600,
-              marginTop: 4
-            }}>
-              {f.change >= 0 ? '+' : ''}{f.change}%
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      {forecastData && (
-        <div style={{ fontSize: 11, color: MUTED, textAlign: 'center', marginBottom: 8 }}>
-          Method: {forecastData.method} | Confidence: {(forecastData.confidence.level * 100).toFixed(0)}% | Std Error: ${forecastData.confidence.stdError}
-        </div>
-      )}
-      
-      <div style={{ fontSize: 11, color: MUTED, fontStyle: 'italic', textAlign: 'center' }}>
-        ⚠️ {forecastData?.disclaimer || 'This forecast is based on historical trend analysis and is NOT guaranteed. Market conditions can significantly affect actual prices.'}
-      </div>
     </div>
   );
 }
