@@ -2,10 +2,25 @@
  * PRICE RESEARCH API — /api/price-research
  * Returns per-reference market analytics from the production DB.
  * Query: GET /api/price-research?reference=52506&brand=Rolex
- *        GET /api/price-research?reference=52506           (brand auto-resolved from catalog)
+ *        GET /api/price-research?reference=52506           (brand auto-resolved)
  */
 const { getClient } = require('./_lib/supabase');
-const { lookupCatalog } = require('./_lib/catalog');
+
+// Inline brand inference — no catalog dependency needed
+function inferBrand(ref) {
+  const r = String(ref || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!r) return null;
+  if (/^[3-7]\d{3}\//.test(ref)) return 'Patek Philippe';
+  if (/^RM\d{2}/.test(r)) return 'Richard Mille';
+  if (/^IW\d{4,6}$/.test(r)) return 'IWC';
+  if (/^(WSSA|WSNM|WGNM|WJSA|CRWS|CRWG)/.test(r)) return 'Cartier';
+  if (/^(15|26|77)\d{3}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';
+  if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180|4500V|4300V|6000V)/.test(r)) return 'Vacheron Constantin';
+  if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
+  if (/^(79\d{4}|70\d{4})[A-Z]*$/.test(r)) return 'Tudor';
+  if (/^3\d{4}\.\d/.test(String(ref || ''))) return 'Omega';
+  return null;
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,15 +31,13 @@ module.exports = async function handler(req, res) {
 
   if (!rawRef) return res.status(400).json({ error: 'reference required' });
 
-  // Auto-resolve brand from catalog if not provided
+  // Auto-resolve brand if not provided
   if (!brand) {
-    const catEntry = lookupCatalog(rawRef);
-    if (catEntry && catEntry.found && catEntry.brand) {
-      brand = catEntry.brand;
-    } else {
+    brand = inferBrand(rawRef);
+    if (!brand) {
       return res.status(400).json({
-        error: 'brand not found. Try: ?reference=52506&brand=Rolex',
-        hint: 'Provide brand via &brand=Rolex, or use a catalog-listed reference'
+        error: 'brand not found. Provide ?reference=52506&brand=Rolex',
+        hint: 'Brand auto-resolve failed. Provide &brand= explicitly.'
       });
     }
   }
@@ -32,7 +45,7 @@ module.exports = async function handler(req, res) {
   try {
     const client = getClient();
 
-    // Step 0: Resolve reference — support prefix matching (3712 → 3712/1A)
+    // Resolve reference — support prefix matching (3712 -> 3712/1A)
     let targetRef = rawRef;
     if (rawRef.length >= 3) {
       const { data: refs, error: refError } = await client
@@ -50,7 +63,7 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // Step 1: Pull all APPROVED records for this brand+reference
+    // Pull all APPROVED records
     const { data: rows, error } = await client
       .from('watch_records')
       .select('price_usd, created_at, condition, source, dial_color, raw_message, year')
@@ -62,51 +75,32 @@ module.exports = async function handler(req, res) {
 
     if (error) throw error;
 
-    // Fill in missing dial colors from catalog
-    rows.forEach(r => {
-      if (!r.dial_color) {
-        const catEntry = lookupCatalog(targetRef);
-        if (catEntry && catEntry.found && catEntry.dialColors) {
-          r.dial_color = catEntry.dialColors[0] || null;
-        }
-      }
-    });
-
-    // Step 2: Get catalog info for model/dial details
-    const catEntry = lookupCatalog(targetRef);
-
     if (!rows || rows.length === 0) {
       return res.status(200).json({
-        success: true,
-        brand,
-        reference: rawRef,
+        success: true, brand, reference: rawRef,
         resolvedRef: targetRef !== rawRef ? targetRef : null,
-        model: catEntry?.found ? (catEntry.model || null) : null,
-        collection: catEntry?.found ? (catEntry.collection || null) : null,
-        dialColors: catEntry?.found ? (catEntry.dialColors || null) : null,
-        totalListings: 0,
-        stats: null,
-        monthly: [],
-        liquidity: null,
-        error: 'No APPROVED records found'
+        model: null, dialColors: null,
+        totalListings: 0, count: 0,
+        stats: null, liquidity: null, monthly: [], prices: [], rows: []
       });
     }
 
-    // Step 3: Build liquidity stats from dealer data
-    // Unique sellers = distinct phone numbers in rows
-    const phones = [...new Set(rows.filter(r => r.raw_message).map(r => {
-      const phoneMatch = r.raw_message.match(/(?:^|\s)(\d{8,15})(?:\s|$)/);
-      return phoneMatch ? phoneMatch[1] : null;
-    }).filter(Boolean))];
-    const uniqueSellers = phones.length || Math.min(rows.length, 20);
-    const uniqueBuyers = Math.round(uniqueSellers * 0.4); // rough estimate from buyer/seller ratio patterns
+    // Filter: exclude test sources + WTB/WTB-like messages
+    const excludedSources = new Set(['bulk_test_100', 'test_run', 'mysql_market_refs', 'mysql_auction_watches']);
+    const marketRows = rows.filter(r => !excludedSources.has(r.source));
 
-    // Step 4: IQR outlier removal + source filter
-    const filteredSources = ['bulk_test_100', 'test_run', 'mysql_market_refs', 'mysql_auction_watches'];
-    const rawPrices = rows
-      .filter(r => r.price_usd > 0 && !filteredSources.includes(r.source))
-      .map(r => r.price_usd)
-      .filter(p => p != null && p > 0);
+    // Also remove obvious WTB/want/looking messages from price analysis
+    const listedRows = marketRows.filter(r => {
+      if (!r.raw_message) return true;
+      const lower = r.raw_message.toLowerCase();
+      // Skip messages that are primarily WTB/want/looking (not listings)
+      if (/^wtb\b/i.test(r.raw_message.trim())) return false;
+      return true;
+    });
+
+    const rawPrices = listedRows
+      .filter(r => r.price_usd > 0)
+      .map(r => r.price_usd);
 
     function iqrFilter(arr) {
       if (arr.length < 4) return arr;
@@ -120,90 +114,48 @@ module.exports = async function handler(req, res) {
     }
 
     const prices = iqrFilter(rawPrices);
-    const count = prices.length;
-    const avg = count > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / count) : 0;
+    const avg = prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0;
     const sorted = [...prices].sort((a, b) => a - b);
     const min = sorted[0] || 0;
     const max = sorted[sorted.length - 1] || 0;
     const median = sorted[Math.floor(sorted.length / 2)] || 0;
-    const outliersRemoved = rawPrices.length - prices.length;
 
-    // Step 5: Monthly aggregation
-    const cleanSources = new Set(filteredSources);
+    // Monthly aggregation
     const monthlyMap = {};
-    rows.forEach(r => {
-      const dateStr = r.created_at;
-      if (!dateStr || !r.price_usd || cleanSources.has(r.source)) return;
-      const d = new Date(dateStr);
+    listedRows.forEach(r => {
+      if (!r.created_at || !r.price_usd || excludedSources.has(r.source)) return;
+      const d = new Date(r.created_at);
       if (isNaN(d.getTime())) return;
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (!monthlyMap[key]) monthlyMap[key] = { month: key, count: 0, sum: 0, prices: [] };
+      if (!monthlyMap[key]) monthlyMap[key] = { month: key, count: 0, sum: 0, min: Infinity, max: 0 };
       monthlyMap[key].count++;
       monthlyMap[key].sum += r.price_usd;
-      monthlyMap[key].prices.push(r.price_usd);
+      monthlyMap[key].min = Math.min(monthlyMap[key].min, r.price_usd);
+      monthlyMap[key].max = Math.max(monthlyMap[key].max, r.price_usd);
     });
 
     const monthly = Object.values(monthlyMap)
-      .map(m => ({
-        month: m.month,
-        count: m.count,
-        avg_price: Math.round(m.sum / m.count),
-        min_price: Math.min(...m.prices),
-        max_price: Math.max(...m.prices)
-      }))
+      .map(m => ({ month: m.month, count: m.count, avg_price: Math.round(m.sum / m.count), min_price: m.min, max_price: m.max }))
       .sort((a, b) => a.month.localeCompare(b.month));
 
-    // Step 6: Price drift (current avg vs previous period)
-    const currentAvg = avg;
-    const prevMonthPrices = rows
-      .filter(r => r.price_usd > 0 && !cleanSources.has(r.source))
-      .map(r => r.price_usd);
-    const prevAvg = prevMonthPrices.length > 0
-      ? Math.round(prevMonthPrices.reduce((a, b) => a + b, 0) / prevMonthPrices.length)
-      : currentAvg;
-    const drift = prevAvg > 0 ? parseFloat((((currentAvg - prevAvg) / prevAvg) * 100).toFixed(2)) : 0;
-
     res.status(200).json({
-      success: true,
-      brand,
-      reference: rawRef,
+      success: true, brand, reference: rawRef,
       resolvedRef: targetRef !== rawRef ? targetRef : null,
-      model: catEntry?.found ? (catEntry.model || null) : null,
-      collection: catEntry?.found ? (catEntry.collection || null) : null,
-      dialColors: catEntry?.found ? (catEntry.dialColors || null) : null,
+      model: null, dialColors: null,
       totalListings: rows.length,
-      count,
-      rawCount: rows.length,
-      outliersRemoved,
-      stats: {
-        avg,
-        median,
-        min,
-        max,
-        range: max - min,
-        drift,
-        previousAvg: prevAvg,
-      },
-      liquidity: {
-        totalListings: rows.length,
-        uniqueSellers,
-        estimatedBuyers: uniqueBuyers,
-        buyerSellerRatio: uniqueSellers > 0 ? parseFloat((uniqueBuyers / uniqueSellers).toFixed(2)) : null,
-      },
-      monthly,
-      prices,
-      rows: rows.map(r => ({
-        price_usd: r.price_usd,
-        created_at: r.created_at,
-        dial_color: r.dial_color,
-        condition: r.condition,
-        source: r.source,
-        year: r.year,
-        raw_message: r.raw_message || '',
+      count: prices.length,
+      rawCount: listedRows.length,
+      outliersRemoved: rawPrices.length - prices.length,
+      stats: { avg, median, min, max, range: max - min },
+      monthly, prices,
+      rows: listedRows.map(r => ({
+        price_usd: r.price_usd, created_at: r.created_at,
+        dial_color: r.dial_color, condition: r.condition,
+        source: r.source, year: r.year, raw_message: r.raw_message || '',
       })),
     });
   } catch (err) {
-    console.error('Price research error:', err);
+    console.error('[price-research] error:', err.message, err.stack?.split('\n').slice(0, 3).join(' '));
     res.status(500).json({ error: 'Failed to fetch from database', detail: err.message });
   }
 };
