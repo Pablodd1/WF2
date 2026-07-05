@@ -279,7 +279,11 @@ export default function PriceResearch() {
                       currentAvg: stats?.currentAvg || 0,
                     },
                     listings,
-                    data.liquidity || undefined,
+                    {
+                      buyers: data.liquidity?.uniqueSellers,
+                      sellers: data.liquidity?.estimatedBuyers,
+                      buyerSellerRatio: data.liquidity?.buyerSellerRatio ?? undefined,
+                    }
                   )}
                   style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: WHITE, color: NAVY, border: `2px solid ${NAVY}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileSpreadsheet size={16} /> Download Report
