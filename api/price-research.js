@@ -16,7 +16,7 @@ function inferBrand(ref) {
   if (/^(WSSA|WSNM|WGNM|WJSA|CRWS|CRWG)/.test(r)) return 'Cartier';
   if (/^(15|26|77)\d{3}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';
   if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180|4500V|4300V|6000V)/.test(r)) return 'Vacheron Constantin';
-  if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
+  if (/^\d{5,6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
   if (/^(79\d{4}|70\d{4})[A-Z]*$/.test(r)) return 'Tudor';
   if (/^3\d{4}\.\d/.test(String(ref || ''))) return 'Omega';
   return null;
