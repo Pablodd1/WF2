@@ -85,7 +85,7 @@ function inferDialFromRef(ref) {
   return null;
 }
 
-function parsePrice(text) {
+function parsePrice(text, knownRef) {
   const t = text.replace(/,/g, '');
   // Million: 1.8M, 1.8 million, 1.8 mio
   const mMatch = t.match(/\b(\d{1,4}(?:\.\d{1,3})?)\s*(?:m|million|mio)\b/i);
@@ -93,13 +93,15 @@ function parsePrice(text) {
   // K suffix: 93k, 308K
   const kMatch = t.match(/\b(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
   if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
-  // FIX 4: Plain number — skip years (20xx)
+  // FIX 4: Plain number — skip years (20xx) AND skip the known ref
   const nums = t.match(/\b(\d{4,8})\b/g);
   if (nums) {
     for (const n of nums) {
       const v = parseInt(n, 10);
       if (v >= 1900 && v <= 2026) continue;
       if (v > 99999999) continue;
+      // Skip if this number is the reference
+      if (knownRef && String(v) === String(knownRef)) continue;
       return v;
     }
   }
@@ -199,7 +201,7 @@ function extractYear(text) {
   return null;
 }
 
-function parseFull(rawMsg) {
+function parseFull(rawMsg, knownRef) {
   const text = rawMsg || '';
   // FIX 1: 5-6 digit refs
   let ref = null;
@@ -221,7 +223,7 @@ function parseFull(rawMsg) {
   const condition = extractCondition(text);
   const year = extractYear(text);
   // FIX 2+4: Price + currency
-  const price = parsePrice(text);
+  const price = parsePrice(text, knownRef);
   const currency = parseCurrency(text) || 'USD';
 
   // JASS v4.0 scoring: brand 25% + ref 25% + price 20% + dial 10% + cond 8% + year 7% + currency 5%
@@ -291,16 +293,41 @@ function splitMulti(rawMsg) {
     const refM = line.match(/\b(\d{4,6}[A-Z]{0,4})\b/i);
     if (!refM) continue;
 
-    // The rest of the line after the ref is description + price
-    const rest = line.substring(refM.index + refM[0].length);
+    // Text before the ref might have brand/context
+    const afterRef = line.substring(refM.index + refM[0].length);
+    
+    // Extract price from afterRef (the 💰 symbol + price or just the price)
+    // For lines like 🏷️52506 N3 FS💰300000
+    let price = null;
+    const pm = afterRef.match(/💰\s*(\d{4,8})\b/);
+    if (pm) price = pm[1];
+    if (!price) {
+      const pm2 = afterRef.match(/\b(\d{4,8})\b/);
+      if (pm2 && String(pm2[1]) !== String(refM[1])) price = pm2[1];
+    }
+    
+    // Extract dial from description (words before 💰)
+    let dial = null;
+    const beforePrice = afterRef.split('💰')[0];
+    const dialM = beforePrice.match(/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|gold|wim|lub|oys|rom|jub)\b/i);
+    if (dialM) {
+      const dm = dialM[1].toLowerCase();
+      const dialMap = { wim: 'Wimbledon', lub: 'Blue', oys: 'Silver', rom: 'Roman', jub: 'Silver' };
+      dial = dialMap[dm] || dm.charAt(0).toUpperCase() + dm.slice(1);
+    }
+    
+    // Extract condition (N3, N4, FS)
+    let condition = null;
+    const condM = beforePrice.match(/FS/i);
+    if (condM) condition = 'Full Set';
+    
+    const watchMsg = header ? `${header}\n${line}` : line;
 
-    // Try the ref itself as a watch record
-    // But also check if the "description" on this line has another ref
-    // (boundary rule: one ref per line, rest is description/price for that ref)
     watches.push({
-      rawMessage: header ? `${header}\n${line}` : line,
+      rawMessage: watchMsg,
       parsedRef: refM[1],
-      rest: rest,
+      parsedPrice: price,
+      rest: afterRef,
     });
   }
 
@@ -382,12 +409,21 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       groupId,
       groupIndex: i,
       groupTotal: split.length,
+      parsedRef: s.parsedRef,
+      parsedPrice: s.parsedPrice,
     }));
   }
 
   const results = [];
   for (const msg of messages) {
-    let parsed = parseFull(msg.rawMessage);
+    // Pass the splitter's ref hint + price to parseFull so price doesn't eat the ref
+    const knownRef = msg.parsedRef || null;
+    let parsed = parseFull(msg.rawMessage, knownRef);
+    // If the splitter found a price and the regex parser didn't, use the splitter's
+    if (!parsed.price && msg.parsedPrice) {
+      parsed.price = parseInt(msg.parsedPrice, 10);
+      if (parsed.price) parsed.confidence = Math.min(100, parsed.confidence + 20);
+    }
     let usedLLM = false;
 
     if (parsed.confidence < HUMAN_THRESHOLD && parsed.ref && deepseekKey) {
