@@ -1,16 +1,12 @@
 /**
  * LIVE INGEST ENDPOINT  —  POST /api/ingest
+ * JASS v4.0 Oracle — 3-layer parser with type detection + multi-watch splitter
  *
  * Receives raw WhatsApp/Telegram dealer messages, runs the full
- * 4-stage parse pipeline, and persists results to Supabase.
+ * parse pipeline, and persists results to Supabase.
  *
- * POST body:
- *   { rawMessage: string, channelId?: string, source?: string }
- *
+ * POST body: { rawMessage, channelId?, source? }
  * GET /api/ingest — returns last 50 live records from Supabase
- *
- * Telegram bridge: also accepts Telegram webhook format
- *   { message: { text: string, chat: { id } } }
  */
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
@@ -24,32 +20,35 @@ const RATES = {
 };
 
 function toUSD(amount, currency) {
-  const rate = RATES[(currency || 'USD').toUpperCase()] || 1.0;
-  return Math.round(amount * rate);
+  return Math.round(amount * (RATES[(currency || 'USD').toUpperCase()] || 1.0));
 }
 
-function parsePrice(text) {
-  const t = text.replace(/,/g, '');
-  const mMatch = t.match(/\b(\d{1,4}(?:\.\d{1,3})?)\s*(?:m|million)\b/i);
-  if (mMatch) return Math.round(parseFloat(mMatch[1]) * 1_000_000);
-  const kMatch = t.match(/\b(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
-  if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
-  const plainMatch = t.match(/\b(\d{4,8})\b/);
-  if (plainMatch) return parseInt(plainMatch[1], 10);
-  return null;
-}
+// ── FIX 3: Extended dial list ──────────────────────────────────
+const DIAL_WORDS = [
+  'mother of pearl', 'mop', 'meteorite', 'skeleton', 'sundust', 'obsidian',
+  'rhodium', 'turquoise', 'chocolate', 'salmon', 'opal', 'onyx', 'cream',
+  'ice blue', 'tiffany', 'wimbledon', 'copper', 'lapis', 'burgundy', 'champagne',
+  'black', 'blue', 'white', 'green', 'silver', 'brown', 'grey', 'gray',
+  'pink', 'red', 'orange', 'yellow', 'gold', 'purple', 'ivory',
+];
 
-function parseCurrency(text) {
-  const t = text.toUpperCase();
-  if (/\bUSDTO?\b|USDT/.test(t)) return 'USDT';
-  if (/\bHKD\b|HK\$/.test(t)) return 'HKD';
-  if (/\bEUR\b|€/.test(t)) return 'EUR';
-  if (/\bGBP\b|£/.test(t)) return 'GBP';
-  if (/\bCHF\b/.test(t)) return 'CHF';
-  if (/\bSGD\b/.test(t)) return 'SGD';
-  if (/\bUSD\b|\$/.test(t)) return 'USD';
-  return null;
-}
+// ── FIX 6: Dealer slang → collection mapping ──────────────────
+const SLANG_TO_COLLECTION = {
+  'hulk': 'Submariner Date', 'kermit': 'Submariner Date', 'starbucks': 'Submariner Date',
+  'smurf': 'Submariner Date', 'batman': 'GMT Master II', 'batgirl': 'GMT Master II',
+  'pepsi': 'GMT Master II', 'rootbeer': 'GMT Master II', 'coke': 'GMT Master II',
+  'sprite': 'GMT Master II', 'bruce wayne': 'GMT Master II',
+  'polar': 'Explorer II', 'ghost': 'Daytona', 'panda': 'Daytona',
+  'reverse panda': 'Daytona', 'zebra': 'Daytona', 'land dweller': 'Sky-Dweller',
+  'tiffany': 'Oyster Perpetual', 'wimbledon': 'Datejust', 'daytona': 'Daytona',
+  'submariner': 'Submariner', 'sea-dweller': 'Sea-Dweller', 'deepsea': 'Deepsea',
+  'explorer': 'Explorer', 'gmt': 'GMT Master II', 'datejust': 'Datejust',
+  'nautilus': 'Nautilus', 'aquanaut': 'Aquanaut', 'overseas': 'Overseas',
+  'royal oak': 'Royal Oak', 'royal oak offshore': 'Royal Oak Offshore',
+  'day-date': 'Day-Date', 'president': 'Day-Date',
+};
+
+// ── FIX 1+2+4+5+6: Full parser v4.0 ──────────────────────────
 
 function inferBrandFromRef(ref) {
   if (!ref) return null;
@@ -57,20 +56,28 @@ function inferBrandFromRef(ref) {
   if (/^[345]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
   if (/^[345]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
   if (/^\d{5}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';
-  if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
+  // FIX 1: 5-6 digit refs for Rolex
+  if (/^\d{5,6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
   if (/^(85|47|49)\d{3}[A-Z\/]/.test(r)) return 'Vacheron Constantin';
+  if (/^(79|70)\d{4}[A-Z]*$/.test(r)) return 'Tudor';
+  if (/^IW\d{4,6}$/.test(r)) return 'IWC';
+  if (/^(WSSA|WSNM|WGNM|WJSA|CRWS|CRWG)/.test(r)) return 'Cartier';
   return null;
 }
 
 function inferDialFromRef(ref) {
   if (!ref) return null;
   const r = ref.toUpperCase();
-  const map = { LN: 'Black', LB: 'Blue', LV: 'Green', CHNR: 'Brown', OR: 'Pink', TI: 'Grey', BC: 'Black', ST: 'Blue' };
-  for (const [sfx, color] of Object.entries(map)) {
+  const SUFFIX_MAP = {
+    LN: 'Black', LB: 'Blue', LV: 'Green', CHNR: 'Brown', OR: 'Pink',
+    TI: 'Grey', BC: 'Black', ST: 'Blue', GRNR: 'Black', BLNR: 'Blue',
+    BLRO: 'Red Blue', VTNR: 'Green Black', RBR: 'Diamond',
+  };
+  for (const [sfx, color] of Object.entries(SUFFIX_MAP)) {
     if (r.endsWith(sfx)) return color;
   }
-  const last = r.split(/[\/-]/).pop() || '';
+  const last = r.split(/[\/\-]/).pop() || '';
   if (last.endsWith('G') && last.length > 2) return 'Blue';
   if (last.endsWith('J') && last.length > 2) return 'Champagne';
   if (last.endsWith('P') && last.length > 2) return 'Blue';
@@ -78,58 +85,229 @@ function inferDialFromRef(ref) {
   return null;
 }
 
+function parsePrice(text) {
+  const t = text.replace(/,/g, '');
+  // Million: 1.8M, 1.8 million, 1.8 mio
+  const mMatch = t.match(/\b(\d{1,4}(?:\.\d{1,3})?)\s*(?:m|million|mio)\b/i);
+  if (mMatch) return Math.round(parseFloat(mMatch[1]) * 1_000_000);
+  // K suffix: 93k, 308K
+  const kMatch = t.match(/\b(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
+  if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
+  // FIX 4: Plain number — skip years (20xx)
+  const nums = t.match(/\b(\d{4,8})\b/g);
+  if (nums) {
+    for (const n of nums) {
+      const v = parseInt(n, 10);
+      if (v >= 1900 && v <= 2026) continue;
+      if (v > 99999999) continue;
+      return v;
+    }
+  }
+  return null;
+}
+
+function parseCurrency(text) {
+  const t = text.toUpperCase();
+  // FIX 2: Proper $ detection — $ is NOT a regex anchor here
+  if (/\bUSDT\b/.test(t)) return 'USDT';
+  if (/\bHKD\b|HK\$/.test(t)) return 'HKD';
+  if (/\bEUR\b|€/.test(t)) return 'EUR';
+  if (/\bGBP\b|£/.test(t)) return 'GBP';
+  if (/\bCHF\b/.test(t)) return 'CHF';
+  if (/\bSGD\b/.test(t)) return 'SGD';
+  if (/\bAED\b/.test(t)) return 'AED';
+  if (/\bJPY\b/.test(t)) return 'JPY';
+  if (/\bUSD\b|\$/.test(t)) return 'USD';
+  return null;
+}
+
+// ── FIX 5: Brand with proximity weighting ──────────────────────
+const BRAND_PATTERNS = [
+  [/\bpatek\s*philippe\b|\bpp\b(?!\w)/i, 'Patek Philippe'],
+  [/\baudemars\s*piguet\b|\bap\b(?!\w)/i, 'Audemars Piguet'],
+  [/\brichard\s*mille\b|\brm\b(?!\w)/i, 'Richard Mille'],
+  [/\bvacheron\s*constantin\b|\bvc\b(?!\w)/i, 'Vacheron Constantin'],
+  [/\brolex\b/i, 'Rolex'],
+  [/\bomega\b/i, 'Omega'],
+  [/\bcartier\b/i, 'Cartier'],
+  [/\btudor\b/i, 'Tudor'],
+  [/\bblancpain\b/i, 'Blancpain'],
+  [/\biwc\b/i, 'IWC'],
+  [/\bpanerai\b/i, 'Panerai'],
+  [/\bjaeger\s*lecoultre\b|\bjlc\b/i, 'Jaeger-LeCoultre'],
+  [/\bhublot\b/i, 'Hublot'],
+  [/\bbreitling\b/i, 'Breitling'],
+  [/\blange\b/i, 'A. Lange & Sohne'],
+  [/\btag\s*heuer\b/i, 'TAG Heuer'],
+  [/\bgrand\s*seiko\b/i, 'Grand Seiko'],
+];
+
+function extractBrand(text, ref) {
+  let bestBrand = null;
+  let bestScore = 0;
+  let refPos = null;
+  if (ref) {
+    const rm = text.match(new RegExp(ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+    if (rm) refPos = rm.index;
+  }
+
+  for (const [pattern, brandName] of BRAND_PATTERNS) {
+    const matches = text.match(pattern);
+    if (!matches) continue;
+    let proximityBonus = 0;
+    if (refPos != null) {
+      const dist = Math.abs((text.search(pattern)) - refPos);
+      if (dist < 80) proximityBonus = 2;
+    }
+    const inferredBrand = inferBrandFromRef(ref);
+    const refBonus = (inferredBrand === brandName) ? 1 : 0;
+    const score = 1 + proximityBonus + refBonus;
+    if (score > bestScore) { bestScore = score; bestBrand = brandName; }
+  }
+  return bestBrand || inferBrandFromRef(ref);
+}
+
+function extractDial(text, ref) {
+  const lower = text.toLowerCase();
+  // Try 2-word dials first (longest match)
+  for (const dw of DIAL_WORDS.slice().sort((a, b) => b.length - a.length)) {
+    const pattern = dw.includes('of') || dw.includes(' ')
+      ? new RegExp('\\b' + dw.replace(/\s+/g, '[- ]?') + '\\b', 'i')
+      : new RegExp('\\b' + dw + '\\b', 'i');
+    if (pattern.test(lower)) {
+      return dw.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+    }
+  }
+  if (ref) return inferDialFromRef(ref);
+  return null;
+}
+
+function extractCondition(text) {
+  const t = text.toLowerCase();
+  if (/\bnew\b|unworn|bnib|brand\s*new|stickers?\s*(?:on|intact)/i.test(t)) return 'New';
+  if (/\bused\b|pre[- ]?owned|worn|pre[- ]?enjoyed/i.test(t)) return 'Used';
+  if (/\bmint\b|excellent|like new|superb/i.test(t)) return 'Like New';
+  if (/\bgood\b|fair|decent|nice\s*condition/i.test(t)) return 'Good';
+  return null;
+}
+
+function extractYear(text) {
+  const y = text.match(/[Nn]\d\s*\/\s*(\d{4})/);
+  if (y) return parseInt(y[1], 10);
+  const fallback = text.match(/\b(19\d{2}|20[01]\d|202[0-6])\b/);
+  if (fallback) return parseInt(fallback[1], 10);
+  return null;
+}
+
 function parseFull(rawMsg) {
   const text = rawMsg || '';
-  let brand = null;
-  if (/\bpp\b|patek\s?philippe|patek/i.test(text)) brand = 'Patek Philippe';
-  else if (/\bap\b|audemars\s?piguet/i.test(text)) brand = 'Audemars Piguet';
-  else if (/\brm\b|richard\s?mille/i.test(text)) brand = 'Richard Mille';
-  else if (/rolex/i.test(text)) brand = 'Rolex';
-  else if (/vacheron|constantin/i.test(text)) brand = 'Vacheron Constantin';
-  else if (/omega/i.test(text)) brand = 'Omega';
-  else if (/cartier/i.test(text)) brand = 'Cartier';
-
+  // FIX 1: 5-6 digit refs
   let ref = null;
-  const rmM = text.match(/\bRM\s?\d{2}[-\s]?\d{2}[A-Z]?\b/i);
+  const rmM = text.match(/\bRM\s?\d{2}[-\s]?\d{2}[A-Z]?(?:-[A-Z]{2})?\b/i);
   const ppM = text.match(/\b[345]\d{3}[A-Z]?\/\d{1,4}[A-Z]{0,4}(?:-\d{3})?\b/i);
   const shortPP = text.match(/\b[345]\d{3}[A-Z]\b/i);
   const apM = text.match(/\b\d{5}[A-Z]{2,4}\b/i);
-  const rolexM = text.match(/\b\d{6}[A-Z]{0,4}\b/i);
+  const rolexM = text.match(/\b\d{5,6}[A-Z]{0,4}\b/i); // FIX 1: was 6, now 5-6
   if (rmM) ref = rmM[0].toUpperCase().replace(/\s/g, '');
   else if (ppM) ref = ppM[0].toUpperCase();
   else if (shortPP) ref = shortPP[0].toUpperCase();
   else if (apM) ref = apM[0].toUpperCase();
   else if (rolexM) ref = rolexM[0].toUpperCase();
 
-  if (!brand && ref) brand = inferBrandFromRef(ref);
-
-  let dial = null;
-  const dialM = text.match(/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|tiffany|panda|hulk|zebra|mop|meteorite)\b/i);
-  if (dialM) dial = dialM[1].charAt(0).toUpperCase() + dialM[1].slice(1).toLowerCase();
-  if (!dial && ref) dial = inferDialFromRef(ref);
-
-  let condition = null;
-  if (/\bnew\b|unworn|bnib/i.test(text)) condition = 'New';
-  else if (/\bused\b|pre-?owned|worn/i.test(text)) condition = 'Used';
-  else if (/\bmint\b|excellent/i.test(text)) condition = 'Like New';
-
-  const yearM = text.match(/[Nn]\d\/(\d{4})/) || text.match(/\b(20[12]\d)\b/);
-  const year = yearM ? parseInt(yearM[1], 10) : null;
-
+  // FIX 5: Brand with proximity
+  const brand = extractBrand(text, ref);
+  // FIX 3: Full dial list
+  const dial = extractDial(text, ref);
+  const condition = extractCondition(text);
+  const year = extractYear(text);
+  // FIX 2+4: Price + currency
   const price = parsePrice(text);
-  const currency = parseCurrency(text);
+  const currency = parseCurrency(text) || 'USD';
 
+  // JASS v4.0 scoring: brand 25% + ref 25% + price 20% + dial 10% + cond 8% + year 7% + currency 5%
   let confidence = 0;
-  if (ref) confidence += 40;
-  if (brand) confidence += 25;
+  if (brand && brand !== 'Unknown') confidence += 25;
+  if (ref) confidence += 25;
+  if (price) confidence += 20;
   if (dial) confidence += 10;
   if (condition) confidence += 8;
-  if (price) confidence += 10;
-  if (year) confidence += 4;
-  if (currency) confidence += 3;
+  if (year) confidence += 7;
+  if (currency) confidence += 5;
 
   return { brand, ref, dial, condition, year, price, currency, confidence };
 }
+
+// ── MESSAGE TYPE DETECTION ──────────────────────────────────
+
+function detectType(rawMsg) {
+  const t = rawMsg.toLowerCase().trim();
+  const first = t.substring(0, 40);
+
+  // WTB: message starts with or contains strong WTB signal
+  if (/^wtb\b|^wtt\b|^(?:want|looking|need|searching|hunting)[\s,.]/.test(first)) return 'WTB';
+  if (/\bwtb\b|\bwant\s*(?:to\s*)?(?:buy|pay)\b|\blooking\s*(?:for|to\s*buy)\b/i.test(t)) return 'WTB';
+
+  // NTQ: name your price / make an offer
+  if (/\bntq\b|\bname\s*your\s*price\b|\bmake\s*an?\s*offer\b/i.test(t)) return 'NTQ';
+
+  // TRADE: trade/swap/exchange (but not "open to trade" in WTS context)
+  if (/\b(?:trade|swap|exchange|swop)\b/i.test(t)) {
+    if (/\b(?:for\s*trade|open\s*to\s*trade|trade\s*possible)\b/i.test(t)) return 'WTS';
+    if (/^trade\s|^swap\s/i.test(t) || /\bmy\s.+\sfor\s.+$/im.test(t)) return 'TRADE';
+    return 'WTS';
+  }
+
+  // MULTI: 3+ watch lines in price list format
+  const lines = rawMsg.split(/\n/).map(l => l.trim()).filter(Boolean);
+  let watchLines = 0;
+  for (const line of lines) {
+    const hasRef = /\b\d{4,6}[A-Z]{0,4}\b/i.test(line);
+    const hasPrice = /\b(\d{3,8})\b/.test(line);
+    if (hasRef && hasPrice) watchLines++;
+  }
+  if (watchLines >= 3) return 'MULTI';
+
+  return 'WTS';
+}
+
+// ── MULTI-WATCH SPLITTER ────────────────────────────────────
+
+function splitMulti(rawMsg) {
+  const lines = rawMsg.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const watches = [];
+  let header = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Skip pure header/emoji lines
+    if (/\b(?:rolex|patek|remark|updated|ready\s*stock|stock)\b/i.test(line)
+        && !/\b\d{4,6}[A-Z]{0,4}\b/i.test(line)
+        && line.length < 60) {
+      header = line;
+      continue;
+    }
+
+    // Try to extract ref from this line
+    const refM = line.match(/\b(\d{4,6}[A-Z]{0,4})\b/i);
+    if (!refM) continue;
+
+    // The rest of the line after the ref is description + price
+    const rest = line.substring(refM.index + refM[0].length);
+
+    // Try the ref itself as a watch record
+    // But also check if the "description" on this line has another ref
+    // (boundary rule: one ref per line, rest is description/price for that ref)
+    watches.push({
+      rawMessage: header ? `${header}\n${line}` : line,
+      parsedRef: refM[1],
+      rest: rest,
+    });
+  }
+
+  return watches;
+}
+
+// ── LLM ENRICH ────────────────────────────────────────────
 
 async function llmEnrich(rawMsg, parsed, apiKey) {
   const resp = await fetch(DEEPSEEK_API_URL, {
@@ -138,8 +316,14 @@ async function llmEnrich(rawMsg, parsed, apiKey) {
     body: JSON.stringify({
       model: 'deepseek-chat',
       messages: [
-        { role: 'system', content: `You are a luxury watch expert. Extract watch data from dealer messages. Return ONLY JSON with: brand, reference, dialColor, condition, year, price, currency, confidence (0-100). Blue circle emoji (🔵) = Patek Philippe. N5/2026 = New, year 2026. k = thousands, m = millions.` },
-        { role: 'user', content: `Regex result: ${JSON.stringify(parsed)}\nMessage: "${rawMsg}"\nReturn JSON only:` },
+        {
+          role: 'system',
+          content: `You are a luxury watch expert. Extract watch data from dealer messages. Return ONLY JSON with: brand, reference, dialColor, condition, year, price, currency, confidence (0-100). N5/2026 = New year 2026. k = thousands, m = millions. $ = USD. HK$ or HKD = Hong Kong Dollar. € = Euro. £ = GBP. USDT = crypto. Be precise about reference numbers.`
+        },
+        {
+          role: 'user',
+          content: `Regex result: ${JSON.stringify(parsed)}\nMessage: "${rawMsg}"\nReturn JSON only:`
+        },
       ],
       max_tokens: 200, temperature: 0.1,
       response_format: { type: 'json_object' },
@@ -156,11 +340,12 @@ function verdict(parsed) {
   if (!hasRef && !hasBrand) return 'RECYCLE';
   if (parsed.confidence < 35) return 'RECYCLE';
   if (parsed.confidence >= APPROVE_THRESHOLD && hasRef && hasBrand) return 'APPROVED';
-  return 'HUMAN';
+  if (parsed.confidence >= HUMAN_THRESHOLD) return 'HUMAN';
+  return 'RECYCLE';
 }
 
 async function supabaseUpsert(record, supabaseUrl, serviceKey) {
-  const resp = await fetch(`${supabaseUrl}/rest/v1/live_ingest`, {
+  const resp = await fetch(`${supabaseUrl}/rest/v1/watch_records`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -176,6 +361,96 @@ async function supabaseUpsert(record, supabaseUrl, serviceKey) {
   }
 }
 
+// ── SINGLE MESSAGE PROCESSOR ───────────────────────────────
+
+async function processMessage(rawMessage, channelId, source, supabaseUrl, serviceKey, deepseekKey) {
+  // Stage 0: Detect type
+  const msgType = detectType(rawMessage);
+  const isMulti = msgType === 'MULTI';
+
+  let messages = [{ rawMessage, channelId, source, isMulti, groupId: null }];
+
+  // Split multi-watch messages
+  if (isMulti) {
+    const groupId = `multi_${Date.now()}_${Math.random().toString(36).substr(2,4)}`;
+    const split = splitMulti(rawMessage);
+    messages = split.map((s, i) => ({
+      rawMessage: s.rawMessage,
+      channelId,
+      source,
+      isMulti: true,
+      groupId,
+      groupIndex: i,
+      groupTotal: split.length,
+    }));
+  }
+
+  const results = [];
+  for (const msg of messages) {
+    let parsed = parseFull(msg.rawMessage);
+    let usedLLM = false;
+
+    if (parsed.confidence < HUMAN_THRESHOLD && parsed.ref && deepseekKey) {
+      try {
+        const llm = await llmEnrich(msg.rawMessage, parsed, deepseekKey);
+        if (!parsed.brand && llm.brand && llm.brand !== 'Unknown') parsed.brand = llm.brand;
+        if (!parsed.ref && llm.reference) parsed.ref = llm.reference;
+        if (!parsed.dial && llm.dialColor && llm.dialColor !== 'Unknown') parsed.dial = llm.dialColor;
+        if (!parsed.condition && llm.condition) parsed.condition = llm.condition;
+        if (!parsed.year && llm.year) parsed.year = llm.year;
+        if (!parsed.price && llm.price) parsed.price = llm.price;
+        if (!parsed.currency && llm.currency && llm.currency !== 'Unknown') parsed.currency = llm.currency;
+        parsed.confidence = Math.max(parsed.confidence, parseInt(llm.confidence) || 0);
+        usedLLM = true;
+      } catch { /* keep regex result */ }
+    }
+
+    const v = verdict(parsed);
+    const priceUSD = parsed.price ? toUSD(parsed.price, parsed.currency || 'USD') : null;
+
+    const record = {
+      id: `live_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      raw_message: msg.rawMessage,
+      brand: parsed.brand || 'Unknown',
+      reference: parsed.ref || null,
+      dial_color: parsed.dial || null,
+      condition: parsed.condition || null,
+      year: parsed.year || null,
+      price_raw: parsed.price || null,
+      price_usd: priceUSD,
+      currency: parsed.currency || null,
+      confidence: parsed.confidence,
+      verdict: v,
+      listing_type: msg.isMulti ? 'MULTI' : msgType,
+      is_multi: msg.isMulti,
+      multi_group_id: msg.groupId,
+      multi_index: msg.groupIndex,
+      multi_total: msg.groupTotal,
+      source,
+      channel_id: channelId,
+      llm_used: usedLLM,
+      jass_version: 'v4.0',
+      received_at: new Date().toISOString(),
+    };
+
+    let persisted = false;
+    if (supabaseUrl && serviceKey) {
+      try {
+        await supabaseUpsert(record, supabaseUrl, serviceKey);
+        persisted = true;
+      } catch (e) {
+        console.error('[ingest] Supabase write failed:', e.message);
+      }
+    }
+
+    results.push({ ...record, persisted });
+  }
+
+  return results;
+}
+
+// ── MAIN HANDLER ────────────────────────────────────────────
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -186,14 +461,13 @@ module.exports = async function handler(req, res) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
 
-  // GET — return recent live records from Supabase
   if (req.method === 'GET') {
     if (!supabaseUrl || !serviceKey) {
       return res.status(200).json({ count: 0, records: [], status: 'supabase_not_configured' });
     }
     try {
       const resp = await fetch(
-        `${supabaseUrl}/rest/v1/live_ingest?order=received_at.desc&limit=50`,
+        `${supabaseUrl}/rest/v1/watch_records?order=received_at.desc&limit=50`,
         { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
       );
       const records = await resp.json();
@@ -205,13 +479,11 @@ module.exports = async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Normalize body — support direct POST or Telegram webhook format
   const body = req.body || {};
   let rawMessage = body.rawMessage;
   let channelId = body.channelId || body.channel_id || 'direct';
   let source = body.source || 'api';
 
-  // Telegram webhook format
   if (!rawMessage && body.message?.text) {
     rawMessage = body.message.text;
     channelId = String(body.message.chat?.id || 'telegram');
@@ -222,69 +494,27 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'rawMessage required (min 5 chars)' });
   }
 
-  // Stage 1: regex parse
-  let parsed = parseFull(rawMessage);
-
-  // Stage 2: LLM enrichment if needed
-  let usedLLM = false;
-  if (parsed.confidence < HUMAN_THRESHOLD && parsed.ref && deepseekKey) {
-    try {
-      const llm = await llmEnrich(rawMessage, parsed, deepseekKey);
-      if (!parsed.brand && llm.brand && llm.brand !== 'Unknown') parsed.brand = llm.brand;
-      if (!parsed.ref && llm.reference) parsed.ref = llm.reference;
-      if (!parsed.dial && llm.dialColor && llm.dialColor !== 'Unknown') parsed.dial = llm.dialColor;
-      if (!parsed.condition && llm.condition) parsed.condition = llm.condition;
-      if (!parsed.year && llm.year) parsed.year = llm.year;
-      if (!parsed.price && llm.price) parsed.price = llm.price;
-      if (!parsed.currency && llm.currency && llm.currency !== 'Unknown') parsed.currency = llm.currency;
-      parsed.confidence = Math.max(parsed.confidence, parseInt(llm.confidence) || 0);
-      usedLLM = true;
-    } catch { /* keep regex result */ }
+  try {
+    const results = await processMessage(rawMessage, channelId, source, supabaseUrl, serviceKey, deepseekKey);
+    return res.status(200).json({
+      success: true,
+      messageType: detectType(rawMessage),
+      isMulti: results.length > 1,
+      records: results.map(r => ({
+        id: r.id,
+        verdict: r.verdict,
+        brand: r.brand,
+        reference: r.reference,
+        confidence: r.confidence,
+        priceUSD: r.price_usd,
+        currency: r.currency,
+        listing_type: r.listing_type,
+        persisted: r.persisted,
+        source: r.llm_used ? 'llm' : 'regex',
+      })),
+    });
+  } catch (e) {
+    console.error('[ingest] error:', e.message);
+    return res.status(500).json({ error: e.message });
   }
-
-  const v = verdict(parsed);
-  const priceUSD = parsed.price ? toUSD(parsed.price, parsed.currency || 'USD') : null;
-
-  const record = {
-    id: `live_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-    raw_message: rawMessage,
-    brand: parsed.brand || 'Unknown',
-    reference: parsed.ref || null,
-    dial_color: parsed.dial || null,
-    condition: parsed.condition || null,
-    year: parsed.year || null,
-    price_raw: parsed.price || null,
-    price_usd: priceUSD,
-    currency: parsed.currency || null,
-    confidence: parsed.confidence,
-    verdict: v,
-    source,
-    channel_id: channelId,
-    llm_used: usedLLM,
-    received_at: new Date().toISOString(),
-  };
-
-  // Persist to Supabase if configured
-  let persisted = false;
-  if (supabaseUrl && serviceKey) {
-    try {
-      await supabaseUpsert(record, supabaseUrl, serviceKey);
-      persisted = true;
-    } catch (e) {
-      console.error('[ingest] Supabase write failed:', e.message);
-    }
-  }
-
-  return res.status(200).json({
-    success: true,
-    id: record.id,
-    verdict: v,
-    brand: record.brand,
-    reference: record.reference,
-    confidence: record.confidence,
-    priceUSD,
-    currency: record.currency,
-    persisted,
-    source: usedLLM ? 'llm' : 'regex',
-  });
-}
+};
