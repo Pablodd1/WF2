@@ -465,17 +465,20 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
     };
 
     let persisted = false;
+    let persistError = null;
     if (supabaseUrl && serviceKey) {
       try {
         await supabaseUpsert(record, supabaseUrl, serviceKey);
         persisted = true;
       } catch (e) {
         console.error('[ingest] Supabase write failed:', e.message);
-        record._upsert_error = e.message;
+        persistError = e.message;
       }
+    } else {
+      persistError = `supabase not configured: url=${!!supabaseUrl} key=${!!serviceKey}`;
     }
 
-    results.push({ ...record, persisted });
+    results.push({ ...record, persisted, _upsert_error: persistError });
   }
 
   return results;
