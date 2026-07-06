@@ -461,7 +461,7 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       source,
       channel_id: channelId,
       llm_used: usedLLM,
-      received_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
     };
 
     let persisted = false;
@@ -499,7 +499,7 @@ module.exports = async function handler(req, res) {
     }
     try {
       const resp = await fetch(
-        `${supabaseUrl}/rest/v1/watch_records?order=received_at.desc&limit=50`,
+        `${supabaseUrl}/rest/v1/watch_records?order=created_at.desc&limit=50`,
         { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
       );
       const records = await resp.json();
