@@ -12,7 +12,6 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const { execSync } = require('child_process');
-  const MYSQL_PASS = "U0aeAr1zFt2'";
   const limit = req.body?.limit || 100;
   const table = req.body?.table || 'wts';
   const offset = req.body?.offset || 0;
@@ -30,7 +29,7 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'table must be wts or wtb' });
     }
 
-    const cmd = `mysql -h 161.35.0.209 -P 3306 -u john -p'${MYSQL_PASS}' -B --quick -D thecollective_inventory -e "SELECT title, brand, reference, price, dial_color, condition_id, created_on, from_number, from_name, region FROM auctions ${whereClause} ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};" 2>/dev/null`;
+    const cmd = `MYSQL_PWD='U0aeAr1zFt2' mysql -h 161.35.0.209 -P 3306 -u john -B --quick -D thecollective_inventory -e "SELECT title, brand, reference, price, dial_color, condition_id, created_on, from_number, from_name, region FROM auctions ${whereClause} ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};" 2>/dev/null`;
     
     const output = execSync(cmd, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024, timeout: 120000 });
     const lines = output.trim().split('\n');
