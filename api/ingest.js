@@ -458,15 +458,9 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       currency: parsed.currency || null,
       confidence: parsed.confidence,
       verdict: v,
-      listing_type: msg.isMulti ? 'MULTI' : msgType,
-      is_multi: msg.isMulti,
-      multi_group_id: msg.groupId,
-      multi_index: msg.groupIndex,
-      multi_total: msg.groupTotal,
       source,
       channel_id: channelId,
       llm_used: usedLLM,
-      jass_version: 'v4.0',
       received_at: new Date().toISOString(),
     };
 
