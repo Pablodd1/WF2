@@ -471,6 +471,7 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
         persisted = true;
       } catch (e) {
         console.error('[ingest] Supabase write failed:', e.message);
+        record._upsert_error = e.message;
       }
     }
 
