@@ -629,8 +629,8 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
 
     if (supabaseUrl && serviceKey) {
       try {
-        // Ingest into JASS-5 Normalized Listings table
-        await insertSupabase('normalized_listings', normalizedListing, supabaseUrl, serviceKey);
+        // Ingest into watch_records table
+        await insertSupabase('watch_records', normalizedListing, supabaseUrl, serviceKey);
 
         // Ingest related prices
         if (parsed.prices && parsed.prices.length > 0) {
@@ -714,12 +714,13 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ count: 0, records: [], status: 'supabase_not_configured' });
     }
     try {
+      // Read from watch_records (the real table), not normalized_listings (doesn't exist)
       const resp = await fetch(
-        `${supabaseUrl}/rest/v1/normalized_listings?order=normalized_at.desc&limit=50`,
+        `${supabaseUrl}/rest/v1/watch_records?order=created_at.desc&limit=50`,
         { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
       );
       const records = await resp.json();
-      return res.status(200).json({ count: records.length, records, status: 'ok' });
+      return res.status(200).json({ count: Array.isArray(records) ? records.length : 0, records: Array.isArray(records) ? records : [], status: 'ok' });
     } catch (e) {
       return res.status(500).json({ error: e.message });
     }

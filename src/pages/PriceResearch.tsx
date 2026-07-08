@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ExternalLink, FileSpreadsheet } from 'lucide-react';
+import { ExternalLink, FileSpreadsheet, Download } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
-import { generatePriceResearchReport } from '@/lib/reports';
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
@@ -19,11 +18,21 @@ interface MonthlyPoint {
   month: string; count: number; avg_price: number; min_price: number; max_price: number;
 }
 
+interface DialPoint {
+  dial_color: string; count: number; avg_price: number; min_price: number; max_price: number;
+}
+
+// Real liquidity — either precomputed indicators or a live-derived fallback.
+// NO invented seller/buyer numbers (every field traces to real data).
 interface LiquidityData {
-  totalListings: number;
-  uniqueSellers: number;
-  estimatedBuyers: number;
-  buyerSellerRatio: number | null;
+  source: 'indicators' | 'live_fallback';
+  listing_count: number;
+  liquidity_score?: number | null;
+  sale_count?: number | null;
+  search_count?: number | null;
+  demand_score?: number | null;
+  supply_score?: number | null;
+  wtb_fs_ratio?: number | null;
 }
 
 interface PriceData {
@@ -34,13 +43,13 @@ interface PriceData {
   model: string | null;
   collection: string | null;
   dialColors: string[] | null;
+  dial_analysis: DialPoint[];
   totalListings: number;
   count: number;
   rawCount: number;
   outliersRemoved: number;
   stats: {
     avg: number; median: number; min: number; max: number; range: number;
-    drift: number; previousAvg: number;
   } | null;
   liquidity: LiquidityData | null;
   monthly: MonthlyPoint[];
@@ -67,6 +76,38 @@ export default function PriceResearch() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // ── Drill-down picker state (brand → model → reference) ──
+  const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC'];
+  const [pBrand, setPBrand] = useState('');
+  const [pModels, setPModels] = useState<{ model: string; listing_count: number; reference_count: number }[]>([]);
+  const [pModel, setPModel] = useState('');
+  const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; avg_price: number }[]>([]);
+  const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
+
+  const loadModels = useCallback(async (brand: string) => {
+    setPBrand(brand); setPModel(''); setPModels([]); setPRefs([]);
+    if (!brand) return;
+    setPLoading('models');
+    try {
+      const r = await fetch(`/api/catalog-models?brand=${encodeURIComponent(brand)}`);
+      const d = await r.json();
+      if (d.success) setPModels(d.models || []);
+    } catch { /* ignore — direct search still works */ }
+    finally { setPLoading(''); }
+  }, []);
+
+  const loadRefs = useCallback(async (brand: string, model: string) => {
+    setPModel(model); setPRefs([]);
+    if (!brand || !model) return;
+    setPLoading('refs');
+    try {
+      const r = await fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`);
+      const d = await r.json();
+      if (d.success) setPRefs(d.references || []);
+    } catch { /* ignore */ }
+    finally { setPLoading(''); }
+  }, []);
+
   const fetchData = useCallback(async (ref: string) => {
     setLoading(true);
     setError('');
@@ -84,9 +125,8 @@ export default function PriceResearch() {
   // ── Derived stats ─────────────────────────────────────────
   const stats = data?.stats
     ? {
-        currentAvg: data.stats.avg,
-        previousAvg: data.stats.previousAvg,
-        drift: data.stats.drift,
+        avg: data.stats.avg,
+        median: data.stats.median,
         min: data.stats.min,
         max: data.stats.max,
         count: data.count,
@@ -136,6 +176,66 @@ export default function PriceResearch() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* ── Drill-down: Browse by Model (real listings only) ─────── */}
+        <div className="mb-6" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 20 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Browse by Model</h3>
+          <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
+            Only models &amp; references with real listings appear — every option is backed by actual watches.
+          </div>
+
+          {/* Brand chips */}
+          <div className="flex gap-2 flex-wrap mb-3">
+            {BRANDS.map(b => (
+              <button key={b} onClick={() => loadModels(b)}
+                style={{
+                  padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: 'none',
+                  backgroundColor: pBrand === b ? NAVY : WHITE,
+                  color: pBrand === b ? WHITE : MUTED,
+                  fontWeight: pBrand === b ? 600 : 400,
+                }}>
+                {b}
+              </button>
+            ))}
+          </div>
+
+          {pLoading === 'models' && <div style={{ fontSize: 13, color: MUTED }}>Loading models…</div>}
+
+          {/* Model cards */}
+          {pModels.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+              {pModels.map(m => (
+                <button key={m.model} onClick={() => loadRefs(pBrand, m.model)}
+                  style={{
+                    textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                    border: `1px solid ${pModel === m.model ? NAVY : BORDER}`,
+                    backgroundColor: pModel === m.model ? '#eef1f6' : WHITE,
+                  }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.model}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{m.listing_count.toLocaleString()} listings · {m.reference_count} refs</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {pLoading === 'refs' && <div style={{ fontSize: 13, color: MUTED }}>Loading references…</div>}
+
+          {/* Reference cards */}
+          {pRefs.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {pRefs.map(r => (
+                <button key={r.reference} onClick={() => { setQuery(r.reference); fetchData(r.reference); }}
+                  style={{
+                    textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                    border: `1px solid ${GOLD}`, backgroundColor: WHITE,
+                  }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{r.listing_count.toLocaleString()} listings · avg ${r.avg_price.toLocaleString()}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* ── Search ─────────────────────────────────────────── */}
         <div className="mb-8">
           <div className="flex gap-2 mb-3">
@@ -209,25 +309,64 @@ export default function PriceResearch() {
                 </div>
               </div>
 
-              {/* Liquidity */}
+              {/* Liquidity — REAL data only, no invented seller/buyer counts */}
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Dealer Activity</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Liquidity & Demand</h3>
+                  {data.liquidity && (
+                    <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, padding: '2px 8px', borderRadius: 10,
+                      backgroundColor: data.liquidity.source === 'indicators' ? '#e7f5ec' : '#fff4e5',
+                      color: data.liquidity.source === 'indicators' ? GREEN : '#b8860b' }}>
+                      {data.liquidity.source === 'indicators' ? 'Market Indicators' : 'Live Count'}
+                    </span>
+                  )}
+                </div>
                 {data.liquidity && (
                   <>
-                    <div className="flex items-center justify-between mb-2">
-                      <span style={{ fontSize: 13, color: MUTED }}>Unique Sellers</span>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: RED }}>{data.liquidity.uniqueSellers}</span>
-                    </div>
-                    <div className="flex items-center justify-between mb-3">
-                      <span style={{ fontSize: 13, color: MUTED }}>Est. Buyers</span>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: GREEN }}>{data.liquidity.estimatedBuyers}</span>
-                    </div>
-                    {data.liquidity.buyerSellerRatio != null && (
-                      <div style={{ fontSize: 14, textAlign: 'center' }}>
-                        B/S Ratio:{' '}
-                        <span style={{ fontWeight: 700, color: data.liquidity.buyerSellerRatio > 1 ? RED : GREEN }}>
-                          {data.liquidity.buyerSellerRatio.toFixed(2)}
-                        </span>
+                    {data.liquidity.source === 'indicators' ? (
+                      <>
+                        {data.liquidity.liquidity_score != null && (
+                          <div className="flex items-center justify-between mb-2">
+                            <span style={{ fontSize: 13, color: MUTED }}>Liquidity Score</span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{data.liquidity.liquidity_score}</span>
+                          </div>
+                        )}
+                        {data.liquidity.sale_count != null && (
+                          <div className="flex items-center justify-between mb-2">
+                            <span style={{ fontSize: 13, color: MUTED }}>Sales (window)</span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: GREEN }}>{data.liquidity.sale_count}</span>
+                          </div>
+                        )}
+                        {data.liquidity.demand_score != null && (
+                          <div className="flex items-center justify-between mb-2">
+                            <span style={{ fontSize: 13, color: MUTED }}>Demand</span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: BLUE }}>{data.liquidity.demand_score}</span>
+                          </div>
+                        )}
+                        {data.liquidity.supply_score != null && (
+                          <div className="flex items-center justify-between mb-2">
+                            <span style={{ fontSize: 13, color: MUTED }}>Supply</span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: RED }}>{data.liquidity.supply_score}</span>
+                          </div>
+                        )}
+                        {data.liquidity.wtb_fs_ratio != null && (
+                          <div className="flex items-center justify-between">
+                            <span style={{ fontSize: 13, color: MUTED }}>WTB/FS Ratio</span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: data.liquidity.wtb_fs_ratio > 1 ? RED : GREEN }}>
+                              {Number(data.liquidity.wtb_fs_ratio).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 13, color: MUTED }}>Real listings for sale</div>
+                        <div style={{ fontSize: 36, fontWeight: 700, color: NAVY, marginTop: 4 }}>
+                          {data.liquidity.listing_count.toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: 11, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
+                          No precomputed indicators for this reference — showing live count only.
+                        </div>
                       </div>
                     )}
                   </>
@@ -241,55 +380,70 @@ export default function PriceResearch() {
                   <>
                     <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
                       Avg:{' '}
-                      <span style={{ color: 'inherit', textDecoration: stats.drift < 0 ? 'line-through' : 'none' }}>
-                        ${stats.previousAvg.toLocaleString()}
-                      </span>
-                      {' → '}
-                      <span style={{ color: stats.drift < 0 ? RED : GREEN, fontWeight: 600 }}>
-                        ${stats.currentAvg.toLocaleString()}
+                      <span style={{ color: GREEN, fontWeight: 700, fontSize: 20 }}>
+                        ${stats.avg.toLocaleString()}
                       </span>
                     </div>
-                    <div style={{ fontSize: 14 }}>
-                      Drift:{' '}
-                      <span style={{ color: stats.drift < 0 ? RED : GREEN, fontWeight: 600, fontSize: 18 }}>
-                        {stats.drift > 0 ? '+' : ''}{stats.drift}%
+                    <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
+                      Median:{' '}
+                      <span style={{ color: NAVY, fontWeight: 600 }}>
+                        ${stats.median.toLocaleString()}
                       </span>
                     </div>
                     <div className="flex justify-between mt-3" style={{ fontSize: 12, color: MUTED }}>
                       <span>Min: ${stats.min.toLocaleString()}</span>
                       <span>Max: ${stats.max.toLocaleString()}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-                      Median: ${data.stats?.median?.toLocaleString()}
+                    <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
+                      Based on {stats.count} real listings (IQR-filtered)
                     </div>
                   </>
                 )}
                 <button
-                  onClick={() => data && generatePriceResearchReport(
-                    data.reference,
-                    data.brand,
-                    data.model || 'Unknown',
-                    {
-                      min: stats?.min || 0,
-                      avg: stats?.currentAvg || 0,
-                      max: stats?.max || 0,
-                      count: stats?.count || 0,
-                      drift: stats?.drift || 0,
-                      previousAvg: stats?.previousAvg || 0,
-                      currentAvg: stats?.currentAvg || 0,
-                    },
-                    listings,
-                    {
-                      buyers: data.liquidity?.uniqueSellers,
-                      sellers: data.liquidity?.estimatedBuyers,
-                      buyerSellerRatio: data.liquidity?.buyerSellerRatio ?? undefined,
-                    }
-                  )}
+                  onClick={() => {
+                    if (!data) return;
+                    const url = `/api/export-excel?reference=${encodeURIComponent(data.reference)}&brand=${encodeURIComponent(data.brand)}`;
+                    window.open(url, '_blank');
+                  }}
                   style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: WHITE, color: NAVY, border: `2px solid ${NAVY}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileSpreadsheet size={16} /> Download Report
+                  <Download size={16} /> Download CSV
                 </button>
               </div>
             </div>
+
+            {/* ── Dial Color Analysis: EVERY dial color found in real listings ── */}
+            {data.dial_analysis && data.dial_analysis.length > 0 && (
+              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Dial Color Analysis</h3>
+                <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
+                  Every dial color found across real listings for {displayRef} — backed by actual watches, not estimates.
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
+                        <th style={{ padding: '8px 12px', fontWeight: 600 }}>Dial Color</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Listings</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Avg</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Min</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Max</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.dial_analysis.map((d, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                          <td style={{ padding: '10px 12px', color: TEXT, fontWeight: 500 }}>{d.dial_color}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: NAVY, fontWeight: 600 }}>{d.count.toLocaleString()}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: GREEN, fontWeight: 600 }}>${d.avg_price.toLocaleString()}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: MUTED }}>${d.min_price.toLocaleString()}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: MUTED }}>${d.max_price.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* ── Price Chart ───────────────────────────────── */}
             {chartData.length >= 2 && (
@@ -326,7 +480,7 @@ export default function PriceResearch() {
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: BLUE, display: 'inline-block' }} />
-                      ${stats?.currentAvg?.toLocaleString() || 'N/A'} AVERAGE
+                      ${stats?.avg?.toLocaleString() || 'N/A'} AVERAGE
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: RED, display: 'inline-block' }} />

@@ -95,6 +95,18 @@ const BRAND_PATTERNS: [RegExp, string][] = [
   [/\b(?:vacheron.*constantin|vc)\b/i, 'Vacheron Constantin'],
   [/\b(?:tudor)\b/i, 'Tudor'],
   [/\b(?:grand.*seiko|gs)\b/i, 'Grand Seiko'],
+  [/\\b(?:girard.*perregaux|gp)\\b/i, 'Girard-Perregaux'],
+  [/\\b(?:glash[uü]tte|glashutte|glashutte\\s*original)\\b/i, 'Glashütte Original'],
+  [/\\b(?:a\\.?\\s*lange|als|lange\\s*&\\s*s[oö]hne|lange\\s*und\\s*s[oö]hne)\\b/i, 'A. Lange & Söhne'],
+  [/\\b(?:f\\.?\\s*p\\.?\\s*journe|fpj)\\b/i, 'F.P. Journe'],
+  [/\\b(?:chopard)\\b/i, 'Chopard'],
+  [/\\b(?:breguet)\\b/i, 'Breguet'],
+  [/\\b(?:blancpain)\\b/i, 'Blancpain'],
+  [/\\b(?:zenith)\\b/i, 'Zenith'],
+  [/\\b(?:h\\.?\\s*moser|moser)\\b/i, 'H. Moser & Cie'],
+  [/\\b(?:ulysse\\s*nardin|un)\\b/i, 'Ulysse Nardin'],
+  [/\\b(?:montblanc)\\b/i, 'Montblanc'],
+  [/\\b(?:piaget)\\b/i, 'Piaget'],
 ];
 
 const ROLEX_MODELS = [
@@ -229,6 +241,58 @@ const PRICE_PATTERNS: RegExp[] = [
   /([\d,]+\.?\d*)\s*(?:HKD|USD|EUR|CHF|GBP|SGD|USDT)\b/i,
 ];
 
+// ── Fuzzy brand matching (Levenshtein + alias resolution) ──
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+}
+
+const ALL_CANONICAL_BRANDS = [
+  'Patek Philippe', 'Rolex', 'Audemars Piguet', 'Richard Mille',
+  'Vacheron Constantin', 'Cartier', 'Omega', 'IWC', 'Hublot', 'Breitling',
+  'Tudor', 'Grand Seiko', 'Girard-Perregaux', 'Glashütte Original',
+  'A. Lange & Söhne', 'F.P. Journe', 'Chopard', 'Breguet', 'Blancpain',
+  'Zenith', 'H. Moser & Cie', 'Ulysse Nardin', 'Montblanc', 'Piaget',
+  'Jaeger-LeCoultre', 'Tag Heuer', 'Panerai',
+];
+
+const BRAND_ALIAS_MAP: Record<string, string> = {
+  'gp': 'Girard-Perregaux', 'vc': 'Vacheron Constantin',
+  'pp': 'Patek Philippe', 'ap': 'Audemars Piguet',
+  'rm': 'Richard Mille', 'als': 'A. Lange & Söhne',
+  'fpj': 'F.P. Journe', 'jlc': 'Jaeger-LeCoultre',
+  'gs': 'Grand Seiko', 'go': 'Glashütte Original',
+};
+
+function fuzzyMatchBrand(token: string): string | null {
+  const t = token.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (t.length < 2) return null;
+  // Check alias map first
+  const alias = BRAND_ALIAS_MAP[t];
+  if (alias) return alias;
+  // Exact or prefix match
+  for (const name of ALL_CANONICAL_BRANDS) {
+    const n = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (t === n || n.startsWith(t) || t.startsWith(n)) return name;
+  }
+  // Levenshtein ≤2 for tokens ≥5 chars, ≤1 for shorter
+  let best: { name: string; dist: number } | null = null;
+  for (const name of ALL_CANONICAL_BRANDS) {
+    const n = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const dist = levenshtein(t, n);
+    const maxDist = t.length >= 5 ? 2 : 1;
+    if (dist <= maxDist && (!best || dist < best.dist)) best = { name, dist };
+  }
+  return best?.name || null;
+}
+
 // ── Parser ──
 
 export function parseWatch(raw: string): ParsedWatch {
@@ -246,7 +310,16 @@ export function parseWatch(raw: string): ParsedWatch {
       if (re.test(clean)) { brand = name; break; }
     }
   }
+  // 2b. Fuzzy brand matching: split clean text into tokens, try fuzzy on each
+  if (brand === 'Unknown') {
+    const tokens = clean.split(/[\s,;|/]+/).filter(t => t.length >= 2);
+    for (const token of tokens) {
+      const fuzzy = fuzzyMatchBrand(token);
+      if (fuzzy) { brand = fuzzy; break; }
+    }
+  }
   // Brand from reference prefix if brand still unknown
+  // REVERSE LOOKUP: cross-reference ref pattern against known brand schemas
   if (brand === 'Unknown') {
     // Patek Philippe: 49xx, 50xx, 51xx, 52xx, 53xx, 54xx, 55xx, 56xx, 57xx, 58xx, 59xx, 61xx, 71xx, 72xx
     if (/\b(49\d{2}|50\d{2}|51\d{2}|52\d{2}|53\d{2}|54\d{2}|55\d{2}|56\d{2}|57\d{2}|58\d{2}|59\d{2}|61\d{2}|71\d{2}|72\d{2})/.test(clean)) brand = 'Patek Philippe';
@@ -361,16 +434,21 @@ export function parseWatch(raw: string): ParsedWatch {
     }
   }
 
-  // 9. Confidence scoring
+  // 9. Confidence scoring with smart sub-bucket classification
   let score = 0;
   const flags: string[] = [];
 
   // Brand known -> +30
   if (brand !== 'Unknown') { score += 30; }
-  else { flags.push('UNKNOWN_BRAND'); }
+  else { flags.push('MISSING_BRAND_MATCH'); }  // sub-bucket: brand token not recognized
 
   // Valid reference found -> +25
   if (reference) { score += 25; }
+  else if (brand !== 'Unknown') {
+    // Brand found but no reference — likely a non-standard listing or description text
+    flags.push('UNPARSABLE_REF');
+    score += 5;  // partial credit for brand awareness
+  }
   else { flags.push('MISSING_REFERENCE'); }
 
   // Dial color found/inferred -> +20
@@ -379,8 +457,12 @@ export function parseWatch(raw: string): ParsedWatch {
 
   // Price found and realistic -> +20
   if (price > 0 && price < 500_000_000) {
+    // Outlier check: flag prices >$2M or <$500 as potential issues
+    if (price >= 2_000_000) flags.push('PRICE_HIGH_OUTLIER');
+    else if (price < 500) flags.push('PRICE_LOW_OUTLIER');
     score += 20;
     if (price >= 5000 && price <= 1_000_000) score += 5;
+    else if (price > 1_000_000 && price <= 5_000_000) score += 2; // high-end but plausible
   } else {
     flags.push('MISSING_PRICE');
   }
@@ -393,6 +475,15 @@ export function parseWatch(raw: string): ParsedWatch {
 
   // Condition found -> +2
   if (condition !== 'Unknown') score += 2;
+
+  // MULTI_WATCH detection: if raw message contains 3+ distinct watch references,
+  // or 3+ price mentions, flag as multi-watch stock list
+  const refCount = (clean.match(/\b\d{4,6}[A-Za-z]{0,4}\b/g) || []).length;
+  const priceCount = (clean.match(/HKD|USD|EUR|\$/g) || []).length;
+  if (refCount >= 3 || priceCount >= 3) {
+    flags.push('MULTI_WATCH_STOCK_LIST');
+    // Multi-watch lists should go to HUMAN review, keep score but flag it
+  }
 
   // ── Intent detection ──
   let intent: 'SELL' | 'BUY' | 'INQUIRY' = 'SELL';

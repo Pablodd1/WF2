@@ -35,15 +35,21 @@ function collapseRef(ref) {
 function inferBrand(rawRef) {
   const r = collapseRef(rawRef);
   if (!r) return null;
-  if (/^[3-7]\d{3}\//.test(normalizeRef(rawRef))) return 'Patek Philippe'; // 5711/1A, 7118/1200A
+  if (/^[3-7]\d{3}\//.test(normalizeRef(rawRef))) return 'Patek Philippe'; // 5711/1A, 7118/1200A — also catches 49xx/50xx/51xx/52xx/53xx/54xx/55xx/56xx/57xx/58xx/59xx/61xx/71xx/72xx
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
   if (/^IW\d{4,6}$/.test(r)) return 'IWC';
   if (/^(WSSA|WSNM|WGNM|WJSA|CRWS|CRWG)/.test(r)) return 'Cartier';
-  if (/^(15|26|77)\d{3}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';     // 15500ST, 26579CE
+  if (/^(15|26|77)\d{3}[A-Z]{2}/.test(r)) return 'Audemars Piguet';     // 15500ST, 26579CE, 15180OR...
   if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180|4500V|4300V|6000V)/.test(r)) return 'Vacheron Constantin';
   if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';                          // 116610LN, 126331
   if (/^(79\d{4}|70\d{4})[A-Z]*$/.test(r)) return 'Tudor';
   if (/^3\d{4}\.\d/.test(String(rawRef))) return 'Omega';
+  // New brands
+  if (/^PAM\d{3,4}$/i.test(r)) return 'Panerai';
+  if (/^Q\d{5,6}$/i.test(r)) return 'Jaeger-LeCoultre';
+  if (/^(AB|A[123])\d{4}[A-Z]?$/i.test(r)) return 'Breitling';
+  if (/^HUB\d{2}/.test(r)) return 'Hublot';
+  if (/^(CR|WG|HP|WE)\d{3}/i.test(r)) return 'Cartier';
   return null;
 }
 

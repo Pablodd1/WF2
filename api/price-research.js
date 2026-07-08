@@ -5,23 +5,51 @@
  *        GET /api/price-research?reference=52506           (brand auto-resolved)
  */
 const { getClient } = require('./_lib/supabase');
+const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
+const { lookupCatalog } = require('./_lib/catalog');
 
-// Inline brand inference — no catalog dependency needed
-// Matches ingest.js inferBrandFromRef pattern order: Patek, AP, Rolex, RM, VC, Tudor, IWC, Cartier
+// Look up a human model name for a reference from the PROVEN file catalog
+// (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
+// by /api/catalog-lookup. The Supabase cached_price_guide_watches table is empty
+// for most brands, so we do NOT use it. Decoration only — never affects existence.
+function lookupModel(reference) {
+  try {
+    const hit = lookupCatalog(reference);
+    return hit && hit.found ? (hit.model || null) : null;
+  } catch { return null; }
+}
+
+// Pull real liquidity indicators for a reference. Wrapped in try/catch because
+// market_reference_indicators_current has never been queried by live code — if
+// column names differ, we fall back to a live-derived count. REAL DATA ONLY:
+// no invented seller/buyer numbers.
+async function lookupLiquidity(client, reference, listingCount) {
+  try {
+    const { data, error } = await client
+      .from('market_reference_indicators_current')
+      .select('liquidity_score, sale_count, search_count, demand_score, supply_score, wtb_fs_ratio')
+      .eq('normalized_reference', normRef(reference))
+      .eq('region', 'global')
+      .limit(1);
+    if (!error && data && data.length) {
+      const d = data[0];
+      return {
+        source: 'indicators',
+        liquidity_score: d.liquidity_score,
+        sale_count: d.sale_count,
+        search_count: d.search_count,
+        demand_score: d.demand_score,
+        supply_score: d.supply_score,
+        wtb_fs_ratio: d.wtb_fs_ratio,
+        listing_count: listingCount,
+      };
+    }
+  } catch { /* fall through to live count */ }
+  return { source: 'live_fallback', listing_count: listingCount };
+}
+
 function inferBrand(ref) {
-  if (!ref) return null;
-  const r = String(ref).toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
-  if (/^[345]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
-  if (/^[345]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
-  if (/^\d{5}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';
-  // 5-6 digit refs → Rolex (supports 4/5/6 digit: 16233, 52506, 116520, 126710BLRO, etc.)
-  if (/^\d{5,6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
-  if (/^RM\d{2}/.test(r)) return 'Richard Mille';
-  if (/^(85|47|49)\d{3}[A-Z\/]/.test(r)) return 'Vacheron Constantin';
-  if (/^(79|70)\d{4}[A-Z]*$/.test(r)) return 'Tudor';
-  if (/^IW\d{4,6}$/.test(r)) return 'IWC';
-  if (/^(WSSA|WSNM|WGNM|WJSA|CRWS|CRWG)/.test(r)) return 'Cartier';
-  return null;
+  return sharedInferBrand(ref);
 }
 
 module.exports = async function handler(req, res) {
@@ -82,6 +110,7 @@ module.exports = async function handler(req, res) {
         success: true, brand, reference: rawRef,
         resolvedRef: targetRef !== rawRef ? targetRef : null,
         model: null, dialColors: null,
+        dial_analysis: [],
         totalListings: 0, count: 0,
         analytics_ready: false, listing_count: 0,
         stats: null, liquidity: null, monthly: [], prices: [], rows: []
@@ -141,10 +170,31 @@ module.exports = async function handler(req, res) {
       .map(m => ({ month: m.month, count: m.count, avg_price: Math.round(m.sum / m.count), min_price: m.min, max_price: m.max }))
       .sort((a, b) => a.month.localeCompare(b.month));
 
+    // ── Dial analysis: EVERY dial color found in real listings (rule: all must show) ──
+    const dialMap = {};
+    listedRows.forEach(r => {
+      if (!(r.price_usd > 0)) return;
+      const dial = r.dial_color || 'Unspecified';
+      if (!dialMap[dial]) dialMap[dial] = { dial_color: dial, count: 0, sum: 0, min: Infinity, max: 0 };
+      const d = dialMap[dial];
+      d.count++; d.sum += r.price_usd;
+      d.min = Math.min(d.min, r.price_usd);
+      d.max = Math.max(d.max, r.price_usd);
+    });
+    const dial_analysis = Object.values(dialMap)
+      .map(d => ({ dial_color: d.dial_color, count: d.count, avg_price: Math.round(d.sum / d.count), min_price: d.min, max_price: d.max }))
+      .sort((a, b) => b.count - a.count);
+    const dialColors = dial_analysis.map(d => d.dial_color);
+
+    // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
+    const model = lookupModel(targetRef);
+    const liquidity = await lookupLiquidity(client, targetRef, listedRows.length);
+
     res.status(200).json({
       success: true, brand, reference: rawRef,
       resolvedRef: targetRef !== rawRef ? targetRef : null,
-      model: null, dialColors: null,
+      model, dialColors,
+      dial_analysis,
       totalListings: rows.length,
       listing_count: listedRows.length,
       count: prices.length,
@@ -152,6 +202,7 @@ module.exports = async function handler(req, res) {
       outliersRemoved: rawPrices.length - prices.length,
       analytics_ready: prices.length >= 4,
       stats: { avg, median, min, max, range: max - min },
+      liquidity,
       monthly, prices,
       rows: listedRows.map(r => ({
         price_usd: r.price_usd, created_at: r.created_at,
