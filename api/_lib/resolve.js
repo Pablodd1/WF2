@@ -26,6 +26,8 @@ function inferBrand(ref) {
   const r = normSlash(ref);
   // Dots are common in AP/Cartier/OEM refs — strip them for matching
   const rClean = r.replace(/\./g, '');
+  // VC Overseas: 4-digit+V (4500V, 4300V, 6000V, 7900V) — before Patek catch-all
+  if (/^(45|43|60|79)\d{2}V$/.test(r)) return 'Vacheron Constantin';
   // Patek: slash refs (5711/1A) or 4-digit+letter (5167A, 5236P) or bare 4-digit (3730 vintage)
   if (/^[3-7]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
   if (/^[3-7]\d{3}[A-Z]?$/.test(r)) return 'Patek Philippe';
@@ -41,8 +43,9 @@ function inferBrand(ref) {
   if (/^(W|CR|WG|HP|WE|WT|WS)[A-Z0-9]{3,}/i.test(rClean)) return 'Cartier';
   // VC: 47xxx, 85xxx, 81xxx, 45xx, 43xx
   if (/^(85|47|49|81|82)\d{3}[A-Z/]/.test(rClean)) return 'Vacheron Constantin';
-  // Tudor: 79xxxx, 70xxxx
+  // Tudor: 79xxxx, 70xxxx, M7xxxx (Black Bay GMT, Chronograph)
   if (/^(79|70)\d{4}[A-Z]*$/.test(rClean)) return 'Tudor';
+  if (/^M7\d{4}[A-Z]*$/.test(rClean)) return 'Tudor';
   // Panerai: PAM + digits
   if (/^PAM\d{3,4}$/i.test(rClean)) return 'Panerai';
   // JLC: Q + 5-6 digits
