@@ -27,7 +27,16 @@
   "rewrites": [
     { "source": "/extract", "destination": "/extract.html" },
     { "source": "/extract.html", "destination": "/extract.html" },
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/batch-process",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/generate-report",
+      "schedule": "0 3 * * *"
+    }
   ]
 }
