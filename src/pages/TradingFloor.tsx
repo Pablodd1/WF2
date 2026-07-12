@@ -37,14 +37,18 @@ interface ListingRecord {
   condition: string | null;
   year: number | null;
   listing_type: string;
-  is_multi: boolean;
-  multi_group_id: string | null;
-  multi_total: number | null;
   raw_message: string;
   source: string;
-  received_at: string;
+  source_type: string | null;
+  listing_date: string | null;
+  listing_status: string | null;
   created_at: string;
   confidence: number;
+  has_images: boolean;
+  thumbnail_url: string | null;
+  seller_name: string | null;
+  region: string | null;
+  review_reason: string | null;
 }
 
 interface TradingFloorResponse {
@@ -110,13 +114,6 @@ export default function TradingFloor() {
     return () => controller.abort();
   }, [activeTab, page, pageSize, search]);
 
-  const grouped = listings.reduce((acc: ListingRecord[], listing) => {
-    if (listing.is_multi && listing.multi_group_id && acc.some(item => item.multi_group_id === listing.multi_group_id)) {
-      return acc;
-    }
-    acc.push(listing);
-    return acc;
-  }, []);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -179,7 +176,7 @@ export default function TradingFloor() {
 
       <div className="max-w-7xl mx-auto px-4 mb-3">
         <div className="flex flex-wrap items-center gap-4" style={{ fontSize: 13, color: MUTED }}>
-          <span>Showing <strong style={{ color: TEXT }}>{grouped.length.toLocaleString()}</strong> of <strong style={{ color: TEXT }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong></span>
+          <span>Showing <strong style={{ color: TEXT }}>{listings.length.toLocaleString()}</strong> of <strong style={{ color: TEXT }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong></span>
           <span>Page <strong style={{ color: TEXT }}>{page}</strong> of <strong style={{ color: TEXT }}>{totalPages}</strong></span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
@@ -190,7 +187,7 @@ export default function TradingFloor() {
           <div className="flex justify-center py-16">
             <div className="animate-spin w-8 h-8 border-2 rounded-full" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
           </div>
-        ) : grouped.length === 0 ? (
+        ) : listings.length === 0 ? (
           <div style={{ padding: '64px 0', textAlign: 'center', color: MUTED }}>
             <div style={{ fontSize: 16, fontWeight: 600 }}>No listings found</div>
             <div style={{ fontSize: 13, marginTop: 4 }}>
@@ -199,7 +196,7 @@ export default function TradingFloor() {
           </div>
         ) : (
           <div className={viewMode === 'grid' ? 'grid gap-3 md:grid-cols-2' : 'grid gap-3'}>
-            {grouped.map(listing => <ListingCard key={listing.id} listing={listing} />)}
+            {listings.map(listing => <ListingCard key={listing.id} listing={listing} />)}
           </div>
         )}
 
@@ -230,13 +227,14 @@ export default function TradingFloor() {
 
 function ListingCard({ listing }: { listing: ListingRecord }) {
   const typeStyle = TYPE_STYLES[listing.listing_type] || TYPE_STYLES.WTS;
-  const isMulti = listing.is_multi && listing.multi_total && listing.multi_total > 1;
   const confidenceColor = listing.confidence >= 90 ? GREEN : listing.confidence >= 70 ? ORANGE : RED;
-  const listingDate = listing.received_at || listing.created_at;
+  const listingDate = listing.listing_date || listing.created_at;
 
   const formatListingDate = (dateStr: string) => {
     if (!dateStr) return '';
-    return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(dateStr));
+    const parsed = new Date(dateStr);
+    if (Number.isNaN(parsed.getTime())) return dateStr;
+    return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
   };
 
   return (
@@ -251,7 +249,7 @@ function ListingCard({ listing }: { listing: ListingRecord }) {
         <div className="flex items-center gap-2 mb-1">
           {listing.brand && listing.brand !== 'Unknown' && <span style={{ fontSize: 14, fontWeight: 600, color: NAVY }}>{listing.brand}</span>}
           {listing.reference && <span style={{ fontSize: 12, color: GOLD, fontFamily: 'monospace' }}>{listing.reference}</span>}
-          {isMulti && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, backgroundColor: `${BLUE}15`, color: BLUE, fontWeight: 600 }}>{listing.multi_total} watches</span>}
+          {listing.listing_status && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, backgroundColor: `${BLUE}15`, color: BLUE, fontWeight: 600 }}>{listing.listing_status}</span>}
         </div>
 
         <div style={{ fontSize: 12, color: MUTED, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 600 }}>
@@ -264,6 +262,7 @@ function ListingCard({ listing }: { listing: ListingRecord }) {
           {listing.year && <span>{listing.year}</span>}
           {listingDate && <span className="flex items-center gap-1"><Clock size={10} />{formatListingDate(listingDate)}</span>}
           {listing.source && <span>via {listing.source}</span>}
+          {listing.region && <span>{listing.region}</span>}
         </div>
       </div>
 

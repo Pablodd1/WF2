@@ -726,7 +726,7 @@ module.exports = async function handler(req, res) {
       const start = (page - 1) * pageSize;
       const end = start + pageSize - 1;
       const params = new URLSearchParams({
-        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,is_multi,multi_group_id,multi_index,multi_total,raw_message,source,channel_id,received_at,created_at,confidence',
+        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,raw_message,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,seller_name,region,review_reason',
         order: 'created_at.desc',
       });
 

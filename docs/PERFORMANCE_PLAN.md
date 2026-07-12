@@ -15,7 +15,7 @@ Make the public application responsive with a multi-million-row archive without 
 
 ## Deployment Gate: Schema Reconciliation
 
-Do not apply the performance migration until the live `watch_records` schema is inventoried. The checked-in SQL schema, ingestion code, and Trading Floor currently use incompatible field names. Confirm these fields or create a stable database view/API contract before deployment:
+The live `watch_records` table was inventoried on 2026-07-12 and contains the fields below. The Trading Floor API now uses this live contract. The checked-in base schema and newer ingestion path still need a separate reconciliation before historical migration or Green API release.
 
 - `id`, `brand`, `reference`, `price_usd`, `price_raw`, `currency`
 - `dial_color`, `condition`, `year`, `confidence`, `created_at`
