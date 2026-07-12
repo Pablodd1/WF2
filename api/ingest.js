@@ -711,7 +711,18 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'GET') {
     if (!supabaseUrl || !serviceKey) {
-      return res.status(200).json({ count: 0, total: 0, records: [], status: 'supabase_not_configured' });
+      return res.status(200).json({
+        count: 0,
+        total: 0,
+        records: [],
+        status: 'supabase_not_configured',
+        configuration: {
+          supabaseUrlPresent: Boolean(supabaseUrl),
+          serviceRoleKeyPresent: Boolean(serviceKey),
+          vercelRuntime: Boolean(process.env.VERCEL),
+          gitBranch: process.env.VERCEL_GIT_COMMIT_REF || null,
+        },
+      });
     }
     try {
       const requestedPage = Number.parseInt(String(req.query?.page || '1'), 10);
