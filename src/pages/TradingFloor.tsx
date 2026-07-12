@@ -96,6 +96,9 @@ export default function TradingFloor() {
 
         const response = await fetch(`/api/ingest?${params.toString()}`, { signal: controller.signal });
         const data = await response.json() as TradingFloorResponse;
+        if (data.status === 'supabase_not_configured') {
+          throw new Error('Trading Floor database is not configured for this deployment');
+        }
         if (!response.ok || data.status !== 'ok') throw new Error(data.error || 'Unable to load listings');
 
         setListings(data.records || []);
