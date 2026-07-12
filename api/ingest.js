@@ -712,10 +712,12 @@ module.exports = async function handler(req, res) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
   const serviceKey = serviceRoleKey || secretKey;
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
 
   if (req.method === 'GET') {
-    if (!supabaseUrl || !serviceKey) {
+    const readKey = serviceKey || publishableKey;
+    if (!supabaseUrl || !readKey) {
       return res.status(200).json({
         count: 0,
         total: 0,
@@ -726,6 +728,7 @@ module.exports = async function handler(req, res) {
           serviceRoleKeyPresent: Boolean(serviceRoleKey),
           secretKeyPresent: Boolean(secretKey),
           serverKeyPresent: Boolean(serviceKey),
+          publishableKeyPresent: Boolean(publishableKey),
           vercelRuntime: Boolean(process.env.VERCEL),
           gitBranch: process.env.VERCEL_GIT_COMMIT_REF || null,
         },
@@ -743,8 +746,10 @@ module.exports = async function handler(req, res) {
       const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'OTHER']);
       const start = (page - 1) * pageSize;
       const end = start + pageSize - 1;
+      const tableName = serviceKey ? 'watch_records' : 'trading_floor_listings';
       const params = new URLSearchParams({
-        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,raw_message,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,seller_name,region,review_reason',
+        // Keep this response marketplace-safe even when a server key is used.
+        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region',
         order: 'created_at.desc',
       });
 
@@ -752,21 +757,22 @@ module.exports = async function handler(req, res) {
       if (search) {
         const escapedSearch = search.replace(/[(),.]/g, ' ').replace(/%/g, '').replace(/\*/g, '').trim();
         if (escapedSearch) {
+          const searchColumns = serviceKey
+            ? [`brand.ilike.*${escapedSearch}*`, `reference.ilike.*${escapedSearch}*`, `raw_message.ilike.*${escapedSearch}*`]
+            : [`brand.ilike.*${escapedSearch}*`, `reference.ilike.*${escapedSearch}*`];
           params.set('or', `(${[
-            `brand.ilike.*${escapedSearch}*`,
-            `reference.ilike.*${escapedSearch}*`,
-            `raw_message.ilike.*${escapedSearch}*`,
+            ...searchColumns,
           ].join(',')})`);
         }
       }
 
       // Pagination and filtering happen in Postgres. The browser should never receive the whole archive.
       const resp = await fetch(
-        `${supabaseUrl}/rest/v1/watch_records?${params.toString()}`,
+        `${supabaseUrl}/rest/v1/${tableName}?${params.toString()}`,
         {
           headers: {
-            'apikey': serviceKey,
-            'Authorization': `Bearer ${serviceKey}`,
+            'apikey': readKey,
+            'Authorization': `Bearer ${readKey}`,
             'Range-Unit': 'items',
             'Range': `${start}-${end}`,
             // Estimated counts avoid a full-table count for a multi-million-row archive.
@@ -786,6 +792,7 @@ module.exports = async function handler(req, res) {
         totalIsEstimate: true,
         records: Array.isArray(records) ? records : [],
         status: 'ok',
+        accessMode: serviceKey ? 'server_key' : 'publishable_read_only',
       });
     } catch (e) {
       return res.status(500).json({ error: e.message });
@@ -793,6 +800,13 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  if (!supabaseUrl || !serviceKey) {
+    return res.status(503).json({
+      error: 'Ingestion requires a Supabase server key',
+      status: 'supabase_write_not_configured',
+    });
+  }
 
   const body = req.body || {};
   let rawMessage = body.rawMessage;

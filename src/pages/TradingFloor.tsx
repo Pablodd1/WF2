@@ -37,7 +37,6 @@ interface ListingRecord {
   condition: string | null;
   year: number | null;
   listing_type: string;
-  raw_message: string;
   source: string;
   source_type: string | null;
   listing_date: string | null;
@@ -46,9 +45,7 @@ interface ListingRecord {
   confidence: number;
   has_images: boolean;
   thumbnail_url: string | null;
-  seller_name: string | null;
   region: string | null;
-  review_reason: string | null;
 }
 
 interface TradingFloorResponse {
@@ -253,10 +250,6 @@ function ListingCard({ listing }: { listing: ListingRecord }) {
           {listing.brand && listing.brand !== 'Unknown' && <span style={{ fontSize: 14, fontWeight: 600, color: NAVY }}>{listing.brand}</span>}
           {listing.reference && <span style={{ fontSize: 12, color: GOLD, fontFamily: 'monospace' }}>{listing.reference}</span>}
           {listing.listing_status && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, backgroundColor: `${BLUE}15`, color: BLUE, fontWeight: 600 }}>{listing.listing_status}</span>}
-        </div>
-
-        <div style={{ fontSize: 12, color: MUTED, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 600 }}>
-          {listing.raw_message?.slice(0, 200)}{listing.raw_message && listing.raw_message.length > 200 ? '...' : ''}
         </div>
 
         <div className="flex flex-wrap items-center gap-3 mt-1" style={{ fontSize: 11, color: MUTED }}>
