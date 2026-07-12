@@ -12,6 +12,7 @@ Make the public application responsive with a multi-million-row archive without 
 - The API returns an estimated matching count from the `Content-Range` header.
 - Routes are loaded with React lazy loading, so charts, spreadsheet export, review, and demo code do not ship on the first page load.
 - `supabase-performance-migration.sql` supplies the indexes required for the new access path.
+- The live `idx_watch_records_listing_type_created_at_desc` index and an `ANALYZE` refresh were applied successfully on 2026-07-12.
 
 ## Deployment Gate: Schema Reconciliation
 
@@ -26,7 +27,7 @@ The live `watch_records` table was inventoried on 2026-07-12 and contains the fi
 
 1. Rotate all credentials exposed outside the secret manager and remove tracked `.env*` files from Git history.
 2. Export the live Supabase schema, indexes, row estimates, and query plans for the Trading Floor path.
-3. Apply the composite listing-type/date index first during a quiet period. Test it with a query plan before adding the larger trigram text-search indexes.
+3. Test the applied composite listing-type/date index with a query plan before adding the larger trigram text-search indexes.
 4. Deploy this branch to a staging environment and test pagination, filters, empty results, and search on realistic data.
 5. Inspect `EXPLAIN (ANALYZE, BUFFERS)` for the first page, a type filter, a reference search, and a raw-text search.
 6. Release to production with error-rate, p95 endpoint latency, and database CPU monitoring enabled.
