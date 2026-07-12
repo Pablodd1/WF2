@@ -706,7 +706,12 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Supabase now labels newly-created server keys as "secret" keys. Keep the
+  // established variable name working while supporting the current dashboard
+  // convention. Neither value is ever returned to a client.
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+  const serviceKey = serviceRoleKey || secretKey;
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
 
   if (req.method === 'GET') {
@@ -718,7 +723,9 @@ module.exports = async function handler(req, res) {
         status: 'supabase_not_configured',
         configuration: {
           supabaseUrlPresent: Boolean(supabaseUrl),
-          serviceRoleKeyPresent: Boolean(serviceKey),
+          serviceRoleKeyPresent: Boolean(serviceRoleKey),
+          secretKeyPresent: Boolean(secretKey),
+          serverKeyPresent: Boolean(serviceKey),
           vercelRuntime: Boolean(process.env.VERCEL),
           gitBranch: process.env.VERCEL_GIT_COMMIT_REF || null,
         },

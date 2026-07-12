@@ -14,14 +14,25 @@ module.exports = async function handler(req, res) {
   const offset = req.body?.offset || 0;
 
   try {
-    // Use mysql2 with URL-encoded password (%27 for the single quote)
+    const legacyDb = {
+      host: process.env.LEGACY_DB_HOST,
+      port: Number(process.env.LEGACY_DB_PORT || 3306),
+      user: process.env.LEGACY_DB_USER,
+      password: process.env.LEGACY_DB_PASSWORD,
+      database: process.env.LEGACY_DB_NAME,
+    };
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+
+    if (Object.values(legacyDb).some((value) => value === undefined || value === '')) {
+      return res.status(503).json({ error: 'Legacy database migration is not configured' });
+    }
+    if (!process.env.SUPABASE_URL || !supabaseKey) {
+      return res.status(503).json({ error: 'Supabase server configuration is missing' });
+    }
+
     const mysql = require('mysql2/promise');
     const conn = await mysql.createConnection({
-      host: '161.35.0.209',
-      port: 3306,
-      user: 'john',
-      password: "U0aeAr1zFt2'",
-      database: 'thecollective_inventory',
+      ...legacyDb,
       connectTimeout: 30000,
     });
 
@@ -54,7 +65,7 @@ module.exports = async function handler(req, res) {
     // Insert into Supabase
     const supabase = createClient(
       process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      supabaseKey,
       { auth: { persistSession: false } }
     );
 
