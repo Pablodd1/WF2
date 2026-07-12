@@ -12,6 +12,10 @@
 
 const path = require('node:path');
 const fs = require('node:fs');
+const {
+  extractPriceObservations,
+  segmentDealerMessage,
+} = require('./_lib/normalization-v4.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -408,8 +412,10 @@ function routeListing(confidence, bundle) {
 }
 
 // Parse watch details via JASS-5 parser pipeline
-function parseJass5(text, context) {
-  const refAssertion = extractReference(text);
+function parseJass5(text, context, referenceHint = null) {
+  const refAssertion = referenceHint
+    ? assertField('reference', referenceHint, referenceHint, 95, 'context_segmentation')
+    : extractReference(text);
   const brandAssertion = extractBrand(text, refAssertion.normalized_value, context);
   const dialAssertion = extractDial(text, refAssertion.normalized_value);
   const modelAssertion = extractModel(text, refAssertion.normalized_value);
@@ -417,7 +423,10 @@ function parseJass5(text, context) {
   const braceletAssertion = extractFromDictionary(text, MATERIALS.bracelets || {}, 'bracelet');
   const bezelAssertion = extractFromDictionary(text, MATERIALS.bezels || {}, 'bezel');
   const conditionAssertion = extractCondition(text, context);
-  const setStatusAssertion = extractFromDictionary(text, CONDITIONS.set_status || {}, 'set_status');
+  let setStatusAssertion = extractFromDictionary(text, CONDITIONS.set_status || {}, 'set_status');
+  if (!setStatusAssertion.normalized_value && context.set_status_context) {
+    setStatusAssertion = assertField('set_status', context.set_status_context, context.set_status_context, 85, 'context_inherited');
+  }
   const cardDate = extractCardDate(text);
 
   const assertions = {
@@ -434,7 +443,7 @@ function parseJass5(text, context) {
     card_year: cardDate.card_year
   };
 
-  const prices = extractPrices(text);
+  const prices = extractPriceObservations(text, context);
 
   const bundle = {
     brand: brandAssertion.normalized_value,
@@ -560,15 +569,13 @@ async function insertSupabase(tableName, record, url, key) {
 // ============================================================
 
 async function processMessage(rawMessage, channelId, source, supabaseUrl, serviceKey, deepseekKey) {
-  const lines = rawMessage.split(/\n/).map(l => l.trim()).filter(Boolean);
-  const isMulti = lines.length > 3 && !rawMessage.includes('💰');
-
   // Step 1: Save Raw Message
   let rawRecord = {
     raw_text: rawMessage,
     sender_phone: channelId,
     source_platform: source,
-    processing_status: 'PROCESSING'
+    processing_status: 'PROCESSING',
+    parser_version: 'v4.0-context',
   };
   
   if (supabaseUrl && serviceKey) {
@@ -580,11 +587,14 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
   }
 
   const results = [];
-  const candidates = isMulti ? splitMulti(rawMessage) : [{ rawLine: rawMessage, context: {} }];
+  const segmented = segmentDealerMessage(rawMessage);
+  const candidates = segmented.length > 0
+    ? segmented
+    : [{ rawLine: rawMessage, context: {}, prices: extractPriceObservations(rawMessage, {}) }];
 
   for (const cand of candidates) {
     // Step 2: Parse watch candidate locally via JASS-5 State-Machine
-    let parsed = parseJass5(cand.rawLine, cand.context);
+    let parsed = parseJass5(cand.rawLine, cand.context, cand.reference || null);
 
     // Hit LLM fallback if local regex is low confidence
     if (parsed.confidence < 70 && parsed.ref && deepseekKey) {
@@ -608,23 +618,31 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
 
     // Prepare JASS-5 structures
     const listingId = `list_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const primaryPrice = parsed.prices?.find(price => price.is_primary) || parsed.prices?.[0] || null;
     const normalizedListing = {
       id: listingId,
-      raw_message_id: rawRecord.id || null,
       brand: parsed.brand,
       reference: parsed.ref,
-      model_family: parsed.model,
-      dial: parsed.dial,
-      material: parsed.material,
-      bracelet: parsed.bracelet,
-      bezel: parsed.bezel,
+      dial_color: parsed.dial,
       condition: parsed.condition,
-      set_status: parsed.set_status,
-      card_year: parsed.year,
-      catalog_match_status: parsed.catalog_status,
-      total_confidence: parsed.confidence,
-      approval_state: parsed.approval_state,
-      review_reasons: parsed.review_reasons,
+      year: parsed.year,
+      price_raw: primaryPrice?.amount_original || null,
+      price_usd: primaryPrice?.amount_usd || null,
+      currency: primaryPrice?.currency_original || null,
+      confidence: parsed.confidence,
+      verdict: parsed.approval_state,
+      source,
+      raw_message: cand.rawLine,
+      parser_version: 'v4.0-context',
+      listing_type: cand.context.intent_context || 'WTS',
+      listing_status: cand.context.listing_status_context || 'ACTIVE',
+      processed_at: new Date().toISOString(),
+      flags: {
+        raw_message_id: rawRecord.id || null,
+        set_status: parsed.set_status || null,
+        catalog_status: parsed.catalog_status,
+      },
+      review_reason: parsed.review_reasons?.join(',') || null,
     };
 
     if (supabaseUrl && serviceKey) {
@@ -643,7 +661,10 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
               amount_usd: pr.amount_usd,
               is_primary: pr.is_primary,
               raw_price_text: pr.raw_price_text,
-              confidence: pr.confidence
+              confidence: pr.confidence,
+              currency_evidence: pr.currency_evidence || null,
+              discount_percent: pr.discount_percent || null,
+              retail_price: pr.retail_price || null,
             }, supabaseUrl, serviceKey);
           }
         }
@@ -654,8 +675,8 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
             await insertSupabase('listing_field_assertions', {
               listing_id: listingId,
               field_name: ass.field_name,
-              raw_value: ass.raw_value,
-              normalized_value: ass.normalized_value,
+              raw_value: ass.raw_value == null ? null : String(ass.raw_value),
+              normalized_value: ass.normalized_value == null ? null : String(ass.normalized_value),
               confidence: ass.confidence,
               source_method: ass.source_method
             }, supabaseUrl, serviceKey);
@@ -673,7 +694,8 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       reference: parsed.ref,
       confidence: parsed.confidence,
       catalog_status: parsed.catalog_status,
-      prices: parsed.prices
+      prices: parsed.prices,
+      listing_type: cand.context.intent_context || 'WTS',
     });
   }
 
