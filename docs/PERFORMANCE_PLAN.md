@@ -1,0 +1,40 @@
+# Performance Plan
+
+## Objective
+
+Make the public application responsive with a multi-million-row archive without loading the archive into a browser, while keeping raw-message lineage and normalisation work out of user-facing requests.
+
+## Completed Locally
+
+- Trading Floor requests one bounded page from the API (10-100 records, default 50).
+- Search and type filtering are passed to PostgREST instead of filtering a downloaded array.
+- Requests are debounced and cancelled when the filter changes.
+- The API returns an estimated matching count from the `Content-Range` header.
+- Routes are loaded with React lazy loading, so charts, spreadsheet export, review, and demo code do not ship on the first page load.
+- `supabase-performance-migration.sql` supplies the indexes required for the new access path.
+
+## Deployment Gate: Schema Reconciliation
+
+Do not apply the performance migration until the live `watch_records` schema is inventoried. The checked-in SQL schema, ingestion code, and Trading Floor currently use incompatible field names. Confirm these fields or create a stable database view/API contract before deployment:
+
+- `id`, `brand`, `reference`, `price_usd`, `price_raw`, `currency`
+- `dial_color`, `condition`, `year`, `confidence`, `created_at`
+- `listing_type`, `is_multi`, `multi_group_id`, `multi_total`
+- `raw_message` or a joinable raw-message preview
+
+## Release Sequence
+
+1. Rotate all credentials exposed outside the secret manager and remove tracked `.env*` files from Git history.
+2. Export the live Supabase schema, indexes, row estimates, and query plans for the Trading Floor path.
+3. Reconcile the storage schema with the ingestion contract, then apply the performance index SQL during a quiet period.
+4. Deploy this branch to a staging environment and test pagination, filters, empty results, and search on realistic data.
+5. Inspect `EXPLAIN (ANALYZE, BUFFERS)` for the first page, a type filter, a reference search, and a raw-text search.
+6. Release to production with error-rate, p95 endpoint latency, and database CPU monitoring enabled.
+
+## Next Performance Work
+
+- Replace `parsedWatches.json` Admin reporting with protected aggregate endpoints.
+- Move Price Research cohort and IQR calculation into database-side queries/materialized aggregates.
+- Use keyset pagination for deep archive navigation after the UI has a product decision for it.
+- Add image/media manifests and object metadata, never scanning a bucket during user requests.
+- Run historical migration raw-first with checkpoints; normalisation, image analysis, and LLM review run asynchronously.

@@ -711,16 +711,64 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'GET') {
     if (!supabaseUrl || !serviceKey) {
-      return res.status(200).json({ count: 0, records: [], status: 'supabase_not_configured' });
+      return res.status(200).json({ count: 0, total: 0, records: [], status: 'supabase_not_configured' });
     }
     try {
-      // Read from watch_records (the real table), not normalized_listings (doesn't exist)
+      const requestedPage = Number.parseInt(String(req.query?.page || '1'), 10);
+      const requestedPageSize = Number.parseInt(String(req.query?.pageSize || '50'), 10);
+      const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1;
+      const pageSize = Number.isFinite(requestedPageSize)
+        ? Math.min(Math.max(requestedPageSize, 10), 100)
+        : 50;
+      const listingType = String(req.query?.type || '').toUpperCase();
+      const search = String(req.query?.q || '').trim().slice(0, 100);
+      const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'OTHER']);
+      const start = (page - 1) * pageSize;
+      const end = start + pageSize - 1;
+      const params = new URLSearchParams({
+        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,is_multi,multi_group_id,multi_index,multi_total,raw_message,source,channel_id,received_at,created_at,confidence',
+        order: 'created_at.desc',
+      });
+
+      if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
+      if (search) {
+        const escapedSearch = search.replace(/[(),.]/g, ' ').replace(/%/g, '').replace(/\*/g, '').trim();
+        if (escapedSearch) {
+          params.set('or', `(${[
+            `brand.ilike.*${escapedSearch}*`,
+            `reference.ilike.*${escapedSearch}*`,
+            `raw_message.ilike.*${escapedSearch}*`,
+          ].join(',')})`);
+        }
+      }
+
+      // Pagination and filtering happen in Postgres. The browser should never receive the whole archive.
       const resp = await fetch(
-        `${supabaseUrl}/rest/v1/watch_records?order=created_at.desc&limit=50`,
-        { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
+        `${supabaseUrl}/rest/v1/watch_records?${params.toString()}`,
+        {
+          headers: {
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`,
+            'Range-Unit': 'items',
+            'Range': `${start}-${end}`,
+            // Estimated counts avoid a full-table count for a multi-million-row archive.
+            'Prefer': 'count=estimated',
+          },
+        }
       );
+      if (!resp.ok) throw new Error(`Supabase returned ${resp.status}`);
       const records = await resp.json();
-      return res.status(200).json({ count: Array.isArray(records) ? records.length : 0, records: Array.isArray(records) ? records : [], status: 'ok' });
+      const contentRange = resp.headers.get('content-range') || '';
+      const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
+      return res.status(200).json({
+        count: Array.isArray(records) ? records.length : 0,
+        total,
+        page,
+        pageSize,
+        totalIsEstimate: true,
+        records: Array.isArray(records) ? records : [],
+        status: 'ok',
+      });
     } catch (e) {
       return res.status(500).json({ error: e.message });
     }
