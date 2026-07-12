@@ -13,6 +13,7 @@ Make the public application responsive with a multi-million-row archive without 
 - Routes are loaded with React lazy loading, so charts, spreadsheet export, review, and demo code do not ship on the first page load.
 - `supabase-performance-migration.sql` supplies the indexes required for the new access path.
 - The live `idx_watch_records_listing_type_created_at_desc` index and an `ANALYZE` refresh were applied successfully on 2026-07-12.
+- `EXPLAIN (ANALYZE, BUFFERS)` verified an index scan for the WTS newest-first page: 50 rows returned in 41.455 ms with no sort step.
 
 ## Deployment Gate: Schema Reconciliation
 
