@@ -18,16 +18,21 @@ const assemblyStages = [
 ];
 
 const brands = [
-  'Rolex',
-  'Patek Philippe',
-  'Audemars Piguet',
-  'Richard Mille',
-  'Vacheron Constantin',
-  'Cartier',
-  'Omega',
-  'Tudor',
-  'IWC',
-  'A. Lange & Sohne',
+  { name: 'Rolex', treatment: 'font-serif text-[1.65rem] font-bold tracking-[0.02em] text-[#1c724f] sm:text-3xl' },
+  { name: 'Patek Philippe', treatment: 'font-sans text-sm font-semibold uppercase tracking-[-0.02em] text-[#282828] sm:text-base' },
+  { name: 'Hublot', treatment: 'text-xl font-semibold uppercase tracking-[-0.05em] text-[#171717] sm:text-2xl' },
+  { name: 'Audemars Piguet', treatment: 'font-serif text-lg font-semibold tracking-[-0.04em] text-[#313131] sm:text-xl' },
+  { name: 'Omega', treatment: 'text-2xl font-medium tracking-[-0.08em] text-[#c61c3b] sm:text-3xl' },
+  { name: 'Cartier', treatment: 'font-serif text-2xl italic tracking-[-0.06em] text-[#bd2e33] sm:text-3xl' },
+  { name: 'Breitling', treatment: 'text-sm font-bold uppercase tracking-[0.12em] text-[#272727] sm:text-base' },
+  { name: 'IWC', treatment: 'font-serif text-3xl font-semibold tracking-[-0.08em] text-[#181818] sm:text-4xl' },
+  { name: 'Panerai', treatment: 'text-base font-medium uppercase tracking-[0.18em] text-[#222] sm:text-lg' },
+  { name: 'Tudor', treatment: 'font-serif text-2xl font-bold tracking-[0.04em] text-[#222] sm:text-3xl' },
+  { name: 'Hermes', treatment: 'font-serif text-xl font-bold uppercase tracking-[0.05em] text-[#242424] sm:text-2xl' },
+  { name: 'Richard Mille', treatment: 'text-sm font-bold uppercase tracking-[0.07em] text-[#242424] sm:text-base' },
+  { name: 'A. Lange & Sohne', treatment: 'font-serif text-sm font-semibold tracking-[0.03em] text-[#4b4b4b] sm:text-base' },
+  { name: 'Chopard', treatment: 'font-serif text-2xl italic tracking-[-0.05em] text-[#242424] sm:text-3xl' },
+  { name: 'Bvlgari', treatment: 'text-lg font-medium uppercase tracking-[0.25em] text-[#222] sm:text-xl' },
 ];
 
 export default function LandingPage() {
@@ -111,18 +116,17 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="border-b border-white/10 bg-[#080808] px-5 py-9 sm:px-8 lg:px-12">
-        <div className="mx-auto max-w-[1440px]">
-          <div className="flex flex-col gap-2 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
-            <h2 className="text-lg font-medium text-white">Market coverage</h2>
-            <p className="text-xs text-white/50">Brands observed across dealer-source records.</p>
+      <section className="border-b border-[#dedbd3] bg-[#f6f5f1] px-5 py-14 text-[#171717] sm:px-8 sm:py-18 lg:px-12">
+        <div className="mx-auto max-w-[1240px]">
+          <div className="mb-9 text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a7040]">Market coverage</p>
+            <h2 className="mt-3 text-3xl font-medium sm:text-4xl">Brands followed by WatchFacts</h2>
+            <p className="mt-3 text-sm text-black/55">Names shown for market coverage. WatchFacts is an independent intelligence platform.</p>
           </div>
-          <div className="grid grid-cols-2 border-l border-t border-white/10 sm:grid-cols-3 lg:grid-cols-5">
-            {brands.map((brand, index) => (
-              <div key={brand} className="flex min-h-24 items-end border-b border-r border-white/10 p-4 transition-colors hover:bg-white/[0.035] sm:min-h-28 sm:p-5">
-                <span className={`leading-none text-white/80 ${index === 1 || index === 4 || index === 9 ? 'font-serif text-lg sm:text-xl' : 'text-sm font-semibold uppercase tracking-[0.08em]'}`}>
-                  {brand}
-                </span>
+          <div className="grid grid-cols-2 border-l border-t border-[#e4e1da] sm:grid-cols-3 lg:grid-cols-5">
+            {brands.map((brand) => (
+              <div key={brand.name} className="flex min-h-32 items-center justify-center border-b border-r border-[#e4e1da] px-3 py-6 text-center transition-colors hover:bg-white sm:min-h-40 sm:px-5">
+                <span className={`leading-none ${brand.treatment}`}>{brand.name}</span>
               </div>
             ))}
           </div>
