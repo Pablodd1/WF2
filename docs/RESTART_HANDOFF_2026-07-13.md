@@ -98,8 +98,10 @@ Historical pre-migration status:
 1. Inspect protected representative samples for each high-volume review flag.
 2. Add narrowly targeted parser tests and fixes only where samples demonstrate
    a deterministic issue.
-3. Run a second, fresh 10,000-row cohort after the fixes (new checkpoint job),
-   then compare flag rates and sample quality.
+3. Run a second 10,000-row pass after the fixes using a new checkpoint job
+   such as `normalization-v4-reference-fix`. This re-evaluates the same
+   deterministic cursor cohort and replaces only its shadow proposals, then
+   compare flag rates and sample quality.
 4. Draft a promotion policy with auto-promote gates and explicit human-review
    reasons. Do not run it until approved.
 5. Remove the temporary trigger token after the controlled review cycle.

@@ -2,8 +2,16 @@
 
 const { analyzeRecord } = require('../tools/shadow-reprocess/shadow-reprocess.cjs');
 
-const JOB_NAME = 'normalization-v4-production';
+const DEFAULT_JOB_NAME = 'normalization-v4-production';
 const BATCH_SIZE = 200;
+
+function getJobName(req, operatorAuthorized) {
+  const requested = operatorAuthorized ? String(req.query?.job || '').trim() : '';
+  // Run names only control an additive checkpoint. They cannot alter tables,
+  // SQL, or the source query.
+  if (requested && /^normalization-v4-[a-z0-9-]{1,60}$/.test(requested)) return requested;
+  return DEFAULT_JOB_NAME;
+}
 
 async function rest(baseUrl, key, path, options = {}) {
   const response = await fetch(`${baseUrl}/rest/v1/${path}`, {
@@ -37,6 +45,7 @@ module.exports = async function handler(req, res) {
   const baseUrl = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!baseUrl || !key) return res.status(503).json({ error: 'Supabase server configuration missing' });
+  const jobName = getJobName(req, operatorAuthorized);
 
   try {
     let schemaReady = true;
@@ -52,7 +61,7 @@ module.exports = async function handler(req, res) {
       ? await rest(
         baseUrl,
         key,
-        `normalization_shadow_checkpoints?job_name=eq.${JOB_NAME}&select=last_source_record_id,rows_analyzed&limit=1`,
+        `normalization_shadow_checkpoints?job_name=eq.${encodeURIComponent(jobName)}&select=last_source_record_id,rows_analyzed&limit=1`,
       )
       : [];
     const checkpoint = checkpoints?.[0] || {};
@@ -97,7 +106,7 @@ module.exports = async function handler(req, res) {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify([{
-        job_name: JOB_NAME,
+        job_name: jobName,
         last_source_record_id: lastId,
         rows_analyzed: rowsAnalyzed,
         updated_at: new Date().toISOString(),
@@ -105,7 +114,7 @@ module.exports = async function handler(req, res) {
     });
 
     const changed = shadowRows.filter(row => row.change_flags.length > 0).length;
-    return res.status(200).json({ status: 'ok', batch: records.length, changed, rowsAnalyzed, lastId });
+    return res.status(200).json({ status: 'ok', jobName, batch: records.length, changed, rowsAnalyzed, lastId });
   } catch (error) {
     console.error('[shadow-normalize]', error);
     return res.status(500).json({ error: 'Shadow normalization failed' });
