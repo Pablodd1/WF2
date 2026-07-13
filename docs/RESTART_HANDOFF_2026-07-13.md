@@ -35,25 +35,32 @@ That initial read-only sample was not persisted because the shadow schema was
 not yet installed at that point. It has since been installed and a persisted,
 isolated 10,000-row shadow run has completed.
 
-### Persisted 10,000-row shadow run
+### Persisted shadow review run
 
-- `rowsAnalyzed`: 10,000
-- `changed` / pending review: 8,017
-- `BUNDLE_SPLIT_REQUIRED`: 2,658
-- `NO_CANDIDATE`: 1,459
-- `REFERENCE_CHANGED`: 1,909
-- `INTENT_CHANGED`: 274
-- `PRICE_CHANGED`: 1,462
-- `BRAND_CHANGED`: 585
-- `CURRENCY_CHANGED`: 787
-- `CURRENCY_AMBIGUOUS`: 1,201
-- `PRICE_PARSE_FAILED`: 306
+- `rowsAnalyzed`: 10,200
+- `changed` / pending review: 7,830
+- `BUNDLE_SPLIT_REQUIRED`: 2,712
+- `NO_CANDIDATE`: 850
+- `REFERENCE_CHANGED`: 1,872
+- `INTENT_CHANGED`: 330
+- `PRICE_CHANGED`: 1,645
+- `BRAND_CHANGED`: 532
+- `CURRENCY_CHANGED`: 909
+- `CURRENCY_AMBIGUOUS`: 1,250
+- `PRICE_PARSE_FAILED`: 328
 
 No rows in `public.watch_records` were modified. The purpose of this result is
 to prioritize parser fixes and human-review cohorts, not to auto-promote all
 changes. The first review found and corrected two parser hazards: Patek
 four-digit suffix references such as `5935A-001`, and six-digit asking prices
 such as `195000 USD` being misread as Rolex references.
+
+Protected sample review confirms that the remaining `NO_CANDIDATE` cohort is
+mixed and must not be bulk-filled: it includes valid catalog-alias requests
+such as `WTB BATMAN 2020+ PLEASE PM`, unsupported-brand references such as
+`Carrier W4BB0021`, and lines whose legacy reference must be retained until a
+candidate can be proven. Multi-watch inventory messages are correctly retained
+as linked bundle proposals rather than flattened into one final listing.
 
 ## Shadow schema status
 
