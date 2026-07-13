@@ -11,7 +11,6 @@ interface RowData {
   condition: string | null;
   source: string;
   year: number | null;
-  raw_message: string;
 }
 
 interface MonthlyPoint {
@@ -48,8 +47,13 @@ interface PriceData {
   count: number;
   rawCount: number;
   outliersRemoved: number;
+  analytics_ready: boolean;
+  sample_quality: 'observational' | 'provisional' | 'robust';
+  selected_cohort: { condition: string; dial_color: string; count: number };
+  cohorts: { condition: string; dial_color: string; count: number }[];
   stats: {
     avg: number; median: number; min: number; max: number; range: number;
+    q1: number; q3: number; iqr: number; lower_fence: number | null; upper_fence: number | null;
   } | null;
   liquidity: LiquidityData | null;
   monthly: MonthlyPoint[];
@@ -142,8 +146,10 @@ export default function PriceResearch() {
     count: m.count,
   }));
 
+  const displayRef = data?.resolvedRef || data?.reference || query;
+
   const listings = (data?.rows || []).map(r => ({
-    title: r.raw_message,
+    title: `${data?.brand || ''} ${displayRef}`.trim(),
     priceUSD: r.price_usd,
     price: r.price_usd,
     currency: 'USD',
@@ -151,8 +157,6 @@ export default function PriceResearch() {
     date: r.created_at ? r.created_at.split('T')[0] : '',
     condition: r.condition || 'N/A',
   }));
-
-  const displayRef = data?.resolvedRef || data?.reference || query;
 
   if (loading) {
     return (
@@ -305,7 +309,10 @@ export default function PriceResearch() {
                   </span>
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
-                  {data.count} after filtering · {data.outliersRemoved} outliers removed
+                  {data.count} comparable listings · {data.outliersRemoved} outliers flagged
+                </div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
+                  Cohort: {data.selected_cohort.condition} / {data.selected_cohort.dial_color}
                 </div>
               </div>
 
@@ -395,8 +402,13 @@ export default function PriceResearch() {
                       <span>Max: ${stats.max.toLocaleString()}</span>
                     </div>
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
-                      Based on {stats.count} real listings (IQR-filtered)
+                      {data.sample_quality === 'robust' ? 'Robust' : data.sample_quality === 'provisional' ? 'Provisional' : 'Observational'} evidence · {stats.count} listings
                     </div>
+                    {!data.analytics_ready && (
+                      <div style={{ fontSize: 11, color: RED, marginTop: 6 }}>
+                        Fewer than five comparable listings; treat these values as observations only.
+                      </div>
+                    )}
                   </>
                 )}
                 <button
@@ -489,7 +501,7 @@ export default function PriceResearch() {
                   </div>
 
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
-                    Based on {data.count} listings from the dealer database — IQR outlier filtering applied.
+                    Based on {data.count} comparable WTS listings · standard 1.5× IQR fences applied.
                   </div>
                 </div>
               </>

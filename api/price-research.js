@@ -7,6 +7,7 @@
 const { getClient } = require('./_lib/supabase');
 const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
 const { lookupCatalog } = require('./_lib/catalog');
+const { buildComparableCohorts, summarizePrices } = require('./_lib/market-stats.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -88,18 +89,28 @@ module.exports = async function handler(req, res) {
 
       if (!refError && refs && refs.length > 0) {
         const foundRefs = [...new Set(refs.map(r => r.reference))];
-        const exact = foundRefs.find(r => r === rawRef);
-        targetRef = exact || foundRefs[0];
+        const exact = foundRefs.find(r => normRef(r) === normRef(rawRef));
+        if (exact) targetRef = exact;
+        else if (foundRefs.length === 1) targetRef = foundRefs[0];
+        else {
+          return res.status(200).json({
+            success: false,
+            error: 'Multiple references match. Select an exact reference.',
+            requires_resolution: true,
+            candidates: foundRefs.slice(0, 50),
+          });
+        }
       }
     }
 
     // Pull all APPROVED records
     const { data: rows, error } = await client
       .from('watch_records')
-      .select('price_usd, created_at, condition, source, dial_color, raw_message, year')
+      .select('price_usd, created_at, condition, source, dial_color, year, listing_type')
       .eq('brand', brand)
       .eq('reference', targetRef)
       .eq('verdict', 'APPROVED')
+      .eq('listing_type', 'WTS')
       .order('created_at', { ascending: false })
       .limit(5000);
 
@@ -113,49 +124,42 @@ module.exports = async function handler(req, res) {
         dial_analysis: [],
         totalListings: 0, count: 0,
         analytics_ready: false, listing_count: 0,
+        sample_quality: 'observational',
+        selected_cohort: { condition: 'Unspecified', dial_color: 'Unspecified', count: 0 },
+        cohorts: [], outliers: [], outliersRemoved: 0, rawCount: 0,
         stats: null, liquidity: null, monthly: [], prices: [], rows: []
       });
     }
 
-    // Filter: exclude test sources + WTB/WTB-like messages
-    const excludedSources = new Set(['bulk_test_100', 'test_run', 'mysql_market_refs', 'mysql_auction_watches']);
+    // Exclude synthetic/test sources. mysql_auction_watches is historical market
+    // evidence and must not be discarded from analytics.
+    const excludedSources = new Set(['bulk_test_100', 'test_run', 'mysql_market_refs']);
     const marketRows = rows.filter(r => !excludedSources.has(r.source));
 
-    // Also remove obvious WTB/want/looking messages from price analysis
-    const listedRows = marketRows.filter(r => {
-      if (!r.raw_message) return true;
-      const lower = r.raw_message.toLowerCase();
-      // Skip messages that are primarily WTB/want/looking (not listings)
-      if (/^wtb\b/i.test(r.raw_message.trim())) return false;
-      return true;
-    });
+    const cohorts = buildComparableCohorts(marketRows);
+    const requestedCondition = String(req.query.condition || '').trim().toLowerCase();
+    const requestedDial = String(req.query.dial || '').trim().toLowerCase();
+    const selectedCohort = cohorts.find(cohort =>
+      (!requestedCondition || cohort.condition.toLowerCase() === requestedCondition)
+      && (!requestedDial || cohort.dial_color.toLowerCase() === requestedDial)
+    ) || cohorts[0] || { condition: 'Unspecified', dial_color: 'Unspecified', rows: [], count: 0 };
+    const listedRows = selectedCohort.rows;
 
     const rawPrices = listedRows
       .filter(r => r.price_usd > 0)
       .map(r => r.price_usd);
-
-    function iqrFilter(arr) {
-      if (arr.length < 4) return arr;
-      const s = [...arr].sort((a, b) => a - b);
-      const q1 = s[Math.floor(s.length * 0.25)];
-      const q3 = s[Math.floor(s.length * 0.75)];
-      const iqr = q3 - q1;
-      const lo = q1 - 1.0 * iqr;
-      const hi = q3 + 1.0 * iqr;
-      return arr.filter(p => p >= lo && p <= hi);
-    }
-
-    const prices = iqrFilter(rawPrices);
-    const avg = prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0;
-    const sorted = [...prices].sort((a, b) => a - b);
-    const min = sorted[0] || 0;
-    const max = sorted[sorted.length - 1] || 0;
-    const median = sorted[Math.floor(sorted.length / 2)] || 0;
+    const summary = summarizePrices(rawPrices);
+    const prices = summary.included;
+    const lowerFence = summary.stats?.lower_fence;
+    const upperFence = summary.stats?.upper_fence;
+    const isIncluded = price => price > 0
+      && (lowerFence == null || price >= lowerFence)
+      && (upperFence == null || price <= upperFence);
 
     // Monthly aggregation
     const monthlyMap = {};
-    listedRows.forEach(r => {
-      if (!r.created_at || !r.price_usd || excludedSources.has(r.source)) return;
+    marketRows.forEach(r => {
+      if (!r.created_at || !isIncluded(r.price_usd)) return;
       const d = new Date(r.created_at);
       if (isNaN(d.getTime())) return;
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -188,7 +192,7 @@ module.exports = async function handler(req, res) {
 
     // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
     const model = lookupModel(targetRef);
-    const liquidity = await lookupLiquidity(client, targetRef, listedRows.length);
+    const liquidity = await lookupLiquidity(client, targetRef, marketRows.length);
 
     res.status(200).json({
       success: true, brand, reference: rawRef,
@@ -196,18 +200,30 @@ module.exports = async function handler(req, res) {
       model, dialColors,
       dial_analysis,
       totalListings: rows.length,
-      listing_count: listedRows.length,
+      listing_count: marketRows.length,
       count: prices.length,
-      rawCount: listedRows.length,
-      outliersRemoved: rawPrices.length - prices.length,
-      analytics_ready: prices.length >= 4,
-      stats: { avg, median, min, max, range: max - min },
+      rawCount: summary.raw_count,
+      outliersRemoved: summary.outliers.length,
+      outliers: summary.outliers,
+      analytics_ready: summary.analytics_ready,
+      sample_quality: summary.sample_quality,
+      stats: summary.stats,
+      selected_cohort: {
+        condition: selectedCohort.condition,
+        dial_color: selectedCohort.dial_color,
+        count: selectedCohort.count,
+      },
+      cohorts: cohorts.map(cohort => ({
+        condition: cohort.condition,
+        dial_color: cohort.dial_color,
+        count: cohort.count,
+      })),
       liquidity,
       monthly, prices,
       rows: listedRows.map(r => ({
         price_usd: r.price_usd, created_at: r.created_at,
         dial_color: r.dial_color, condition: r.condition,
-        source: r.source, year: r.year, raw_message: r.raw_message || '',
+        source: r.source, year: r.year,
       })),
     });
   } catch (err) {
