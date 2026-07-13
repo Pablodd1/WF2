@@ -14,17 +14,18 @@
 
 ## Normalization evidence
 
-A protected read-only production sample analyzed 200 records with normalization
-v4. Results:
+A cursor-paged, protected read-only production sample analyzed 1,000 distinct
+records with normalization v4. Results:
 
-- 143 records flagged (71.5%).
-- `BUNDLE_SPLIT_REQUIRED`: 58
-- `NO_CANDIDATE`: 32
-- `INTENT_CHANGED`: 24
-- `REFERENCE_CHANGED`: 20
-- `PRICE_CHANGED`: 11
-- `BRAND_CHANGED`: 8
-- `CURRENCY_CHANGED`: 3
+- 718 records flagged (71.8%). Flags overlap because a row can require more
+  than one correction or review action.
+- `BUNDLE_SPLIT_REQUIRED`: 259
+- `NO_CANDIDATE`: 165
+- `REFERENCE_CHANGED`: 132
+- `INTENT_CHANGED`: 104
+- `PRICE_CHANGED`: 66
+- `BRAND_CHANGED`: 60
+- `CURRENCY_CHANGED`: 12
 
 The result was not persisted because the additive shadow tables are not yet in
 the production Supabase schema.
@@ -35,14 +36,15 @@ Apply this additive migration in the production Supabase SQL Editor:
 
 `supabase/migrations/20260713003000_normalization_shadow_v4.sql`
 
-The configured direct `DATABASE_URL` resolves to an IPv6-only Supabase host from
-Vercel and its stored password is stale for the available pooler routes. Do not
-keep retrying automatic DDL from Vercel. Apply the checked-in SQL in Supabase.
+The configured production `DATABASE_URL` is malformed for direct Postgres use:
+its host resolves as `base`. The shadow worker no longer depends on it and no
+longer runs DDL from Vercel. Do not restore automatic DDL. Apply the checked-in
+SQL in Supabase, then repair or remove the obsolete `DATABASE_URL` separately.
 
 Expected status before migration:
 
 ```json
-{"status":"schema_pending","total":0,"changed":0,"pending":0,"bundles":0}
+{"status":"schema_pending","total":0,"changed":0,"pending":0,"bundles":0,"flagCounts":{}}
 ```
 
 ## Resume sequence
