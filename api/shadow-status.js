@@ -49,7 +49,17 @@ module.exports = async function handler(req, res) {
       'CURRENCY_AMBIGUOUS',
       'PRICE_PARSE_FAILED',
     ];
-    const [total, changed, pending, bundles, ...flagValues] = await Promise.all([
+    // The checkpoint is the exact throughput source. Load it first so a
+    // temporary planner-count failure cannot hide live normalization progress.
+    const checkpoints = await fetchRows(
+      baseUrl,
+      key,
+      `normalization_shadow_checkpoints?job_name=eq.${encodeURIComponent(jobName)}&select=rows_analyzed,updated_at&limit=1`,
+    );
+    const checkpoint = checkpoints?.[0] || null;
+    const rowsAnalyzed = Number(checkpoint?.rows_analyzed || 0);
+
+    const countResults = await Promise.allSettled([
       countRows(baseUrl, key, 'normalization_shadow_v4?select=source_record_id'),
       countRows(baseUrl, key, 'normalization_shadow_v4?select=source_record_id&change_flags=not.eq.{}'),
       countRows(baseUrl, key, 'normalization_shadow_v4?select=source_record_id&review_status=eq.PENDING'),
@@ -60,16 +70,12 @@ module.exports = async function handler(req, res) {
         `normalization_shadow_v4?select=source_record_id&change_flags=cs.{${flag}}`,
       )),
     ]);
+    const values = countResults.map(result => result.status === 'fulfilled' ? result.value : 0);
+    const [total, changed, pending, bundles, ...flagValues] = values;
+    const countError = countResults.some(result => result.status === 'rejected');
     const flagCounts = Object.fromEntries(flags.map((flag, index) => [flag, flagValues[index]]));
-    const checkpoints = await fetchRows(
-      baseUrl,
-      key,
-      `normalization_shadow_checkpoints?job_name=eq.${encodeURIComponent(jobName)}&select=rows_analyzed,updated_at&limit=1`,
-    );
-    const checkpoint = checkpoints?.[0] || null;
-    const rowsAnalyzed = Number(checkpoint?.rows_analyzed || 0);
     return res.status(200).json({
-      status: 'ok',
+      status: countError ? 'partial' : 'ok',
       jobName,
       countsEstimated: true,
       total,
@@ -80,6 +86,7 @@ module.exports = async function handler(req, res) {
       pending,
       bundles,
       flagCounts,
+      countError,
     });
   } catch (error) {
     console.error('[shadow-status]', error);
