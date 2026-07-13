@@ -3,7 +3,7 @@ import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import {
   CheckCircle2, AlertTriangle, Eye,
-  Search, Clock, MessageSquare, Shield
+  Search, Clock, MessageSquare, Shield, Database, RefreshCw
 } from 'lucide-react';
 
 interface ReviewItem {
@@ -25,12 +25,21 @@ interface ReviewItem {
   disposition: 'HUMAN_REVIEW' | 'READY_FOR_HUMAN_APPROVAL' | 'CATALOG_CONFIRMATION_REQUIRED';
 }
 
+interface ShadowProgress {
+  rowsAnalyzed: number;
+  total: number;
+  changed: number;
+  pending: number;
+  lastUpdatedAt: string | null;
+}
+
 export default function ReviewQueue() {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ReviewItem | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<ShadowProgress | null>(null);
 
   // The queue is read-only: a later audited endpoint will handle reviewer
   // decisions. Do not let a client-side click mutate market records.
@@ -72,6 +81,34 @@ export default function ReviewQueue() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const loadProgress = async () => {
+      try {
+        const response = await fetch('/api/shadow-status');
+        if (!response.ok) throw new Error('Normalization progress is unavailable');
+        const data = await response.json();
+        if (active && data.status === 'ok') {
+          setProgress({
+            rowsAnalyzed: Number(data.rowsAnalyzed || 0),
+            total: Number(data.total || 0),
+            changed: Number(data.changed || 0),
+            pending: Number(data.pending || 0),
+            lastUpdatedAt: data.lastUpdatedAt || null,
+          });
+        }
+      } catch {
+        // Queue data remains useful when the progress monitor has a transient failure.
+      }
+    };
+    void loadProgress();
+    const interval = window.setInterval(loadProgress, 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
   const filtered = items.filter(item => {
     if (filter !== 'all' && item.status !== filter) return false;
     if (search && !item.reference.toLowerCase().includes(search.toLowerCase()) && 
@@ -107,13 +144,29 @@ export default function ReviewQueue() {
           {loadError && <p className="text-xs text-red-400 mt-2">{loadError}</p>}
         </div>
 
+        {progress && (
+          <div className="mb-6 border border-border-default bg-bg-card px-4 py-3 rounded-xl flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+            <div className="flex items-center gap-2 text-text-secondary">
+              <Database size={14} className="text-gold-primary" />
+              <span><strong className="text-text-primary">{progress.rowsAnalyzed.toLocaleString()}</strong> normalized in shadow</span>
+            </div>
+            <span className="text-text-muted"><strong className="text-amber-400">{progress.pending.toLocaleString()}</strong> pending review</span>
+            <span className="text-text-muted"><strong className="text-text-primary">{progress.changed.toLocaleString()}</strong> corrections flagged</span>
+            <span className="text-text-muted"><strong className="text-text-primary">{progress.total.toLocaleString()}</strong> proposals stored</span>
+            <span className="ml-auto flex items-center gap-1 text-text-muted">
+              <RefreshCw size={11} />
+              {progress.lastUpdatedAt ? `Updated ${new Date(progress.lastUpdatedAt).toLocaleTimeString()}` : 'Waiting for first checkpoint'}
+            </span>
+          </div>
+        )}
+
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           {[
-            { label: 'Pending', count: items.filter(i => i.status === 'pending').length, color: 'text-amber-400' },
-            { label: 'Approved Today', count: items.filter(i => i.status === 'approved').length, color: 'text-emerald-400' },
-            { label: 'Rejected', count: items.filter(i => i.status === 'rejected').length, color: 'text-red-400' },
-            { label: 'Avg Review Time', count: '2.3m', color: 'text-blue-400' },
+            { label: 'Loaded for review', count: items.filter(i => i.status === 'pending').length, color: 'text-amber-400' },
+            { label: 'Catalog-confirmed', count: items.filter(i => i.disposition === 'READY_FOR_HUMAN_APPROVAL').length, color: 'text-emerald-400' },
+            { label: 'Currency blocked', count: items.filter(i => i.reviewReasons.includes('CURRENCY_AMBIGUOUS')).length, color: 'text-red-400' },
+            { label: 'Bundle/manual review', count: items.filter(i => i.reviewReasons.includes('BUNDLE_SPLIT_REQUIRED')).length, color: 'text-blue-400' },
           ].map(stat => (
             <div key={stat.label} className="rounded-xl border border-border-default bg-bg-card p-4">
               <div className={`text-2xl font-extrabold ${stat.color}`}>{stat.count}</div>
