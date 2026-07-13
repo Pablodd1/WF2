@@ -3,7 +3,8 @@ import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import {
   CheckCircle2, AlertTriangle, Eye,
-  Search, Clock, MessageSquare, Shield, Database, RefreshCw
+  Search, Clock, MessageSquare, Shield, Database, RefreshCw, KeyRound,
+  Loader2, XCircle
 } from 'lucide-react';
 
 interface ReviewItem {
@@ -40,6 +41,10 @@ export default function ReviewQueue() {
   const [selected, setSelected] = useState<ReviewItem | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ShadowProgress | null>(null);
+  const [operatorId, setOperatorId] = useState('');
+  const [adminKey, setAdminKey] = useState('');
+  const [decisionBusy, setDecisionBusy] = useState<string | null>(null);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
 
   // The queue is read-only: a later audited endpoint will handle reviewer
   // decisions. Do not let a client-side click mutate market records.
@@ -128,6 +133,47 @@ export default function ReviewQueue() {
     return 'Flagged';
   };
 
+  const submitDecision = async (item: ReviewItem, decision: 'APPROVED' | 'REJECTED') => {
+    if (!operatorId.trim() || !adminKey.trim()) {
+      setDecisionError('Enter your reviewer identity and admin key before recording a decision.');
+      return;
+    }
+    const reason = decision === 'REJECTED'
+      ? window.prompt('Reason for rejection (required for audit):')
+      : 'Catalog-confirmed human approval.';
+    if (decision === 'REJECTED' && !reason?.trim()) return;
+
+    setDecisionBusy(item.id);
+    setDecisionError(null);
+    try {
+      const response = await fetch('/api/shadow-review-decision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey,
+        },
+        body: JSON.stringify({
+          sourceRecordId: item.id,
+          decision,
+          operatorId: operatorId.trim(),
+          reason,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Review decision failed');
+      setItems(current => current.map(candidate => (
+        candidate.id === item.id
+          ? { ...candidate, status: decision === 'APPROVED' ? 'approved' : 'rejected' }
+          : candidate
+      )));
+      setSelected(null);
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : 'Review decision failed');
+    } finally {
+      setDecisionBusy(null);
+    }
+  };
+
   return (
     <Layout>
       <TabNav />
@@ -142,6 +188,35 @@ export default function ReviewQueue() {
             Catalog-confirmed candidates are ready for human approval; other rows remain blocked for review.
           </p>
           {loadError && <p className="text-xs text-red-400 mt-2">{loadError}</p>}
+        </div>
+
+        <div className="mb-6 border border-border-default bg-bg-card px-4 py-3 rounded-xl flex flex-wrap items-end gap-3">
+          <div className="flex items-center gap-2 text-text-secondary mr-1">
+            <KeyRound size={14} className="text-gold-primary" />
+            <span className="text-xs font-semibold">Reviewer session</span>
+          </div>
+          <label className="text-[10px] uppercase tracking-wider text-text-muted">
+            Reviewer
+            <input
+              value={operatorId}
+              onChange={event => setOperatorId(event.target.value)}
+              placeholder="name@company.com"
+              className="block mt-1 bg-bg-elevated border border-border-default rounded px-2 py-1.5 text-xs text-text-primary outline-none focus:border-gold-primary w-52"
+            />
+          </label>
+          <label className="text-[10px] uppercase tracking-wider text-text-muted">
+            Admin key
+            <input
+              value={adminKey}
+              onChange={event => setAdminKey(event.target.value)}
+              type="password"
+              autoComplete="off"
+              placeholder="Required to submit"
+              className="block mt-1 bg-bg-elevated border border-border-default rounded px-2 py-1.5 text-xs text-text-primary outline-none focus:border-gold-primary w-52"
+            />
+          </label>
+          <span className="text-[11px] text-text-muted pb-1">Credentials remain only in this browser tab.</span>
+          {decisionError && <span className="w-full text-xs text-red-400">{decisionError}</span>}
         </div>
 
         {progress && (
@@ -263,6 +338,26 @@ export default function ReviewQueue() {
                   >
                     <Eye size={14} className="text-text-muted" />
                   </button>
+                  {item.status === 'pending' && item.disposition === 'READY_FOR_HUMAN_APPROVAL' && (
+                    <button
+                      onClick={() => void submitDecision(item, 'APPROVED')}
+                      disabled={decisionBusy === item.id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-emerald-500 text-black text-xs font-bold disabled:opacity-50"
+                    >
+                      {decisionBusy === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                      Approve
+                    </button>
+                  )}
+                  {item.status === 'pending' && (
+                    <button
+                      onClick={() => void submitDecision(item, 'REJECTED')}
+                      disabled={decisionBusy === item.id}
+                      className="p-2 rounded-lg border border-red-500/30 hover:border-red-400 transition-colors disabled:opacity-50"
+                      title="Reject proposal"
+                    >
+                      {decisionBusy === item.id ? <Loader2 size={14} className="animate-spin text-red-400" /> : <XCircle size={14} className="text-red-400" />}
+                    </button>
+                  )}
                 </div>
               </div>
 

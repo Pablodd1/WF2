@@ -21,8 +21,11 @@ async function rest(baseUrl, key, path, options = {}) {
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const token = process.env.REVIEW_OPERATOR_TOKEN;
-  if (!token || req.headers['x-review-operator-token'] !== token) {
+  const reviewToken = process.env.REVIEW_OPERATOR_TOKEN;
+  const adminKey = process.env.ADMIN_KEY;
+  const reviewAuthorized = Boolean(reviewToken) && req.headers['x-review-operator-token'] === reviewToken;
+  const adminAuthorized = Boolean(adminKey) && req.headers['x-admin-key'] === adminKey;
+  if (!reviewAuthorized && !adminAuthorized) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const baseUrl = process.env.SUPABASE_URL;
