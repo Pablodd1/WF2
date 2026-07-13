@@ -115,12 +115,20 @@ module.exports = async function handler(req, res) {
   if (!baseUrl || !key) return res.status(503).json({ error: 'Supabase server configuration missing' });
 
   try {
-    await ensureShadowSchema();
-    const checkpoints = await rest(
-      baseUrl,
-      key,
-      `normalization_shadow_checkpoints?job_name=eq.${JOB_NAME}&select=last_source_record_id,rows_analyzed&limit=1`,
-    );
+    let schemaReady = true;
+    try {
+      await ensureShadowSchema();
+    } catch (error) {
+      schemaReady = false;
+      console.warn('[shadow-normalize] schema unavailable; running read-only sample', error.message);
+    }
+    const checkpoints = schemaReady
+      ? await rest(
+        baseUrl,
+        key,
+        `normalization_shadow_checkpoints?job_name=eq.${JOB_NAME}&select=last_source_record_id,rows_analyzed&limit=1`,
+      )
+      : [];
     const checkpoint = checkpoints?.[0] || {};
     const params = new URLSearchParams({
       select: 'id,raw_message,brand,reference,price_raw,price_usd,currency,listing_type,parser_version',
@@ -137,6 +145,19 @@ module.exports = async function handler(req, res) {
 
     const shadowRows = records.map(analyzeRecord);
     const lastId = records[records.length - 1].id;
+    if (!schemaReady) {
+      const flagCounts = {};
+      for (const row of shadowRows) {
+        for (const flag of row.change_flags) flagCounts[flag] = (flagCounts[flag] || 0) + 1;
+      }
+      return res.status(200).json({
+        status: 'dry_run_only',
+        batch: records.length,
+        changed: shadowRows.filter(row => row.change_flags.length > 0).length,
+        flagCounts,
+        persisted: false,
+      });
+    }
     await rest(baseUrl, key, 'normalization_shadow_v4?on_conflict=source_record_id', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
