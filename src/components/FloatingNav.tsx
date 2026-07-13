@@ -29,7 +29,7 @@ export function FloatingNav() {
   };
 
   const goToDashboard = () => {
-    navigate('/');
+    navigate('/dashboard');
   };
 
   return (

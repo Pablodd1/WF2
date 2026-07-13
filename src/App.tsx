@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 const Home = lazy(() => import('@/pages/Home'));
+const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const TradingFloor = lazy(() => import('@/pages/TradingFloor'));
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'));
 const AnalyticsDashboard = lazy(() => import('@/pages/AnalyticsDashboard'));
@@ -20,7 +21,8 @@ export default function App() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-white" />}>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/dashboard" element={<Home />} />
         <Route path="/trading" element={<TradingFloor />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/analytics-dashboard" element={<AnalyticsDashboard />} />
