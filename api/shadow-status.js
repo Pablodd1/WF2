@@ -6,7 +6,9 @@ async function countRows(baseUrl, key, query) {
     headers: {
       apikey: key,
       Authorization: `Bearer ${key}`,
-      Prefer: 'count=estimated',
+      // The shadow table is intentionally bounded during review, so exact
+      // counts are cheap and avoid misleading progress totals.
+      Prefer: 'count=exact',
     },
   });
   if (!response.ok) throw new Error(`Supabase returned ${response.status}`);
@@ -29,6 +31,10 @@ module.exports = async function handler(req, res) {
   const baseUrl = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!baseUrl || !key) return res.status(503).json({ status: 'not_configured' });
+  const requestedJob = String(req.query?.job || '').trim();
+  const jobName = /^normalization-v4-[a-z0-9-]{1,60}$/.test(requestedJob)
+    ? requestedJob
+    : 'normalization-v4-production';
 
   try {
     const flags = [
@@ -57,12 +63,13 @@ module.exports = async function handler(req, res) {
     const checkpoints = await fetchRows(
       baseUrl,
       key,
-      'normalization_shadow_checkpoints?job_name=eq.normalization-v4-production&select=rows_analyzed,updated_at&limit=1',
+      `normalization_shadow_checkpoints?job_name=eq.${encodeURIComponent(jobName)}&select=rows_analyzed,updated_at&limit=1`,
     );
     const checkpoint = checkpoints?.[0] || null;
     const rowsAnalyzed = Number(checkpoint?.rows_analyzed || 0);
     return res.status(200).json({
       status: 'ok',
+      jobName,
       total,
       rowsAnalyzed,
       deduplicatedSourceRows: Math.max(0, rowsAnalyzed - total),
