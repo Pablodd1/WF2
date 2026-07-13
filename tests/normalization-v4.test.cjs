@@ -129,6 +129,14 @@ Full set price 195000 USD
   assert.equal(candidates[0].context.brand_context, 'Patek Philippe');
 });
 
+test('keeps a bare six-digit reference when the following price uses a separate dollar token', () => {
+  const candidates = segmentDealerMessage('Rolex 126333 $14,500 plus label');
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].reference, '126333');
+  assert.equal(candidates[0].context.brand_context, 'Rolex');
+  assert.deepEqual(candidates[0].prices, []);
+});
+
 test('classifies Chinese WTB messages and inherited request context', () => {
   const direct = segmentDealerMessage('\u6c42\u8d2d 126500LN White HKD 280k');
   const inherited = segmentDealerMessage('\u6c42\u8cfc\n126610LN Black $114000');

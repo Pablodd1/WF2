@@ -161,6 +161,18 @@ function inferBrandFromReference(reference) {
   return null;
 }
 
+function isPriceLikeReferenceToken(text, matchIndex, rawToken) {
+  const before = text.slice(Math.max(0, matchIndex - 24), matchIndex);
+  const after = text.slice(matchIndex + rawToken.length, matchIndex + rawToken.length + 24);
+  const compact = String(rawToken).toUpperCase();
+  const isBareNumericToken = /^\d{5,6}$/.test(compact);
+  const followsPriceLabel = /(?:price|ask(?:ing)?|usd|hkd|usdt|us\$|hk\$|\$)\s*$/i.test(before);
+  const hasCurrencySuffix = /^\d{5,6}(?:USD|HKD|USDT)$/.test(compact);
+  const precedesCurrencyWord = isBareNumericToken && /^\s*(?:usd|hkd|usdt|us\$|hk\$)\b/i.test(after);
+  const hasDirectDollarSuffix = isBareNumericToken && /^\$/.test(after);
+  return followsPriceLabel || hasCurrencySuffix || precedesCurrencyWord || hasDirectDollarSuffix;
+}
+
 function extractReference(line) {
   const text = String(line);
   const patterns = [
@@ -174,17 +186,15 @@ function extractReference(line) {
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);
-    if (match) return match[1].replace(/\s/g, '').toUpperCase();
+    if (match && !isPriceLikeReferenceToken(text, match.index, match[1])) {
+      return match[1].replace(/\s/g, '').toUpperCase();
+    }
   }
 
   // A bare six-digit reference is valid for Rolex, but a six-digit asking
   // price (for example "195000 USD") must never create a phantom listing.
   for (const match of text.matchAll(/\b(\d{5,6})\b/g)) {
-    const before = text.slice(Math.max(0, match.index - 24), match.index);
-    const after = text.slice(match.index + match[1].length, match.index + match[1].length + 24);
-    const followsPriceLabel = /(?:price|ask(?:ing)?|usd|hkd|usdt|us\$|hk\$|\$)\s*$/i.test(before);
-    const precedesCurrency = /^\s*(?:usd|hkd|usdt|us\$|hk\$|\$|[-–]\s*\d{1,2}%)/i.test(after);
-    if (!followsPriceLabel && !precedesCurrency) return match[1];
+    if (!isPriceLikeReferenceToken(text, match.index, match[1])) return match[1];
   }
   return null;
 }
