@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.normalization_shadow_v4 (
   source_listing_type TEXT,
   candidate_count INTEGER NOT NULL,
   proposed_candidates JSONB NOT NULL,
-  change_flags JSONB NOT NULL DEFAULT '[]'::jsonb,
+  change_flags TEXT[] NOT NULL DEFAULT '{}',
   review_status TEXT NOT NULL DEFAULT 'PENDING',
   analyzed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

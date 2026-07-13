@@ -1,85 +1,9 @@
 'use strict';
 
 const { analyzeRecord } = require('../tools/shadow-reprocess/shadow-reprocess.cjs');
-const { Client } = require('pg');
 
 const JOB_NAME = 'normalization-v4-production';
 const BATCH_SIZE = 200;
-
-async function ensureShadowSchema() {
-  if (!process.env.DATABASE_URL) return;
-  const directUrl = new URL(process.env.DATABASE_URL);
-  const projectRef = directUrl.hostname.match(/^db\.([a-z0-9]+)\.supabase\.co$/)?.[1];
-  const candidates = [directUrl.toString()];
-  for (const region of ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2']) {
-    for (const pool of ['aws-0', 'aws-1']) {
-      if (!projectRef) break;
-      const poolerUrl = new URL(directUrl.toString());
-      poolerUrl.hostname = `${pool}-${region}.pooler.supabase.com`;
-      poolerUrl.port = '5432';
-      poolerUrl.username = `postgres.${projectRef}`;
-      poolerUrl.search = '';
-      candidates.push(poolerUrl.toString());
-    }
-  }
-
-  let client;
-  let lastError;
-  for (const connectionString of candidates) {
-    const candidate = new Client({
-      connectionString,
-      ssl: { rejectUnauthorized: false },
-      connectionTimeoutMillis: 3000,
-    });
-    try {
-      await candidate.connect();
-      client = candidate;
-      break;
-    } catch (error) {
-      lastError = error;
-      await candidate.end().catch(() => {});
-    }
-  }
-  if (!client) throw lastError || new Error('No Supabase database connection available');
-  try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS public.normalization_shadow_v4 (
-        source_record_id TEXT PRIMARY KEY,
-        normalization_version TEXT NOT NULL,
-        source_parser_version TEXT,
-        source_brand TEXT,
-        source_reference TEXT,
-        source_price_raw NUMERIC,
-        source_price_usd NUMERIC,
-        source_currency TEXT,
-        source_listing_type TEXT,
-        candidate_count INTEGER NOT NULL DEFAULT 0,
-        proposed_candidates JSONB NOT NULL DEFAULT '[]'::jsonb,
-        change_flags TEXT[] NOT NULL DEFAULT '{}',
-        review_status TEXT NOT NULL DEFAULT 'PENDING',
-        analyzed_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-      CREATE INDEX IF NOT EXISTS idx_normalization_shadow_v4_review_status
-        ON public.normalization_shadow_v4 (review_status, analyzed_at);
-      CREATE INDEX IF NOT EXISTS idx_normalization_shadow_v4_change_flags
-        ON public.normalization_shadow_v4 USING GIN (change_flags);
-      CREATE TABLE IF NOT EXISTS public.normalization_shadow_checkpoints (
-        job_name TEXT PRIMARY KEY,
-        last_source_record_id TEXT,
-        rows_analyzed BIGINT NOT NULL DEFAULT 0,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-      ALTER TABLE public.normalization_shadow_v4 ENABLE ROW LEVEL SECURITY;
-      ALTER TABLE public.normalization_shadow_checkpoints ENABLE ROW LEVEL SECURITY;
-      REVOKE ALL ON public.normalization_shadow_v4 FROM anon, authenticated;
-      REVOKE ALL ON public.normalization_shadow_checkpoints FROM anon, authenticated;
-      GRANT ALL ON public.normalization_shadow_v4 TO service_role;
-      GRANT ALL ON public.normalization_shadow_checkpoints TO service_role;
-    `);
-  } finally {
-    await client.end();
-  }
-}
 
 async function rest(baseUrl, key, path, options = {}) {
   const response = await fetch(`${baseUrl}/rest/v1/${path}`, {
@@ -117,10 +41,12 @@ module.exports = async function handler(req, res) {
   try {
     let schemaReady = true;
     try {
-      await ensureShadowSchema();
+      // The additive migration is the only supported schema owner. Probe it
+      // through Supabase REST; never run DDL from a production request.
+      await rest(baseUrl, key, 'normalization_shadow_checkpoints?select=job_name&limit=1');
     } catch (error) {
       schemaReady = false;
-      console.warn('[shadow-normalize] schema unavailable; running read-only sample', error.message);
+      console.warn('[shadow-normalize] shadow schema unavailable; running read-only sample', error.message);
     }
     const checkpoints = schemaReady
       ? await rest(
