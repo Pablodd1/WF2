@@ -39,7 +39,24 @@ test('routes ambiguous bare-dollar prices to shadow review instead of retaining 
     listing_type: 'WTS',
   });
   assert.ok(result.change_flags.includes('CURRENCY_AMBIGUOUS'));
-  assert.ok(result.change_flags.includes('PRICE_PARSE_FAILED'));
+  assert.ok(!result.change_flags.includes('PRICE_PARSE_FAILED'));
   assert.equal(result.review_status, 'PENDING');
+});
+
+test('retains an existing structured source price when a marketplace title has no price text', () => {
+  const result = analyzeRecord({
+    id: 'source-4',
+    raw_message: 'Rolex Yacht-Master 16628 18k Solid Yellow Gold Automatic Mens Watch 40mm',
+    brand: 'Rolex',
+    reference: '16628',
+    currency: 'USD',
+    price_raw: 18000,
+    price_usd: 18000,
+    listing_type: 'WTS',
+  });
+  assert.equal(result.proposed_candidates[0].price_raw, 18000);
+  assert.equal(result.proposed_candidates[0].prices[0].currency_evidence, 'source_record');
+  assert.ok(!result.change_flags.includes('PRICE_PARSE_FAILED'));
+  assert.equal(result.review_status, 'NO_CHANGE');
 });
 

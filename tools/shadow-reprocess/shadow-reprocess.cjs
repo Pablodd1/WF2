@@ -8,10 +8,32 @@ function normalizeText(value) {
   return String(value || '').trim().toUpperCase().replace(/[\s.-]/g, '');
 }
 
+function sourcePriceObservation(record) {
+  const amount = Number(record.price_raw);
+  const currency = String(record.currency || '').trim().toUpperCase();
+  if (!Number.isFinite(amount) || amount <= 0 || !currency) return null;
+  const amountUsd = Number(record.price_usd);
+  return {
+    price_type: 'ASK_PRICE',
+    amount_original: amount,
+    currency_original: currency,
+    amount_usd: Number.isFinite(amountUsd) && amountUsd > 0 ? amountUsd : null,
+    is_primary: true,
+    raw_price_text: null,
+    confidence: null,
+    // This preserves an already structured source value. It is intentionally
+    // not parser evidence and cannot unlock automatic promotion by itself.
+    currency_evidence: 'source_record',
+  };
+}
+
 function analyzeRecord(record) {
   const candidates = segmentDealerMessage(record.raw_message || '');
   const proposed = candidates.map(candidate => {
-    const primary = candidate.prices.find(price => price.is_primary) || candidate.prices[0] || null;
+    const parsedPrices = candidate.prices || [];
+    const retainedSourcePrice = parsedPrices.length ? null : sourcePriceObservation(record);
+    const prices = retainedSourcePrice ? [retainedSourcePrice] : parsedPrices;
+    const primary = prices.find(price => price.is_primary) || prices[0] || null;
     return {
       raw_line: candidate.rawLine,
       brand: candidate.context.brand_context || null,
@@ -24,7 +46,7 @@ function analyzeRecord(record) {
       price_usd: primary?.amount_usd || null,
       currency: primary?.currency_original || null,
       currency_evidence: primary?.currency_evidence || null,
-      prices: candidate.prices,
+      prices,
     };
   });
 
@@ -42,7 +64,8 @@ function analyzeRecord(record) {
     // A bare dollar amount without message or section currency context is not
     // safe to preserve as USD. Keep it out of automatic approval even when an
     // older parser already supplied a numeric price or currency.
-    if (!next.price_raw && /\$\s*\d/.test(next.raw_line) && !/(?:US\$|U\$|HK\$)/i.test(next.raw_line)) {
+    const priceCameFromText = next.prices.some(price => price.currency_evidence !== 'source_record');
+    if (!priceCameFromText && /\$\s*\d/.test(next.raw_line) && !/(?:US\$|U\$|HK\$)/i.test(next.raw_line)) {
       flags.add('CURRENCY_AMBIGUOUS');
     }
     if (!next.price_raw && record.price_raw != null) flags.add('PRICE_PARSE_FAILED');
