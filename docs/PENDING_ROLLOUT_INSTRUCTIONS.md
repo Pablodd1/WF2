@@ -1,6 +1,6 @@
 # Pending Rollout Instructions
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 
 ## Current verified state
 
@@ -11,15 +11,15 @@ Last updated: 2026-07-12
   ambiguous dollar signs, price pairs, discounts, bundles, WTS/WTB, and brand
   inference.
 - Price Research uses comparable WTS cohorts and standard 1.5x IQR fences.
+- Production reports an estimated 2,634,269 `watch_records` rows.
+- PR #1 and the production shadow-normalization follow-up are merged.
+- `/api/shadow-normalize` processes resumable 200-row batches into shadow
+  output only; `/api/shadow-status` exposes aggregate progress.
 
-## Before merging PR #1
+## Completed PR #1 verification
 
-1. Wait for Vercel Preview and Supabase Preview checks to pass on the latest commit.
-2. Verify `/trading` returns listings and pagination/filter/search work.
-3. Verify `/api/ingest?page=1&pageSize=50` returns `status: ok`.
-4. Test `/api/price-research` with one exact reference having at least ten records.
-5. Confirm no production migration contains a destructive statement.
-6. Review the final PR diff and merge only after the Preview smoke test passes.
+The PR is merged. Production `/api/ingest?page=1&pageSize=10` returns
+`status: ok` through server-key access with the multi-million-row estimate.
 
 ## Production environment
 
