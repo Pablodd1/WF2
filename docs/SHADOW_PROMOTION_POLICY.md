@@ -60,3 +60,28 @@ entries, and brand conflicts remain human-review items.
 `GET /api/shadow-review-queue` returns a bounded, read-only queue of shadow
 proposals with their catalog-confirmation decision. It never returns raw dealer
 messages and has no mutation operation.
+
+## Audited reviewer decisions
+
+Apply `supabase/migrations/20260713020000_shadow_review_decisions.sql` in the
+production Supabase SQL Editor before enabling decisions. It adds an immutable
+`normalization_review_decisions` audit table and an atomic
+`apply_shadow_review_decision` RPC. Neither changes `watch_records`.
+
+`POST /api/shadow-review-decision` requires a temporary server-only
+`REVIEW_OPERATOR_TOKEN` in Vercel and the `x-review-operator-token` request
+header. The browser must never receive that token. Required request body:
+
+```json
+{
+  "sourceRecordId": "shadow-source-uuid",
+  "decision": "APPROVED",
+  "operatorId": "reviewer@example.com",
+  "reason": "Catalog and source context verified"
+}
+```
+
+The endpoint re-loads the shadow proposal, re-computes catalog confirmation,
+and permits `APPROVED` only for `READY_FOR_HUMAN_APPROVAL`. Reject decisions
+remain available for every pending proposal. This is review evidence, not live
+promotion.

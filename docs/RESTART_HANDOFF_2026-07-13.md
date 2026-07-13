@@ -121,6 +121,23 @@ Historical pre-migration status:
    reasons. Do not run it until approved.
 5. Remove the temporary trigger token after the controlled review cycle.
 
+## Reviewer decision rollout
+
+The catalog-confirmed read-only queue is available at:
+
+```text
+/api/shadow-review-queue?limit=100
+```
+
+Before reviewers can record decisions, apply
+`supabase/migrations/20260713020000_shadow_review_decisions.sql` using the
+production Supabase SQL Editor. Then configure a new temporary
+`REVIEW_OPERATOR_TOKEN` as a Vercel Production secret. Do not use the old
+shadow-run token and do not expose this token to the browser.
+
+The audited decision endpoint changes only `normalization_shadow_v4.review_status`
+and inserts `normalization_review_decisions`; it does not mutate `watch_records`.
+
 Do not enable a repeating cron until shadow persistence succeeds and a bounded
 sample has been reviewed.
 
