@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, BarChart3, Building2, Search, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { FrontDeskWidget } from '@/components/FrontDeskWidget';
+import { SocialShareRail } from '@/components/SocialShareRail';
 
 const routes = [
   { icon: Search, label: 'Price research', detail: 'Reference-level market evidence', to: '/price-research' },
@@ -158,6 +160,8 @@ export default function LandingPage() {
         <span className="flex items-center gap-2"><Building2 size={13} /> Dealer network intelligence</span>
         <Link to="/dashboard" className="text-white/70 transition-colors hover:text-white">Open operations</Link>
       </footer>
+      <SocialShareRail />
+      <FrontDeskWidget />
     </main>
   );
 }
