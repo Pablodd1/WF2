@@ -10,6 +10,10 @@
 - Market-ready estimate: 2,632,776 dated records.
 - Trading Floor has Market-ready and Full archive modes.
 - Price Research for Rolex 126610LN returns a robust cohort using 1.5x IQR.
+- Normalization v4 regression coverage includes Chinese price and intent forms:
+  the HKD Chinese alias and ten-thousand multiplier parse correctly, a Chinese
+  HKD section header applies to following bare-dollar prices, and Chinese buy
+  requests classify as WTB.
 - No live `watch_records` values were changed by the shadow work.
 
 ## Normalization evidence
