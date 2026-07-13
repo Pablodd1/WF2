@@ -181,11 +181,13 @@ export default function TradingFloor() {
                 cursor: 'pointer',
               }}
             >
-              {mode === 'market' ? 'Market-ready' : 'Full archive'}
+              {mode === 'market' ? 'Dated listings' : 'Full archive'}
             </button>
           ))}
           <span style={{ color: MUTED, fontSize: 11, marginLeft: 8 }}>
-            {qualityMode === 'market' ? 'Dated dealer listings' : 'Includes legacy and review records'}
+            {qualityMode === 'market'
+              ? 'Current dated dealer listings; normalization status is reviewed separately.'
+              : 'Includes legacy and review records.'}
           </span>
         </div>
         <div className="relative">
