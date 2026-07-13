@@ -31,6 +31,7 @@ interface ShadowProgress {
   total: number;
   changed: number;
   pending: number;
+  countsEstimated: boolean;
   lastUpdatedAt: string | null;
 }
 
@@ -99,6 +100,7 @@ export default function ReviewQueue() {
             total: Number(data.total || 0),
             changed: Number(data.changed || 0),
             pending: Number(data.pending || 0),
+            countsEstimated: Boolean(data.countsEstimated),
             lastUpdatedAt: data.lastUpdatedAt || null,
           });
         }
@@ -225,9 +227,9 @@ export default function ReviewQueue() {
               <Database size={14} className="text-gold-primary" />
               <span><strong className="text-text-primary">{progress.rowsAnalyzed.toLocaleString()}</strong> normalized in shadow</span>
             </div>
-            <span className="text-text-muted"><strong className="text-amber-400">{progress.pending.toLocaleString()}</strong> pending review</span>
-            <span className="text-text-muted"><strong className="text-text-primary">{progress.changed.toLocaleString()}</strong> corrections flagged</span>
-            <span className="text-text-muted"><strong className="text-text-primary">{progress.total.toLocaleString()}</strong> proposals stored</span>
+            <span className="text-text-muted"><strong className="text-amber-400">{progress.pending.toLocaleString()}</strong> pending review{progress.countsEstimated ? ' est.' : ''}</span>
+            <span className="text-text-muted"><strong className="text-text-primary">{progress.changed.toLocaleString()}</strong> corrections flagged{progress.countsEstimated ? ' est.' : ''}</span>
+            <span className="text-text-muted"><strong className="text-text-primary">{progress.total.toLocaleString()}</strong> proposals stored{progress.countsEstimated ? ' est.' : ''}</span>
             <span className="ml-auto flex items-center gap-1 text-text-muted">
               <RefreshCw size={11} />
               {progress.lastUpdatedAt ? `Updated ${new Date(progress.lastUpdatedAt).toLocaleTimeString()}` : 'Waiting for first checkpoint'}

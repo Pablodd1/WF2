@@ -6,9 +6,10 @@ async function countRows(baseUrl, key, query) {
     headers: {
       apikey: key,
       Authorization: `Bearer ${key}`,
-      // The shadow table is intentionally bounded during review, so exact
-      // counts are cheap and avoid misleading progress totals.
-      Prefer: 'count=exact',
+      // This endpoint is polled by the admin UI. Planner counts stay fast as
+      // the shadow table grows into millions of rows; checkpoint progress is
+      // still exact and is the authoritative throughput measure.
+      Prefer: 'count=planned',
     },
   });
   if (!response.ok) throw new Error(`Supabase returned ${response.status}`);
@@ -70,6 +71,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       status: 'ok',
       jobName,
+      countsEstimated: true,
       total,
       rowsAnalyzed,
       deduplicatedSourceRows: Math.max(0, rowsAnalyzed - total),
