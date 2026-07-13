@@ -68,6 +68,7 @@ export default function TradingFloor() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [qualityMode, setQualityMode] = useState<'market' | 'archive'>('market');
   const pageSize = 50;
 
   useEffect(() => {
@@ -88,6 +89,7 @@ export default function TradingFloor() {
 
       try {
         const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+        params.set('quality', qualityMode);
         if (activeTab !== 'All') params.set('type', activeTab);
         if (search) params.set('q', search);
 
@@ -112,7 +114,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [activeTab, page, pageSize, search]);
+  }, [activeTab, page, pageSize, qualityMode, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -162,6 +164,30 @@ export default function TradingFloor() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-3">
+        <div className="flex items-center gap-1 mb-3" role="group" aria-label="Listing data quality">
+          {(['market', 'archive'] as const).map(mode => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => { setQualityMode(mode); setPage(1); }}
+              style={{
+                border: `1px solid ${qualityMode === mode ? NAVY : BORDER}`,
+                background: qualityMode === mode ? NAVY : WHITE,
+                color: qualityMode === mode ? WHITE : MUTED,
+                borderRadius: 6,
+                padding: '7px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {mode === 'market' ? 'Market-ready' : 'Full archive'}
+            </button>
+          ))}
+          <span style={{ color: MUTED, fontSize: 11, marginLeft: 8 }}>
+            {qualityMode === 'market' ? 'Dated dealer listings' : 'Includes legacy and review records'}
+          </span>
+        </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
           <input
