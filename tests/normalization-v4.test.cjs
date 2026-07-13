@@ -109,6 +109,26 @@ test('classifies looking-for listings as WTB without changing inventory defaults
   assert.equal(wts[0].context.intent_context, 'WTS');
 });
 
+test('extracts Patek four-digit suffix references without treating prices as references', () => {
+  const candidates = segmentDealerMessage(`
+Patek Philippe
+5935A-001 48,000US$
+5396G 255,000HK$
+  `);
+  assert.deepEqual(candidates.map(candidate => candidate.reference), ['5935A-001', '5396G']);
+  assert.deepEqual(candidates.map(candidate => candidate.context.brand_context), ['Patek Philippe', 'Patek Philippe']);
+});
+
+test('does not create a phantom Rolex candidate from a six-digit price', () => {
+  const candidates = segmentDealerMessage(`
+Patek Philippe 5712/1A Tiffany
+Full set price 195000 USD
+  `);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].reference, '5712/1A');
+  assert.equal(candidates[0].context.brand_context, 'Patek Philippe');
+});
+
 test('classifies Chinese WTB messages and inherited request context', () => {
   const direct = segmentDealerMessage('\u6c42\u8d2d 126500LN White HKD 280k');
   const inherited = segmentDealerMessage('\u6c42\u8cfc\n126610LN Black $114000');

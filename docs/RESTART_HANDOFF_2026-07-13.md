@@ -31,12 +31,34 @@ records with normalization v4. Results:
 - `BRAND_CHANGED`: 60
 - `CURRENCY_CHANGED`: 12
 
-The result was not persisted because the additive shadow tables are not yet in
-the production Supabase schema.
+That initial read-only sample was not persisted because the shadow schema was
+not yet installed at that point. It has since been installed and a persisted,
+isolated 10,000-row shadow run has completed.
 
-## Immediate blocker
+### Persisted 10,000-row shadow run
 
-Apply this additive migration in the production Supabase SQL Editor:
+- `rowsAnalyzed`: 10,000
+- `changed` / pending review: 8,017
+- `BUNDLE_SPLIT_REQUIRED`: 2,658
+- `NO_CANDIDATE`: 1,459
+- `REFERENCE_CHANGED`: 1,909
+- `INTENT_CHANGED`: 274
+- `PRICE_CHANGED`: 1,462
+- `BRAND_CHANGED`: 585
+- `CURRENCY_CHANGED`: 787
+- `CURRENCY_AMBIGUOUS`: 1,201
+- `PRICE_PARSE_FAILED`: 306
+
+No rows in `public.watch_records` were modified. The purpose of this result is
+to prioritize parser fixes and human-review cohorts, not to auto-promote all
+changes. The first review found and corrected two parser hazards: Patek
+four-digit suffix references such as `5935A-001`, and six-digit asking prices
+such as `195000 USD` being misread as Rolex references.
+
+## Shadow schema status
+
+The production schema is now installed. The additive migration remains the
+authoritative schema reference:
 
 `supabase/migrations/20260713003000_normalization_shadow_v4.sql`
 
@@ -65,7 +87,7 @@ its host resolves as `base`. The shadow worker no longer depends on it and no
 longer runs DDL from Vercel. Do not restore automatic DDL. Apply the checked-in
 SQL in Supabase, then repair or remove the obsolete `DATABASE_URL` separately.
 
-Expected status before migration:
+Historical pre-migration status:
 
 ```json
 {"status":"schema_pending","total":0,"changed":0,"pending":0,"bundles":0,"flagCounts":{}}
@@ -73,17 +95,14 @@ Expected status before migration:
 
 ## Resume sequence
 
-1. Sign in to the production Supabase dashboard.
-2. Open SQL Editor and run the shadow migration above.
-3. Verify `https://watchfacts-poc.vercel.app/api/shadow-status` returns
-   `status: ok`.
-4. Configure a temporary `SHADOW_RUN_TOKEN` in Vercel Production.
-5. Invoke `GET /api/shadow-normalize` with header `x-shadow-token` set to that
-   value. Each call is bounded to 200 records.
-6. Confirm shadow totals increase and live `watch_records` remain unchanged.
-7. Process 10,000 shadow rows, inspect flag rates and representative samples,
-   then approve correction rules before any live promotion.
-8. Remove the temporary trigger token after the controlled run.
+1. Inspect protected representative samples for each high-volume review flag.
+2. Add narrowly targeted parser tests and fixes only where samples demonstrate
+   a deterministic issue.
+3. Run a second, fresh 10,000-row cohort after the fixes (new checkpoint job),
+   then compare flag rates and sample quality.
+4. Draft a promotion policy with auto-promote gates and explicit human-review
+   reasons. Do not run it until approved.
+5. Remove the temporary trigger token after the controlled review cycle.
 
 Do not enable a repeating cron until shadow persistence succeeds and a bounded
 sample has been reviewed.

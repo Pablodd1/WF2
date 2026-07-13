@@ -162,17 +162,29 @@ function inferBrandFromReference(reference) {
 }
 
 function extractReference(line) {
+  const text = String(line);
   const patterns = [
     /\b(RM\s*\d{2,3}(?:-\d{2})?(?:\s*[A-Z0-9]+)?)\b/i,
     /\b((?:15|26|67|77)\d{3}[A-Z]{2}(?:\.[A-Z0-9.]+)?)\b/i,
     /\b([245678]\d{3}[VH]\/[A-Z0-9-]+)\b/i,
     /\b(\d{4}\/\d[A-Z0-9-]*)\b/i,
+    /\b([345678]\d{3}[A-Z](?:-\d{3})?)\b/i,
     /\b(PAM\s*\d{3,5})\b/i,
-    /\b(\d{5,6}[A-Z]{0,5})\b/i,
+    /\b(\d{5,6}[A-Z]{1,5})\b/i,
   ];
   for (const pattern of patterns) {
-    const match = String(line).match(pattern);
+    const match = text.match(pattern);
     if (match) return match[1].replace(/\s/g, '').toUpperCase();
+  }
+
+  // A bare six-digit reference is valid for Rolex, but a six-digit asking
+  // price (for example "195000 USD") must never create a phantom listing.
+  for (const match of text.matchAll(/\b(\d{5,6})\b/g)) {
+    const before = text.slice(Math.max(0, match.index - 24), match.index);
+    const after = text.slice(match.index + match[1].length, match.index + match[1].length + 24);
+    const followsPriceLabel = /(?:price|ask(?:ing)?|usd|hkd|usdt|us\$|hk\$|\$)\s*$/i.test(before);
+    const precedesCurrency = /^\s*(?:usd|hkd|usdt|us\$|hk\$|\$|[-–]\s*\d{1,2}%)/i.test(after);
+    if (!followsPriceLabel && !precedesCurrency) return match[1];
   }
   return null;
 }
@@ -224,12 +236,13 @@ function segmentDealerMessage(rawMessage) {
     if (!reference) continue;
 
     const inferredBrand = inferBrandFromReference(reference);
+    const explicitBrand = detectBrandHeader(line);
     candidates.push({
       rawLine: line,
       reference,
       context: {
         ...context,
-        brand_context: inferredBrand || context.brand_context || null,
+        brand_context: inferredBrand || explicitBrand || context.brand_context || null,
         intent_context: inferIntent(line, context.intent_context),
       },
       prices: extractPriceObservations(line, context),

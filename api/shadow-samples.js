@@ -62,11 +62,29 @@ module.exports = async function handler(req, res) {
 
   try {
     const samples = await rest(baseUrl, key, `normalization_shadow_v4?${params.toString()}`);
+    const sourceIds = samples.map(sample => sample.source_record_id).filter(Boolean);
+    const rawMessagesById = new Map();
+    if (sourceIds.length) {
+      const sourceParams = new URLSearchParams({
+        select: 'id,raw_message',
+        id: `in.(${sourceIds.join(',')})`,
+      });
+      const sourceRows = await rest(baseUrl, key, `watch_records?${sourceParams.toString()}`);
+      sourceRows.forEach(row => {
+        rawMessagesById.set(row.id, String(row.raw_message || '').slice(0, 4000));
+      });
+    }
     return res.status(200).json({
       status: 'ok',
       flag: requestedFlag || null,
       count: samples.length,
-      samples,
+      // This endpoint is protected by the temporary shadow-review token.
+      // Keeping original text here gives reviewers enough evidence to judge
+      // parser corrections without exposing raw dealer content publicly.
+      samples: samples.map(sample => ({
+        ...sample,
+        source_raw_message: rawMessagesById.get(sample.source_record_id) || null,
+      })),
     });
   } catch (error) {
     console.error('[shadow-samples]', error);
