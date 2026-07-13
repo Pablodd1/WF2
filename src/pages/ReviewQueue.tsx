@@ -24,7 +24,17 @@ interface ReviewItem {
   listingTitle: string;
   reviewReasons: string[];
   disposition: 'HUMAN_REVIEW' | 'READY_FOR_HUMAN_APPROVAL' | 'CATALOG_CONFIRMATION_REQUIRED';
+  priority: number;
 }
+
+const reasonFilters = [
+  { value: '', label: 'Priority' },
+  { value: 'CURRENCY_AMBIGUOUS', label: 'Currency' },
+  { value: 'PRICE_PARSE_FAILED', label: 'Price parse' },
+  { value: 'BUNDLE_SPLIT_REQUIRED', label: 'Bundles' },
+  { value: 'NO_CANDIDATE', label: 'No candidate' },
+  { value: 'REFERENCE_CHANGED', label: 'Reference' },
+] as const;
 
 interface ShadowProgress {
   rowsAnalyzed: number;
@@ -38,6 +48,7 @@ interface ShadowProgress {
 export default function ReviewQueue() {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [reasonFilter, setReasonFilter] = useState('');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ReviewItem | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -51,7 +62,9 @@ export default function ReviewQueue() {
   // decisions. Do not let a client-side click mutate market records.
   useEffect(() => {
     let active = true;
-    fetch('/api/shadow-review-queue?limit=100')
+    const params = new URLSearchParams({ limit: '100', sort: reasonFilter ? 'recent' : 'priority' });
+    if (reasonFilter) params.set('reason', reasonFilter);
+    fetch(`/api/shadow-review-queue?${params.toString()}`)
       .then(async response => {
         if (!response.ok) throw new Error('Review queue is unavailable');
         return response.json();
@@ -78,6 +91,7 @@ export default function ReviewQueue() {
             listingTitle: candidate.raw_line || 'No deterministic candidate extracted',
             reviewReasons: item.decision?.reasons || [],
             disposition: item.decision?.disposition || 'HUMAN_REVIEW',
+            priority: Number(item.priority || 0),
           };
         }));
       })
@@ -85,7 +99,7 @@ export default function ReviewQueue() {
         if (active) setLoadError(error instanceof Error ? error.message : 'Review queue is unavailable');
       });
     return () => { active = false; };
-  }, []);
+  }, [reasonFilter]);
 
   useEffect(() => {
     let active = true;
@@ -225,7 +239,7 @@ export default function ReviewQueue() {
           <div className="mb-6 border border-border-default bg-bg-card px-4 py-3 rounded-xl flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
             <div className="flex items-center gap-2 text-text-secondary">
               <Database size={14} className="text-gold-primary" />
-              <span><strong className="text-text-primary">{progress.rowsAnalyzed.toLocaleString()}</strong> normalized in shadow</span>
+              <span><strong className="text-text-primary">{progress.rowsAnalyzed.toLocaleString()}</strong> analyzed in shadow</span>
             </div>
             <span className="text-text-muted"><strong className="text-amber-400">{progress.pending.toLocaleString()}</strong> pending review{progress.countsEstimated ? ' est.' : ''}</span>
             <span className="text-text-muted"><strong className="text-text-primary">{progress.changed.toLocaleString()}</strong> corrections flagged{progress.countsEstimated ? ' est.' : ''}</span>
@@ -277,6 +291,19 @@ export default function ReviewQueue() {
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-1 overflow-x-auto bg-bg-card border border-border-default rounded-lg p-1">
+            {reasonFilters.map(reason => (
+              <button
+                key={reason.value || 'priority'}
+                onClick={() => setReasonFilter(reason.value)}
+                className={`whitespace-nowrap px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${
+                  reasonFilter === reason.value ? 'bg-bg-elevated text-gold-primary' : 'text-text-muted hover:text-text-primary'
+                }`}
+              >
+                {reason.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Queue List */}
@@ -316,6 +343,7 @@ export default function ReviewQueue() {
                     }`}>
                       {item.disposition === 'READY_FOR_HUMAN_APPROVAL' ? 'catalog confirmed' : 'review blocked'}
                     </span>
+                    <span className="px-2 py-0.5 rounded bg-bg-elevated text-[10px] font-bold uppercase text-text-muted">P{item.priority}</span>
                   </div>
                   <p className="text-xs text-text-secondary truncate">{item.listingTitle}</p>
                   <div className="flex items-center gap-4 mt-2">
