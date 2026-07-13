@@ -30,6 +30,14 @@ test('does not assume USD for a bare dollar sign without context', () => {
   assert.deepEqual(extractPriceObservations('126500 White $283000', {}), []);
 });
 
+test('parses Chinese HKD labels and ten-thousand multipliers without a USD fallback', () => {
+  const prices = extractPriceObservations('220\u4e07\u6e2f\u5e01');
+  assert.equal(prices.length, 1);
+  assert.equal(prices[0].amount_original, 2_200_000);
+  assert.equal(prices[0].currency_original, 'HKD');
+  assert.equal(prices[0].currency_evidence, 'explicit_line_currency');
+});
+
 test('preserves explicit HKD and USD equivalents', () => {
   const prices = extractPriceObservations('105,000HK$/13,500US$');
   assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original]), [
