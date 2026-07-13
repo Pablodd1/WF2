@@ -23,11 +23,11 @@ const SCAN_CAP = 400_000; // hard ceiling to stay under Vercel timeout
 // enriched_refs.json via _lib/catalog.js). This is the PROVEN path used live by
 // /api/catalog-lookup. Cloud-editable Supabase catalog can replace this later
 // behind the same interface. Returns a model name or null.
-const _modelMemo = new Map(); // normRef -> modelName|null
-function modelForRef(reference) {
-  const key = normRef(reference);
+const _modelMemo = new Map(); // brand|normRef -> modelName|null
+function modelForRef(reference, brand) {
+  const key = `${brand || ''}|${normRef(reference)}`;
   if (_modelMemo.has(key)) return _modelMemo.get(key);
-  const hit = lookupCatalog(reference);
+  const hit = lookupCatalog(reference, brand || null);
   const model = hit && hit.found ? (hit.model || null) : null;
   _modelMemo.set(key, model);
   return model;
@@ -75,7 +75,7 @@ module.exports = async function handler(req, res) {
       for (const r of data) {
         scanned++;
         if (!r.reference) continue;
-        const modelName = modelForRef(r.reference) || 'Other / Uncatalogued';
+        const modelName = modelForRef(r.reference, brand) || 'Other / Uncatalogued';
         if (!models.has(modelName)) models.set(modelName, { listing_count: 0, refs: new Set() });
         const m = models.get(modelName);
         m.listing_count++;

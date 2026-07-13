@@ -11,7 +11,17 @@ function confirmCatalogCandidate(candidate) {
     return { confirmed: false, reason: 'CATALOG_IDENTITY_INCOMPLETE', match: null };
   }
 
-  const match = lookupCatalog(candidate.reference);
+  let match = lookupCatalog(candidate.reference, candidate.brand || null);
+  // A brand-qualified miss may still be a known reference under another brand.
+  // Preserve that as an explicit conflict for reviewers instead of hiding it as
+  // a generic catalog miss.
+  if (!match.found && candidate.brand) {
+    const unqualified = lookupCatalog(candidate.reference);
+    if (unqualified.found && unqualified.brand
+      && normalizeBrand(unqualified.brand) !== normalizeBrand(candidate.brand)) {
+      match = unqualified;
+    }
+  }
   if (!match.found) {
     return { confirmed: false, reason: 'CATALOG_NOT_FOUND', match };
   }

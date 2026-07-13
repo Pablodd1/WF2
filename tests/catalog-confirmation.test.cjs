@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { confirmCatalogCandidate } = require('../tools/shadow-reprocess/catalog-confirmation.cjs');
 const { buildPromotionDecision } = require('../tools/shadow-reprocess/promotion-policy.cjs');
+const { lookupCatalog } = require('../api/_lib/catalog.js');
 
 test('confirms an exact catalog reference with matching brand', () => {
   const confirmation = confirmCatalogCandidate({ brand: 'Rolex', reference: '126610LN' });
@@ -37,4 +38,21 @@ test('returns reviewer approval readiness only after exact catalog confirmation'
   }, confirmation);
   assert.equal(decision.disposition, 'READY_FOR_HUMAN_APPROVAL');
   assert.equal(decision.catalog.reference, 'WSSA0039');
+});
+
+test('uses the local catalog source when an overlapping reference has an explicit brand', () => {
+  const rolex = lookupCatalog('52508', 'Rolex');
+  const piaget = lookupCatalog('52508', 'Piaget');
+  assert.equal(rolex.found, true);
+  assert.equal(rolex.brand, 'Rolex');
+  assert.equal(piaget.found, true);
+  assert.equal(piaget.brand, 'Piaget');
+});
+
+test('does not silently resolve an unbranded cross-brand reference', () => {
+  const ambiguous = lookupCatalog('52508');
+  assert.equal(ambiguous.found, false);
+  assert.equal(ambiguous.matchType, 'ambiguous_reference');
+  assert.ok(ambiguous.candidates.some(candidate => candidate.brand === 'Rolex'));
+  assert.ok(ambiguous.candidates.some(candidate => candidate.brand === 'Piaget'));
 });

@@ -13,9 +13,9 @@ const { buildComparableCohorts, summarizePrices } = require('./_lib/market-stats
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
 // by /api/catalog-lookup. The Supabase cached_price_guide_watches table is empty
 // for most brands, so we do NOT use it. Decoration only — never affects existence.
-function lookupModel(reference) {
+function lookupModel(reference, brand) {
   try {
-    const hit = lookupCatalog(reference);
+    const hit = lookupCatalog(reference, brand || null);
     return hit && hit.found ? (hit.model || null) : null;
   } catch { return null; }
 }
@@ -191,7 +191,7 @@ module.exports = async function handler(req, res) {
     const dialColors = dial_analysis.map(d => d.dial_color);
 
     // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
-    const model = lookupModel(targetRef);
+    const model = lookupModel(targetRef, brand);
     const liquidity = await lookupLiquidity(client, targetRef, marketRows.length);
 
     res.status(200).json({

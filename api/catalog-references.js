@@ -20,10 +20,10 @@ const SCAN_CAP = 400_000; // hard ceiling to stay under Vercel timeout
 
 // Memoized model resolver via the proven file catalog (same as catalog-models).
 const _modelMemo = new Map();
-function modelForRef(reference) {
-  const key = normRef(reference);
+function modelForRef(reference, brand) {
+  const key = `${brand || ''}|${normRef(reference)}`;
   if (_modelMemo.has(key)) return _modelMemo.get(key);
-  const hit = lookupCatalog(reference);
+  const hit = lookupCatalog(reference, brand || null);
   const model = hit && hit.found ? (hit.model || null) : null;
   _modelMemo.set(key, model);
   return model;
@@ -70,7 +70,7 @@ module.exports = async function handler(req, res) {
       for (const r of data) {
         scanned++;
         if (!r.reference) continue;
-        const modelName = modelForRef(r.reference) || 'Other / Uncatalogued';
+        const modelName = modelForRef(r.reference, brand) || 'Other / Uncatalogued';
         if (modelName !== model) continue; // only this model's refs
         if (!refs.has(r.reference)) refs.set(r.reference, { count: 0, sum: 0, dials: new Map() });
         const e = refs.get(r.reference);

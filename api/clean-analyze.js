@@ -1191,7 +1191,7 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   //    Supplies/confirms brand, fills collection/model, and feeds crossValidate.
   let catalog = { found: false, brand: null };
   if (parsed.reference) {
-    catalog = lookupCatalog(parsed.reference);
+    catalog = lookupCatalog(parsed.reference, parsed.brand || null);
     if (catalog.found || catalog.brand) {
       // Fill brand if the parser missed it; never overwrite a confident parser brand.
       if ((!parsed.brand || parsed.brand === 'Unknown') && catalog.brand) {
@@ -1233,8 +1233,8 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
       let aiRef = ai.reference || null;
       if (aiRef && parsed.reference) {
         // Both parser and AI have references — validate AI's against catalog
-        const aiCat = lookupCatalog(aiRef);
-        const parserCat = lookupCatalog(parsed.reference);
+        const aiCat = lookupCatalog(aiRef, parsed.brand || null);
+        const parserCat = lookupCatalog(parsed.reference, parsed.brand || null);
         if (!aiCat.found && parserCat.found) {
           // AI reference has no catalog match but parser's does — keep parser's
           aiRef = null;
@@ -1273,7 +1273,7 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
       confidence = Math.max(confidence, Math.min(ai.confidence ?? codeConfidence(parsed), 100));
       // If AI surfaced a reference the parser missed, re-check the catalog.
       if (ai.reference && (!catalog.found)) {
-        const recheck = lookupCatalog(parsed.reference);
+        const recheck = lookupCatalog(parsed.reference, parsed.brand || null);
         if (recheck.found) {
           catalog = recheck;
           if ((!parsed.brand || parsed.brand === 'Unknown') && recheck.brand) parsed.brand = recheck.brand;

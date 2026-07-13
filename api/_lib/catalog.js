@@ -1,50 +1,48 @@
 /**
- * Shared in-process catalog lookup for the live pipeline.  (CommonJS — matches
- * api/package.json "type":"commonjs"; imported from clean-analyze.js via default
- * import, which Vercel's bundler and Node both handle as ESM<-CJS interop.)
+ * Brand-aware in-process catalog lookup for the live pipeline.
  *
- * Loads catalog.json (177 curated refs) + enriched_refs.json (3,379 dealer
- * refs) ONCE at module scope, normalizes references, and infers a brand for
- * the ~581 null-brand entries so the catalog never falsely defaults a
- * Rolex/AP ref to "Patek Philippe".
- *
- * Replaces the HTTP self-call to /api/catalog-lookup — same data, zero network
- * hop, safe to call 120× inside one batched function.
+ * The local catalog import is keyed by brand + reference. Reference values
+ * alone are not globally unique, so an unbranded collision is returned as
+ * ambiguous rather than silently assigning the wrong watch identity.
  */
-
 const { readFileSync } = require('fs');
 const { resolve } = require('path');
 
 const PUBLIC_DIR = resolve(process.cwd(), 'public');
 
-let _catalog = null;   // Map<normRef, entry>
-let _enriched = null;  // Map<normRef, entry>
+let _catalog = null;
+let _enriched = null;
+let _sourceByBrandReference = null;
+let _sourceByReference = null;
 
 function normalizeRef(ref) {
-  return String(ref || '').toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
+  return String(ref || '').toUpperCase().replace(/[^A-Z0-9/\\-]/g, '');
 }
+
 function collapseRef(ref) {
   return String(ref || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-/**
- * Infer brand from a reference pattern. Used only for entries whose brand
- * field is null/empty — NEVER guesses Patek as a blanket default. Mirrors the
- * brand-prefix rules in src/utils/parseEngine.ts so catalog and parser agree.
- */
+function normalizeBrand(brand) {
+  return String(brand || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function inferredOrExpectedBrand(reference, expectedBrand) {
+  return expectedBrand || inferBrand(reference) || null;
+}
+
 function inferBrand(rawRef) {
   const r = collapseRef(rawRef);
   if (!r) return null;
-  if (/^[3-7]\d{3}\//.test(normalizeRef(rawRef))) return 'Patek Philippe'; // 5711/1A, 7118/1200A — also catches 49xx/50xx/51xx/52xx/53xx/54xx/55xx/56xx/57xx/58xx/59xx/61xx/71xx/72xx
+  if (/^[3-7]\d{3}\//.test(normalizeRef(rawRef))) return 'Patek Philippe';
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
   if (/^IW\d{4,6}$/.test(r)) return 'IWC';
   if (/^(WSSA|WSNM|WGNM|WJSA|CRWS|CRWG)/.test(r)) return 'Cartier';
-  if (/^(15|26|77)\d{3}[A-Z]{2}/.test(r)) return 'Audemars Piguet';     // 15500ST, 26579CE, 15180OR...
+  if (/^(15|26|77)\d{3}[A-Z]{2}/.test(r)) return 'Audemars Piguet';
   if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180|4500V|4300V|6000V)/.test(r)) return 'Vacheron Constantin';
-  if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';                          // 116610LN, 126331
+  if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
   if (/^(79\d{4}|70\d{4})[A-Z]*$/.test(r)) return 'Tudor';
   if (/^3\d{4}\.\d/.test(String(rawRef))) return 'Omega';
-  // New brands
   if (/^PAM\d{3,4}$/i.test(r)) return 'Panerai';
   if (/^Q\d{5,6}$/i.test(r)) return 'Jaeger-LeCoultre';
   if (/^(AB|A[123])\d{4}[A-Z]?$/i.test(r)) return 'Breitling';
@@ -53,19 +51,28 @@ function inferBrand(rawRef) {
   return null;
 }
 
+function compatibleWithBrand(entry, expectedBrand) {
+  return !expectedBrand || !entry.brand || normalizeBrand(entry.brand) === normalizeBrand(expectedBrand);
+}
+
+function found(entry, matchType, matchedRef) {
+  return Object.assign({ found: true, matchType, matchedRef }, entry);
+}
+
 function loadCatalogs() {
-  if (_catalog && _enriched) return;
+  if (_catalog && _enriched && _sourceByBrandReference && _sourceByReference) return;
   _catalog = new Map();
   _enriched = new Map();
+  _sourceByBrandReference = new Map();
+  _sourceByReference = new Map();
 
   try {
     const catalog = JSON.parse(readFileSync(resolve(PUBLIC_DIR, 'catalog.json'), 'utf8'));
     for (const item of catalog) {
       const ref = normalizeRef(item.reference);
       if (!ref) continue;
-      const brand = item.brand || inferBrand(item.reference) || 'Patek Philippe';
       _catalog.set(ref, {
-        brand,
+        brand: item.brand || inferBrand(item.reference) || null,
         collection: item.collection || null,
         model: item.model || null,
         caseMetal: item.case_metal || null,
@@ -75,8 +82,8 @@ function loadCatalogs() {
         source: 'catalog',
       });
     }
-  } catch (e) {
-    console.error('[catalog] failed to load catalog.json:', e.message);
+  } catch (error) {
+    console.error('[catalog] failed to load catalog.json:', error.message);
   }
 
   try {
@@ -84,9 +91,8 @@ function loadCatalogs() {
     for (const item of enriched) {
       const ref = normalizeRef(item.reference);
       if (!ref || _enriched.has(ref)) continue;
-      const brand = item.brand || inferBrand(item.reference) || null;
       _enriched.set(ref, {
-        brand,
+        brand: item.brand || inferBrand(item.reference) || null,
         collection: item.collection && item.collection !== 'Unknown' ? item.collection : null,
         model: item.model && item.model !== 'Unknown' ? item.model : null,
         caseMetal: item.case_metal && item.case_metal !== 'Unknown' ? item.case_metal : null,
@@ -97,47 +103,121 @@ function loadCatalogs() {
         source: 'enriched',
       });
     }
-  } catch (e) {
-    console.error('[catalog] failed to load enriched_refs.json:', e.message);
+  } catch (error) {
+    console.error('[catalog] failed to load enriched_refs.json:', error.message);
+  }
+
+  try {
+    const source = JSON.parse(readFileSync(resolve(PUBLIC_DIR, 'catalog-source-v1.json'), 'utf8'));
+    for (const item of source.entries || []) {
+      const ref = normalizeRef(item.reference);
+      const brand = String(item.brand || '').trim();
+      if (!ref || !brand) continue;
+      const entry = {
+        brand,
+        collection: null,
+        model: item.model || null,
+        modelClaims: item.model_claims || [],
+        dialColors: item.dial_colors || [],
+        variants: item.variants || [],
+        source: 'local_catalog_v1',
+      };
+      _sourceByBrandReference.set(`${normalizeBrand(brand)}|${ref}`, entry);
+      const candidates = _sourceByReference.get(ref) || [];
+      candidates.push(entry);
+      _sourceByReference.set(ref, candidates);
+    }
+  } catch (error) {
+    console.error('[catalog] failed to load catalog-source-v1.json:', error.message);
   }
 }
 
-/**
- * Look up a reference across both catalogs.
- * Returns { found, brand, collection, model, caseMetal, dialColors,
- *           productionYears, liquidityScore, source, matchType }.
- */
-function lookupCatalog(reference) {
-  loadCatalogs();
-  const empty = { found: false, brand: null, source: null, matchType: null, matchedRef: null };
-  if (!reference) return empty;
+function sourceExactMatch(ref, expectedBrand) {
+  if (expectedBrand) {
+    const entry = _sourceByBrandReference.get(`${normalizeBrand(expectedBrand)}|${ref}`);
+    return entry ? found(entry, 'exact', ref) : null;
+  }
 
+  const candidates = _sourceByReference.get(ref) || [];
+  if (candidates.length === 1) return found(candidates[0], 'exact', ref);
+  if (candidates.length > 1) {
+    const inferred = inferBrand(ref);
+    const inferredCandidate = inferred
+      ? candidates.find(entry => normalizeBrand(entry.brand) === normalizeBrand(inferred))
+      : null;
+    if (inferredCandidate) return found(inferredCandidate, 'exact_inferred_brand', ref);
+    return {
+      found: false,
+      brand: null,
+      source: 'local_catalog_v1',
+      matchType: 'ambiguous_reference',
+      matchedRef: null,
+      candidates: candidates.map(entry => ({ brand: entry.brand, model: entry.model || null })),
+    };
+  }
+  return null;
+}
+
+function legacyMatch(map, reference, expectedBrand, matchType) {
+  const ref = normalizeRef(reference);
+  const direct = map.get(ref);
+  if (direct && compatibleWithBrand(direct, expectedBrand)) return found(direct, matchType, ref);
+  return null;
+}
+
+function lookupCatalog(reference, expectedBrand = null) {
+  loadCatalogs();
+  const empty = {
+    found: false,
+    brand: inferredOrExpectedBrand(reference, expectedBrand),
+    source: null,
+    matchType: null,
+    matchedRef: null,
+  };
   const ref = normalizeRef(reference);
   if (!ref) return empty;
 
-  // Tier 1 — exact normalized (catalog wins over enriched: it's curated).
-  let hit = _catalog.get(ref) || _enriched.get(ref);
-  if (hit) return Object.assign({ found: true, matchType: 'exact', matchedRef: reference }, hit);
+  const sourceExact = sourceExactMatch(ref, expectedBrand);
+  if (sourceExact) return sourceExact;
 
-  // Tier 2 — whitespace/slash-collapsed variant (126331 G -> 126331G).
-  const collapsed = collapseRef(reference);
   for (const map of [_catalog, _enriched]) {
-    for (const [key, val] of map) {
-      if (collapseRef(key) === collapsed) return Object.assign({ found: true, matchType: 'collapsed', matchedRef: key }, val);
-    }
+    const direct = legacyMatch(map, reference, expectedBrand, 'exact');
+    if (direct) return direct;
   }
 
-  // Tier 3 — prefix/partial (7118/1 -> 7118/1200A). Require >= 4 chars.
-  for (const map of [_catalog, _enriched]) {
-    for (const [key, val] of map) {
-      const shorter = ref.length <= key.length ? ref : key;
-      if (shorter.length >= 4 && (key.startsWith(ref) || ref.startsWith(key))) {
-        return Object.assign({ found: true, matchType: 'partial', matchedRef: key }, val);
+  const collapsed = collapseRef(reference);
+  for (const map of [_sourceByBrandReference, _catalog, _enriched]) {
+    for (const [key, entry] of map) {
+      const entryRef = map === _sourceByBrandReference ? key.split('|').slice(1).join('|') : key;
+      if (collapseRef(entryRef) === collapsed && compatibleWithBrand(entry, expectedBrand)) {
+        return found(entry, 'collapsed', entryRef);
       }
     }
   }
 
-  return Object.assign({}, empty, { brand: inferBrand(reference) });
+  // Partial values are candidates, never catalog confirmation. The caller must
+  // still gate them before normalizing a listing.
+  for (const map of [_sourceByBrandReference, _catalog, _enriched]) {
+    for (const [key, entry] of map) {
+      const entryRef = map === _sourceByBrandReference ? key.split('|').slice(1).join('|') : key;
+      const shorter = ref.length <= entryRef.length ? ref : entryRef;
+      if (shorter.length >= 4 && (entryRef.startsWith(ref) || ref.startsWith(entryRef)) && compatibleWithBrand(entry, expectedBrand)) {
+        return found(entry, 'partial', entryRef);
+      }
+    }
+  }
+
+  return empty;
 }
 
-module.exports = { lookupCatalog, inferBrand, normalizeRef };
+function catalogStats() {
+  loadCatalogs();
+  return {
+    catalog: _catalog.size,
+    enriched: _enriched.size,
+    localSource: _sourceByBrandReference.size,
+    uniqueLocalReferences: _sourceByReference.size,
+  };
+}
+
+module.exports = { lookupCatalog, inferBrand, normalizeRef, catalogStats };
