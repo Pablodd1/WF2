@@ -1,22 +1,19 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Layout } from '@/components/Layout';
-import { StatsBar } from '@/components/StatsBar';
 import { Footer } from '@/components/Footer';
 import { ProcessingTheater } from '@/sections/ProcessingTheater';
 import { InventoryGrid } from '@/sections/InventoryGrid';
 import { LiquidityTaxonomy } from '@/sections/LiquidityTaxonomy';
 import { EnhancedResidue } from '@/sections/EnhancedResidue';
-import { WorkflowSidebar } from '@/components/WorkflowSidebar';
 import { TabNav } from '@/components/TabNav';
 import { FloatingNav } from '@/components/FloatingNav';
 import { DetailModal } from '@/components/DetailModal';
 import { EditModal } from '@/components/EditModal';
 import { AIInsights } from '@/sections/AIInsights';
+import { HomeCommandCenter } from '@/sections/HomeCommandCenter';
 import LiveStream from '@/components/LiveStream';
 import { useWatchData } from '@/hooks/useWatchData';
-import { exportDatasetExcel, exportDatasetCsv } from '@/lib/datasetExport';
-import { downloadStyledReport } from '@/lib/reportGenerator';
 import type { WatchRecord } from '@/types';
 
 export default function Home() {
@@ -133,38 +130,6 @@ export default function Home() {
     }
   }, [records]);
 
-  const handleExportExcel = useCallback(async () => {
-    if (!records || records.length === 0) return;
-    try {
-      await exportDatasetExcel(records);
-    } catch (e) {
-      console.error('Excel export failed:', e);
-      alert('Export failed: ' + (e as Error).message);
-    }
-  }, [records]);
-
-  const handleExportCsv = useCallback(() => {
-    if (!records || records.length === 0) return;
-    exportDatasetCsv(records);
-  }, [records]);
-
-  const handleExportReport = useCallback(() => {
-    if (!records || records.length === 0) return;
-    downloadStyledReport(records.map(r => ({
-      reference: r.reference,
-      brand: r.brand,
-      dialColor: r.dialColor,
-      price: r.price,
-      currency: r.originalCurrency,
-      condition: r.condition,
-      year: r.year,
-      confidence: r.confidence,
-      status: r.isResidue ? 'HUMAN_REVIEW' : r.confidence >= 90 ? 'AUTO_APPROVED' : 'AI_REVIEW',
-      intent: (r as any).intent || 'SELL',
-      rawMessage: r.rawMessage,
-    })));
-  }, [records]);
-
   if (loading) {
     return (
       <Layout
@@ -213,24 +178,8 @@ export default function Home() {
       {/* Tab Navigation */}
       <TabNav totalProcessed={stats.totalProcessed} />
 
-      {/* Workflow Sidebar */}
-      <WorkflowSidebar
-        totalRecords={stats.totalProcessed}
-        normalizedCount={stats.normalizedCount}
-        residueCount={stats.residueCount}
-        onExportExcel={handleExportExcel}
-        onExportCsv={handleExportCsv}
-        onExportReport={handleExportReport}
-      />
-
       <div className="ml-0">
-        {/* Stats Bar */}
-        <StatsBar
-        totalProcessed={stats.totalProcessed}
-        accuracyRate={stats.accuracyRate}
-        mlAvgTime={stats.mlAvgTime}
-        residueRate={stats.residueRate}
-      />
+      <HomeCommandCenter workspaceRecords={stats.totalProcessed} />
 
       {/* Processing Theater Section */}
       <ProcessingTheater
