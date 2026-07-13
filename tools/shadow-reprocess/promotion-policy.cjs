@@ -13,7 +13,7 @@ const ACCEPTABLE_CURRENCY_EVIDENCE = new Set([
   'message_context',
 ]);
 
-function buildPromotionDecision(shadowRow) {
+function buildPromotionDecision(shadowRow, catalogConfirmation = null) {
   const flags = new Set(shadowRow.change_flags || []);
   const candidate = shadowRow.candidate_count === 1
     ? shadowRow.proposed_candidates?.[0]
@@ -51,6 +51,23 @@ function buildPromotionDecision(shadowRow) {
         candidate: null,
       };
     }
+  }
+
+  if (catalogConfirmation) {
+    if (!catalogConfirmation.confirmed) {
+      return {
+        disposition: 'HUMAN_REVIEW',
+        reasons: [catalogConfirmation.reason],
+        candidate: null,
+        catalog: catalogConfirmation.match || null,
+      };
+    }
+    return {
+      disposition: 'READY_FOR_HUMAN_APPROVAL',
+      reasons: ['CATALOG_CONFIRMED'],
+      candidate,
+      catalog: catalogConfirmation.match,
+    };
   }
 
   // A catalog match must be recorded before this can become an approved live

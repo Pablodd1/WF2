@@ -49,3 +49,14 @@ require all of:
 The policy implementation lives in
 `tools/shadow-reprocess/promotion-policy.cjs` and is unit tested. It returns a
 disposition only; it never writes to `watch_records`.
+
+## Catalog confirmation implementation
+
+`tools/shadow-reprocess/catalog-confirmation.cjs` uses the shared deployed
+catalog. Exact and punctuation-collapsed references with agreeing brands can
+move to `READY_FOR_HUMAN_APPROVAL`. Partial catalog matches, missing catalog
+entries, and brand conflicts remain human-review items.
+
+`GET /api/shadow-review-queue` returns a bounded, read-only queue of shadow
+proposals with their catalog-confirmation decision. It never returns raw dealer
+messages and has no mutation operation.
