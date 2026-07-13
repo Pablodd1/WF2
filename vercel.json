@@ -37,10 +37,6 @@
     {
       "path": "/api/generate-report",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/shadow-normalize",
-      "schedule": "*/5 * * * *"
     }
   ]
 }

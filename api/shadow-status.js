@@ -29,6 +29,9 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ status: 'ok', total, changed, pending, bundles });
   } catch (error) {
     console.error('[shadow-status]', error);
+    if (String(error.message).includes('404')) {
+      return res.status(200).json({ status: 'schema_pending', total: 0, changed: 0, pending: 0, bundles: 0 });
+    }
     return res.status(500).json({ status: 'unavailable' });
   }
 };

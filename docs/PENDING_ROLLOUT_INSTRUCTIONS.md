@@ -13,8 +13,16 @@ Last updated: 2026-07-13
 - Price Research uses comparable WTS cohorts and standard 1.5x IQR fences.
 - Production reports an estimated 2,634,269 `watch_records` rows.
 - PR #1 and the production shadow-normalization follow-up are merged.
-- `/api/shadow-normalize` processes resumable 200-row batches into shadow
-  output only; `/api/shadow-status` exposes aggregate progress.
+- `/api/shadow-normalize` supports protected, bounded 200-row batches and
+  fails closed to a read-only sample when shadow storage is unavailable.
+- A production read-only sample on 2026-07-13 analyzed 200 rows: 143 (71.5%)
+  received at least one change/review flag. Counts were bundle split 58,
+  no candidate 32, intent 24, reference 20, price 11, brand 8, currency 3.
+- Persistence remains disabled until the additive shadow schema is applied.
+  The repeating cron is intentionally not enabled while schema status is pending.
+- Price Research smoke testing for Rolex 126610LN returned a robust cohort and
+  excluded 108 extreme observations, confirming that legacy price contamination
+  remains visible but separated from included statistics.
 
 ## Completed PR #1 verification
 
