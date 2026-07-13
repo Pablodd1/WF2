@@ -60,6 +60,9 @@ The final evaluated checkpoint is `normalization-v4-format-fix`, completed at
 Hublot references, literal Excel `_x000D_` separators, and English WTB header
 inheritance.
 
+The temporary `SHADOW_RUN_TOKEN` used for this controlled run was removed from
+Vercel Production and the local ignored workspace after completion.
+
 Protected sample review confirms that the remaining `NO_CANDIDATE` cohort is
 mixed and must not be bulk-filled: it includes valid catalog-alias requests
 such as `WTB BATMAN 2020+ PLEASE PM`, unsupported-brand references such as
