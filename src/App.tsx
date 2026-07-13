@@ -6,6 +6,7 @@ const OperationsDashboard = lazy(() => import('@/pages/OperationsDashboard'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const TradingFloor = lazy(() => import('@/pages/TradingFloor'));
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'));
+const SourceAnalytics = lazy(() => import('@/pages/SourceAnalytics'));
 const AnalyticsDashboard = lazy(() => import('@/pages/AnalyticsDashboard'));
 const ReviewPage = lazy(() => import('@/pages/ReviewPage'));
 const ReviewQueue = lazy(() => import('@/pages/ReviewQueue'));
@@ -26,7 +27,8 @@ export default function App() {
         <Route path="/dashboard" element={<OperationsDashboard />} />
         <Route path="/dashboard/legacy" element={<Home />} />
         <Route path="/trading" element={<TradingFloor />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/analytics" element={<SourceAnalytics />} />
+        <Route path="/analytics/legacy" element={<AnalyticsPage />} />
         <Route path="/analytics-dashboard" element={<AnalyticsDashboard />} />
         <Route path="/review" element={<ReviewPage />} />
         <Route path="/review-queue" element={<ReviewQueue />} />
