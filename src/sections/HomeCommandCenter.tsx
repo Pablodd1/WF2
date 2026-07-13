@@ -21,6 +21,7 @@ interface ShadowStatus {
   countsEstimated?: boolean;
   checkpointAgeSeconds?: number | null;
   checkpointDelayed?: boolean;
+  batchComplete?: boolean;
 }
 
 interface HomeCommandCenterProps {
@@ -57,6 +58,7 @@ export function HomeCommandCenter({ workspaceRecords }: HomeCommandCenterProps) 
   }, []);
 
   const progress = useMemo(() => {
+    if (status?.batchComplete) return 100;
     if (status?.countsEstimated) return null;
     if (!status?.total || !status.rowsAnalyzed) return 0;
     return Math.min(100, Math.round((status.rowsAnalyzed / status.total) * 100));
@@ -115,7 +117,9 @@ export function HomeCommandCenter({ workspaceRecords }: HomeCommandCenterProps) 
             </div>
             <div className="mt-4 flex items-baseline gap-2">
               <span className="font-mono text-2xl font-semibold text-text-primary">{progress === null ? 'Live' : `${progress}%`}</span>
-              <span className="text-xs text-text-muted">{progress === null ? 'checkpointing' : 'checkpointed'}</span>
+              <span className="text-xs text-text-muted">
+                {status?.batchComplete ? 'batch complete' : progress === null ? 'checkpointing' : 'checkpointed'}
+              </span>
             </div>
             <div className="mt-3 h-1 overflow-hidden bg-bg-elevated">
               <div className={`h-full bg-gold-primary transition-all ${progress === null ? 'w-2/5 animate-pulse' : ''}`} style={progress === null ? undefined : { width: `${progress}%` }} />
@@ -123,7 +127,9 @@ export function HomeCommandCenter({ workspaceRecords }: HomeCommandCenterProps) 
             <p className="mt-3 text-xs text-text-secondary">
               {statusError
                 ? 'Status unavailable'
-                : progress === null
+                : status?.batchComplete
+                  ? `${formatNumber(status?.rowsAnalyzed)} analyzed; review and promotion remain`
+                  : progress === null
                   ? `${formatNumber(status?.rowsAnalyzed)} checkpointed; total is being reconciled`
                   : `${formatNumber(status?.rowsAnalyzed)} analyzed of ${formatNumber(status?.total)}`}
             </p>

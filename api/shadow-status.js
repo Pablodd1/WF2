@@ -64,7 +64,6 @@ module.exports = async function handler(req, res) {
     // Batches normally write checkpoints frequently. This is a monitor only:
     // it never stops or restarts a worker, but surfaces a delayed checkpoint
     // before an operator assumes changing planner estimates mean active work.
-    const checkpointDelayed = checkpointAgeSeconds !== null && checkpointAgeSeconds > 20 * 60;
 
     const countResults = await Promise.allSettled([
       countRows(baseUrl, key, 'normalization_shadow_v4?select=source_record_id'),
@@ -80,6 +79,13 @@ module.exports = async function handler(req, res) {
     const values = countResults.map(result => result.status === 'fulfilled' ? result.value : 0);
     const [total, changed, pending, bundles, ...flagValues] = values;
     const countError = countResults.some(result => result.status === 'rejected');
+    // Planner counts are approximate, but a checkpoint at or beyond the
+    // planner total means this scan has reached its current source boundary.
+    // Do not label the quiet review phase as a stalled worker.
+    const batchComplete = total > 0 && rowsAnalyzed >= total;
+    const checkpointDelayed = !batchComplete
+      && checkpointAgeSeconds !== null
+      && checkpointAgeSeconds > 20 * 60;
     const flagCounts = Object.fromEntries(flags.map((flag, index) => [flag, flagValues[index]]));
     return res.status(200).json({
       status: countError ? 'partial' : 'ok',
@@ -87,6 +93,7 @@ module.exports = async function handler(req, res) {
       countsEstimated: true,
       total,
       rowsAnalyzed,
+      batchComplete,
       deduplicatedSourceRows: Math.max(0, rowsAnalyzed - total),
       lastUpdatedAt: checkpoint?.updated_at || null,
       checkpointAgeSeconds,
