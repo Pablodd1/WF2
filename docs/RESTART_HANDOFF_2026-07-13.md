@@ -157,6 +157,24 @@ longer pending. No `watch_records` row was inserted, updated, or deleted.
 The one-time `REVIEW_OPERATOR_TOKEN` must now be removed from Vercel Production
 and the local temporary token file deleted before continuing with human review.
 
+## Continuous shadow normalization
+
+Production runs `GET /api/shadow-normalize` on a five-minute Vercel cron. Each
+invocation processes at most 1,000 source records, writes only shadow proposals,
+and advances the `normalization-v4-production` checkpoint. It is authorized by
+the existing `CRON_SECRET`; do not expose that secret or add it to browser code.
+
+The current review UI is available at:
+
+```text
+https://watchfacts-poc.vercel.app/review-queue
+```
+
+The first larger scheduled batch must be checked through `/api/shadow-status`.
+If a 1,000-row batch approaches the function limit, reduce the batch size before
+increasing the cron frequency. Do not run concurrent manual requests against the
+same checkpoint job.
+
 Do not enable a repeating cron until shadow persistence succeeds and a bounded
 sample has been reviewed.
 

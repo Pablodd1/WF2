@@ -9,6 +9,9 @@
     "api/clean-analyze.js": {
       "maxDuration": 120
     },
+    "api/shadow-normalize.js": {
+      "maxDuration": 120
+    },
     "api/*.js": {
       "maxDuration": 60
     }
@@ -37,6 +40,10 @@
     {
       "path": "/api/generate-report",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/shadow-normalize",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

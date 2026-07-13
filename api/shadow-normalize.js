@@ -3,7 +3,9 @@
 const { analyzeRecord } = require('../tools/shadow-reprocess/shadow-reprocess.cjs');
 
 const DEFAULT_JOB_NAME = 'normalization-v4-production';
-const BATCH_SIZE = 200;
+// A bounded batch keeps the archive scan resumable within Vercel's function
+// budget while making enough progress for a production cron schedule.
+const BATCH_SIZE = 1000;
 
 function getJobName(req, operatorAuthorized) {
   const requested = operatorAuthorized ? String(req.query?.job || '').trim() : '';
