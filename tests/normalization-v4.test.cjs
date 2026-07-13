@@ -109,6 +109,13 @@ test('classifies looking-for listings as WTB without changing inventory defaults
   assert.equal(wts[0].context.intent_context, 'WTS');
 });
 
+test('classifies Chinese WTB messages and inherited request context', () => {
+  const direct = segmentDealerMessage('\u6c42\u8d2d 126500LN White HKD 280k');
+  const inherited = segmentDealerMessage('\u6c42\u8cfc\n126610LN Black $114000');
+  assert.equal(direct[0].context.intent_context, 'WTB');
+  assert.equal(inherited[0].context.intent_context, 'WTB');
+});
+
 test('extracts all 13 watches from the Hong Kong inventory fixture', () => {
   const fixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'hong-kong-inventory.txt'), 'utf8');
   const candidates = segmentDealerMessage(fixture);
