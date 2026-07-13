@@ -25,6 +25,10 @@ Last updated: 2026-07-13
   directional production evidence, not an approval to promote corrections.
 - Persistence remains disabled until the additive shadow schema is applied.
   The repeating cron is intentionally not enabled while schema status is pending.
+- The currently configured production `DATABASE_URL` is not a usable Postgres
+  connection string (its host resolves as `base`). Shadow processing no longer
+  depends on it. Apply the checked-in additive migration through Supabase, then
+  repair or remove that obsolete variable separately.
 - Price Research smoke testing for Rolex 126610LN returned a robust cohort and
   excluded 108 extreme observations, confirming that legacy price contamination
   remains visible but separated from included statistics.
