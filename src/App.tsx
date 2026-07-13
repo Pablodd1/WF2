@@ -1,37 +1,41 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import Home from '@/pages/Home';
-import TradingFloor from '@/pages/TradingFloor';
-import AnalyticsPage from '@/pages/AnalyticsPage';
-import AnalyticsDashboard from '@/pages/AnalyticsDashboard';
-import ReviewPage from '@/pages/ReviewPage';
-import ReviewQueue from '@/pages/ReviewQueue';
-import CleanPage from '@/pages/CleanPage';
-import ReprocessPage from '@/pages/ReprocessPage';
-import DemoPage from '@/pages/DemoPage';
-import DemoMode from '@/pages/DemoMode';
-import AdminPage from '@/pages/AdminPage';
-import PriceResearch from '@/pages/PriceResearch';
-import DemandSignals from '@/pages/DemandSignals';
-import InsightDetails from '@/pages/InsightDetails';
+import { lazy, Suspense } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+
+const Home = lazy(() => import('@/pages/Home'));
+const TradingFloor = lazy(() => import('@/pages/TradingFloor'));
+const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'));
+const AnalyticsDashboard = lazy(() => import('@/pages/AnalyticsDashboard'));
+const ReviewPage = lazy(() => import('@/pages/ReviewPage'));
+const ReviewQueue = lazy(() => import('@/pages/ReviewQueue'));
+const CleanPage = lazy(() => import('@/pages/CleanPage'));
+const ReprocessPage = lazy(() => import('@/pages/ReprocessPage'));
+const DemoPage = lazy(() => import('@/pages/DemoPage'));
+const DemoMode = lazy(() => import('@/pages/DemoMode'));
+const AdminPage = lazy(() => import('@/pages/AdminPage'));
+const PriceResearch = lazy(() => import('@/pages/PriceResearch'));
+const DemandSignals = lazy(() => import('@/pages/DemandSignals'));
+const InsightDetails = lazy(() => import('@/pages/InsightDetails'));
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/trading" element={<TradingFloor />} />
-      <Route path="/analytics" element={<AnalyticsPage />} />
-      <Route path="/analytics-dashboard" element={<AnalyticsDashboard />} />
-      <Route path="/review" element={<ReviewPage />} />
-      <Route path="/review-queue" element={<ReviewQueue />} />
-      <Route path="/clean" element={<CleanPage />} />
-      <Route path="/reprocess" element={<ReprocessPage />} />
-      <Route path="/demo" element={<DemoPage />} />
-      <Route path="/demo-mode" element={<DemoMode />} />
-      <Route path="/admin" element={<AdminPage />} />
-      <Route path="/price-research" element={<PriceResearch />} />
-      <Route path="/demand" element={<DemandSignals />} />
-      <Route path="/insight" element={<InsightDetails />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/trading" element={<TradingFloor />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/analytics-dashboard" element={<AnalyticsDashboard />} />
+        <Route path="/review" element={<ReviewPage />} />
+        <Route path="/review-queue" element={<ReviewQueue />} />
+        <Route path="/clean" element={<CleanPage />} />
+        <Route path="/reprocess" element={<ReprocessPage />} />
+        <Route path="/demo" element={<DemoPage />} />
+        <Route path="/demo-mode" element={<DemoMode />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/price-research" element={<PriceResearch />} />
+        <Route path="/demand" element={<DemandSignals />} />
+        <Route path="/insight" element={<InsightDetails />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }

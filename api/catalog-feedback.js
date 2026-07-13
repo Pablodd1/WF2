@@ -102,7 +102,7 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
   const supabaseConfigured = !!(supabaseUrl && serviceKey);
 
   // GET: return recent feedback entries

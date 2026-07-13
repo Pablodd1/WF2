@@ -12,6 +12,10 @@
 
 const path = require('node:path');
 const fs = require('node:fs');
+const {
+  extractPriceObservations,
+  segmentDealerMessage,
+} = require('./_lib/normalization-v4.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -408,8 +412,10 @@ function routeListing(confidence, bundle) {
 }
 
 // Parse watch details via JASS-5 parser pipeline
-function parseJass5(text, context) {
-  const refAssertion = extractReference(text);
+function parseJass5(text, context, referenceHint = null) {
+  const refAssertion = referenceHint
+    ? assertField('reference', referenceHint, referenceHint, 95, 'context_segmentation')
+    : extractReference(text);
   const brandAssertion = extractBrand(text, refAssertion.normalized_value, context);
   const dialAssertion = extractDial(text, refAssertion.normalized_value);
   const modelAssertion = extractModel(text, refAssertion.normalized_value);
@@ -417,7 +423,10 @@ function parseJass5(text, context) {
   const braceletAssertion = extractFromDictionary(text, MATERIALS.bracelets || {}, 'bracelet');
   const bezelAssertion = extractFromDictionary(text, MATERIALS.bezels || {}, 'bezel');
   const conditionAssertion = extractCondition(text, context);
-  const setStatusAssertion = extractFromDictionary(text, CONDITIONS.set_status || {}, 'set_status');
+  let setStatusAssertion = extractFromDictionary(text, CONDITIONS.set_status || {}, 'set_status');
+  if (!setStatusAssertion.normalized_value && context.set_status_context) {
+    setStatusAssertion = assertField('set_status', context.set_status_context, context.set_status_context, 85, 'context_inherited');
+  }
   const cardDate = extractCardDate(text);
 
   const assertions = {
@@ -434,7 +443,7 @@ function parseJass5(text, context) {
     card_year: cardDate.card_year
   };
 
-  const prices = extractPrices(text);
+  const prices = extractPriceObservations(text, context);
 
   const bundle = {
     brand: brandAssertion.normalized_value,
@@ -560,15 +569,13 @@ async function insertSupabase(tableName, record, url, key) {
 // ============================================================
 
 async function processMessage(rawMessage, channelId, source, supabaseUrl, serviceKey, deepseekKey) {
-  const lines = rawMessage.split(/\n/).map(l => l.trim()).filter(Boolean);
-  const isMulti = lines.length > 3 && !rawMessage.includes('💰');
-
   // Step 1: Save Raw Message
   let rawRecord = {
     raw_text: rawMessage,
     sender_phone: channelId,
     source_platform: source,
-    processing_status: 'PROCESSING'
+    processing_status: 'PROCESSING',
+    parser_version: 'v4.0-context',
   };
   
   if (supabaseUrl && serviceKey) {
@@ -580,11 +587,14 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
   }
 
   const results = [];
-  const candidates = isMulti ? splitMulti(rawMessage) : [{ rawLine: rawMessage, context: {} }];
+  const segmented = segmentDealerMessage(rawMessage);
+  const candidates = segmented.length > 0
+    ? segmented
+    : [{ rawLine: rawMessage, context: {}, prices: extractPriceObservations(rawMessage, {}) }];
 
   for (const cand of candidates) {
     // Step 2: Parse watch candidate locally via JASS-5 State-Machine
-    let parsed = parseJass5(cand.rawLine, cand.context);
+    let parsed = parseJass5(cand.rawLine, cand.context, cand.reference || null);
 
     // Hit LLM fallback if local regex is low confidence
     if (parsed.confidence < 70 && parsed.ref && deepseekKey) {
@@ -608,23 +618,31 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
 
     // Prepare JASS-5 structures
     const listingId = `list_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const primaryPrice = parsed.prices?.find(price => price.is_primary) || parsed.prices?.[0] || null;
     const normalizedListing = {
       id: listingId,
-      raw_message_id: rawRecord.id || null,
       brand: parsed.brand,
       reference: parsed.ref,
-      model_family: parsed.model,
-      dial: parsed.dial,
-      material: parsed.material,
-      bracelet: parsed.bracelet,
-      bezel: parsed.bezel,
+      dial_color: parsed.dial,
       condition: parsed.condition,
-      set_status: parsed.set_status,
-      card_year: parsed.year,
-      catalog_match_status: parsed.catalog_status,
-      total_confidence: parsed.confidence,
-      approval_state: parsed.approval_state,
-      review_reasons: parsed.review_reasons,
+      year: parsed.year,
+      price_raw: primaryPrice?.amount_original || null,
+      price_usd: primaryPrice?.amount_usd || null,
+      currency: primaryPrice?.currency_original || null,
+      confidence: parsed.confidence,
+      verdict: parsed.approval_state,
+      source,
+      raw_message: cand.rawLine,
+      parser_version: 'v4.0-context',
+      listing_type: cand.context.intent_context || 'WTS',
+      listing_status: cand.context.listing_status_context || 'ACTIVE',
+      processed_at: new Date().toISOString(),
+      flags: {
+        raw_message_id: rawRecord.id || null,
+        set_status: parsed.set_status || null,
+        catalog_status: parsed.catalog_status,
+      },
+      review_reason: parsed.review_reasons?.join(',') || null,
     };
 
     if (supabaseUrl && serviceKey) {
@@ -643,7 +661,10 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
               amount_usd: pr.amount_usd,
               is_primary: pr.is_primary,
               raw_price_text: pr.raw_price_text,
-              confidence: pr.confidence
+              confidence: pr.confidence,
+              currency_evidence: pr.currency_evidence || null,
+              discount_percent: pr.discount_percent || null,
+              retail_price: pr.retail_price || null,
             }, supabaseUrl, serviceKey);
           }
         }
@@ -654,8 +675,8 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
             await insertSupabase('listing_field_assertions', {
               listing_id: listingId,
               field_name: ass.field_name,
-              raw_value: ass.raw_value,
-              normalized_value: ass.normalized_value,
+              raw_value: ass.raw_value == null ? null : String(ass.raw_value),
+              normalized_value: ass.normalized_value == null ? null : String(ass.normalized_value),
               confidence: ass.confidence,
               source_method: ass.source_method
             }, supabaseUrl, serviceKey);
@@ -673,7 +694,8 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       reference: parsed.ref,
       confidence: parsed.confidence,
       catalog_status: parsed.catalog_status,
-      prices: parsed.prices
+      prices: parsed.prices,
+      listing_type: cand.context.intent_context || 'WTS',
     });
   }
 
@@ -706,27 +728,107 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Supabase now labels newly-created server keys as "secret" keys. Keep the
+  // established variable name working while supporting the current dashboard
+  // convention. Neither value is ever returned to a client.
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+  const serviceKey = serviceRoleKey || secretKey;
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
 
   if (req.method === 'GET') {
-    if (!supabaseUrl || !serviceKey) {
-      return res.status(200).json({ count: 0, records: [], status: 'supabase_not_configured' });
+    const readKey = serviceKey || publishableKey;
+    if (!supabaseUrl || !readKey) {
+      return res.status(200).json({
+        count: 0,
+        total: 0,
+        records: [],
+        status: 'supabase_not_configured',
+        configuration: {
+          supabaseUrlPresent: Boolean(supabaseUrl),
+          serviceRoleKeyPresent: Boolean(serviceRoleKey),
+          secretKeyPresent: Boolean(secretKey),
+          serverKeyPresent: Boolean(serviceKey),
+          publishableKeyPresent: Boolean(publishableKey),
+          vercelRuntime: Boolean(process.env.VERCEL),
+          gitBranch: process.env.VERCEL_GIT_COMMIT_REF || null,
+        },
+      });
     }
     try {
-      // Read from watch_records (the real table), not normalized_listings (doesn't exist)
+      const requestedPage = Number.parseInt(String(req.query?.page || '1'), 10);
+      const requestedPageSize = Number.parseInt(String(req.query?.pageSize || '50'), 10);
+      const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1;
+      const pageSize = Number.isFinite(requestedPageSize)
+        ? Math.min(Math.max(requestedPageSize, 10), 100)
+        : 50;
+      const listingType = String(req.query?.type || '').toUpperCase();
+      const search = String(req.query?.q || '').trim().slice(0, 100);
+      const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'OTHER']);
+      const start = (page - 1) * pageSize;
+      const end = start + pageSize - 1;
+      const tableName = serviceKey ? 'watch_records' : 'trading_floor_listings';
+      const params = new URLSearchParams({
+        // Keep this response marketplace-safe even when a server key is used.
+        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region',
+        order: 'created_at.desc',
+      });
+
+      if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
+      if (search) {
+        const escapedSearch = search.replace(/[(),.]/g, ' ').replace(/%/g, '').replace(/\*/g, '').trim();
+        if (escapedSearch) {
+          const searchColumns = serviceKey
+            ? [`brand.ilike.*${escapedSearch}*`, `reference.ilike.*${escapedSearch}*`, `raw_message.ilike.*${escapedSearch}*`]
+            : [`brand.ilike.*${escapedSearch}*`, `reference.ilike.*${escapedSearch}*`];
+          params.set('or', `(${[
+            ...searchColumns,
+          ].join(',')})`);
+        }
+      }
+
+      // Pagination and filtering happen in Postgres. The browser should never receive the whole archive.
       const resp = await fetch(
-        `${supabaseUrl}/rest/v1/watch_records?order=created_at.desc&limit=50`,
-        { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
+        `${supabaseUrl}/rest/v1/${tableName}?${params.toString()}`,
+        {
+          headers: {
+            'apikey': readKey,
+            'Authorization': `Bearer ${readKey}`,
+            'Range-Unit': 'items',
+            'Range': `${start}-${end}`,
+            // Estimated counts avoid a full-table count for a multi-million-row archive.
+            'Prefer': 'count=estimated',
+          },
+        }
       );
+      if (!resp.ok) throw new Error(`Supabase returned ${resp.status}`);
       const records = await resp.json();
-      return res.status(200).json({ count: Array.isArray(records) ? records.length : 0, records: Array.isArray(records) ? records : [], status: 'ok' });
+      const contentRange = resp.headers.get('content-range') || '';
+      const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
+      return res.status(200).json({
+        count: Array.isArray(records) ? records.length : 0,
+        total,
+        page,
+        pageSize,
+        totalIsEstimate: true,
+        records: Array.isArray(records) ? records : [],
+        status: 'ok',
+        accessMode: serviceKey ? 'server_key' : 'publishable_read_only',
+      });
     } catch (e) {
       return res.status(500).json({ error: e.message });
     }
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  if (!supabaseUrl || !serviceKey) {
+    return res.status(503).json({
+      error: 'Ingestion requires a Supabase server key',
+      status: 'supabase_write_not_configured',
+    });
+  }
 
   const body = req.body || {};
   let rawMessage = body.rawMessage;
