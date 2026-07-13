@@ -15,9 +15,14 @@ Last updated: 2026-07-13
 - PR #1 and the production shadow-normalization follow-up are merged.
 - `/api/shadow-normalize` supports protected, bounded 200-row batches and
   fails closed to a read-only sample when shadow storage is unavailable.
-- A production read-only sample on 2026-07-13 analyzed 200 rows: 143 (71.5%)
-  received at least one change/review flag. Counts were bundle split 58,
-  no candidate 32, intent 24, reference 20, price 11, brand 8, currency 3.
+- A cursor-paged production read-only sample on 2026-07-13 analyzed 1,000
+  distinct rows. 718 (71.8%) received at least one change/review flag. The
+  flags overlap because a row can need more than one correction: bundle split
+  259, no candidate 165, reference 132, intent 104, price 66, brand 60, and
+  currency 12. No live rows or shadow rows were written during this sample.
+- The first five 200-row pages were evaluated through protected, cursor-based
+  requests rather than repeatedly inspecting the same initial page. This is
+  directional production evidence, not an approval to promote corrections.
 - Persistence remains disabled until the additive shadow schema is applied.
   The repeating cron is intentionally not enabled while schema status is pending.
 - Price Research smoke testing for Rolex 126610LN returned a robust cohort and
