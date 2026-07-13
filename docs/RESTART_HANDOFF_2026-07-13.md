@@ -38,22 +38,27 @@ isolated 10,000-row shadow run has completed.
 ### Persisted shadow review run
 
 - `rowsAnalyzed`: 10,200
-- `changed` / pending review: 7,830
-- `BUNDLE_SPLIT_REQUIRED`: 2,712
-- `NO_CANDIDATE`: 850
-- `REFERENCE_CHANGED`: 1,872
-- `INTENT_CHANGED`: 330
-- `PRICE_CHANGED`: 1,645
-- `BRAND_CHANGED`: 532
-- `CURRENCY_CHANGED`: 909
-- `CURRENCY_AMBIGUOUS`: 1,250
-- `PRICE_PARSE_FAILED`: 328
+- `changed` / pending review: 7,624
+- `BUNDLE_SPLIT_REQUIRED`: 2,553
+- `NO_CANDIDATE`: 940
+- `REFERENCE_CHANGED`: 1,781
+- `INTENT_CHANGED`: 112
+- `PRICE_CHANGED`: 1,549
+- `BRAND_CHANGED`: 602
+- `CURRENCY_CHANGED`: 880
+- `CURRENCY_AMBIGUOUS`: 1,272
+- `PRICE_PARSE_FAILED`: 345
 
 No rows in `public.watch_records` were modified. The purpose of this result is
 to prioritize parser fixes and human-review cohorts, not to auto-promote all
 changes. The first review found and corrected two parser hazards: Patek
 four-digit suffix references such as `5935A-001`, and six-digit asking prices
 such as `195000 USD` being misread as Rolex references.
+
+The final evaluated checkpoint is `normalization-v4-format-fix`, completed at
+`2026-07-13T14:43:45Z`. It also covers Cartier `WSSA` references, dotted
+Hublot references, literal Excel `_x000D_` separators, and English WTB header
+inheritance.
 
 Protected sample review confirms that the remaining `NO_CANDIDATE` cohort is
 mixed and must not be bulk-filled: it includes valid catalog-alias requests
