@@ -17,6 +17,19 @@ const assemblyStages = [
   { image: '/images/watch-build/04-finished.jpg', label: '04', title: 'Decision', detail: 'Evidence becomes a dated market observation.' },
 ];
 
+const brands = [
+  'Rolex',
+  'Patek Philippe',
+  'Audemars Piguet',
+  'Richard Mille',
+  'Vacheron Constantin',
+  'Cartier',
+  'Omega',
+  'Tudor',
+  'IWC',
+  'A. Lange & Sohne',
+];
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const assemblyRef = useRef<HTMLElement>(null);
@@ -94,6 +107,24 @@ export default function LandingPage() {
             <div className="py-4 sm:px-5 sm:py-0"><p className="text-[11px] uppercase tracking-[0.13em] text-[#d8bd80]">Evidence</p><p className="mt-2 text-sm leading-6 text-white/65">Source text and message time stay connected to each observation.</p></div>
             <div className="py-4 sm:px-5 sm:py-0"><p className="text-[11px] uppercase tracking-[0.13em] text-[#d8bd80]">Comparison</p><p className="mt-2 text-sm leading-6 text-white/65">Price signals are separated by reference, configuration, condition, and intent.</p></div>
             <div className="py-4 sm:px-5 sm:py-0"><p className="text-[11px] uppercase tracking-[0.13em] text-[#d8bd80]">Control</p><p className="mt-2 text-sm leading-6 text-white/65">Ambiguous listings move into review instead of becoming false certainty.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-white/10 bg-[#080808] px-5 py-9 sm:px-8 lg:px-12">
+        <div className="mx-auto max-w-[1440px]">
+          <div className="flex flex-col gap-2 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <h2 className="text-lg font-medium text-white">Market coverage</h2>
+            <p className="text-xs text-white/50">Brands observed across dealer-source records.</p>
+          </div>
+          <div className="grid grid-cols-2 border-l border-t border-white/10 sm:grid-cols-3 lg:grid-cols-5">
+            {brands.map((brand, index) => (
+              <div key={brand} className="flex min-h-24 items-end border-b border-r border-white/10 p-4 transition-colors hover:bg-white/[0.035] sm:min-h-28 sm:p-5">
+                <span className={`leading-none text-white/80 ${index === 1 || index === 4 || index === 9 ? 'font-serif text-lg sm:text-xl' : 'text-sm font-semibold uppercase tracking-[0.08em]'}`}>
+                  {brand}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
