@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, BarChart3, Building2, Search, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -7,8 +8,37 @@ const routes = [
   { icon: ShieldCheck, label: 'Dealer access', detail: 'Operations and review workspace', to: '/dashboard' },
 ];
 
+const assemblyStages = [
+  { image: '/images/watch-build/01-exploded.jpg', label: '01', title: 'Source', detail: 'Raw dealer messages remain intact.' },
+  { image: '/images/watch-build/02-components.jpg', label: '02', title: 'Structure', detail: 'Listings split into individual candidates.' },
+  { image: '/images/watch-build/03-resolved.jpg', label: '03', title: 'Reconcile', detail: 'Catalog, price, and context are compared.' },
+  { image: '/images/watch-build/04-finished.jpg', label: '04', title: 'Decision', detail: 'Evidence becomes a dated market observation.' },
+];
+
 export default function LandingPage() {
   const navigate = useNavigate();
+  const assemblyRef = useRef<HTMLElement>(null);
+  const [assemblyProgress, setAssemblyProgress] = useState(0);
+
+  useEffect(() => {
+    const updateProgress = () => {
+      const element = assemblyRef.current;
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      const scrollableDistance = Math.max(1, rect.height - window.innerHeight);
+      setAssemblyProgress(Math.min(1, Math.max(0, -rect.top / scrollableDistance)));
+    };
+
+    updateProgress();
+    window.addEventListener('scroll', updateProgress, { passive: true });
+    window.addEventListener('resize', updateProgress);
+    return () => {
+      window.removeEventListener('scroll', updateProgress);
+      window.removeEventListener('resize', updateProgress);
+    };
+  }, []);
+
+  const activeStage = Math.min(assemblyStages.length - 1, Math.round(assemblyProgress * (assemblyStages.length - 1)));
 
   return (
     <main className="min-h-screen bg-[#080808] text-white">
@@ -62,6 +92,50 @@ export default function LandingPage() {
             <div className="py-4 sm:px-5 sm:py-0"><p className="text-[11px] uppercase tracking-[0.13em] text-[#d8bd80]">Evidence</p><p className="mt-2 text-sm leading-6 text-white/65">Source text and message time stay connected to each observation.</p></div>
             <div className="py-4 sm:px-5 sm:py-0"><p className="text-[11px] uppercase tracking-[0.13em] text-[#d8bd80]">Comparison</p><p className="mt-2 text-sm leading-6 text-white/65">Price signals are separated by reference, configuration, condition, and intent.</p></div>
             <div className="py-4 sm:px-5 sm:py-0"><p className="text-[11px] uppercase tracking-[0.13em] text-[#d8bd80]">Control</p><p className="mt-2 text-sm leading-6 text-white/65">Ambiguous listings move into review instead of becoming false certainty.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section ref={assemblyRef} className="relative h-[320vh] bg-[#f6f5f1] text-[#141414]">
+        <div className="sticky top-0 flex h-[100svh] overflow-hidden">
+          <div className="relative flex w-full flex-col justify-between px-5 py-7 sm:px-8 sm:py-10 lg:w-[42%] lg:px-12 lg:py-14">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7b643a]">How evidence takes shape</p>
+              <h2 className="mt-4 max-w-md text-4xl font-semibold leading-[0.98] sm:text-5xl">Every signal earns its place.</h2>
+            </div>
+
+            <div className="relative z-10 max-w-sm border-l border-[#bca779] pl-4">
+              <div className="font-mono text-xs text-[#7b643a]">{assemblyStages[activeStage].label} / 04</div>
+              <h3 className="mt-2 text-2xl font-medium">{assemblyStages[activeStage].title}</h3>
+              <p className="mt-2 text-sm leading-6 text-black/60">{assemblyStages[activeStage].detail}</p>
+            </div>
+
+            <div className="flex gap-2" aria-label="Watch assembly progress">
+              {assemblyStages.map((stage, index) => (
+                <span key={stage.label} className={`h-1 flex-1 transition-colors ${index <= activeStage ? 'bg-[#8a7040]' : 'bg-black/15'}`} />
+              ))}
+            </div>
+          </div>
+
+          <div className="absolute inset-x-0 bottom-0 top-[42%] lg:inset-y-0 lg:left-[42%] lg:right-0">
+            {assemblyStages.map((stage, index) => {
+              const stageProgress = index / (assemblyStages.length - 1);
+              const distance = Math.abs(assemblyProgress - stageProgress);
+              const opacity = Math.max(0, 1 - distance * 3.1);
+              const translateY = (stageProgress - assemblyProgress) * 120;
+              const scale = 0.94 + Math.max(0, 0.06 - distance * 0.1);
+
+              return (
+                <img
+                  key={stage.image}
+                  src={stage.image}
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 h-full w-full object-cover object-center will-change-transform"
+                  style={{ opacity, transform: `translateY(${translateY}px) scale(${scale})` }}
+                />
+              );
+            })}
           </div>
         </div>
       </section>
