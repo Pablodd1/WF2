@@ -138,6 +138,25 @@ shadow-run token and do not expose this token to the browser.
 The audited decision endpoint changes only `normalization_shadow_v4.review_status`
 and inserts `normalization_review_decisions`; it does not mutate `watch_records`.
 
+### Controlled production validation - completed 2026-07-13
+
+The reviewer-decision migration was applied to the WatchFacts production
+Supabase project and a single catalog-confirmed proposal was approved through
+the production endpoint as a controlled validation. The proposal was:
+
+```text
+source_record_id: 043f88e0-26bf-4cff-a461-75f90687c047
+catalog match: exact enriched Patek Philippe 5396R
+```
+
+The endpoint returned `status: ok`, created audit record
+`d38ef243-d367-4c10-a1bc-434274d4b8be`, and set only the corresponding shadow
+row to `APPROVED`. A follow-up queue read confirmed that this record is no
+longer pending. No `watch_records` row was inserted, updated, or deleted.
+
+The one-time `REVIEW_OPERATOR_TOKEN` must now be removed from Vercel Production
+and the local temporary token file deleted before continuing with human review.
+
 Do not enable a repeating cron until shadow persistence succeeds and a bounded
 sample has been reviewed.
 
