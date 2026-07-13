@@ -22,7 +22,7 @@ interface ShadowStatus {
 }
 
 interface HomeCommandCenterProps {
-  workspaceRecords: number;
+  workspaceRecords?: number;
 }
 
 const formatNumber = (value?: number) => (value || 0).toLocaleString();
@@ -96,7 +96,7 @@ export function HomeCommandCenter({ workspaceRecords }: HomeCommandCenterProps) 
           </form>
         </div>
 
-        <div className="grid border-l border-t border-border-default md:grid-cols-2 xl:grid-cols-4">
+        <div className={`grid border-l border-t border-border-default md:grid-cols-2 ${workspaceRecords === undefined ? 'xl:grid-cols-3' : 'xl:grid-cols-4'}`}>
           <div className="min-h-36 border-b border-r border-border-default p-4">
             <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.1em] text-text-muted">
               Shadow normalization
@@ -124,11 +124,13 @@ export function HomeCommandCenter({ workspaceRecords }: HomeCommandCenterProps) 
             <p className="mt-3 text-xs text-text-secondary">Current dealer listings, filtered server-side.</p>
           </button>
 
-          <button onClick={() => navigate('/analytics')} className="min-h-36 border-b border-r border-border-default p-4 text-left transition-colors hover:bg-bg-card">
-            <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.1em] text-text-muted"><span>Workspace</span><Database size={15} className="text-teal" /></div>
-            <div className="mt-4 font-mono text-2xl font-semibold text-text-primary">{formatNumber(workspaceRecords)}</div>
-            <p className="mt-3 text-xs text-text-secondary">Loaded workspace records for operational analysis.</p>
-          </button>
+          {workspaceRecords !== undefined && (
+            <button onClick={() => navigate('/dashboard/legacy')} className="min-h-36 border-b border-r border-border-default p-4 text-left transition-colors hover:bg-bg-card">
+              <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.1em] text-text-muted"><span>Legacy workspace</span><Database size={15} className="text-teal" /></div>
+              <div className="mt-4 font-mono text-2xl font-semibold text-text-primary">{formatNumber(workspaceRecords)}</div>
+              <p className="mt-3 text-xs text-text-secondary">Cached historical records for exploratory analysis.</p>
+            </button>
+          )}
         </div>
 
         <div className="grid gap-2 pt-4 sm:grid-cols-3">
