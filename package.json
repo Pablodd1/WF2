@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:normalization": "node --test tests/normalization-v4.test.cjs tests/market-stats.test.cjs"
+    "test:normalization": "node --test tests/normalization-v4.test.cjs tests/market-stats.test.cjs tests/shadow-reprocess.test.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
