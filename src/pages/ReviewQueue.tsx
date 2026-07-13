@@ -43,6 +43,8 @@ interface ShadowProgress {
   pending: number;
   countsEstimated: boolean;
   lastUpdatedAt: string | null;
+  checkpointAgeSeconds?: number | null;
+  checkpointDelayed?: boolean;
 }
 
 export default function ReviewQueue() {
@@ -116,6 +118,8 @@ export default function ReviewQueue() {
             pending: Number(data.pending || 0),
             countsEstimated: Boolean(data.countsEstimated),
             lastUpdatedAt: data.lastUpdatedAt || null,
+            checkpointAgeSeconds: data.checkpointAgeSeconds,
+            checkpointDelayed: Boolean(data.checkpointDelayed),
           });
         }
       } catch {
@@ -248,6 +252,7 @@ export default function ReviewQueue() {
               <RefreshCw size={11} />
               {progress.lastUpdatedAt ? `Updated ${new Date(progress.lastUpdatedAt).toLocaleTimeString()}` : 'Waiting for first checkpoint'}
             </span>
+            {progress.checkpointDelayed && <span className="w-full text-warning">Checkpoint is delayed; planner estimates may continue changing while the worker is not advancing.</span>}
           </div>
         )}
 

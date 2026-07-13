@@ -19,6 +19,8 @@ interface ShadowStatus {
   pending?: number;
   lastUpdatedAt?: string | null;
   countsEstimated?: boolean;
+  checkpointAgeSeconds?: number | null;
+  checkpointDelayed?: boolean;
 }
 
 interface HomeCommandCenterProps {
@@ -65,6 +67,12 @@ export function HomeCommandCenter({ workspaceRecords }: HomeCommandCenterProps) 
     const cleanReference = reference.trim();
     if (cleanReference) navigate(`/price-research?ref=${encodeURIComponent(cleanReference)}`);
   };
+
+  const checkpointAge = status?.checkpointAgeSeconds === null || status?.checkpointAgeSeconds === undefined
+    ? null
+    : status.checkpointAgeSeconds < 60
+      ? `${status.checkpointAgeSeconds}s ago`
+      : `${Math.floor(status.checkpointAgeSeconds / 60)}m ago`;
 
   return (
     <section className="border-b border-border-default bg-bg-primary px-4 py-5 sm:px-5 lg:px-7">
@@ -119,6 +127,7 @@ export function HomeCommandCenter({ workspaceRecords }: HomeCommandCenterProps) 
                   ? `${formatNumber(status?.rowsAnalyzed)} checkpointed; total is being reconciled`
                   : `${formatNumber(status?.rowsAnalyzed)} analyzed of ${formatNumber(status?.total)}`}
             </p>
+            {status?.checkpointDelayed && <p className="mt-2 text-[11px] text-warning">Checkpoint delayed {checkpointAge}; inspect the worker.</p>}
           </div>
 
           <button onClick={() => navigate('/review-queue')} className="min-h-36 border-b border-r border-border-default p-4 text-left transition-colors hover:bg-bg-card">

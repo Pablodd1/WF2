@@ -58,6 +58,13 @@ module.exports = async function handler(req, res) {
     );
     const checkpoint = checkpoints?.[0] || null;
     const rowsAnalyzed = Number(checkpoint?.rows_analyzed || 0);
+    const checkpointAgeSeconds = checkpoint?.updated_at
+      ? Math.max(0, Math.round((Date.now() - new Date(checkpoint.updated_at).getTime()) / 1000))
+      : null;
+    // Batches normally write checkpoints frequently. This is a monitor only:
+    // it never stops or restarts a worker, but surfaces a delayed checkpoint
+    // before an operator assumes changing planner estimates mean active work.
+    const checkpointDelayed = checkpointAgeSeconds !== null && checkpointAgeSeconds > 20 * 60;
 
     const countResults = await Promise.allSettled([
       countRows(baseUrl, key, 'normalization_shadow_v4?select=source_record_id'),
@@ -82,6 +89,8 @@ module.exports = async function handler(req, res) {
       rowsAnalyzed,
       deduplicatedSourceRows: Math.max(0, rowsAnalyzed - total),
       lastUpdatedAt: checkpoint?.updated_at || null,
+      checkpointAgeSeconds,
+      checkpointDelayed,
       changed,
       pending,
       bundles,
