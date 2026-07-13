@@ -17,6 +17,9 @@ function analyzeRecord(record) {
       brand: candidate.context.brand_context || null,
       reference: candidate.reference || null,
       listing_type: candidate.context.intent_context || 'WTS',
+      condition: candidate.context.condition_context || null,
+      set_status: candidate.context.set_status_context || null,
+      listing_status: candidate.context.listing_status_context || null,
       price_raw: primary?.amount_original || null,
       price_usd: primary?.amount_usd || null,
       currency: primary?.currency_original || null,
@@ -25,17 +28,26 @@ function analyzeRecord(record) {
     };
   });
 
-  const flags = [];
-  if (proposed.length === 0) flags.push('NO_CANDIDATE');
-  if (proposed.length > 1) flags.push('BUNDLE_SPLIT_REQUIRED');
+  const flags = new Set();
+  if (proposed.length === 0) flags.add('NO_CANDIDATE');
+  if (proposed.length > 1) flags.add('BUNDLE_SPLIT_REQUIRED');
   if (proposed.length === 1) {
     const next = proposed[0];
-    if (next.brand && normalizeText(next.brand) !== normalizeText(record.brand)) flags.push('BRAND_CHANGED');
-    if (next.reference && normalizeText(next.reference) !== normalizeText(record.reference)) flags.push('REFERENCE_CHANGED');
-    if (next.currency && normalizeText(next.currency) !== normalizeText(record.currency)) flags.push('CURRENCY_CHANGED');
-    if (next.listing_type && normalizeText(next.listing_type) !== normalizeText(record.listing_type)) flags.push('INTENT_CHANGED');
-    if (next.price_raw && Number(next.price_raw) !== Number(record.price_raw || 0)) flags.push('PRICE_CHANGED');
+    if (next.brand && normalizeText(next.brand) !== normalizeText(record.brand)) flags.add('BRAND_CHANGED');
+    if (next.reference && normalizeText(next.reference) !== normalizeText(record.reference)) flags.add('REFERENCE_CHANGED');
+    if (next.currency && normalizeText(next.currency) !== normalizeText(record.currency)) flags.add('CURRENCY_CHANGED');
+    if (next.listing_type && normalizeText(next.listing_type) !== normalizeText(record.listing_type)) flags.add('INTENT_CHANGED');
+    if (next.price_raw && Number(next.price_raw) !== Number(record.price_raw || 0)) flags.add('PRICE_CHANGED');
+
+    // A bare dollar amount without message or section currency context is not
+    // safe to preserve as USD. Keep it out of automatic approval even when an
+    // older parser already supplied a numeric price or currency.
+    if (!next.price_raw && /\$\s*\d/.test(next.raw_line) && !/(?:US\$|U\$|HK\$)/i.test(next.raw_line)) {
+      flags.add('CURRENCY_AMBIGUOUS');
+    }
+    if (!next.price_raw && record.price_raw != null) flags.add('PRICE_PARSE_FAILED');
   }
+  const changeFlags = [...flags];
 
   return {
     source_record_id: record.id,
@@ -49,8 +61,8 @@ function analyzeRecord(record) {
     source_listing_type: record.listing_type || null,
     candidate_count: proposed.length,
     proposed_candidates: proposed,
-    change_flags: flags,
-    review_status: flags.length ? 'PENDING' : 'NO_CHANGE',
+    change_flags: changeFlags,
+    review_status: changeFlags.length ? 'PENDING' : 'NO_CHANGE',
     analyzed_at: new Date().toISOString(),
   };
 }

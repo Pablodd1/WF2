@@ -28,3 +28,18 @@ test('flags brand and reference corrections in shadow output', () => {
   assert.equal(result.proposed_candidates[0].brand, 'Vacheron Constantin');
 });
 
+test('routes ambiguous bare-dollar prices to shadow review instead of retaining USD', () => {
+  const result = analyzeRecord({
+    id: 'source-3',
+    raw_message: '126500LN White $283000',
+    brand: 'Rolex',
+    reference: '126500LN',
+    currency: 'USD',
+    price_raw: 283000,
+    listing_type: 'WTS',
+  });
+  assert.ok(result.change_flags.includes('CURRENCY_AMBIGUOUS'));
+  assert.ok(result.change_flags.includes('PRICE_PARSE_FAILED'));
+  assert.equal(result.review_status, 'PENDING');
+});
+

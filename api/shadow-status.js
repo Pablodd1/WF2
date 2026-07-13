@@ -28,6 +28,8 @@ module.exports = async function handler(req, res) {
       'PRICE_CHANGED',
       'BRAND_CHANGED',
       'CURRENCY_CHANGED',
+      'CURRENCY_AMBIGUOUS',
+      'PRICE_PARSE_FAILED',
     ];
     const [total, changed, pending, bundles, ...flagValues] = await Promise.all([
       countRows(baseUrl, key, 'normalization_shadow_v4?select=source_record_id'),
