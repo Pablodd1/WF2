@@ -137,6 +137,24 @@ test('keeps a bare six-digit reference when the following price uses a separate 
   assert.deepEqual(candidates[0].prices, []);
 });
 
+test('recognizes Cartier and dotted Hublot reference formats', () => {
+  const candidates = segmentDealerMessage(`
+WTB WSSA0039 FULL SET 2026 ONLY UNDER 8k
+485.ES.5171.RX.1204 - HKD 135300 - New 2025
+  `);
+  assert.deepEqual(candidates.map(candidate => candidate.reference), ['WSSA0039', '485.ES.5171.RX.1204']);
+  assert.deepEqual(candidates.map(candidate => candidate.context.brand_context), ['Cartier', 'Hublot']);
+  assert.equal(candidates[0].context.intent_context, 'WTB');
+});
+
+test('normalizes literal Excel carriage-return markers before segmenting references', () => {
+  const candidates = segmentDealerMessage('Looking for stock_x000D_5968R_x000D_Need fresh date 2025+');
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].reference, '5968R');
+  assert.equal(candidates[0].context.brand_context, 'Patek Philippe');
+  assert.equal(candidates[0].context.intent_context, 'WTB');
+});
+
 test('classifies Chinese WTB messages and inherited request context', () => {
   const direct = segmentDealerMessage('\u6c42\u8d2d 126500LN White HKD 280k');
   const inherited = segmentDealerMessage('\u6c42\u8cfc\n126610LN Black $114000');

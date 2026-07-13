@@ -155,9 +155,11 @@ function inferBrandFromReference(reference) {
   if (/^RM\s*\d/.test(ref)) return 'Richard Mille';
   if (/^(?:15|26|67|77)\d{3}[A-Z]{2}(?:\.|$)/.test(ref)) return 'Audemars Piguet';
   if (/^[245678]\d{3}[VH]\//.test(ref)) return 'Vacheron Constantin';
+  if (/^WSSA\d{4}$/.test(ref)) return 'Cartier';
+  if (/^\d{3}\.[A-Z]{2}\.\d{4}\.[A-Z]{2}\.\d{4}$/.test(ref)) return 'Hublot';
   if (/^PAM\d/.test(ref)) return 'Panerai';
   if (/^\d{6}[A-Z]{0,5}$/.test(ref)) return 'Rolex';
-  if (/^[34567]\d{3}(?:\/\d[A-Z0-9]*)?(?:-\d{3})?$/.test(ref)) return 'Patek Philippe';
+  if (/^[34567]\d{3}[A-Z]?(?:\/\d[A-Z0-9]*)?(?:-\d{3})?$/.test(ref)) return 'Patek Philippe';
   return null;
 }
 
@@ -179,6 +181,8 @@ function extractReference(line) {
     /\b(RM\s*\d{2,3}(?:-\d{2})?(?:\s*[A-Z0-9]+)?)\b/i,
     /\b((?:15|26|67|77)\d{3}[A-Z]{2}(?:\.[A-Z0-9.]+)?)\b/i,
     /\b([245678]\d{3}[VH]\/[A-Z0-9-]+)\b/i,
+    /\b(WSSA\d{4})\b/i,
+    /\b(\d{3}\.[A-Z]{2}\.\d{4}\.[A-Z]{2}\.\d{4})\b/i,
     /\b(\d{4}\/\d[A-Z0-9-]*)\b/i,
     /\b([345678]\d{3}[A-Z](?:-\d{3})?)\b/i,
     /\b(PAM\s*\d{3,5})\b/i,
@@ -206,7 +210,7 @@ function looksLikeHeader(line, reference) {
     Boolean(detectBrandHeader(text))
     || /\b(?:brand\s+new|new|used|coming\s+stock|without\s+box|watch\s+only|full\s+set|only\s+watch\s+and\s+card)\b/i.test(text)
     || /\b(?:HKD|USD|USDT|HK\$)\b|\u6e2f\u5e01|\u6e2f\u5e63/i.test(text)
-    || /(?:\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)|^\u6536[\uff1a:\s]/.test(text)
+    || /(?:\bWTB\b|want\s+to\s+buy|looking\s+for|seeking|wanted|\bLF\b|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)|^\u6536[\uff1a:\s]/i.test(text)
   );
 }
 
@@ -235,7 +239,11 @@ function inferIntent(line, inherited = null) {
 function segmentDealerMessage(rawMessage) {
   const candidates = [];
   let context = {};
-  const lines = String(rawMessage || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const lines = String(rawMessage || '')
+    .replace(/_x000D_/gi, '\n')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
 
   for (const line of lines) {
     const reference = extractReference(line);
