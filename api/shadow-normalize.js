@@ -48,6 +48,8 @@ module.exports = async function handler(req, res) {
   const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!baseUrl || !key) return res.status(503).json({ error: 'Supabase server configuration missing' });
   const jobName = getJobName(req, operatorAuthorized);
+  const leaseHolder = `vercel:${process.env.VERCEL_DEPLOYMENT_ID || 'deployment'}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  let leaseAcquired = false;
 
   try {
     let schemaReady = true;
@@ -57,8 +59,21 @@ module.exports = async function handler(req, res) {
       await rest(baseUrl, key, 'normalization_shadow_checkpoints?select=job_name&limit=1');
     } catch (error) {
       schemaReady = false;
-      console.warn('[shadow-normalize] shadow schema unavailable; running read-only sample', error.message);
+      console.warn('[shadow-normalize] shadow schema unavailable', error.message);
     }
+    if (!schemaReady) return res.status(503).json({ error: 'Shadow schema migration missing' });
+
+    const acquired = await rest(baseUrl, key, 'rpc/acquire_normalization_worker_lease', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_job_name: jobName,
+        p_holder: leaseHolder,
+        p_lease_seconds: 240,
+      }),
+    });
+    if (!acquired) return res.status(202).json({ status: 'skipped', reason: 'worker_lease_busy', jobName });
+    leaseAcquired = true;
+
     const checkpoints = schemaReady
       ? await rest(
         baseUrl,
@@ -84,20 +99,6 @@ module.exports = async function handler(req, res) {
 
     const shadowRows = records.map(analyzeRecord);
     const lastId = records[records.length - 1].id;
-    if (!schemaReady) {
-      const flagCounts = {};
-      for (const row of shadowRows) {
-        for (const flag of row.change_flags) flagCounts[flag] = (flagCounts[flag] || 0) + 1;
-      }
-      return res.status(200).json({
-        status: 'dry_run_only',
-        batch: records.length,
-        changed: shadowRows.filter(row => row.change_flags.length > 0).length,
-        flagCounts,
-        nextAfter: lastId,
-        persisted: false,
-      });
-    }
     await rest(baseUrl, key, 'normalization_shadow_v4?on_conflict=source_record_id', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
@@ -120,5 +121,16 @@ module.exports = async function handler(req, res) {
   } catch (error) {
     console.error('[shadow-normalize]', error);
     return res.status(500).json({ error: 'Shadow normalization failed' });
+  } finally {
+    if (leaseAcquired) {
+      try {
+        await rest(baseUrl, key, 'rpc/release_normalization_worker_lease', {
+          method: 'POST',
+          body: JSON.stringify({ p_job_name: jobName, p_holder: leaseHolder }),
+        });
+      } catch (error) {
+        console.error('[shadow-normalize] failed to release lease', error);
+      }
+    }
   }
 };
