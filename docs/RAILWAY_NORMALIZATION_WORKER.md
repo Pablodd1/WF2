@@ -50,5 +50,5 @@ increase `SHADOW_BATCH_SIZE` to `2000`, then separately increase
 `SHADOW_ROWS_PER_LEASE` to `20000`. Keep exactly one replica and preserve the
 lease migration.
 
-Once the worker is advancing reliably, remove the Vercel shadow-normalize cron
-from `vercel.json` in a separate deployment. Never run both without the lease.
+The Vercel shadow-normalize cron is removed once Railway has shown stable lease
+cycles. Never run both without the lease.
