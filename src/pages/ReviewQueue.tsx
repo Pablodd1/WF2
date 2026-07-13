@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import {
-  CheckCircle2, XCircle, AlertTriangle, Eye, ArrowRight,
-  Filter, Search, Clock, User, MessageSquare, Shield
+  CheckCircle2, AlertTriangle, Eye,
+  Search, Clock, MessageSquare, Shield
 } from 'lucide-react';
 
 interface ReviewItem {
@@ -21,6 +21,8 @@ interface ReviewItem {
   submittedAt: string;
   imageUrl?: string;
   listingTitle: string;
+  reviewReasons: string[];
+  disposition: 'HUMAN_REVIEW' | 'READY_FOR_HUMAN_APPROVAL' | 'CATALOG_CONFIRMATION_REQUIRED';
 }
 
 export default function ReviewQueue() {
@@ -28,60 +30,46 @@ export default function ReviewQueue() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ReviewItem | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Load flagged items (confidence < 80%)
+  // The queue is read-only: a later audited endpoint will handle reviewer
+  // decisions. Do not let a client-side click mutate market records.
   useEffect(() => {
-    // In production, fetch from API
-    // For demo, generate sample data
-    const sample: ReviewItem[] = [
-      {
-        id: 'rev-001',
-        reference: '52506',
-        brand: 'Rolex',
-        model: '1908',
-        dial: 'Ice Blue',
-        price: 49000,
-        currency: 'USDT',
-        confidence: 60,
-        aiFields: ['price', 'currency', 'year', 'condition'],
-        catalogFields: ['reference', 'dial', 'boxPapers'],
-        status: 'pending',
-        submittedAt: '2026-06-23T10:00:00Z',
-        imageUrl: 'https://ebmluxetime.com/products/rolex-1908-39mm-ice-blue-dial-divided-bezel-leather-strap-52506-2024-model',
-        listingTitle: '*Rolex Perpetual 1908* Platinum 39MM Reference 52506 Fresh Date Full Set $49,000 USDT',
-      },
-      {
-        id: 'rev-002',
-        reference: '126500LN',
-        brand: 'Rolex',
-        model: 'Daytona',
-        dial: 'White',
-        price: 38500,
-        currency: 'USD',
-        confidence: 70,
-        aiFields: ['price', 'condition'],
-        catalogFields: ['reference', 'dial', 'brand'],
-        status: 'pending',
-        submittedAt: '2026-06-23T09:30:00Z',
-        listingTitle: 'Rolex Daytona 126500LN White Dial 2024 Full Set',
-      },
-      {
-        id: 'rev-003',
-        reference: '5711/1A',
-        brand: 'Patek Philippe',
-        model: 'Nautilus',
-        dial: 'Blue',
-        price: 185000,
-        currency: 'USD',
-        confidence: 50,
-        aiFields: ['price', 'currency', 'year', 'condition', 'boxPapers'],
-        catalogFields: ['reference'],
-        status: 'pending',
-        submittedAt: '2026-06-23T08:15:00Z',
-        listingTitle: 'Patek 5711/1A Blue Dial 2018 Full Set $185k',
-      },
-    ];
-    setItems(sample);
+    let active = true;
+    fetch('/api/shadow-review-queue?limit=100')
+      .then(async response => {
+        if (!response.ok) throw new Error('Review queue is unavailable');
+        return response.json();
+      })
+      .then(data => {
+        if (!active) return;
+        setItems((data.items || []).map((item: any): ReviewItem => {
+          const candidate = item.candidate || {};
+          const catalog = item.decision?.catalog || {};
+          const ready = item.decision?.disposition === 'READY_FOR_HUMAN_APPROVAL';
+          return {
+            id: item.id,
+            reference: candidate.reference || item.source?.reference || 'Unresolved',
+            brand: candidate.brand || item.source?.brand || 'Unknown',
+            model: catalog.model || catalog.collection || 'Catalog review',
+            dial: 'Unverified',
+            price: candidate.price_usd || candidate.price_raw || 0,
+            currency: candidate.currency || item.source?.currency || 'Unknown',
+            confidence: ready ? 95 : item.changeFlags?.includes('CURRENCY_AMBIGUOUS') ? 40 : 65,
+            aiFields: item.changeFlags || [],
+            catalogFields: catalog.reference ? ['reference', 'brand'] : [],
+            status: 'pending',
+            submittedAt: item.analyzedAt,
+            listingTitle: candidate.raw_line || 'No deterministic candidate extracted',
+            reviewReasons: item.decision?.reasons || [],
+            disposition: item.decision?.disposition || 'HUMAN_REVIEW',
+          };
+        }));
+      })
+      .catch(error => {
+        if (active) setLoadError(error instanceof Error ? error.message : 'Review queue is unavailable');
+      });
+    return () => { active = false; };
   }, []);
 
   const filtered = items.filter(item => {
@@ -90,18 +78,6 @@ export default function ReviewQueue() {
         !item.brand.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
-
-  const handleApprove = (id: string) => {
-    setItems(prev => prev.map(item => 
-      item.id === id ? { ...item, status: 'approved' as const } : item
-    ));
-  };
-
-  const handleReject = (id: string) => {
-    setItems(prev => prev.map(item => 
-      item.id === id ? { ...item, status: 'rejected' as const } : item
-    ));
-  };
 
   const getConfidenceColor = (score: number) => {
     if (score >= 90) return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
@@ -126,8 +102,9 @@ export default function ReviewQueue() {
             Human Review Queue
           </h1>
           <p className="text-sm text-text-muted mt-1">
-            Review and approve flagged listings. Accuracy is critical.
+            Catalog-confirmed candidates are ready for human approval; other rows remain blocked for review.
           </p>
+          {loadError && <p className="text-xs text-red-400 mt-2">{loadError}</p>}
         </div>
 
         {/* Stats */}
@@ -202,6 +179,13 @@ export default function ReviewQueue() {
                     }`}>
                       {item.status}
                     </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      item.disposition === 'READY_FOR_HUMAN_APPROVAL'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-amber-500/20 text-amber-400'
+                    }`}>
+                      {item.disposition === 'READY_FOR_HUMAN_APPROVAL' ? 'catalog confirmed' : 'review blocked'}
+                    </span>
                   </div>
                   <p className="text-xs text-text-secondary truncate">{item.listingTitle}</p>
                   <div className="flex items-center gap-4 mt-2">
@@ -226,22 +210,6 @@ export default function ReviewQueue() {
                   >
                     <Eye size={14} className="text-text-muted" />
                   </button>
-                  {item.status === 'pending' && (
-                    <>
-                      <button
-                        onClick={() => handleApprove(item.id)}
-                        className="p-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors"
-                      >
-                        <CheckCircle2 size={14} className="text-emerald-400" />
-                      </button>
-                      <button
-                        onClick={() => handleReject(item.id)}
-                        className="p-2 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-colors"
-                      >
-                        <XCircle size={14} className="text-red-400" />
-                      </button>
-                    </>
-                  )}
                 </div>
               </div>
 
@@ -276,11 +244,7 @@ export default function ReviewQueue() {
                   </div>
                   <div className="mt-4 flex items-center gap-2">
                     <MessageSquare size={12} className="text-text-muted" />
-                    <input
-                      type="text"
-                      placeholder="Add review note..."
-                      className="flex-1 bg-transparent border-none outline-none text-xs text-text-primary"
-                    />
+                    <span className="text-xs text-text-muted">Review reasons: {item.reviewReasons.join(', ') || 'Manual verification required'}</span>
                   </div>
                 </div>
               )}
