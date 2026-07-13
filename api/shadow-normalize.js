@@ -17,7 +17,7 @@ async function ensureShadowSchema() {
     poolerUrl.hostname = `aws-0-${region}.pooler.supabase.com`;
     poolerUrl.port = '6543';
     poolerUrl.username = `postgres.${projectRef}`;
-    poolerUrl.searchParams.set('sslmode', 'require');
+    poolerUrl.search = '';
     candidates.push(poolerUrl.toString());
   }
 
