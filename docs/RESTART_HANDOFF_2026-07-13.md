@@ -36,6 +36,11 @@ Apply this additive migration in the production Supabase SQL Editor:
 
 `supabase/migrations/20260713003000_normalization_shadow_v4.sql`
 
+The repository also contains the idempotent, new-timestamp retry migration
+`supabase/migrations/20260713012000_apply_normalization_shadow_v4.sql`. It is
+for Supabase Git integration, which deploys only new migration files from
+`main` when its Deploy to production setting is enabled.
+
 The configured production `DATABASE_URL` is malformed for direct Postgres use:
 its host resolves as `base`. The shadow worker no longer depends on it and no
 longer runs DDL from Vercel. Do not restore automatic DDL. Apply the checked-in

@@ -29,6 +29,10 @@ Last updated: 2026-07-13
   connection string (its host resolves as `base`). Shadow processing no longer
   depends on it. Apply the checked-in additive migration through Supabase, then
   repair or remove that obsolete variable separately.
+- `20260713012000_apply_normalization_shadow_v4.sql` is an idempotent,
+  new-timestamp deployment retry for the same schema. It lets Supabase Git
+  integration apply the shadow tables from `main` when Deploy to production is
+  enabled. It never changes `watch_records`.
 - Price Research smoke testing for Rolex 126610LN returned a robust cohort and
   excluded 108 extreme observations, confirming that legacy price contamination
   remains visible but separated from included statistics.
