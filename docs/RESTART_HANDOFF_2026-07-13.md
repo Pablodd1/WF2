@@ -37,9 +37,24 @@ Apply this additive migration in the production Supabase SQL Editor:
 `supabase/migrations/20260713003000_normalization_shadow_v4.sql`
 
 The repository also contains the idempotent, new-timestamp retry migration
-`supabase/migrations/20260713012000_apply_normalization_shadow_v4.sql`. It is
-for Supabase Git integration, which deploys only new migration files from
-`main` when its Deploy to production setting is enabled.
+`supabase/migrations/20260713012000_apply_normalization_shadow_v4.sql`.
+
+## 2026-07-13 recovery update
+
+- The production Supabase project has **no GitHub integration**. Pushing new
+  migration files to `main` does not apply them to production.
+- The current production `DATABASE_URL` is malformed (its host resolves as
+  `base`), so it cannot be used as a direct migration connection.
+- The authenticated Supabase dashboard is the available execution path. Run
+  either shadow migration in its SQL Editor; both are additive and idempotent.
+- After a successful SQL Editor run, verify:
+
+  ```text
+  https://watchfacts-poc.vercel.app/api/shadow-status
+  ```
+
+  It must return `status: "ok"` before creating a temporary trigger token or
+  invoking the persisted shadow worker.
 
 The configured production `DATABASE_URL` is malformed for direct Postgres use:
 its host resolves as `base`. The shadow worker no longer depends on it and no

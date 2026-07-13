@@ -33,6 +33,8 @@ Last updated: 2026-07-13
   new-timestamp deployment retry for the same schema. It lets Supabase Git
   integration apply the shadow tables from `main` when Deploy to production is
   enabled. It never changes `watch_records`.
+- Confirmed 2026-07-13: this project currently has no GitHub integration, so
+  use the production Supabase SQL Editor to apply either idempotent migration.
 - Price Research smoke testing for Rolex 126610LN returned a robust cohort and
   excluded 108 extreme observations, confirming that legacy price contamination
   remains visible but separated from included statistics.
