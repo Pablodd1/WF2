@@ -13,6 +13,17 @@ async function countRows(baseUrl, key, query) {
   return Number.parseInt((response.headers.get('content-range') || '').split('/')[1] || '0', 10) || 0;
 }
 
+async function fetchRows(baseUrl, key, query) {
+  const response = await fetch(`${baseUrl}/rest/v1/${query}`, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+    },
+  });
+  if (!response.ok) throw new Error(`Supabase returned ${response.status}`);
+  return response.json();
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   const baseUrl = process.env.SUPABASE_URL;
@@ -43,9 +54,19 @@ module.exports = async function handler(req, res) {
       )),
     ]);
     const flagCounts = Object.fromEntries(flags.map((flag, index) => [flag, flagValues[index]]));
+    const checkpoints = await fetchRows(
+      baseUrl,
+      key,
+      'normalization_shadow_checkpoints?job_name=eq.normalization-v4-production&select=rows_analyzed,updated_at&limit=1',
+    );
+    const checkpoint = checkpoints?.[0] || null;
+    const rowsAnalyzed = Number(checkpoint?.rows_analyzed || 0);
     return res.status(200).json({
       status: 'ok',
       total,
+      rowsAnalyzed,
+      deduplicatedSourceRows: Math.max(0, rowsAnalyzed - total),
+      lastUpdatedAt: checkpoint?.updated_at || null,
       changed,
       pending,
       bundles,
