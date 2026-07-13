@@ -8,12 +8,37 @@ const BATCH_SIZE = 200;
 
 async function ensureShadowSchema() {
   if (!process.env.DATABASE_URL) return;
-  const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 10000,
-  });
-  await client.connect();
+  const directUrl = new URL(process.env.DATABASE_URL);
+  const projectRef = directUrl.hostname.match(/^db\.([a-z0-9]+)\.supabase\.co$/)?.[1];
+  const candidates = [directUrl.toString()];
+  for (const region of ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2']) {
+    if (!projectRef) break;
+    const poolerUrl = new URL(directUrl.toString());
+    poolerUrl.hostname = `aws-0-${region}.pooler.supabase.com`;
+    poolerUrl.port = '6543';
+    poolerUrl.username = `postgres.${projectRef}`;
+    poolerUrl.searchParams.set('sslmode', 'require');
+    candidates.push(poolerUrl.toString());
+  }
+
+  let client;
+  let lastError;
+  for (const connectionString of candidates) {
+    const candidate = new Client({
+      connectionString,
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 4000,
+    });
+    try {
+      await candidate.connect();
+      client = candidate;
+      break;
+    } catch (error) {
+      lastError = error;
+      await candidate.end().catch(() => {});
+    }
+  }
+  if (!client) throw lastError || new Error('No Supabase database connection available');
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.normalization_shadow_v4 (
