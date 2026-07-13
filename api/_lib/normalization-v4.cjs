@@ -183,7 +183,7 @@ function looksLikeHeader(line, reference) {
   return text.length < 100 && (
     Boolean(detectBrandHeader(text))
     || /\b(?:brand\s+new|new|used|coming\s+stock|without\s+box|watch\s+only|full\s+set|only\s+watch\s+and\s+card)\b/i.test(text)
-    || /\b(?:HKD|USD|USDT|HK\$)\b/i.test(text)
+    || /\b(?:HKD|USD|USDT|HK\$)\b|\u6e2f\u5e01|\u6e2f\u5e63/i.test(text)
   );
 }
 

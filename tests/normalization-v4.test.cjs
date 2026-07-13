@@ -38,6 +38,14 @@ test('parses Chinese HKD labels and ten-thousand multipliers without a USD fallb
   assert.equal(prices[0].currency_evidence, 'explicit_line_currency');
 });
 
+test('inherits Chinese HKD section context for bare dollar prices', () => {
+  const candidates = segmentDealerMessage('\u6e2f\u5e01\n126500 White N5/26 $283000');
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].context.currency_context, 'HKD');
+  assert.equal(candidates[0].prices[0].currency_original, 'HKD');
+  assert.equal(candidates[0].prices[0].amount_original, 283_000);
+});
+
 test('preserves explicit HKD and USD equivalents', () => {
   const prices = extractPriceObservations('105,000HK$/13,500US$');
   assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original]), [
