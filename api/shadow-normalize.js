@@ -136,7 +136,9 @@ module.exports = async function handler(req, res) {
       order: 'id.asc',
       limit: String(BATCH_SIZE),
     });
-    if (checkpoint.last_source_record_id) params.set('id', `gt.${checkpoint.last_source_record_id}`);
+    const requestedAfter = operatorAuthorized ? String(req.query?.after || '').trim() : '';
+    const afterId = requestedAfter || checkpoint.last_source_record_id;
+    if (afterId) params.set('id', `gt.${afterId}`);
 
     const records = await rest(baseUrl, key, `watch_records?${params.toString()}`);
     if (!records?.length) {
@@ -155,6 +157,7 @@ module.exports = async function handler(req, res) {
         batch: records.length,
         changed: shadowRows.filter(row => row.change_flags.length > 0).length,
         flagCounts,
+        nextAfter: lastId,
         persisted: false,
       });
     }
