@@ -35,3 +35,4 @@ package-lock.json
 public/watchfacts-export.json
 public/watchfacts-export.csv
 .env*
+.shadow-trigger-token

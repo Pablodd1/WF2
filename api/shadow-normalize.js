@@ -76,7 +76,10 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret || req.headers.authorization !== `Bearer ${cronSecret}`) {
+  const runToken = process.env.SHADOW_RUN_TOKEN;
+  const cronAuthorized = Boolean(cronSecret) && req.headers.authorization === `Bearer ${cronSecret}`;
+  const operatorAuthorized = Boolean(runToken) && req.headers['x-shadow-token'] === runToken;
+  if (!cronAuthorized && !operatorAuthorized) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
