@@ -13,6 +13,8 @@ interface RowData {
   source: string;
   year: number | null;
   is_outlier: boolean;
+  stored_price_usd?: number;
+  price_normalization?: string | null;
   outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' | null;
 }
 
@@ -51,6 +53,10 @@ interface PriceData {
     unknown_count: number;
     completeness_percent: number;
     status: 'complete' | 'incomplete';
+  };
+  currency_data_quality?: {
+    corrected_count: number;
+    status: 'corrected_for_analytics' | 'as_stored';
   };
   totalListings: number;
   sampledListings: number;
@@ -369,6 +375,11 @@ export default function PriceResearch() {
                   <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6, lineHeight: 1.4 }}>
                     Dial data {data.dial_data_quality.completeness_percent}% complete.{' '}
                     {data.dial_data_quality.unknown_count.toLocaleString()} listing observations remain unspecified and are being normalized.
+                  </div>
+                )}
+                {data.currency_data_quality && data.currency_data_quality.corrected_count > 0 && (
+                  <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6, lineHeight: 1.4 }}>
+                    {data.currency_data_quality.corrected_count.toLocaleString()} explicit currency mismatch{data.currency_data_quality.corrected_count === 1 ? '' : 'es'} corrected for analytics; stored values remain auditable.
                   </div>
                 )}
                 {data.sampleCapped && (

@@ -8,6 +8,7 @@ const { getClient } = require('./_lib/supabase');
 const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
 const { lookupCatalog } = require('./_lib/catalog');
 const { buildComparableCohorts, classifyPrice, summarizePrices } = require('./_lib/market-stats.cjs');
+const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -123,7 +124,7 @@ module.exports = async function handler(req, res) {
     // reference does not produce a chart made only from its newest day.
     const pageSize = 1000;
     const sampleLimit = 5000;
-    const columns = 'price_usd, created_at, listing_date, condition, source, dial_color, year, listing_type';
+    const columns = 'id,price_raw,price_usd,currency,raw_message,created_at,listing_date,condition,source,dial_color,year,listing_type';
     const buildRowsQuery = (from, to) => client
       .from('watch_records')
       .select(columns)
@@ -166,7 +167,13 @@ module.exports = async function handler(req, res) {
     // Exclude synthetic/test sources. mysql_auction_watches is historical market
     // evidence and must not be discarded from analytics.
     const excludedSources = new Set(['bulk_test_100', 'test_run', 'mysql_market_refs']);
-    const marketRows = rows.filter(r => !excludedSources.has(r.source));
+    const marketRows = rows
+      .filter(r => !excludedSources.has(r.source))
+      .map(row => {
+        const normalized = normalizeMarketRow(row, targetRef);
+        return { ...normalized, stored_price_usd: row.price_usd, price_usd: normalized.analytics_price_usd };
+      });
+    const currencyCorrections = marketRows.filter(row => row.price_normalization).length;
     const isUnknownDial = value => {
       const normalized = String(value || '').trim().toUpperCase();
       return !normalized || ['UNKNOWN', 'UNSPECIFIED', 'N/A', 'NA', 'NONE', 'NULL', '-'].includes(normalized);
@@ -185,7 +192,14 @@ module.exports = async function handler(req, res) {
     // A deterministic safety floor runs before IQR. Otherwise a malformed low-
     // price cluster can make the IQR lower fence negative and contaminate every
     // market statistic. Catalog-relative bands are the next refinement.
-    const marketPriceFloorUsd = 1000;
+    const preliminaryPrices = listedRows
+      .map(row => Number(row.price_usd))
+      .filter(value => Number.isFinite(value) && value > 0)
+      .sort((a, b) => a - b);
+    const preliminaryMedian = preliminaryPrices.length
+      ? preliminaryPrices[Math.floor(preliminaryPrices.length / 2)]
+      : 0;
+    const marketPriceFloorUsd = Math.max(1000, Math.round(preliminaryMedian * 0.1));
     const validPriceRows = listedRows.filter(r => Number.isFinite(Number(r.price_usd)) && Number(r.price_usd) > 0);
     const rawPrices = validPriceRows
       .filter(r => Number(r.price_usd) >= marketPriceFloorUsd)
@@ -250,6 +264,10 @@ module.exports = async function handler(req, res) {
           : 0,
         status: unknownDialCount === 0 ? 'complete' : 'incomplete',
       },
+      currency_data_quality: {
+        corrected_count: currencyCorrections,
+        status: currencyCorrections ? 'corrected_for_analytics' : 'as_stored',
+      },
       totalListings,
       listing_count: marketRows.length,
       sampledListings: rows.length,
@@ -262,6 +280,7 @@ module.exports = async function handler(req, res) {
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year, is_outlier: true, outlier_reason: r.outlier_reason,
+        stored_price_usd: r.stored_price_usd, price_normalization: r.price_normalization,
       })),
       analytics_ready: summary.analytics_ready,
       sample_quality: summary.sample_quality,
@@ -292,6 +311,7 @@ module.exports = async function handler(req, res) {
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year,
+        stored_price_usd: r.stored_price_usd, price_normalization: r.price_normalization,
         is_outlier: r.is_outlier, outlier_reason: r.outlier_reason,
       })),
     });
