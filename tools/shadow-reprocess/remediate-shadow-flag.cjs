@@ -17,6 +17,7 @@ const flag = String(process.env.REMEDIATION_FLAG || 'PRICE_PARSE_FAILED').trim()
 const batchSize = Math.max(25, Math.min(Number(process.env.REMEDIATION_BATCH_SIZE || 250), 1000));
 const maxRows = Math.max(1, Math.min(Number(process.env.REMEDIATION_MAX_ROWS || 1000), 100000));
 const dryRun = String(process.env.DRY_RUN || 'true').toLowerCase() !== 'false';
+const sourceLookupChunkSize = 100;
 
 if (!baseUrl || !key) throw new Error('SUPABASE_URL and a server key are required');
 if (!ALLOWED_FLAGS.has(flag)) throw new Error(`Unsupported REMEDIATION_FLAG: ${flag}`);
@@ -41,6 +42,25 @@ function sourceIdFilter(ids) {
   return `in.(${ids.map(id => String(id).replace(/[,()]/g, '')).join(',')})`;
 }
 
+function chunk(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function fetchSourceRecords(sourceIds) {
+  const recordGroups = await Promise.all(chunk(sourceIds, sourceLookupChunkSize).map(async ids => {
+    const recordParams = new URLSearchParams({
+      select: 'id,raw_message,brand,reference,price_raw,price_usd,currency,listing_type,parser_version',
+      id: sourceIdFilter(ids),
+    });
+    return rest(`watch_records?${recordParams.toString()}`);
+  }));
+  return recordGroups.flat();
+}
+
 async function run() {
   let lastSourceId = '';
   let processed = 0;
@@ -62,11 +82,7 @@ async function run() {
 
     const sourceIds = shadowRows.map(row => row.source_record_id).filter(Boolean);
     lastSourceId = sourceIds[sourceIds.length - 1] || lastSourceId;
-    const recordParams = new URLSearchParams({
-      select: 'id,raw_message,brand,reference,price_raw,price_usd,currency,listing_type,parser_version',
-      id: sourceIdFilter(sourceIds),
-    });
-    const records = await rest(`watch_records?${recordParams.toString()}`);
+    const records = await fetchSourceRecords(sourceIds);
     const proposals = (records || []).map(analyzeRecord);
     processed += proposals.length;
     for (const proposal of proposals) {
@@ -91,4 +107,3 @@ run().catch(error => {
   console.error(JSON.stringify({ event: 'remediation_error', flag, error: error.message }));
   process.exitCode = 1;
 });
-
