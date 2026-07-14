@@ -786,6 +786,8 @@ module.exports = async function handler(req, res) {
         params.set('created_at', 'not.is.null');
         params.set('verdict', 'eq.APPROVED');
         params.set('reference', 'not.is.null');
+        params.set('brand', 'neq.Unknown');
+        params.set('source', 'neq.preview_seed');
         // WTB/NTQ requests often omit an asking price. WTS and the default feed
         // require a minimally plausible luxury-watch price.
         if (!listingType || listingType === 'WTS') params.set('price_usd', 'gte.1000');
@@ -793,9 +795,12 @@ module.exports = async function handler(req, res) {
       if (search) {
         const escapedSearch = search.replace(/[(),.]/g, ' ').replace(/%/g, '').replace(/\*/g, '').trim();
         if (escapedSearch) {
-          const searchColumns = serviceKey
-            ? [`brand.ilike.*${escapedSearch}*`, `reference.ilike.*${escapedSearch}*`, `raw_message.ilike.*${escapedSearch}*`]
-            : [`brand.ilike.*${escapedSearch}*`, `reference.ilike.*${escapedSearch}*`];
+          // Keep customer search on normalized fields. Searching raw_message
+          // across millions of rows caused database statement timeouts.
+          const searchColumns = [
+            `brand.ilike.${escapedSearch}*`,
+            `reference.ilike.${escapedSearch}*`,
+          ];
           params.set('or', `(${[
             ...searchColumns,
           ].join(',')})`);
