@@ -46,3 +46,20 @@ test('allows WTB identity confirmation without an asking price', () => {
   });
   assert.equal(result.disposition, 'CATALOG_CONFIRMATION_REQUIRED');
 });
+
+test('does not promote source-record currency evidence without human review', () => {
+  const result = buildPromotionDecision({
+    source_listing_type: 'WTS',
+    candidate_count: 1,
+    proposed_candidates: [{
+      ...validCandidate,
+      prices: [{
+        ...validCandidate.prices[0],
+        currency_evidence: 'source_record_currency',
+      }],
+    }],
+    change_flags: [],
+  });
+  assert.equal(result.disposition, 'HUMAN_REVIEW');
+  assert.deepEqual(result.reasons, ['CURRENCY_EVIDENCE_INSUFFICIENT']);
+});

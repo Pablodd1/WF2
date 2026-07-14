@@ -34,13 +34,52 @@ test('routes ambiguous bare-dollar prices to shadow review instead of retaining 
     raw_message: '126500LN White $283000',
     brand: 'Rolex',
     reference: '126500LN',
-    currency: 'USD',
+    currency: null,
     price_raw: 283000,
     listing_type: 'WTS',
   });
   assert.ok(result.change_flags.includes('CURRENCY_AMBIGUOUS'));
-  assert.ok(!result.change_flags.includes('PRICE_PARSE_FAILED'));
+  assert.ok(result.change_flags.includes('PRICE_PARSE_FAILED'));
   assert.equal(result.review_status, 'PENDING');
+});
+
+test('uses a structured source currency with the amount parsed from raw text', () => {
+  const result = analyzeRecord({
+    id: 'source-5',
+    raw_message: '79833MN fabric 2022 fullset $16000',
+    brand: 'Tudor',
+    reference: '79833MN',
+    currency: 'USD',
+    price_raw: 160,
+    price_usd: 160,
+    listing_type: 'WTS',
+  });
+  const candidate = result.proposed_candidates[0];
+  assert.equal(candidate.price_raw, 16000);
+  assert.equal(candidate.price_usd, 16000);
+  assert.equal(candidate.currency, 'USD');
+  assert.equal(candidate.currency_evidence, 'source_record_currency');
+  assert.ok(!result.change_flags.includes('CURRENCY_AMBIGUOUS'));
+  assert.ok(result.change_flags.includes('PRICE_CHANGED'));
+});
+
+test('uses source HKD only as currency evidence for a bare-dollar text amount', () => {
+  const result = analyzeRecord({
+    id: 'source-6',
+    raw_message: '126500 White N5/26 $283000',
+    brand: 'Rolex',
+    reference: '126500',
+    currency: 'HKD',
+    price_raw: 283000,
+    price_usd: 36282,
+    listing_type: 'WTS',
+  });
+  const candidate = result.proposed_candidates[0];
+  assert.equal(candidate.price_raw, 283000);
+  assert.equal(candidate.price_usd, 36282);
+  assert.equal(candidate.currency, 'HKD');
+  assert.equal(candidate.currency_evidence, 'source_record_currency');
+  assert.ok(!result.change_flags.includes('CURRENCY_AMBIGUOUS'));
 });
 
 test('retains an existing structured source price when a marketplace title has no price text', () => {

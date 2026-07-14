@@ -1,8 +1,9 @@
 'use strict';
 
-const { segmentDealerMessage } = require('../../api/_lib/normalization-v4.cjs');
+const { parseNumber, segmentDealerMessage } = require('../../api/_lib/normalization-v4.cjs');
 
 const VERSION = 'v4.0-context';
+const USD_PER_UNIT = { USD: 1, USDT: 1, HKD: 1 / 7.8, EUR: 1.08, GBP: 1.27, CHF: 1.12, SGD: 0.74, CNY: 0.138 };
 
 function normalizeText(value) {
   return String(value || '').trim().toUpperCase().replace(/[\s.-]/g, '');
@@ -27,12 +28,38 @@ function sourcePriceObservation(record) {
   };
 }
 
+function sourceCurrencyTextObservation(candidate, record) {
+  const currency = String(record.currency || '').trim().toUpperCase();
+  const rate = USD_PER_UNIT[currency];
+  if (!currency || !rate) return null;
+
+  const match = String(candidate.rawLine || '').match(/\$\s*([\d][\d.,]*)(?:\s*(k|m|mn|w|\u4e07))?/i);
+  if (!match) return null;
+  const amount = parseNumber(match[1], match[2]);
+  if (!amount) return null;
+
+  return {
+    price_type: 'ASK_PRICE',
+    amount_original: amount,
+    currency_original: currency,
+    amount_usd: Math.round(amount * rate),
+    is_primary: true,
+    raw_price_text: match[0].trim(),
+    confidence: 85,
+    // The amount is deterministic raw-text evidence. The currency comes from
+    // the structured source record, so promotion still requires stronger
+    // message or section evidence.
+    currency_evidence: 'source_record_currency',
+  };
+}
+
 function analyzeRecord(record) {
   const candidates = segmentDealerMessage(record.raw_message || '');
   const proposed = candidates.map(candidate => {
     const parsedPrices = candidate.prices || [];
-    const retainedSourcePrice = parsedPrices.length ? null : sourcePriceObservation(record);
-    const prices = retainedSourcePrice ? [retainedSourcePrice] : parsedPrices;
+    const sourceCurrencyPrice = parsedPrices.length ? null : sourceCurrencyTextObservation(candidate, record);
+    const retainedSourcePrice = parsedPrices.length || sourceCurrencyPrice ? null : sourcePriceObservation(record);
+    const prices = sourceCurrencyPrice ? [sourceCurrencyPrice] : retainedSourcePrice ? [retainedSourcePrice] : parsedPrices;
     const primary = prices.find(price => price.is_primary) || prices[0] || null;
     return {
       raw_line: candidate.rawLine,
