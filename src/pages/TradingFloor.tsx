@@ -58,7 +58,7 @@ interface TradingFloorResponse {
 
 export default function TradingFloor() {
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get('type') || 'All');
+  const [activeTab, setActiveTab] = useState(searchParams.get('type') || 'WTS');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [listings, setListings] = useState<ListingRecord[]>([]);

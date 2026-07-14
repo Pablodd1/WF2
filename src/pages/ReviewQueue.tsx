@@ -55,8 +55,6 @@ export default function ReviewQueue() {
   const [selected, setSelected] = useState<ReviewItem | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ShadowProgress | null>(null);
-  const [operatorId, setOperatorId] = useState('');
-  const [adminKey, setAdminKey] = useState('');
   const [decisionBusy, setDecisionBusy] = useState<string | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
 
@@ -154,10 +152,6 @@ export default function ReviewQueue() {
   };
 
   const submitDecision = async (item: ReviewItem, decision: 'APPROVED' | 'REJECTED') => {
-    if (!operatorId.trim() || !adminKey.trim()) {
-      setDecisionError('Enter your reviewer identity and admin key before recording a decision.');
-      return;
-    }
     const reason = decision === 'REJECTED'
       ? window.prompt('Reason for rejection (required for audit):')
       : 'Catalog-confirmed human approval.';
@@ -168,14 +162,12 @@ export default function ReviewQueue() {
     try {
       const response = await fetch('/api/shadow-review-decision', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-key': adminKey,
-        },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sourceRecordId: item.id,
           decision,
-          operatorId: operatorId.trim(),
+          operatorId: null,
           reason,
         }),
       });
@@ -215,27 +207,7 @@ export default function ReviewQueue() {
             <KeyRound size={14} className="text-gold-primary" />
             <span className="text-xs font-semibold">Reviewer session</span>
           </div>
-          <label className="text-[10px] uppercase tracking-wider text-text-muted">
-            Reviewer
-            <input
-              value={operatorId}
-              onChange={event => setOperatorId(event.target.value)}
-              placeholder="name@company.com"
-              className="block mt-1 bg-bg-elevated border border-border-default rounded px-2 py-1.5 text-xs text-text-primary outline-none focus:border-gold-primary w-52"
-            />
-          </label>
-          <label className="text-[10px] uppercase tracking-wider text-text-muted">
-            Admin key
-            <input
-              value={adminKey}
-              onChange={event => setAdminKey(event.target.value)}
-              type="password"
-              autoComplete="off"
-              placeholder="Required to submit"
-              className="block mt-1 bg-bg-elevated border border-border-default rounded px-2 py-1.5 text-xs text-text-primary outline-none focus:border-gold-primary w-52"
-            />
-          </label>
-          <span className="text-[11px] text-text-muted pb-1">Credentials remain only in this browser tab.</span>
+          <span className="text-[11px] text-text-muted pb-1">Approval requires a signed-in reviewer or administrator account.</span>
           {decisionError && <span className="w-full text-xs text-red-400">{decisionError}</span>}
         </div>
 

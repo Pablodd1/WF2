@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { StatusPill } from './ui/StatusPill';
 import { motion } from 'framer-motion';
+import { LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface NavbarProps {
   totalProcessed?: number;
@@ -17,8 +19,26 @@ export function Navbar({
   throughputRate = 142,
   avgLatency = 847,
 }: NavbarProps) {
+  const navigate = useNavigate();
   const [time, setTime] = useState('');
-  const [showColon, setShowColon] = useState(true);
+  const [dealerSession, setDealerSession] = useState(() => sessionStorage.getItem('wf_beta_skip') === '1');
+
+  useEffect(() => {
+    if (sessionStorage.getItem('wf_beta_skip') === '1') return;
+    fetch('/api/dealer-auth', { credentials: 'include' })
+      .then(async response => {
+        const result = response.headers.get('content-type')?.includes('application/json') ? await response.json() : null;
+        setDealerSession(response.ok && result?.authenticated === true);
+      })
+      .catch(() => setDealerSession(false));
+  }, []);
+
+  async function signOut() {
+    sessionStorage.removeItem('wf_beta_skip');
+    await fetch('/api/dealer-auth', { method: 'DELETE', credentials: 'include' }).catch(() => undefined);
+    setDealerSession(false);
+    navigate('/dealer-login', { replace: true });
+  }
 
   useEffect(() => {
     const update = () => {
@@ -26,13 +46,13 @@ export function Navbar({
       const h = String(now.getUTCHours()).padStart(2, '0');
       const m = String(now.getUTCMinutes()).padStart(2, '0');
       const s = String(now.getUTCSeconds()).padStart(2, '0');
-      setTime(`${h}${showColon ? ':' : ' '}${m}${showColon ? ':' : ' '}${s} UTC`);
-      setShowColon((prev) => !prev);
+      const separator = now.getUTCSeconds() % 2 === 0 ? ':' : ' ';
+      setTime(`${h}${separator}${m}${separator}${s} UTC`);
     };
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [showColon]);
+  }, []);
 
   const formatNum = (n: number) => n.toLocaleString();
 
@@ -62,7 +82,6 @@ export function Navbar({
         <div className="flex items-center gap-1 text-[11px] font-mono">
           <span className="text-muted uppercase tracking-wider mr-1">TOTAL</span>
           <motion.span
-            key={totalProcessed}
             initial={{ scale: 1.2 }}
             animate={{ scale: 1 }}
             transition={{ type: 'spring', stiffness: 100, damping: 15 }}
@@ -73,7 +92,6 @@ export function Navbar({
           <span className="text-muted mx-1">/</span>
           <span className="text-muted uppercase tracking-wider mr-1">NORM</span>
           <motion.span
-            key={normalizedCount}
             initial={{ scale: 1.2 }}
             animate={{ scale: 1 }}
             transition={{ type: 'spring', stiffness: 100, damping: 15 }}
@@ -84,7 +102,6 @@ export function Navbar({
           <span className="text-muted mx-1">/</span>
           <span className="text-muted uppercase tracking-wider mr-1">RES</span>
           <motion.span
-            key={residueCount}
             initial={{ scale: 1.2 }}
             animate={{ scale: 1 }}
             transition={{ type: 'spring', stiffness: 100, damping: 15 }}
@@ -97,6 +114,11 @@ export function Navbar({
 
       {/* Right Group */}
       <div className="hidden md:flex items-center gap-5">
+        {dealerSession && (
+          <button type="button" onClick={signOut} title="Sign out" className="flex h-8 w-8 items-center justify-center border border-border-default text-text-muted transition-colors hover:border-gold-primary hover:text-gold-primary">
+            <LogOut size={14} />
+          </button>
+        )}
         <div className="flex items-center gap-2">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A96E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />

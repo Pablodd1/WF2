@@ -779,9 +779,17 @@ module.exports = async function handler(req, res) {
       });
 
       if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
-      // Customer-facing mode excludes undated legacy imports. The full archive
-      // remains available explicitly for Admin and review workflows.
-      if (quality !== 'archive') params.set('created_at', 'not.is.null');
+      // Customer-facing mode is approved market evidence only. Human/recycle
+      // records and unresolved references remain available in the archive and
+      // review workflows, never mixed into customer-facing listings.
+      if (quality !== 'archive') {
+        params.set('created_at', 'not.is.null');
+        params.set('verdict', 'eq.APPROVED');
+        params.set('reference', 'not.is.null');
+        // WTB/NTQ requests often omit an asking price. WTS and the default feed
+        // require a minimally plausible luxury-watch price.
+        if (!listingType || listingType === 'WTS') params.set('price_usd', 'gte.1000');
+      }
       if (search) {
         const escapedSearch = search.replace(/[(),.]/g, ' ').replace(/%/g, '').replace(/\*/g, '').trim();
         if (escapedSearch) {

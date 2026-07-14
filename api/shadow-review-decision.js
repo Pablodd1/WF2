@@ -3,6 +3,7 @@
 const { buildPromotionDecision } = require('../tools/shadow-reprocess/promotion-policy.cjs');
 const { confirmCatalogCandidate } = require('../tools/shadow-reprocess/catalog-confirmation.cjs');
 const { validateReviewerDecision } = require('../tools/shadow-reprocess/review-decision-policy.cjs');
+const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 
 async function rest(baseUrl, key, path, options = {}) {
   const response = await fetch(`${baseUrl}/rest/v1/${path}`, {
@@ -25,14 +26,17 @@ module.exports = async function handler(req, res) {
   const adminKey = process.env.ADMIN_KEY;
   const reviewAuthorized = Boolean(reviewToken) && req.headers['x-review-operator-token'] === reviewToken;
   const adminAuthorized = Boolean(adminKey) && req.headers['x-admin-key'] === adminKey;
-  if (!reviewAuthorized && !adminAuthorized) {
+  const dealerAuth = await authorizeDealer(req, res, new Set(['reviewer', 'admin']));
+  const sessionAuthorized = !dealerAuth.error;
+  if (!reviewAuthorized && !adminAuthorized && !sessionAuthorized) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const baseUrl = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!baseUrl || !key) return res.status(503).json({ error: 'Supabase server configuration missing' });
 
-  const { sourceRecordId, decision, operatorId, reason = null } = req.body || {};
+  const { sourceRecordId, decision, operatorId: requestedOperatorId, reason = null } = req.body || {};
+  const operatorId = sessionAuthorized ? (dealerAuth.user.email || dealerAuth.user.id) : requestedOperatorId;
   if (!sourceRecordId) return res.status(400).json({ error: 'sourceRecordId is required' });
 
   try {

@@ -7,7 +7,7 @@ import { SocialShareRail } from '@/components/SocialShareRail';
 const routes = [
   { icon: Search, label: 'Price research', detail: 'Reference-level market evidence', to: '/price-research' },
   { icon: BarChart3, label: 'Trading floor', detail: 'Dated dealer listings', to: '/trading' },
-  { icon: ShieldCheck, label: 'Dealer access', detail: 'Operations and review workspace', to: '/dashboard' },
+  { icon: ShieldCheck, label: 'Dealer access', detail: 'Operations and review workspace', to: '/dealer-login' },
 ];
 
 const assemblyStages = [
@@ -67,7 +67,7 @@ export default function LandingPage() {
         <nav className="flex items-center gap-5 text-xs font-medium text-white/70 sm:gap-7">
           <Link to="/price-research" className="transition-colors hover:text-white">Research</Link>
           <Link to="/trading" className="transition-colors hover:text-white">Trading</Link>
-          <Link to="/dashboard" className="hidden transition-colors hover:text-white sm:block">Dealer login</Link>
+          <Link to="/dealer-login" className="hidden transition-colors hover:text-white sm:block">Dealer login</Link>
         </nav>
       </header>
 
@@ -193,7 +193,7 @@ export default function LandingPage() {
       <footer className="flex flex-col gap-3 border-t border-white/10 px-5 py-6 text-[11px] uppercase tracking-[0.1em] text-white/45 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
         <span>WatchFacts</span>
         <span className="flex items-center gap-2"><Building2 size={13} /> Dealer network intelligence</span>
-        <Link to="/dashboard" className="text-white/70 transition-colors hover:text-white">Open operations</Link>
+        <Link to="/dealer-login" className="text-white/70 transition-colors hover:text-white">Open operations</Link>
       </footer>
       <SocialShareRail />
       <FrontDeskWidget />

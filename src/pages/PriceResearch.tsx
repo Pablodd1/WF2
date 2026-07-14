@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Download, ExternalLink, FileSpreadsheet } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, ExternalLink } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
 
 // ── Types ──────────────────────────────────────────────────────
