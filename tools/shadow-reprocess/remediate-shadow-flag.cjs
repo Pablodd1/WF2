@@ -65,6 +65,7 @@ async function run() {
   let processed = 0;
   let cleared = 0;
   let stillFlagged = 0;
+  const unresolvedSourceIds = new Set();
   const targetRows = dryRun ? Math.min(maxRows, batchSize) : maxRows;
 
   while (processed < targetRows) {
@@ -75,6 +76,9 @@ async function run() {
       change_flags: `cs.{${flag}}`,
       limit: String(limit),
     });
+    if (unresolvedSourceIds.size) {
+      params.set('source_record_id', `not.in.(${[...unresolvedSourceIds].join(',')})`);
+    }
     const shadowRows = await rest(`normalization_shadow_v4?${params.toString()}`);
     if (!shadowRows?.length) break;
 
@@ -83,7 +87,10 @@ async function run() {
     const proposals = (records || []).map(analyzeRecord);
     processed += proposals.length;
     for (const proposal of proposals) {
-      if (proposal.change_flags.includes(flag)) stillFlagged++;
+      if (proposal.change_flags.includes(flag)) {
+        stillFlagged++;
+        unresolvedSourceIds.add(proposal.source_record_id);
+      }
       else cleared++;
     }
 
@@ -104,12 +111,21 @@ async function run() {
       lastSourceId: sourceIds[sourceIds.length - 1] || null,
     }));
 
-    // Without a deterministic sort, rows that remain flagged would be selected
-    // again. Stop rather than claim repeated work; the operator can inspect them.
-    if (!dryRun && stillFlagged > 0) break;
+    // Keep individual genuine failures in review while continuing with rows the
+    // deterministic source-price fix can safely resolve. The cap keeps the
+    // REST filter short and hands unusually dirty batches back to review.
+    if (!dryRun && unresolvedSourceIds.size >= 25) break;
   }
 
-  console.log(JSON.stringify({ event: 'remediation_complete', flag, dryRun, processed, cleared, stillFlagged }));
+  console.log(JSON.stringify({
+    event: 'remediation_complete',
+    flag,
+    dryRun,
+    processed,
+    cleared,
+    stillFlagged,
+    unresolved: unresolvedSourceIds.size,
+  }));
 }
 
 run().catch(error => {
