@@ -124,9 +124,9 @@ module.exports = async function handler(req, res) {
     const pageSize = 1000;
     const sampleLimit = 5000;
     const columns = 'price_usd, created_at, listing_date, condition, source, dial_color, year, listing_type';
-    const buildRowsQuery = (from, to, withCount = false) => client
+    const buildRowsQuery = (from, to) => client
       .from('watch_records')
-      .select(columns, withCount ? { count: 'estimated' } : undefined)
+      .select(columns)
       .eq('brand', brand)
       .eq('reference', targetRef)
       .eq('verdict', 'APPROVED')
@@ -134,23 +134,18 @@ module.exports = async function handler(req, res) {
       .order('created_at', { ascending: false })
       .range(from, to);
 
-    const firstPage = await buildRowsQuery(0, pageSize - 1, true);
-    if (firstPage.error) throw firstPage.error;
-    const totalListings = firstPage.count ?? firstPage.data?.length ?? 0;
-    const sampledTotal = Math.min(totalListings, sampleLimit);
-    const pageCount = Math.ceil(sampledTotal / pageSize);
-    const remainingPages = await Promise.all(
-      Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) => {
-        const from = (index + 1) * pageSize;
-        return buildRowsQuery(from, Math.min(from + pageSize - 1, sampledTotal - 1));
+    // Avoid a filtered COUNT over the multi-million-row table. Fetch bounded,
+    // deterministic pages in parallel and report whether the sample hit its cap.
+    const sampledPages = await Promise.all(
+      Array.from({ length: sampleLimit / pageSize }, (_, index) => {
+        const from = index * pageSize;
+        return buildRowsQuery(from, from + pageSize - 1);
       })
     );
-    const pageError = remainingPages.find(page => page.error)?.error;
+    const pageError = sampledPages.find(page => page.error)?.error;
     if (pageError) throw pageError;
-    const rows = [
-      ...(firstPage.data || []),
-      ...remainingPages.flatMap(page => page.data || []),
-    ];
+    const rows = sampledPages.flatMap(page => page.data || []);
+    const totalListings = rows.length;
 
     if (!rows || rows.length === 0) {
       return res.status(200).json({
@@ -245,7 +240,7 @@ module.exports = async function handler(req, res) {
       totalListings,
       listing_count: marketRows.length,
       sampledListings: rows.length,
-      sampleCapped: totalListings > rows.length,
+      sampleCapped: rows.length >= sampleLimit,
       count: prices.length,
       rawCount: validPriceRows.length,
       outliersRemoved: outlierRows.length,
