@@ -18,6 +18,7 @@ const batchSize = Math.max(25, Math.min(Number(process.env.REMEDIATION_BATCH_SIZ
 const maxRows = Math.max(1, Math.min(Number(process.env.REMEDIATION_MAX_ROWS || 1000), 100000));
 const dryRun = String(process.env.DRY_RUN || 'true').toLowerCase() !== 'false';
 const sourceLookupChunkSize = 100;
+const maxUnresolved = Math.max(1, Math.min(Number(process.env.REMEDIATION_MAX_UNRESOLVED || 25), 250));
 
 if (!baseUrl || !key) throw new Error('SUPABASE_URL and a server key are required');
 if (!ALLOWED_FLAGS.has(flag)) throw new Error(`Unsupported REMEDIATION_FLAG: ${flag}`);
@@ -114,7 +115,7 @@ async function run() {
     // Keep individual genuine failures in review while continuing with rows the
     // deterministic source-price fix can safely resolve. The cap keeps the
     // REST filter short and hands unusually dirty batches back to review.
-    if (!dryRun && unresolvedSourceIds.size >= 25) break;
+    if (!dryRun && unresolvedSourceIds.size >= maxUnresolved) break;
   }
 
   console.log(JSON.stringify({
@@ -125,6 +126,7 @@ async function run() {
     cleared,
     stillFlagged,
     unresolved: unresolvedSourceIds.size,
+    maxUnresolved,
   }));
 }
 
