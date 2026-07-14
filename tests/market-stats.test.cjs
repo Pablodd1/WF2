@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildComparableCohorts, summarizePrices } = require('../api/_lib/market-stats.cjs');
+const { buildComparableCohorts, classifyPrice, summarizePrices } = require('../api/_lib/market-stats.cjs');
 
 test('uses standard 1.5 IQR fences and preserves outliers separately', () => {
   const result = summarizePrices([100, 101, 102, 103, 104, 105, 500]);
@@ -35,5 +35,13 @@ test('separates price cohorts by condition and dial', () => {
   assert.equal(cohorts[0].condition, 'New');
   assert.equal(cohorts[0].dial_color, 'Blue');
   assert.equal(cohorts[0].count, 2);
+});
+
+test('classifies row-level outliers with an auditable reason', () => {
+  const stats = summarizePrices([100, 101, 102, 103, 104, 105, 500]).stats;
+  assert.deepEqual(classifyPrice(102, stats), { included: true, reason: null });
+  assert.deepEqual(classifyPrice(90, stats), { included: false, reason: 'BELOW_IQR_FENCE' });
+  assert.deepEqual(classifyPrice(500, stats), { included: false, reason: 'ABOVE_IQR_FENCE' });
+  assert.deepEqual(classifyPrice(null, stats), { included: false, reason: 'INVALID_PRICE' });
 });
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ExternalLink, FileSpreadsheet, Download } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -11,6 +11,8 @@ interface RowData {
   condition: string | null;
   source: string;
   year: number | null;
+  is_outlier: boolean;
+  outlier_reason: 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' | null;
 }
 
 interface MonthlyPoint {
@@ -59,6 +61,11 @@ interface PriceData {
   monthly: MonthlyPoint[];
   prices: number[];
   rows: RowData[];
+  outlier_rows: RowData[];
+  methodology: {
+    method: 'IQR_1_5'; minimum_sample: number; included_count: number; excluded_count: number;
+    lower_fence?: number | null; upper_fence?: number | null;
+  };
 }
 
 const NAVY = '#1a2744';
@@ -112,11 +119,14 @@ export default function PriceResearch() {
     finally { setPLoading(''); }
   }, []);
 
-  const fetchData = useCallback(async (ref: string) => {
+  const fetchData = useCallback(async (ref: string, condition = '', dial = '') => {
     setLoading(true);
     setError('');
     try {
-      const r = await fetch(`/api/price-research?reference=${encodeURIComponent(ref)}`);
+      const params = new URLSearchParams({ reference: ref });
+      if (condition) params.set('condition', condition);
+      if (dial) params.set('dial', dial);
+      const r = await fetch(`/api/price-research?${params.toString()}`);
       const d = await r.json();
       if (d.success) setData(d);
       else setError(d.error || 'No data for this reference');
@@ -148,7 +158,7 @@ export default function PriceResearch() {
 
   const displayRef = data?.resolvedRef || data?.reference || query;
 
-  const listings = (data?.rows || []).map(r => ({
+  const listings = (data?.rows || []).filter(r => !r.is_outlier).map(r => ({
     title: `${data?.brand || ''} ${displayRef}`.trim(),
     priceUSD: r.price_usd,
     price: r.price_usd,
@@ -157,6 +167,12 @@ export default function PriceResearch() {
     date: r.created_at ? r.created_at.split('T')[0] : '',
     condition: r.condition || 'N/A',
   }));
+
+  const outlierReason = (reason: RowData['outlier_reason']) => {
+    if (reason === 'BELOW_IQR_FENCE') return 'Below lower IQR fence';
+    if (reason === 'ABOVE_IQR_FENCE') return 'Above upper IQR fence';
+    return 'Invalid price';
+  };
 
   if (loading) {
     return (
@@ -296,6 +312,30 @@ export default function PriceResearch() {
                 </div>
               )}
             </div>
+
+            {data.cohorts.length > 1 && (
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3" style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 16, marginBottom: 24 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>Comparable presentation</div>
+                  <div style={{ fontSize: 12, color: MUTED }}>Condition and dial stay separate so different configurations do not distort the market price.</div>
+                </div>
+                <select
+                  aria-label="Comparable presentation"
+                  value={`${data.selected_cohort.condition}|||${data.selected_cohort.dial_color}`}
+                  onChange={(event) => {
+                    const [condition, dial] = event.target.value.split('|||');
+                    fetchData(data.reference, condition, dial);
+                  }}
+                  style={{ minWidth: 260, padding: '10px 12px', border: `1px solid ${BORDER}`, color: NAVY, backgroundColor: WHITE, fontSize: 13 }}
+                >
+                  {data.cohorts.map(cohort => (
+                    <option key={`${cohort.condition}-${cohort.dial_color}`} value={`${cohort.condition}|||${cohort.dial_color}`}>
+                      {cohort.condition} / {cohort.dial_color} ({cohort.count})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* ── Stats Cards ──────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -458,13 +498,13 @@ export default function PriceResearch() {
             )}
 
             {/* ── Price Chart ───────────────────────────────── */}
-            {chartData.length >= 2 && (
+            {chartData.length >= 1 && (
               <>
                 <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                   <div className="flex items-center justify-between mb-4">
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Price History (Monthly)</h3>
                     <div className="flex gap-3">
-                      <span style={{ fontSize: 13, color: MUTED }}>Min / Avg / Max</span>
+                      <span style={{ fontSize: 13, color: MUTED }}>Included observations only</span>
                     </div>
                   </div>
 
@@ -508,6 +548,75 @@ export default function PriceResearch() {
             )}
 
             {/* ── Listings Table ──────────────────────────────── */}
+            <section style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '24px 0', marginBottom: 24 }}>
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+                <div style={{ flex: 1 }}>
+                  <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+                    <CheckCircle2 size={18} color={GREEN} />
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Comparable price set</h3>
+                  </div>
+                  <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
+                    Standard 1.5 x IQR method. Prices inside the fences are included in averages, medians, and the chart.
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      ['Raw observations', data.rawCount],
+                      ['Included', data.methodology.included_count],
+                      ['Excluded', data.methodology.excluded_count],
+                      ['IQR', data.stats ? `$${data.stats.iqr.toLocaleString()}` : 'N/A'],
+                      ['Q1', data.stats ? `$${data.stats.q1.toLocaleString()}` : 'N/A'],
+                      ['Q3', data.stats ? `$${data.stats.q3.toLocaleString()}` : 'N/A'],
+                      ['Lower fence', data.stats?.lower_fence != null ? `$${data.stats.lower_fence.toLocaleString()}` : 'N/A'],
+                      ['Upper fence', data.stats?.upper_fence != null ? `$${data.stats.upper_fence.toLocaleString()}` : 'N/A'],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} style={{ padding: '10px 0', borderBottom: `1px solid ${BORDER}` }}>
+                        <div style={{ fontSize: 11, color: MUTED }}>{label}</div>
+                        <div style={{ fontSize: 16, color: NAVY, fontWeight: 700 }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ width: 'min(100%, 280px)', paddingTop: 2 }}>
+                  <div className="flex items-center gap-2" style={{ color: data.outliersRemoved ? '#8a6500' : GREEN, fontWeight: 700, fontSize: 14 }}>
+                    <AlertTriangle size={17} /> {data.outliersRemoved} excluded outlier{data.outliersRemoved === 1 ? '' : 's'}
+                  </div>
+                  <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
+                    Exclusions stay visible below for audit and human review. They are not deleted from the database.
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {data.outlier_rows.length > 0 && (
+              <section style={{ marginBottom: 28 }}>
+                <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Excluded outliers</h3>
+                  <span style={{ fontSize: 12, color: MUTED }}>Retained for audit, excluded from market statistics</span>
+                </div>
+                <div style={{ overflowX: 'auto', borderTop: `1px solid ${BORDER}` }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760, fontSize: 13 }}>
+                    <thead><tr style={{ textAlign: 'left', color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
+                      <th style={{ padding: '10px 8px' }}>Price</th><th style={{ padding: '10px 8px' }}>Date</th>
+                      <th style={{ padding: '10px 8px' }}>Reason</th><th style={{ padding: '10px 8px' }}>Condition</th>
+                      <th style={{ padding: '10px 8px' }}>Dial</th><th style={{ padding: '10px 8px' }}>Source</th>
+                    </tr></thead>
+                    <tbody>
+                      {data.outlier_rows.slice(0, 100).map((row, index) => (
+                        <tr key={`${row.created_at}-${row.price_usd}-${index}`} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                          <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>${row.price_usd.toLocaleString()}</td>
+                          <td style={{ padding: '11px 8px' }}>{row.created_at ? row.created_at.split('T')[0] : 'Unknown'}</td>
+                          <td style={{ padding: '11px 8px', color: '#8a6500' }}>{outlierReason(row.outlier_reason)}</td>
+                          <td style={{ padding: '11px 8px' }}>{row.condition || 'Unspecified'}</td>
+                          <td style={{ padding: '11px 8px' }}>{row.dial_color || 'Unspecified'}</td>
+                          <td style={{ padding: '11px 8px', color: MUTED }}>{row.source || 'Unknown'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
               <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
                 Recent Listings ({listings.length} of {data.totalListings})

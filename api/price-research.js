@@ -7,7 +7,7 @@
 const { getClient } = require('./_lib/supabase');
 const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
 const { lookupCatalog } = require('./_lib/catalog');
-const { buildComparableCohorts, summarizePrices } = require('./_lib/market-stats.cjs');
+const { buildComparableCohorts, classifyPrice, summarizePrices } = require('./_lib/market-stats.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -126,7 +126,8 @@ module.exports = async function handler(req, res) {
         analytics_ready: false, listing_count: 0,
         sample_quality: 'observational',
         selected_cohort: { condition: 'Unspecified', dial_color: 'Unspecified', count: 0 },
-        cohorts: [], outliers: [], outliersRemoved: 0, rawCount: 0,
+        cohorts: [], outliers: [], outlier_rows: [], outliersRemoved: 0, rawCount: 0,
+        methodology: { method: 'IQR_1_5', minimum_sample: 5, included_count: 0, excluded_count: 0 },
         stats: null, liquidity: null, monthly: [], prices: [], rows: []
       });
     }
@@ -150,16 +151,17 @@ module.exports = async function handler(req, res) {
       .map(r => r.price_usd);
     const summary = summarizePrices(rawPrices);
     const prices = summary.included;
-    const lowerFence = summary.stats?.lower_fence;
-    const upperFence = summary.stats?.upper_fence;
-    const isIncluded = price => price > 0
-      && (lowerFence == null || price >= lowerFence)
-      && (upperFence == null || price <= upperFence);
+    const classifiedRows = listedRows.map(row => {
+      const classification = classifyPrice(row.price_usd, summary.stats);
+      return { ...row, is_outlier: !classification.included, outlier_reason: classification.reason };
+    });
+    const includedRows = classifiedRows.filter(row => !row.is_outlier && row.price_usd > 0);
+    const outlierRows = classifiedRows.filter(row => row.is_outlier && row.outlier_reason !== 'INVALID_PRICE');
 
     // Monthly aggregation
     const monthlyMap = {};
-    marketRows.forEach(r => {
-      if (!r.created_at || !isIncluded(r.price_usd)) return;
+    includedRows.forEach(r => {
+      if (!r.created_at) return;
       const d = new Date(r.created_at);
       if (isNaN(d.getTime())) return;
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -205,6 +207,11 @@ module.exports = async function handler(req, res) {
       rawCount: summary.raw_count,
       outliersRemoved: summary.outliers.length,
       outliers: summary.outliers,
+      outlier_rows: outlierRows.map(r => ({
+        price_usd: r.price_usd, created_at: r.created_at,
+        dial_color: r.dial_color, condition: r.condition,
+        source: r.source, year: r.year, is_outlier: true, outlier_reason: r.outlier_reason,
+      })),
       analytics_ready: summary.analytics_ready,
       sample_quality: summary.sample_quality,
       stats: summary.stats,
@@ -218,12 +225,21 @@ module.exports = async function handler(req, res) {
         dial_color: cohort.dial_color,
         count: cohort.count,
       })),
+      methodology: {
+        method: 'IQR_1_5',
+        minimum_sample: 5,
+        included_count: includedRows.length,
+        excluded_count: outlierRows.length,
+        lower_fence: summary.stats?.lower_fence ?? null,
+        upper_fence: summary.stats?.upper_fence ?? null,
+      },
       liquidity,
       monthly, prices,
-      rows: listedRows.map(r => ({
+      rows: classifiedRows.map(r => ({
         price_usd: r.price_usd, created_at: r.created_at,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year,
+        is_outlier: r.is_outlier, outlier_reason: r.outlier_reason,
       })),
     });
   } catch (err) {

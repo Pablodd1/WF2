@@ -54,6 +54,17 @@ function summarizePrices(values) {
   };
 }
 
+function classifyPrice(value, stats) {
+  const price = Number(value);
+  if (!Number.isFinite(price) || price <= 0) return { included: false, reason: 'INVALID_PRICE' };
+  if (!stats || stats.lower_fence == null || stats.upper_fence == null) {
+    return { included: true, reason: null };
+  }
+  if (price < stats.lower_fence) return { included: false, reason: 'BELOW_IQR_FENCE' };
+  if (price > stats.upper_fence) return { included: false, reason: 'ABOVE_IQR_FENCE' };
+  return { included: true, reason: null };
+}
+
 function normalizeDimension(value, fallback = 'Unspecified') {
   const clean = String(value || '').trim();
   return clean || fallback;
@@ -73,5 +84,5 @@ function buildComparableCohorts(rows) {
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
-module.exports = { buildComparableCohorts, percentile, summarizePrices };
+module.exports = { buildComparableCohorts, classifyPrice, percentile, summarizePrices };
 
