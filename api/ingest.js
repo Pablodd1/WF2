@@ -795,15 +795,13 @@ module.exports = async function handler(req, res) {
       if (search) {
         const escapedSearch = search.replace(/[(),.]/g, ' ').replace(/%/g, '').replace(/\*/g, '').trim();
         if (escapedSearch) {
-          // Keep customer search on normalized fields. Searching raw_message
-          // across millions of rows caused database statement timeouts.
-          const searchColumns = [
-            `brand.ilike.${escapedSearch}*`,
-            `reference.ilike.${escapedSearch}*`,
-          ];
-          params.set('or', `(${[
-            ...searchColumns,
-          ].join(',')})`);
+          // Reference lookups are the dominant workflow and must use the btree
+          // equality index. Broad wildcard scans across millions of rows caused
+          // database statement timeouts. Brand lookup remains exact but
+          // case-insensitive; full-text message search belongs in a dedicated
+          // indexed search service/RPC.
+          if (/\d/.test(escapedSearch)) params.set('reference', `eq.${escapedSearch}`);
+          else params.set('brand', `ilike.${escapedSearch}`);
         }
       }
 
