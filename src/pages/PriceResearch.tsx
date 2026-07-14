@@ -7,6 +7,7 @@ import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, 
 interface RowData {
   price_usd: number;
   created_at: string;
+  listing_date?: string | null;
   dial_color: string | null;
   condition: string | null;
   source: string;
@@ -46,6 +47,8 @@ interface PriceData {
   dialColors: string[] | null;
   dial_analysis: DialPoint[];
   totalListings: number;
+  sampledListings: number;
+  sampleCapped: boolean;
   count: number;
   rawCount: number;
   outliersRemoved: number;
@@ -164,7 +167,7 @@ export default function PriceResearch() {
     price: r.price_usd,
     currency: 'USD',
     dial: r.dial_color || 'N/A',
-    date: r.created_at ? r.created_at.split('T')[0] : '',
+    date: (r.listing_date || r.created_at) ? (r.listing_date || r.created_at).split('T')[0] : '',
     condition: r.condition || 'N/A',
   }));
 
@@ -354,6 +357,11 @@ export default function PriceResearch() {
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                   Cohort: {data.selected_cohort.condition} / {data.selected_cohort.dial_color}
                 </div>
+                {data.sampleCapped && (
+                  <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6 }}>
+                    Analytics use the newest {data.sampledListings.toLocaleString()} of {data.totalListings.toLocaleString()} matching listings.
+                  </div>
+                )}
               </div>
 
               {/* Liquidity — REAL data only, no invented seller/buyer counts */}
@@ -604,7 +612,7 @@ export default function PriceResearch() {
                       {data.outlier_rows.slice(0, 100).map((row, index) => (
                         <tr key={`${row.created_at}-${row.price_usd}-${index}`} style={{ borderBottom: `1px solid ${BORDER}` }}>
                           <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>${row.price_usd.toLocaleString()}</td>
-                          <td style={{ padding: '11px 8px' }}>{row.created_at ? row.created_at.split('T')[0] : 'Unknown'}</td>
+                          <td style={{ padding: '11px 8px' }}>{(row.listing_date || row.created_at) ? (row.listing_date || row.created_at).split('T')[0] : 'Unknown'}</td>
                           <td style={{ padding: '11px 8px', color: '#8a6500' }}>{outlierReason(row.outlier_reason)}</td>
                           <td style={{ padding: '11px 8px' }}>{row.condition || 'Unspecified'}</td>
                           <td style={{ padding: '11px 8px' }}>{row.dial_color || 'Unspecified'}</td>

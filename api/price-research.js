@@ -103,18 +103,38 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // Pull all APPROVED records
-    const { data: rows, error } = await client
+    // PostgREST caps each response at 1,000 rows. Page explicitly so a busy
+    // reference does not produce a chart made only from its newest day.
+    const pageSize = 1000;
+    const sampleLimit = 5000;
+    const columns = 'price_usd, created_at, listing_date, condition, source, dial_color, year, listing_type';
+    const buildRowsQuery = (from, to, withCount = false) => client
       .from('watch_records')
-      .select('price_usd, created_at, condition, source, dial_color, year, listing_type')
+      .select(columns, withCount ? { count: 'exact' } : undefined)
       .eq('brand', brand)
       .eq('reference', targetRef)
       .eq('verdict', 'APPROVED')
       .eq('listing_type', 'WTS')
       .order('created_at', { ascending: false })
-      .limit(5000);
+      .range(from, to);
 
-    if (error) throw error;
+    const firstPage = await buildRowsQuery(0, pageSize - 1, true);
+    if (firstPage.error) throw firstPage.error;
+    const totalListings = firstPage.count ?? firstPage.data?.length ?? 0;
+    const sampledTotal = Math.min(totalListings, sampleLimit);
+    const pageCount = Math.ceil(sampledTotal / pageSize);
+    const remainingPages = await Promise.all(
+      Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) => {
+        const from = (index + 1) * pageSize;
+        return buildRowsQuery(from, Math.min(from + pageSize - 1, sampledTotal - 1));
+      })
+    );
+    const pageError = remainingPages.find(page => page.error)?.error;
+    if (pageError) throw pageError;
+    const rows = [
+      ...(firstPage.data || []),
+      ...remainingPages.flatMap(page => page.data || []),
+    ];
 
     if (!rows || rows.length === 0) {
       return res.status(200).json({
@@ -122,7 +142,7 @@ module.exports = async function handler(req, res) {
         resolvedRef: targetRef !== rawRef ? targetRef : null,
         model: null, dialColors: null,
         dial_analysis: [],
-        totalListings: 0, count: 0,
+        totalListings: 0, sampledListings: 0, sampleCapped: false, count: 0,
         analytics_ready: false, listing_count: 0,
         sample_quality: 'observational',
         selected_cohort: { condition: 'Unspecified', dial_color: 'Unspecified', count: 0 },
@@ -161,8 +181,9 @@ module.exports = async function handler(req, res) {
     // Monthly aggregation
     const monthlyMap = {};
     includedRows.forEach(r => {
-      if (!r.created_at) return;
-      const d = new Date(r.created_at);
+      const observedAt = r.listing_date || r.created_at;
+      if (!observedAt) return;
+      const d = new Date(observedAt);
       if (isNaN(d.getTime())) return;
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       if (!monthlyMap[key]) monthlyMap[key] = { month: key, count: 0, sum: 0, min: Infinity, max: 0 };
@@ -201,14 +222,16 @@ module.exports = async function handler(req, res) {
       resolvedRef: targetRef !== rawRef ? targetRef : null,
       model, dialColors,
       dial_analysis,
-      totalListings: rows.length,
+      totalListings,
       listing_count: marketRows.length,
+      sampledListings: rows.length,
+      sampleCapped: totalListings > rows.length,
       count: prices.length,
       rawCount: summary.raw_count,
       outliersRemoved: summary.outliers.length,
       outliers: summary.outliers,
       outlier_rows: outlierRows.map(r => ({
-        price_usd: r.price_usd, created_at: r.created_at,
+        price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year, is_outlier: true, outlier_reason: r.outlier_reason,
       })),
@@ -236,7 +259,7 @@ module.exports = async function handler(req, res) {
       liquidity,
       monthly, prices,
       rows: classifiedRows.map(r => ({
-        price_usd: r.price_usd, created_at: r.created_at,
+        price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year,
         is_outlier: r.is_outlier, outlier_reason: r.outlier_reason,
