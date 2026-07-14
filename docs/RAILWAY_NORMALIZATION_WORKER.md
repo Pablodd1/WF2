@@ -24,15 +24,16 @@ checkpoint simultaneously.
 2. Railway detects `railway.json`; do not expose a public domain for this
    service.
 3. Add these service environment variables from the existing WatchFacts Vercel
-   Production configuration:
+   Production configuration. For the active v4.1 dial rollout, keep the
+   production checkpoint name and conservative lease sizing:
 
 ```text
 SUPABASE_URL=<existing production value>
 SUPABASE_SERVICE_ROLE_KEY=<existing production value>
-SHADOW_JOB_NAME=normalization-v4-production
-SHADOW_BATCH_SIZE=1000
-SHADOW_ROWS_PER_LEASE=10000
-SHADOW_IDLE_DELAY_MS=15000
+SHADOW_JOB_NAME=normalization-v4-dial-production
+SHADOW_BATCH_SIZE=250
+SHADOW_ROWS_PER_LEASE=5000
+SHADOW_IDLE_DELAY_MS=5000
 ```
 
 4. Deploy one replica only. Do not configure multiple replicas.
@@ -45,10 +46,26 @@ https://watchfacts-poc.vercel.app/api/shadow-status
 
 ## Throughput tuning
 
-Start with the values above. If several `lease_complete` cycles finish cleanly,
-increase `SHADOW_BATCH_SIZE` to `2000`, then separately increase
-`SHADOW_ROWS_PER_LEASE` to `20000`. Keep exactly one replica and preserve the
-lease migration.
+Do not tune the active `normalization-v4-dial-production` rollout upward while
+Supabase statement timeouts are still appearing. Keep exactly one replica,
+preserve the lease migration, and change only one setting at a time after a
+measured clean window.
 
 The Vercel shadow-normalize cron is removed once Railway has shown stable lease
 cycles. Never run both without the lease.
+
+## Read-only progress report
+
+Use the local report to capture exact checkpoint progress, planner-estimated
+change-flag counts, and a bounded evidence sample without scanning the full
+archive:
+
+```text
+railway run npm run shadow:progress
+```
+
+The checkpoint values are exact and job-specific. Flag counts are PostgreSQL
+planner estimates across `normalization_shadow_v4`; that table does not store
+`job_name`, so these counts can include rows from earlier shadow passes.
+Evidence breakdowns are sampled near the active checkpoint and are for rollout
+monitoring only; they are not promotion evidence.
