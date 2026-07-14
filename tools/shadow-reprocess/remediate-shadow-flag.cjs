@@ -62,26 +62,23 @@ async function fetchSourceRecords(sourceIds) {
 }
 
 async function run() {
-  let lastSourceId = '';
   let processed = 0;
   let cleared = 0;
   let stillFlagged = 0;
+  const targetRows = dryRun ? Math.min(maxRows, batchSize) : maxRows;
 
-  while (processed < maxRows) {
-    const limit = Math.min(batchSize, maxRows - processed);
+  while (processed < targetRows) {
+    const limit = Math.min(batchSize, targetRows - processed);
     const params = new URLSearchParams({
       select: 'source_record_id',
       review_status: 'eq.PENDING',
       change_flags: `cs.{${flag}}`,
-      order: 'source_record_id.asc',
       limit: String(limit),
     });
-    if (lastSourceId) params.set('source_record_id', `gt.${lastSourceId}`);
     const shadowRows = await rest(`normalization_shadow_v4?${params.toString()}`);
     if (!shadowRows?.length) break;
 
     const sourceIds = shadowRows.map(row => row.source_record_id).filter(Boolean);
-    lastSourceId = sourceIds[sourceIds.length - 1] || lastSourceId;
     const records = await fetchSourceRecords(sourceIds);
     const proposals = (records || []).map(analyzeRecord);
     processed += proposals.length;
@@ -97,7 +94,19 @@ async function run() {
         body: JSON.stringify(proposals),
       });
     }
-    console.log(JSON.stringify({ event: 'remediation_batch', flag, dryRun, processed, cleared, stillFlagged, lastSourceId }));
+    console.log(JSON.stringify({
+      event: 'remediation_batch',
+      flag,
+      dryRun,
+      processed,
+      cleared,
+      stillFlagged,
+      lastSourceId: sourceIds[sourceIds.length - 1] || null,
+    }));
+
+    // Without a deterministic sort, rows that remain flagged would be selected
+    // again. Stop rather than claim repeated work; the operator can inspect them.
+    if (!dryRun && stillFlagged > 0) break;
   }
 
   console.log(JSON.stringify({ event: 'remediation_complete', flag, dryRun, processed, cleared, stillFlagged }));
