@@ -54,9 +54,13 @@ function summarizePrices(values) {
   };
 }
 
-function classifyPrice(value, stats) {
+function classifyPrice(value, stats, options = {}) {
   const price = Number(value);
   if (!Number.isFinite(price) || price <= 0) return { included: false, reason: 'INVALID_PRICE' };
+  const minimumPrice = Number(options.minimumPrice || 0);
+  if (minimumPrice > 0 && price < minimumPrice) {
+    return { included: false, reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' };
+  }
   if (!stats || stats.lower_fence == null || stats.upper_fence == null) {
     return { included: true, reason: null };
   }

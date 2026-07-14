@@ -79,13 +79,29 @@ module.exports = async function handler(req, res) {
     // Resolve reference — support prefix matching (3712 -> 3712/1A)
     let targetRef = rawRef;
     if (rawRef.length >= 3) {
-      const { data: refs, error: refError } = await client
+      // Exact indexed lookup first. Prefix ILIKE over millions of rows is only
+      // a fallback for genuinely partial references.
+      const { data: exactRefs, error: exactRefError } = await client
         .from('watch_records')
         .select('reference')
         .eq('brand', brand)
         .eq('verdict', 'APPROVED')
-        .ilike('reference', `${rawRef}%`)
-        .limit(50);
+        .eq('reference', rawRef)
+        .limit(1);
+
+      let refs = exactRefs;
+      let refError = exactRefError;
+      if (!exactRefError && (!exactRefs || exactRefs.length === 0)) {
+        const prefixResult = await client
+          .from('watch_records')
+          .select('reference')
+          .eq('brand', brand)
+          .eq('verdict', 'APPROVED')
+          .ilike('reference', `${rawRef}%`)
+          .limit(50);
+        refs = prefixResult.data;
+        refError = prefixResult.error;
+      }
 
       if (!refError && refs && refs.length > 0) {
         const foundRefs = [...new Set(refs.map(r => r.reference))];
@@ -110,7 +126,7 @@ module.exports = async function handler(req, res) {
     const columns = 'price_usd, created_at, listing_date, condition, source, dial_color, year, listing_type';
     const buildRowsQuery = (from, to, withCount = false) => client
       .from('watch_records')
-      .select(columns, withCount ? { count: 'exact' } : undefined)
+      .select(columns, withCount ? { count: 'estimated' } : undefined)
       .eq('brand', brand)
       .eq('reference', targetRef)
       .eq('verdict', 'APPROVED')
@@ -166,13 +182,18 @@ module.exports = async function handler(req, res) {
     ) || cohorts[0] || { condition: 'Unspecified', dial_color: 'Unspecified', rows: [], count: 0 };
     const listedRows = selectedCohort.rows;
 
-    const rawPrices = listedRows
-      .filter(r => r.price_usd > 0)
+    // A deterministic safety floor runs before IQR. Otherwise a malformed low-
+    // price cluster can make the IQR lower fence negative and contaminate every
+    // market statistic. Catalog-relative bands are the next refinement.
+    const marketPriceFloorUsd = 1000;
+    const validPriceRows = listedRows.filter(r => Number.isFinite(Number(r.price_usd)) && Number(r.price_usd) > 0);
+    const rawPrices = validPriceRows
+      .filter(r => Number(r.price_usd) >= marketPriceFloorUsd)
       .map(r => r.price_usd);
     const summary = summarizePrices(rawPrices);
     const prices = summary.included;
     const classifiedRows = listedRows.map(row => {
-      const classification = classifyPrice(row.price_usd, summary.stats);
+      const classification = classifyPrice(row.price_usd, summary.stats, { minimumPrice: marketPriceFloorUsd });
       return { ...row, is_outlier: !classification.included, outlier_reason: classification.reason };
     });
     const includedRows = classifiedRows.filter(row => !row.is_outlier && row.price_usd > 0);
@@ -199,8 +220,7 @@ module.exports = async function handler(req, res) {
 
     // ── Dial analysis: EVERY dial color found in real listings (rule: all must show) ──
     const dialMap = {};
-    listedRows.forEach(r => {
-      if (!(r.price_usd > 0)) return;
+    includedRows.forEach(r => {
       const dial = r.dial_color || 'Unspecified';
       if (!dialMap[dial]) dialMap[dial] = { dial_color: dial, count: 0, sum: 0, min: Infinity, max: 0 };
       const d = dialMap[dial];
@@ -227,9 +247,9 @@ module.exports = async function handler(req, res) {
       sampledListings: rows.length,
       sampleCapped: totalListings > rows.length,
       count: prices.length,
-      rawCount: summary.raw_count,
-      outliersRemoved: summary.outliers.length,
-      outliers: summary.outliers,
+      rawCount: validPriceRows.length,
+      outliersRemoved: outlierRows.length,
+      outliers: outlierRows.map(row => row.price_usd),
       outlier_rows: outlierRows.map(r => ({
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
@@ -249,10 +269,12 @@ module.exports = async function handler(req, res) {
         count: cohort.count,
       })),
       methodology: {
-        method: 'IQR_1_5',
+        method: 'PLAUSIBILITY_FLOOR_THEN_IQR_1_5',
         minimum_sample: 5,
         included_count: includedRows.length,
         excluded_count: outlierRows.length,
+        plausibility_floor_usd: marketPriceFloorUsd,
+        plausibility_excluded_count: outlierRows.filter(row => row.outlier_reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR').length,
         lower_fence: summary.stats?.lower_fence ?? null,
         upper_fence: summary.stats?.upper_fence ?? null,
       },

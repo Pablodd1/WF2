@@ -13,7 +13,7 @@ interface RowData {
   source: string;
   year: number | null;
   is_outlier: boolean;
-  outlier_reason: 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' | null;
+  outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' | null;
 }
 
 interface MonthlyPoint {
@@ -66,7 +66,8 @@ interface PriceData {
   rows: RowData[];
   outlier_rows: RowData[];
   methodology: {
-    method: 'IQR_1_5'; minimum_sample: number; included_count: number; excluded_count: number;
+    method: 'IQR_1_5' | 'PLAUSIBILITY_FLOOR_THEN_IQR_1_5'; minimum_sample: number; included_count: number; excluded_count: number;
+    plausibility_floor_usd?: number; plausibility_excluded_count?: number;
     lower_fence?: number | null; upper_fence?: number | null;
   };
 }
@@ -172,6 +173,7 @@ export default function PriceResearch() {
   }));
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
+    if (reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR') return 'Below market plausibility floor';
     if (reason === 'BELOW_IQR_FENCE') return 'Below lower IQR fence';
     if (reason === 'ABOVE_IQR_FENCE') return 'Above upper IQR fence';
     return 'Invalid price';
@@ -564,13 +566,14 @@ export default function PriceResearch() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Comparable price set</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    Standard 1.5 x IQR method. Prices inside the fences are included in averages, medians, and the chart.
+                    A market plausibility floor is applied first, followed by the standard 1.5 x IQR method. Excluded prices remain visible below for audit.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
                       ['Raw observations', data.rawCount],
                       ['Included', data.methodology.included_count],
                       ['Excluded', data.methodology.excluded_count],
+                      ['Plausibility floor', data.methodology.plausibility_floor_usd ? `$${data.methodology.plausibility_floor_usd.toLocaleString()}` : 'N/A'],
                       ['IQR', data.stats ? `$${data.stats.iqr.toLocaleString()}` : 'N/A'],
                       ['Q1', data.stats ? `$${data.stats.q1.toLocaleString()}` : 'N/A'],
                       ['Q3', data.stats ? `$${data.stats.q3.toLocaleString()}` : 'N/A'],
@@ -598,7 +601,7 @@ export default function PriceResearch() {
             {data.outlier_rows.length > 0 && (
               <section style={{ marginBottom: 28 }}>
                 <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Excluded outliers</h3>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Discarded observations and outliers</h3>
                   <span style={{ fontSize: 12, color: MUTED }}>Retained for audit, excluded from market statistics</span>
                 </div>
                 <div style={{ overflowX: 'auto', borderTop: `1px solid ${BORDER}` }}>

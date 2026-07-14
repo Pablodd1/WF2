@@ -45,3 +45,12 @@ test('classifies row-level outliers with an auditable reason', () => {
   assert.deepEqual(classifyPrice(null, stats), { included: false, reason: 'INVALID_PRICE' });
 });
 
+test('rejects implausible watch prices before applying IQR fences', () => {
+  const stats = { lower_fence: -1000, upper_fence: 100000 };
+  assert.deepEqual(
+    classifyPrice(244, stats, { minimumPrice: 1000 }),
+    { included: false, reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' }
+  );
+  assert.deepEqual(classifyPrice(24000, stats, { minimumPrice: 1000 }), { included: true, reason: null });
+});
+
