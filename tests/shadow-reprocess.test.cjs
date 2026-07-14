@@ -99,3 +99,37 @@ test('retains an existing structured source price when a marketplace title has n
   assert.equal(result.review_status, 'NO_CHANGE');
 });
 
+test('proposes a catalog-backed dial only for a deterministic single-dial reference', () => {
+  const result = analyzeRecord({
+    id: 'dial-1',
+    raw_message: 'Rolex 52506 full set USD 26000',
+    brand: 'Rolex',
+    reference: '52506',
+    dial_color: 'Unknown',
+    currency: 'USD',
+    price_raw: 26000,
+    price_usd: 26000,
+    listing_type: 'WTS',
+  });
+  assert.equal(result.proposed_candidates[0].source_dial_color, 'Unknown');
+  assert.ok(result.change_flags.includes('DIAL_CHANGED'));
+  assert.ok(result.proposed_candidates[0].dial_color);
+  assert.equal(result.proposed_candidates[0].dial_evidence, 'exact_catalog_single_dial');
+});
+
+test('flags a text and structured dial conflict instead of silently overwriting it', () => {
+  const result = analyzeRecord({
+    id: 'dial-2',
+    raw_message: 'Rolex 126500LN white dial USD 30000',
+    brand: 'Rolex',
+    reference: '126500LN',
+    dial_color: 'Black',
+    currency: 'USD',
+    price_raw: 30000,
+    price_usd: 30000,
+    listing_type: 'WTS',
+  });
+  assert.ok(result.change_flags.includes('DIAL_AMBIGUOUS'));
+  assert.ok(result.change_flags.includes('DIAL_CHANGED'));
+});
+

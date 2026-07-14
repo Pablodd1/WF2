@@ -63,3 +63,14 @@ test('does not promote source-record currency evidence without human review', ()
   assert.equal(result.disposition, 'HUMAN_REVIEW');
   assert.deepEqual(result.reasons, ['CURRENCY_EVIDENCE_INSUFFICIENT']);
 });
+
+test('blocks ambiguous dial changes from promotion', () => {
+  const result = buildPromotionDecision({
+    source_listing_type: 'WTS',
+    candidate_count: 1,
+    proposed_candidates: [validCandidate],
+    change_flags: ['DIAL_AMBIGUOUS', 'DIAL_CHANGED'],
+  });
+  assert.equal(result.disposition, 'HUMAN_REVIEW');
+  assert.deepEqual(result.reasons, ['DIAL_AMBIGUOUS']);
+});

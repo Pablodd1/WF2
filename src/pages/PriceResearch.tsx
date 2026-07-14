@@ -46,6 +46,12 @@ interface PriceData {
   collection: string | null;
   dialColors: string[] | null;
   dial_analysis: DialPoint[];
+  dial_data_quality?: {
+    known_count: number;
+    unknown_count: number;
+    completeness_percent: number;
+    status: 'complete' | 'incomplete';
+  };
   totalListings: number;
   sampledListings: number;
   sampleCapped: boolean;
@@ -359,6 +365,12 @@ export default function PriceResearch() {
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                   Cohort: {data.selected_cohort.condition} / {data.selected_cohort.dial_color}
                 </div>
+                {data.dial_data_quality && data.dial_data_quality.unknown_count > 0 && (
+                  <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6, lineHeight: 1.4 }}>
+                    Dial data {data.dial_data_quality.completeness_percent}% complete.{' '}
+                    {data.dial_data_quality.unknown_count.toLocaleString()} listing observations remain unspecified and are being normalized.
+                  </div>
+                )}
                 {data.sampleCapped && (
                   <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6 }}>
                     Analytics use the newest {data.sampledListings.toLocaleString()} of {data.totalListings.toLocaleString()} matching listings.

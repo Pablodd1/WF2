@@ -167,6 +167,11 @@ module.exports = async function handler(req, res) {
     // evidence and must not be discarded from analytics.
     const excludedSources = new Set(['bulk_test_100', 'test_run', 'mysql_market_refs']);
     const marketRows = rows.filter(r => !excludedSources.has(r.source));
+    const isUnknownDial = value => {
+      const normalized = String(value || '').trim().toUpperCase();
+      return !normalized || ['UNKNOWN', 'UNSPECIFIED', 'N/A', 'NA', 'NONE', 'NULL', '-'].includes(normalized);
+    };
+    const unknownDialCount = marketRows.filter(row => isUnknownDial(row.dial_color)).length;
 
     const cohorts = buildComparableCohorts(marketRows);
     const requestedCondition = String(req.query.condition || '').trim().toLowerCase();
@@ -237,6 +242,14 @@ module.exports = async function handler(req, res) {
       resolvedRef: targetRef !== rawRef ? targetRef : null,
       model, dialColors,
       dial_analysis,
+      dial_data_quality: {
+        known_count: marketRows.length - unknownDialCount,
+        unknown_count: unknownDialCount,
+        completeness_percent: marketRows.length
+          ? Math.round(((marketRows.length - unknownDialCount) / marketRows.length) * 1000) / 10
+          : 0,
+        status: unknownDialCount === 0 ? 'complete' : 'incomplete',
+      },
       totalListings,
       listing_count: marketRows.length,
       sampledListings: rows.length,

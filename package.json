@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:normalization": "node --test tests/normalization-v4.test.cjs tests/market-stats.test.cjs tests/shadow-reprocess.test.cjs tests/promotion-policy.test.cjs tests/catalog-confirmation.test.cjs tests/review-decision-policy.test.cjs"
+    "test:normalization": "node --test tests/normalization-v4.test.cjs tests/dial-normalization.test.cjs tests/market-stats.test.cjs tests/shadow-reprocess.test.cjs tests/promotion-policy.test.cjs tests/catalog-confirmation.test.cjs tests/review-decision-policy.test.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

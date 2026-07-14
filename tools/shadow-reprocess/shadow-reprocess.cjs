@@ -1,8 +1,10 @@
 'use strict';
 
 const { parseNumber, segmentDealerMessage } = require('../../api/_lib/normalization-v4.cjs');
+const { lookupCatalog } = require('../../api/_lib/catalog.js');
+const { comparisonKey, normalizeDialValue, resolveDial } = require('../../api/_lib/dial-normalization.cjs');
 
-const VERSION = 'v4.0-context';
+const VERSION = 'v4.1-dial-context';
 const USD_PER_UNIT = { USD: 1, USDT: 1, HKD: 1 / 7.8, EUR: 1.08, GBP: 1.27, CHF: 1.12, SGD: 0.74, CNY: 0.138 };
 
 function normalizeText(value) {
@@ -61,10 +63,21 @@ function analyzeRecord(record) {
     const retainedSourcePrice = parsedPrices.length || sourceCurrencyPrice ? null : sourcePriceObservation(record);
     const prices = sourceCurrencyPrice ? [sourceCurrencyPrice] : retainedSourcePrice ? [retainedSourcePrice] : parsedPrices;
     const primary = prices.find(price => price.is_primary) || prices[0] || null;
+    const candidateBrand = candidate.context.brand_context || record.brand || null;
+    const candidateReference = candidate.reference || record.reference || null;
+    const catalog = candidateReference ? lookupCatalog(candidateReference, candidateBrand) : null;
+    const exactCatalog = catalog?.found && ['exact', 'exact_inferred_brand', 'collapsed'].includes(catalog.matchType)
+      ? catalog
+      : null;
+    const dial = resolveDial({
+      sourceDial: record.dial_color,
+      rawText: candidate.rawLine,
+      catalogDials: exactCatalog?.dialColors || [],
+    });
     return {
       raw_line: candidate.rawLine,
-      brand: candidate.context.brand_context || null,
-      reference: candidate.reference || null,
+      brand: candidateBrand,
+      reference: candidateReference,
       listing_type: candidate.context.intent_context || 'WTS',
       condition: candidate.context.condition_context || null,
       set_status: candidate.context.set_status_context || null,
@@ -73,6 +86,12 @@ function analyzeRecord(record) {
       price_usd: primary?.amount_usd || null,
       currency: primary?.currency_original || null,
       currency_evidence: primary?.currency_evidence || null,
+      dial_color: dial.value,
+      source_dial_color: record.dial_color || null,
+      dial_evidence: dial.evidence,
+      dial_confidence: dial.confidence,
+      dial_ambiguous: dial.ambiguous,
+      dial_reason: dial.reason,
       prices,
     };
   });
@@ -87,6 +106,9 @@ function analyzeRecord(record) {
     if (next.currency && normalizeText(next.currency) !== normalizeText(record.currency)) flags.add('CURRENCY_CHANGED');
     if (next.listing_type && normalizeText(next.listing_type) !== normalizeText(record.listing_type)) flags.add('INTENT_CHANGED');
     if (next.price_raw && Number(next.price_raw) !== Number(record.price_raw || 0)) flags.add('PRICE_CHANGED');
+    const sourceDial = normalizeDialValue(record.dial_color);
+    if (next.dial_ambiguous) flags.add('DIAL_AMBIGUOUS');
+    if (next.dial_color && comparisonKey(next.dial_color) !== comparisonKey(sourceDial.value)) flags.add('DIAL_CHANGED');
 
     // A bare dollar amount without message or section currency context is not
     // safe to preserve as USD. Keep it out of automatic approval even when an
@@ -109,6 +131,7 @@ function analyzeRecord(record) {
     source_price_usd: record.price_usd || null,
     source_currency: record.currency || null,
     source_listing_type: record.listing_type || null,
+    source_dial_color: record.dial_color || null,
     candidate_count: proposed.length,
     proposed_candidates: proposed,
     change_flags: changeFlags,
@@ -151,7 +174,7 @@ async function run() {
   while (total < maxRows) {
     const limit = Math.min(batchSize, maxRows - total);
     const params = new URLSearchParams({
-      select: 'id,raw_message,brand,reference,price_raw,price_usd,currency,listing_type,parser_version',
+      select: 'id,raw_message,brand,reference,price_raw,price_usd,currency,listing_type,dial_color,parser_version',
       raw_message: 'not.is.null',
       order: 'id.asc',
       limit: String(limit),

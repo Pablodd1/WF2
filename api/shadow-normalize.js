@@ -83,7 +83,7 @@ module.exports = async function handler(req, res) {
       : [];
     const checkpoint = checkpoints?.[0] || {};
     const params = new URLSearchParams({
-      select: 'id,raw_message,brand,reference,price_raw,price_usd,currency,listing_type,parser_version',
+      select: 'id,raw_message,brand,reference,price_raw,price_usd,currency,listing_type,dial_color,parser_version',
       raw_message: 'not.is.null',
       order: 'id.asc',
       limit: String(BATCH_SIZE),
