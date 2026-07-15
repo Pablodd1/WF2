@@ -114,6 +114,7 @@ function loadCatalogs() {
       const brand = String(item.brand || '').trim();
       if (!ref || !brand) continue;
       const entry = {
+        reference: item.reference,
         brand,
         collection: null,
         model: item.model || null,
@@ -220,4 +221,13 @@ function catalogStats() {
   };
 }
 
-module.exports = { lookupCatalog, inferBrand, normalizeRef, catalogStats };
+function listCatalogReferences(brand, model = null) {
+  loadCatalogs();
+  const expectedBrand = normalizeBrand(brand);
+  return [..._sourceByBrandReference.values()]
+    .filter(entry => normalizeBrand(entry.brand) === expectedBrand)
+    .filter(entry => entry.model && (!model || entry.model === model))
+    .map(entry => ({ reference: entry.reference, brand: entry.brand, model: entry.model }));
+}
+
+module.exports = { lookupCatalog, inferBrand, normalizeRef, catalogStats, listCatalogReferences };

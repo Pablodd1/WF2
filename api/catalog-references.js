@@ -1,32 +1,59 @@
 /**
  * CATALOG REFERENCES — /api/catalog-references?brand=Rolex&model=Submariner
  *
- * Returns the REFERENCES under a (brand, model) that have >=1 real approved
- * listing. Existence is derived from watch_records. Each reference carries a
- * derived avg price, real listing count, and the FULL set of dial colors that
- * actually appear in listings (rule: every dial color found must show).
- *
- * Anti-phantom rule: reference appears iff real approved listings >= 1.
- * The returned `reference` is the RAW DB string (not normalized) so it feeds
- * price-research.js's resolver cleanly — no drift.
+ * Returns catalog references only when an indexed exact lookup finds real,
+ * approved listing evidence. Each result carries a bounded price/dial sample,
+ * avoiding the former full-brand scan over millions of production rows.
  */
 const { getClient } = require('./_lib/supabase');
-const { normRef } = require('./_lib/resolve');
-const { lookupCatalog } = require('./_lib/catalog');
+const { listCatalogReferences } = require('./_lib/catalog');
 
-const _cache = new Map(); // `${brand}|${model}` -> { at, payload }
+const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
-const SCAN_CAP = 400_000; // hard ceiling to stay under Vercel timeout
+const REFERENCE_SAMPLE_LIMIT = 500;
+const LOOKUP_CONCURRENCY = 8;
 
-// Memoized model resolver via the proven file catalog (same as catalog-models).
-const _modelMemo = new Map();
-function modelForRef(reference, brand) {
-  const key = `${brand || ''}|${normRef(reference)}`;
-  if (_modelMemo.has(key)) return _modelMemo.get(key);
-  const hit = lookupCatalog(reference, brand || null);
-  const model = hit && hit.found ? (hit.model || null) : null;
-  _modelMemo.set(key, model);
-  return model;
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await mapper(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
+}
+
+async function loadReferenceEvidence(client, brand, entry) {
+  const { data, error } = await client
+    .from('watch_records')
+    .select('reference, price_usd, dial_color')
+    .eq('brand', brand)
+    .eq('reference', entry.reference)
+    .eq('verdict', 'APPROVED')
+    .gt('price_usd', 0)
+    .limit(REFERENCE_SAMPLE_LIMIT);
+  if (error) throw error;
+  if (!data?.length) return null;
+
+  const dials = new Map();
+  let sum = 0;
+  for (const row of data) {
+    sum += Number(row.price_usd);
+    const dial = row.dial_color || 'Unspecified';
+    dials.set(dial, (dials.get(dial) || 0) + 1);
+  }
+  return {
+    reference: entry.reference,
+    listing_count: data.length,
+    sample_capped: data.length >= REFERENCE_SAMPLE_LIMIT,
+    avg_price: Math.round(sum / data.length),
+    dial_colors: [...dials.entries()]
+      .map(([dial_color, count]) => ({ dial_color, count }))
+      .sort((a, b) => b.count - a.count),
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -46,57 +73,20 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-
-    const batch = 5000;
-    let lastId = null;
-    let scanned = 0;
-    // raw reference -> { count, sum, dials:Map<dial,count> }
-    const refs = new Map();
-
-    while (true) {
-      let q = client
-        .from('watch_records')
-        .select('id, reference, price_usd, dial_color')
-        .eq('brand', brand)
-        .eq('verdict', 'APPROVED')
-        .gt('price_usd', 0)
-        .order('id', { ascending: true })
-        .limit(batch);
-      if (lastId) q = q.gt('id', lastId);
-      const { data, error } = await q;
-      if (error) throw error;
-      if (!data || !data.length) break;
-
-      for (const r of data) {
-        scanned++;
-        if (!r.reference) continue;
-        const modelName = modelForRef(r.reference, brand) || 'Other / Uncatalogued';
-        if (modelName !== model) continue; // only this model's refs
-        if (!refs.has(r.reference)) refs.set(r.reference, { count: 0, sum: 0, dials: new Map() });
-        const e = refs.get(r.reference);
-        e.count++;
-        e.sum += r.price_usd;
-        const dial = r.dial_color || 'Unspecified';
-        e.dials.set(dial, (e.dials.get(dial) || 0) + 1);
-      }
-      lastId = data[data.length - 1].id;
-      if (scanned > SCAN_CAP) break;
-    }
-
-    const out = [...refs.entries()]
-      .map(([reference, v]) => ({
-        reference, // RAW string — feeds price-research resolver directly
-        listing_count: v.count,
-        avg_price: Math.round(v.sum / v.count),
-        dial_colors: [...v.dials.entries()]
-          .map(([dial_color, count]) => ({ dial_color, count }))
-          .sort((a, b) => b.count - a.count),
-      }))
-      .filter(r => r.listing_count >= 1)
+    const catalogReferences = listCatalogReferences(brand, model);
+    const evidence = await mapWithConcurrency(
+      catalogReferences,
+      LOOKUP_CONCURRENCY,
+      entry => loadReferenceEvidence(client, brand, entry)
+    );
+    const out = evidence
+      .filter(Boolean)
       .sort((a, b) => b.listing_count - a.listing_count);
 
     const payload = {
-      success: true, brand, model,
+      success: true,
+      brand,
+      model,
       reference_count: out.length,
       references: out,
     };

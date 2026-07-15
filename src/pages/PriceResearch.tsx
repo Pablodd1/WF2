@@ -137,9 +137,9 @@ export default function PriceResearch() {
   // ── Drill-down picker state (brand → model → reference) ──
   const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC'];
   const [pBrand, setPBrand] = useState('');
-  const [pModels, setPModels] = useState<{ model: string; listing_count: number; reference_count: number }[]>([]);
+  const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
   const [pModel, setPModel] = useState('');
-  const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; avg_price: number }[]>([]);
+  const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; sample_capped?: boolean; avg_price: number }[]>([]);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
 
   const loadModels = useCallback(async (brand: string) => {
@@ -250,7 +250,7 @@ export default function PriceResearch() {
         <div className="mb-6" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 20 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Browse by Model</h3>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-            Only models &amp; references with real listings appear — every option is backed by actual watches.
+            Browse catalog-confirmed models. References appear only when backed by real listing evidence.
           </div>
 
           {/* Brand chips */}
@@ -281,7 +281,7 @@ export default function PriceResearch() {
                     backgroundColor: pModel === m.model ? '#eef1f6' : WHITE,
                   }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.model}</div>
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{m.listing_count.toLocaleString()} listings · {m.reference_count} refs</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{m.reference_count} catalog refs</div>
                 </button>
               ))}
             </div>
@@ -299,7 +299,7 @@ export default function PriceResearch() {
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,
                   }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</div>
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{r.listing_count.toLocaleString()} listings · avg ${r.avg_price.toLocaleString()}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} observations · avg ${r.avg_price.toLocaleString()}</div>
                 </button>
               ))}
             </div>
