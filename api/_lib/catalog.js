@@ -230,4 +230,23 @@ function listCatalogReferences(brand, model = null) {
     .map(entry => ({ reference: entry.reference, brand: entry.brand, model: entry.model }));
 }
 
-module.exports = { lookupCatalog, inferBrand, normalizeRef, catalogStats, listCatalogReferences };
+function listCatalogBrands() {
+  loadCatalogs();
+  const brands = new Map();
+  for (const entry of _sourceByBrandReference.values()) {
+    if (!entry.brand || !entry.model) continue;
+    const current = brands.get(entry.brand) || { references: new Set(), models: new Set() };
+    current.references.add(entry.reference);
+    current.models.add(entry.model);
+    brands.set(entry.brand, current);
+  }
+  return [...brands.entries()]
+    .map(([brand, values]) => ({
+      brand,
+      reference_count: values.references.size,
+      model_count: values.models.size,
+    }))
+    .sort((a, b) => b.reference_count - a.reference_count || a.brand.localeCompare(b.brand));
+}
+
+module.exports = { lookupCatalog, inferBrand, normalizeRef, catalogStats, listCatalogReferences, listCatalogBrands };

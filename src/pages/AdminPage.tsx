@@ -3,10 +3,11 @@ import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import {
   Shield, BarChart3, Users, Trash2, CheckCircle2, AlertTriangle,
-  RefreshCw, DollarSign, Clock, Database, Zap,
+  RefreshCw, Clock, Database, Zap,
   TrendingUp, TrendingDown, Activity, Package, Search,
-  Loader2, FileSpreadsheet, FileText, ArrowRight, Eye, Sparkles,
+  Loader2, ArrowRight, Eye, Sparkles,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -23,7 +24,10 @@ interface StatsData {
   unknownDial: number;
   missingYear: number;
   avgConfidence: number;
-  processingRate: number;
+  typeCounts: Record<'WTS' | 'WTB' | 'NTQ' | 'TRADE' | 'MULTI' | 'OTHER', number>;
+  countsEstimated: boolean;
+  qualitySampleSize: number;
+  lastUpdatedAt: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -32,7 +36,7 @@ interface StatsData {
 
 function StatCard({ label, value, sub, icon: Icon, color, trend }: {
   label: string; value: string | number; sub?: string;
-  icon: any; color: string; trend?: 'up' | 'down' | 'neutral';
+  icon: LucideIcon; color: string; trend?: 'up' | 'down' | 'neutral';
 }) {
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Activity;
   return (
@@ -71,7 +75,7 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
 /* ------------------------------------------------------------------ */
 
 function BulkActionCard({ title, desc, icon: Icon, color, onClick, loading }: {
-  title: string; desc: string; icon: any; color: string;
+  title: string; desc: string; icon: LucideIcon; color: string;
   onClick: () => void; loading: boolean;
 }) {
   return (
@@ -100,124 +104,30 @@ function BulkActionCard({ title, desc, icon: Icon, color, onClick, loading }: {
 
 export default function AdminPage() {
   const [stats, setStats] = useState<StatsData | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch('/parsedWatches.json');
+      const res = await fetch('/api/admin-stats', { credentials: 'include' });
       const data = await res.json();
-      const rows = Array.isArray(data) ? data : [];
-
-      let approved = 0, human = 0, recycle = 0;
-      let missingRef = 0, missingPrice = 0, unknownBrand = 0, unknownDial = 0, missingYear = 0;
-      let totalConf = 0;
-
-      for (const row of rows) {
-        const status = row[10] || '';
-        if (status === 'APPROVED') approved++;
-        else if (status === 'HUMAN') human++;
-        else if (status === 'RECYCLE') recycle++;
-
-        if (!row[2] || row[2] === '') missingRef++;
-        if (!row[4] || row[4] === 0) missingPrice++;
-        if (!row[1] || row[1] === 'UNKNOWN' || row[1] === '') unknownBrand++;
-        if (!row[3] || row[3] === 'UNKNOWN' || row[3] === '') unknownDial++;
-        if (!row[12]) missingYear++;
-
-        totalConf += parseFloat(row[9] || 0);
-      }
-
-      const total = rows.length;
-      setStats({
-        totalRecords: total,
-        approved,
-        human,
-        recycle,
-        missingRef,
-        missingPrice,
-        unknownBrand,
-        unknownDial,
-        missingYear,
-        avgConfidence: total > 0 ? Math.round(totalConf / total) : 0,
-        processingRate: Math.round(total / 30), // rough estimate
-      });
+      if (!res.ok || !data.success) throw new Error(data.error || 'Live admin statistics are unavailable');
+      setStats(data);
     } catch (e) {
       console.error('Failed to load stats:', e);
+      setMessage(`Error: ${(e as Error).message}`);
     }
   }, []);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  const runBulkAction = async (action: string) => {
-    setActionLoading(action);
-    setMessage(null);
-    try {
-      const res = await fetch('/api/bulk-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
-      const data = await res.json();
-      setMessage(data.message || `${action} complete`);
-      fetchStats();
-    } catch (e: any) {
-      setMessage(`Error: ${e.message}`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const exportData = async (format: 'excel' | 'csv') => {
-    setActionLoading(`export-${format}`);
-    try {
-      // Fetch parsed watches first
-      const watchesRes = await fetch('/parsedWatches.json');
-      const watchesData = await watchesRes.json();
-      const rows = Array.isArray(watchesData) ? watchesData : [];
-      
-      // Convert rows to watches format for export-report
-      const watches = rows.map(row => ({
-        parsed: {
-          reference: row[2] || '',
-          brand: row[1] || '',
-          dialColor: row[3] || '',
-          condition: row[5] || '',
-          year: row[12] || '',
-          price: row[4] || '',
-          currency: row[6] || '',
-        },
-        confidence: row[9] || 0,
-        verdict: row[10] || 'RECYCLE',
-        reason: row[11] || '',
-        input: row[0] || '',
-      }));
-      
-      const res = await fetch('/api/export-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ watches, format }),
-      });
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `watchfacts-report-${new Date().toISOString().slice(0,10)}.${format === 'excel' ? 'xlsx' : 'csv'}`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setMessage(`Exported ${format.toUpperCase()}`);
-    } catch (e: any) {
-      setMessage(`Export failed: ${e.message}`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   const statsMock = stats || {
-    totalRecords: 117744, approved: 39694, human: 45850, recycle: 32200,
-    missingRef: 7425, missingPrice: 42682, unknownBrand: 31834, unknownDial: 21095, missingYear: 54153,
-    avgConfidence: 67, processingRate: 3925,
+    totalRecords: 0, approved: 0, human: 0, recycle: 0,
+    missingRef: 0, missingPrice: 0, unknownBrand: 0, unknownDial: 0, missingYear: 0,
+    avgConfidence: 0, typeCounts: { WTS: 0, WTB: 0, NTQ: 0, TRADE: 0, MULTI: 0, OTHER: 0 },
+    countsEstimated: true, qualitySampleSize: 0, lastUpdatedAt: null,
   };
+  const totalDenominator = Math.max(1, statsMock.totalRecords);
+  const qualityDenominator = Math.max(1, statsMock.qualitySampleSize);
 
   return (
     <Layout totalProcessed={statsMock.totalRecords} normalizedCount={statsMock.approved} residueCount={statsMock.recycle}>
@@ -238,9 +148,9 @@ export default function AdminPage() {
         {/* ═══ STATS GRID ═══ */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-8">
           <StatCard label="Total Records" value={statsMock.totalRecords.toLocaleString()} icon={Database} color="text-blue-400" />
-          <StatCard label="Approved" value={statsMock.approved.toLocaleString()} sub={`${Math.round((statsMock.approved/statsMock.totalRecords)*100)}%`} icon={CheckCircle2} color="text-emerald-400" trend="up" />
-          <StatCard label="Human Review" value={statsMock.human.toLocaleString()} sub={`${Math.round((statsMock.human/statsMock.totalRecords)*100)}%`} icon={Users} color="text-amber-400" trend="neutral" />
-          <StatCard label="Recycle" value={statsMock.recycle.toLocaleString()} sub={`${Math.round((statsMock.recycle/statsMock.totalRecords)*100)}%`} icon={Trash2} color="text-red-400" trend="down" />
+          <StatCard label="Approved" value={statsMock.approved.toLocaleString()} sub={`${Math.round((statsMock.approved/totalDenominator)*100)}% est.`} icon={CheckCircle2} color="text-emerald-400" trend="up" />
+          <StatCard label="Human Review" value={statsMock.human.toLocaleString()} sub={`${Math.round((statsMock.human/totalDenominator)*100)}% est.`} icon={Users} color="text-amber-400" trend="neutral" />
+          <StatCard label="Recycle" value={statsMock.recycle.toLocaleString()} sub={`${Math.round((statsMock.recycle/totalDenominator)*100)}% est.`} icon={Trash2} color="text-red-400" trend="down" />
           <StatCard label="Avg Confidence" value={`${statsMock.avgConfidence}%`} icon={Activity} color="text-purple-400" />
         </div>
 
@@ -263,56 +173,42 @@ export default function AdminPage() {
             </div>
 
             <BulkActionCard
-              title="Re-process HUMAN + RECYCLE"
-              desc={`Run all ${(statsMock.human + statsMock.recycle).toLocaleString()} records through AI + web enrichment`}
+              title="Review changed rows only"
+              desc="Open the normalization review queue; promotion writes only selected source record IDs"
               icon={RefreshCw}
               color="text-cyan-400"
-              onClick={() => runBulkAction('reprocess')}
-              loading={actionLoading === 'reprocess'}
+              onClick={() => { window.location.href = '/review-queue'; }}
+              loading={false}
             />
             <BulkActionCard
-              title="Export Excel Report"
-              desc="Colored 3-sheet report with all records"
-              icon={FileSpreadsheet}
+              title="Open live Trading Floor"
+              desc="Inspect watches, WTB, luxury items, and multi-listings from production"
+              icon={Package}
               color="text-emerald-400"
-              onClick={() => exportData('excel')}
-              loading={actionLoading === 'export-excel'}
+              onClick={() => { window.location.href = '/trading'; }}
+              loading={false}
             />
             <BulkActionCard
-              title="Export CSV"
-              desc="Raw data export for external tools"
-              icon={FileText}
+              title="Audit model coverage"
+              desc="Browse every cataloged brand/model or search any approved reference directly"
+              icon={Search}
               color="text-blue-400"
-              onClick={() => exportData('csv')}
-              loading={actionLoading === 'export-csv'}
+              onClick={() => { window.location.href = '/price-research'; }}
+              loading={false}
             />
 
             <div className="flex items-center gap-2 mt-6 mb-2">
-              <DollarSign size={14} className="text-gold-primary" />
-              <span className="text-xs font-bold uppercase tracking-wider text-text-primary">AI Cost Tracker</span>
+              <Package size={14} className="text-gold-primary" />
+              <span className="text-xs font-bold uppercase tracking-wider text-text-primary">Live Listing Classes</span>
             </div>
 
             <div className="rounded-xl border border-border-default bg-bg-card p-4 space-y-3">
-              {[
-                { name: 'DeepSeek', calls: 1247, cost: 0.84, color: 'text-cyan-400' },
-                { name: 'Gemini', calls: 892, cost: 0.00, color: 'text-purple-400' },
-                { name: 'Kimi', calls: 156, cost: 1.24, color: 'text-amber-400' },
-              ].map(provider => (
-                <div key={provider.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${provider.color}`} />
-                    <span className="text-xs text-text-secondary">{provider.name}</span>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-mono text-text-primary">{provider.calls} calls</div>
-                    <div className="text-[10px] text-text-muted">${provider.cost.toFixed(2)}</div>
-                  </div>
+              {Object.entries(statsMock.typeCounts).map(([type, count]) => (
+                <div key={type} className="flex items-center justify-between">
+                  <span className="text-xs text-text-secondary">{type}</span>
+                  <span className={`text-xs font-mono ${count > 0 ? 'text-text-primary' : 'text-red-400'}`}>{count.toLocaleString()}{statsMock.countsEstimated && count > 1 ? ' est.' : ''}</span>
                 </div>
               ))}
-              <div className="border-t border-border-default pt-2 flex items-center justify-between">
-                <span className="text-xs font-bold text-text-primary">Total</span>
-                <span className="text-xs font-mono text-gold-primary">$2.08</span>
-              </div>
             </div>
           </div>
 
@@ -324,12 +220,13 @@ export default function AdminPage() {
             </div>
 
             <div className="rounded-xl border border-border-default bg-bg-card p-4 space-y-4">
+              <div className="text-[10px] text-text-muted">Latest {statsMock.qualitySampleSize.toLocaleString()} production rows; rates are sample-based.</div>
               {[
-                { label: 'Missing Reference', count: statsMock.missingRef, total: statsMock.totalRecords, color: 'bg-red-500' },
-                { label: 'Missing Price', count: statsMock.missingPrice, total: statsMock.totalRecords, color: 'bg-amber-500' },
-                { label: 'Unknown Brand', count: statsMock.unknownBrand, total: statsMock.totalRecords, color: 'bg-orange-500' },
-                { label: 'Unknown Dial', count: statsMock.unknownDial, total: statsMock.totalRecords, color: 'bg-yellow-500' },
-                { label: 'Missing Year', count: statsMock.missingYear, total: statsMock.totalRecords, color: 'bg-blue-500' },
+                { label: 'Missing Reference', count: statsMock.missingRef, total: qualityDenominator, color: 'bg-red-500' },
+                { label: 'Missing Price', count: statsMock.missingPrice, total: qualityDenominator, color: 'bg-amber-500' },
+                { label: 'Unknown Brand', count: statsMock.unknownBrand, total: qualityDenominator, color: 'bg-orange-500' },
+                { label: 'Unknown Dial', count: statsMock.unknownDial, total: qualityDenominator, color: 'bg-yellow-500' },
+                { label: 'Missing Year', count: statsMock.missingYear, total: qualityDenominator, color: 'bg-blue-500' },
               ].map(item => (
                 <div key={item.label}>
                   <div className="flex items-center justify-between mb-1">
@@ -343,25 +240,25 @@ export default function AdminPage() {
 
             <div className="flex items-center gap-2 mt-6 mb-2">
               <Clock size={14} className="text-gold-primary" />
-              <span className="text-xs font-bold uppercase tracking-wider text-text-primary">Processing Stats</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-text-primary">Snapshot Provenance</span>
             </div>
 
             <div className="rounded-xl border border-border-default bg-bg-card p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-text-secondary">Records / day</span>
-                <span className="text-xs font-mono text-text-primary">{statsMock.processingRate.toLocaleString()}</span>
+                <span className="text-xs text-text-secondary">Data source</span>
+                <span className="text-xs font-mono text-text-primary">Production DB</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-text-secondary">Avg processing time</span>
-                <span className="text-xs font-mono text-text-primary">2.3s</span>
+                <span className="text-xs text-text-secondary">Full-table counts</span>
+                <span className="text-xs font-mono text-text-primary">{statsMock.countsEstimated ? 'Planner estimates' : 'Exact'}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-text-secondary">AI success rate</span>
-                <span className="text-xs font-mono text-emerald-400">94.2%</span>
+                <span className="text-xs text-text-secondary">Quality sample</span>
+                <span className="text-xs font-mono text-emerald-400">{statsMock.qualitySampleSize.toLocaleString()} rows</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-text-secondary">Cache hit rate</span>
-                <span className="text-xs font-mono text-blue-400">67.8%</span>
+                <span className="text-xs text-text-secondary">Newest record</span>
+                <span className="text-xs font-mono text-blue-400">{statsMock.lastUpdatedAt ? new Date(statsMock.lastUpdatedAt).toLocaleString() : 'Loading'}</span>
               </div>
             </div>
           </div>
@@ -401,14 +298,14 @@ export default function AdminPage() {
               <div className="mt-4 pt-3 border-t border-border-default">
                 <div className="text-[10px] text-text-muted mb-2">Distribution</div>
                 <div className="flex h-3 rounded-full overflow-hidden">
-                  <div className="bg-emerald-500" style={{ width: `${(statsMock.approved/statsMock.totalRecords)*100}%` }} />
-                  <div className="bg-amber-500" style={{ width: `${(statsMock.human/statsMock.totalRecords)*100}%` }} />
-                  <div className="bg-red-500" style={{ width: `${(statsMock.recycle/statsMock.totalRecords)*100}%` }} />
+                  <div className="bg-emerald-500" style={{ width: `${(statsMock.approved/totalDenominator)*100}%` }} />
+                  <div className="bg-amber-500" style={{ width: `${(statsMock.human/totalDenominator)*100}%` }} />
+                  <div className="bg-red-500" style={{ width: `${(statsMock.recycle/totalDenominator)*100}%` }} />
                 </div>
                 <div className="flex justify-between mt-1">
-                  <span className="text-[9px] text-emerald-400">{Math.round((statsMock.approved/statsMock.totalRecords)*100)}%</span>
-                  <span className="text-[9px] text-amber-400">{Math.round((statsMock.human/statsMock.totalRecords)*100)}%</span>
-                  <span className="text-[9px] text-red-400">{Math.round((statsMock.recycle/statsMock.totalRecords)*100)}%</span>
+                  <span className="text-[9px] text-emerald-400">{Math.round((statsMock.approved/totalDenominator)*100)}%</span>
+                  <span className="text-[9px] text-amber-400">{Math.round((statsMock.human/totalDenominator)*100)}%</span>
+                  <span className="text-[9px] text-red-400">{Math.round((statsMock.recycle/totalDenominator)*100)}%</span>
                 </div>
               </div>
             </div>

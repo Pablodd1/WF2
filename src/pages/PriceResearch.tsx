@@ -130,6 +130,7 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
+const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC'];
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
@@ -166,15 +167,18 @@ export default function PriceResearch() {
   const [detailError, setDetailError] = useState('');
 
   // ── Drill-down picker state (brand → model → reference) ──
-  const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC'];
+  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number }[]>(
+    DEFAULT_BRANDS.map(brand => ({ brand }))
+  );
   const [pBrand, setPBrand] = useState('');
   const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
+  const [modelQuery, setModelQuery] = useState('');
   const [pModel, setPModel] = useState('');
   const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; sample_capped?: boolean; avg_price: number }[]>([]);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
 
   const loadModels = useCallback(async (brand: string) => {
-    setPBrand(brand); setPModel(''); setPModels([]); setPRefs([]);
+    setPBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery('');
     if (!brand) return;
     setPLoading('models');
     try {
@@ -217,6 +221,17 @@ export default function PriceResearch() {
       else setError(d.error || 'No data for this reference');
     } catch { setError('Failed to fetch'); }
     finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/catalog-brands', { signal: controller.signal })
+      .then(response => response.json())
+      .then(payload => {
+        if (payload.success && Array.isArray(payload.brands) && payload.brands.length) setPBrands(payload.brands);
+      })
+      .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load catalog brands:', error); });
+    return () => controller.abort();
   }, []);
 
   const openListing = useCallback(async (row: RowData) => {
@@ -286,6 +301,7 @@ export default function PriceResearch() {
   const displayRef = data?.resolvedRef || data?.reference || query;
 
   const listings = (data?.rows || []).filter(r => !r.is_outlier);
+  const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
     if (reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR') return 'Below market plausibility floor';
@@ -312,20 +328,20 @@ export default function PriceResearch() {
         <div className="mb-6" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 20 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Browse by Model</h3>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-            Browse catalog-confirmed models. References appear only when backed by real listing evidence.
+            Search every cataloged brand and model. References appear only when backed by real listing evidence; any approved reference can also be searched directly below.
           </div>
 
           {/* Brand chips */}
           <div className="flex gap-2 flex-wrap mb-3">
-            {BRANDS.map(b => (
-              <button key={b} onClick={() => loadModels(b)}
+            {pBrands.map(item => (
+              <button key={item.brand} onClick={() => loadModels(item.brand)} title={item.model_count ? `${item.model_count} models · ${item.reference_count} references` : undefined}
                 style={{
                   padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: 'none',
-                  backgroundColor: pBrand === b ? NAVY : WHITE,
-                  color: pBrand === b ? WHITE : MUTED,
-                  fontWeight: pBrand === b ? 600 : 400,
+                  backgroundColor: pBrand === item.brand ? NAVY : WHITE,
+                  color: pBrand === item.brand ? WHITE : MUTED,
+                  fontWeight: pBrand === item.brand ? 600 : 400,
                 }}>
-                {b}
+                {item.brand}
               </button>
             ))}
           </div>
@@ -334,8 +350,14 @@ export default function PriceResearch() {
 
           {/* Model cards */}
           {pModels.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-              {pModels.map(m => (
+            <>
+              <label style={{ display: 'block', marginBottom: 10 }}>
+                <span className="sr-only">Search models for {pBrand}</span>
+                <input type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} placeholder={`Search all ${pModels.length} ${pBrand} models`} style={{ width: 'min(100%, 420px)', height: 38, border: `1px solid ${BORDER}`, borderRadius: 7, background: WHITE, color: TEXT, padding: '0 12px', fontSize: 13 }} />
+              </label>
+              <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>{visibleModels.length} of {pModels.length} models</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+              {visibleModels.map(m => (
                 <button key={m.model} onClick={() => loadRefs(pBrand, m.model)}
                   style={{
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
@@ -346,7 +368,9 @@ export default function PriceResearch() {
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{m.reference_count} catalog refs</div>
                 </button>
               ))}
-            </div>
+              </div>
+              {visibleModels.length === 0 && <div style={{ fontSize: 12, color: MUTED, marginBottom: 12 }}>No cataloged model matches “{modelQuery}”. Try the reference search for uncataloged records.</div>}
+            </>
           )}
 
           {pLoading === 'refs' && <div style={{ fontSize: 13, color: MUTED }}>Loading references…</div>}

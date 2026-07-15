@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { confirmCatalogCandidate } = require('../tools/shadow-reprocess/catalog-confirmation.cjs');
 const { buildPromotionDecision } = require('../tools/shadow-reprocess/promotion-policy.cjs');
-const { lookupCatalog } = require('../api/_lib/catalog.js');
+const { listCatalogBrands, lookupCatalog } = require('../api/_lib/catalog.js');
 
 test('confirms an exact catalog reference with matching brand', () => {
   const confirmation = confirmCatalogCandidate({ brand: 'Rolex', reference: '126610LN' });
@@ -55,4 +55,13 @@ test('does not silently resolve an unbranded cross-brand reference', () => {
   assert.equal(ambiguous.matchType, 'ambiguous_reference');
   assert.ok(ambiguous.candidates.some(candidate => candidate.brand === 'Rolex'));
   assert.ok(ambiguous.candidates.some(candidate => candidate.brand === 'Piaget'));
+});
+
+test('exposes every modeled brand to Price Research browsing', () => {
+  const brands = listCatalogBrands();
+  assert.ok(brands.length >= 20);
+  for (const expected of ['Rolex', 'Patek Philippe', 'Breitling', 'Blancpain', 'Grand Seiko', 'F.P. Journe']) {
+    assert.ok(brands.some(entry => entry.brand === expected), `${expected} should be browsable`);
+  }
+  assert.ok(brands.every(entry => entry.model_count > 0 && entry.reference_count > 0));
 });
