@@ -98,7 +98,8 @@ const BLUE = '#0d6efd';
 // ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
-  const [query, setQuery] = useState(searchParams.get('ref') || '52506');
+  const initialReference = searchParams.get('ref') || '52506';
+  const [query, setQuery] = useState(initialReference);
   const [data, setData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -136,10 +137,15 @@ export default function PriceResearch() {
   }, []);
 
   const fetchData = useCallback(async (ref: string, condition = '', dial = '') => {
+    const normalizedReference = ref.trim();
+    if (!normalizedReference) {
+      setError('Enter a reference to search');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const params = new URLSearchParams({ reference: ref });
+      const params = new URLSearchParams({ reference: normalizedReference });
       if (condition) params.set('condition', condition);
       if (dial) params.set('dial', dial);
       const r = await fetch(`/api/price-research?${params.toString()}`);
@@ -150,7 +156,10 @@ export default function PriceResearch() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchData(query); }, [query, fetchData]);
+  // Load the URL/default reference once. Typing must not start a request: the
+  // former query dependency replaced this page with the loading spinner after
+  // every character, which unmounted the input and dropped keyboard focus.
+  useEffect(() => { void fetchData(initialReference); }, [fetchData, initialReference]);
 
   // ── Derived stats ─────────────────────────────────────────
   const stats = data?.stats
@@ -190,14 +199,6 @@ export default function PriceResearch() {
     if (reason === 'ABOVE_IQR_FENCE') return 'Above upper IQR fence';
     return 'Invalid price';
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: WHITE }}>
-        <div className="animate-spin w-8 h-8 border-2 rounded-full" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
-      </div>
-    );
-  }
 
   return (
     <div style={{ backgroundColor: WHITE, color: TEXT, fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh' }}>
@@ -280,14 +281,14 @@ export default function PriceResearch() {
               <input
                 type="text" value={query}
                 onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && fetchData(query)}
+                onKeyDown={e => { if (e.key === 'Enter' && !loading) void fetchData(query); }}
                 placeholder="Enter reference (e.g. 52506, 126334, 5711/1A)"
                 style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none' }}
               />
             </div>
-            <button onClick={() => fetchData(query)}
-              style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: WHITE, border: 'none', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
-              Search
+            <button onClick={() => void fetchData(query)} disabled={loading}
+              style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: WHITE, border: 'none', fontWeight: 600, fontSize: 14, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+              {loading ? 'Searching…' : 'Search'}
             </button>
           </div>
           <div className="flex gap-2 flex-wrap">
