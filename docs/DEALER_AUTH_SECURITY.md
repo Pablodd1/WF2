@@ -7,7 +7,7 @@
 - Dealer, review, admin, analytics, clean, and reprocess routes use a shared client gate.
 - Login responses never expose service-role credentials or raw tokens to browser JavaScript.
 - Login errors are intentionally generic and attempts receive a best-effort server rate limit.
-- The beta skip is session-tab only. It grants read-only UI access but does not create an authenticated dealer session or authorize review decisions.
+- The beta skip is session-tab only. It grants access only to the dealer portal, Price Search, and Trading Floor; it does not create an authenticated dealer session or unlock operations, admin, or review routes.
 - Human approval accepts only a signed-in `reviewer`/`admin` session (legacy server operator tokens remain available for controlled automation).
 - Successful, denied, role-denied, and logout events are written to the append-only dealer authentication audit table when available.
 

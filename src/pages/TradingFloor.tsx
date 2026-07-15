@@ -26,7 +26,16 @@ const SOFT = '#8B7355';
 const DARK_ACTION = '#2A2F37';
 const RED = '#EF4444';
 
-const FILTER_TABS = ['All', 'WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'Other'];
+const FILTER_OPTIONS = [
+  { label: 'Watches', value: 'watches', group: 'Inventory' },
+  { label: 'Luxury items', value: 'luxury', group: 'Inventory' },
+  { label: 'Multi-listings', value: 'multi', group: 'Inventory' },
+  { label: 'All inventory', value: 'all', group: 'Inventory' },
+  { label: 'WTS', value: 'WTS', group: 'Intent' },
+  { label: 'WTB', value: 'WTB', group: 'Intent' },
+  { label: 'NTQ', value: 'NTQ', group: 'Intent' },
+  { label: 'Trade', value: 'TRADE', group: 'Intent' },
+] as const;
 
 interface ListingRecord {
   id: string;
@@ -63,7 +72,8 @@ type QualityMode = 'market' | 'archive';
 
 export default function TradingFloor() {
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get('type') || 'WTS');
+  const initialFilter = searchParams.get('item') || searchParams.get('type') || 'watches';
+  const [activeFilter, setActiveFilter] = useState(initialFilter);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [listings, setListings] = useState<ListingRecord[]>([]);
@@ -96,7 +106,9 @@ export default function TradingFloor() {
       try {
         const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         params.set('quality', qualityMode);
-        if (activeTab !== 'All') params.set('type', activeTab);
+        const selectedFilter = FILTER_OPTIONS.find(option => option.value.toLowerCase() === activeFilter.toLowerCase());
+        if (selectedFilter?.group === 'Inventory') params.set('item', selectedFilter.value);
+        if (selectedFilter?.group === 'Intent') params.set('type', selectedFilter.value);
         if (search) params.set('q', search);
 
         const response = await fetch(`/api/ingest?${params.toString()}`, { signal: controller.signal });
@@ -125,7 +137,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [activeTab, page, pageSize, qualityMode, search]);
+  }, [activeFilter, page, pageSize, qualityMode, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -148,20 +160,21 @@ export default function TradingFloor() {
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
-              {FILTER_TABS.map(tab => (
+            <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar" aria-label="Trading floor filters">
+              {FILTER_OPTIONS.map(option => (
                 <button
-                  key={tab}
+                  key={option.value}
                   type="button"
-                  onClick={() => { setActiveTab(tab); setPage(1); setSelectedListing(null); }}
+                  onClick={() => { setActiveFilter(option.value); setPage(1); setSelectedListing(null); }}
                   className="h-9 shrink-0 rounded-md px-4 text-sm font-medium transition"
                   style={{
-                    border: `1px solid ${activeTab === tab ? GOLD : BORDER}`,
-                    background: activeTab === tab ? GOLD : PANEL,
-                    color: activeTab === tab ? '#09090D' : MUTED,
+                    border: `1px solid ${activeFilter.toLowerCase() === option.value.toLowerCase() ? GOLD : BORDER}`,
+                    background: activeFilter.toLowerCase() === option.value.toLowerCase() ? GOLD : PANEL,
+                    color: activeFilter.toLowerCase() === option.value.toLowerCase() ? '#09090D' : MUTED,
                   }}
+                  title={`${option.group}: ${option.label}`}
                 >
-                  {tab}
+                  {option.label}
                 </button>
               ))}
             </div>
@@ -295,6 +308,9 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       </button>
 
       <div className="mt-5 min-h-[56px]">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>
+          {listingKindLabel(listing)} · {cleanValue(listing.listing_type) || 'Listing'}
+        </div>
         <button
           type="button"
           onClick={onSelect}
@@ -426,8 +442,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Listing Details:</h2>
           <div className="mt-5 grid gap-3 text-[15px] sm:grid-cols-2" style={{ color: INK }}>
-            <DetailRow label="Brand" value={cleanValue(listing.brand)} />
-            <DetailRow label="Reference" value={cleanValue(listing.reference)} />
+            <DetailRow label="Category" value={listingKindLabel(listing)} />
+            <DetailRow label="Brand / maker" value={cleanValue(listing.brand) || 'Not identified'} />
+            <DetailRow label="Reference" value={cleanValue(listing.reference) || (listing.listing_type === 'MULTI' ? 'Pending item split' : 'Not listed')} />
             <DetailRow label="Condition" value={cleanValue(listing.condition)} />
             <DetailRow label="Dial" value={cleanValue(listing.dial_color)} />
             <DetailRow label="Year" value={listing.year ? String(listing.year) : 'Not listed'} />
@@ -461,7 +478,9 @@ function ListingImage({ listing, className, large = false }: { listing: ListingR
       <div className={large ? 'text-[34px] font-semibold' : 'text-[22px] font-semibold'} style={{ color: GOLD_BRIGHT }}>
         {cleanValue(listing.brand) || 'Watch'}
       </div>
-      <div className="mt-3 text-[15px]" style={{ color: MUTED }}>{cleanValue(listing.reference) || 'Reference pending'}</div>
+      <div className="mt-3 text-[15px]" style={{ color: MUTED }}>
+        {cleanValue(listing.reference) || (listing.listing_type === 'MULTI' ? 'Multiple items · split pending' : listingKindLabel(listing))}
+      </div>
     </div>
   );
 }
@@ -556,6 +575,7 @@ function getListingMeta(listing: ListingRecord) {
 }
 
 function buildListingTitle(listing: ListingRecord) {
+  if (listing.listing_type === 'MULTI' && !cleanValue(listing.reference)) return 'Multi-item dealer listing';
   const parts = [
     cleanValue(listing.brand) === 'Unknown' ? '' : cleanValue(listing.brand),
     cleanValue(listing.reference),
@@ -563,7 +583,13 @@ function buildListingTitle(listing: ListingRecord) {
     listing.year ? `${listing.year}year` : '',
     cleanValue(listing.dial_color),
   ].filter(Boolean);
-  return parts.length ? parts.join(' ') : 'Watch listing';
+  return parts.length ? parts.join(' ') : `${listingKindLabel(listing)} listing`;
+}
+
+function listingKindLabel(listing: ListingRecord) {
+  if (listing.listing_type === 'MULTI') return 'Multi-listing';
+  if (listing.listing_type === 'OTHER') return 'Luxury item';
+  return 'Watch';
 }
 
 function formatRawPrice(listing: ListingRecord) {

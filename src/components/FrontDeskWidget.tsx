@@ -19,7 +19,7 @@ function fallbackResponse(message: string) {
     return { reply: 'The Trading Floor is the fastest way to browse dated dealer listings.', route: '/trading' };
   }
   if (/(dealer|review|account|operation|admin)/.test(normalized)) {
-    return { reply: 'Dealer access opens the operations workspace and controlled review queue.', route: '/dashboard' };
+    return { reply: 'Dealer access opens Price Search, the Trading Floor, and the rated-dealer network.', route: '/dealer' };
   }
   return { reply: 'I can help with listings, price research, or dealer access. Which one do you need?', route: null };
 }
