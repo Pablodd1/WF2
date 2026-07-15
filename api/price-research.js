@@ -287,6 +287,7 @@ module.exports = async function handler(req, res) {
       outliersRemoved: outlierRows.length,
       outliers: outlierRows.map(row => row.price_usd),
       outlier_rows: outlierRows.map(r => ({
+        id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year, is_outlier: true, outlier_reason: r.outlier_reason,
@@ -324,6 +325,7 @@ module.exports = async function handler(req, res) {
       liquidity,
       monthly, prices,
       rows: classifiedRows.map(r => ({
+        id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year,
