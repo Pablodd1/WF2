@@ -35,7 +35,8 @@ interface ListingDetailData {
   price_usd: number;
   currency: string | null;
   raw_message: string;
-  raw_message_restricted: boolean;
+  raw_message_scope: 'original_post' | 'stored_source_message' | 'unavailable';
+  raw_message_lineage_id: string | null;
   created_at: string;
   listing_date?: string | null;
   condition: string | null;
@@ -915,12 +916,27 @@ function ListingDetailModal({ summary, detail, loading, error, onClose, outlierL
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{detail.brand} {detail.reference}</h1>
               <div style={{ color: GOLD, fontSize: 26, fontWeight: 800, marginBottom: 28 }}>${displayPrice.toLocaleString()} <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>USD normalized</span></div>
 
-              <DetailCard title="Post information">
+              <DetailCard title="Raw source message — unchanged" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy raw message'}</button> : undefined}>
+                <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
+                  <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>NO NORMALIZATION APPLIED</span>
+                  <span style={{ color: MUTED, fontSize: 12 }}>
+                    {detail.raw_message_scope === 'original_post'
+                      ? 'Complete immutable post recovered from ingestion lineage.'
+                      : detail.raw_message_scope === 'stored_source_message'
+                        ? 'Exact source text stored with this historical listing; full-post lineage is not available.'
+                        : 'No source text is stored for this listing.'}
+                  </span>
+                </div>
+                {detail.raw_message ? <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>{detail.raw_message}</pre> : <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>No raw source message is stored for this record.</div>}
+                {detail.raw_message_lineage_id && <div style={{ marginTop: 8, color: MUTED, fontSize: 10, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>Raw lineage ID: {detail.raw_message_lineage_id}</div>}
+              </DetailCard>
+
+              <DetailCard title="Normalized record — what the parser produced">
                 <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
                   <DetailField label="Record ID" value={detail.id} mono />
                   <DetailField label="Observed" value={observedAt ? observedAt.split('T')[0] : null} />
                   <DetailField label="Source" value={detail.source} />
-                  <DetailField label="Original price" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
+                  <DetailField label="Stored source price" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
                   <DetailField label="Condition" value={detail.condition} />
                   <DetailField label="Dial" value={detail.dial_color} />
                   <DetailField label="Year" value={detail.year} />
@@ -933,10 +949,6 @@ function ListingDetailModal({ summary, detail, loading, error, onClose, outlierL
                 {detail.accessories.length > 0 && <div style={{ marginTop: 20 }}><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Accessories stated in source</div><div className="flex flex-wrap gap-2">{detail.accessories.map(item => <span key={item} style={{ background: LIGHT_GRAY, border: `1px solid ${BORDER}`, padding: '5px 9px', borderRadius: 5, fontSize: 12 }}>{item}</span>)}</div></div>}
               </DetailCard>
 
-              <DetailCard title="Source evidence" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy raw message'}</button> : undefined}>
-                <p style={{ fontSize: 12, color: MUTED, marginBottom: 12 }}>Original message retained with the record. This is the audit trail for the extracted reference, price, condition, and outlier decision.</p>
-                {detail.raw_message ? <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>{detail.raw_message}</pre> : <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>{detail.raw_message_restricted ? 'Sign in with dealer credentials to view the original source message.' : 'No raw source message is stored for this record.'}</div>}
-              </DetailCard>
             </section>
           </div>
         )}
