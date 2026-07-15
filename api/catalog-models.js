@@ -4,9 +4,10 @@
  * Returns the list of MODELS for a brand that have at least one REAL approved
  * listing behind them. Existence is derived from watch_records (the real
  * listings) — NEVER from a static catalog. The catalog (cached_price_guide_watches)
- * is used ONLY to attach a human model name to a reference. A reference with no
- * catalog entry still appears (grouped under its reference); a catalog model with
- * zero real listings NEVER appears.
+ * is used ONLY to attach a confirmed human model name to a reference. References
+ * without a catalog-confirmed model remain available through direct search but
+ * are not presented as models in this browse endpoint. A catalog model with zero
+ * real listings NEVER appears.
  *
  * Anti-phantom rule: a model shows up iff SUM(real approved listings) >= 1.
  */
@@ -55,7 +56,6 @@ module.exports = async function handler(req, res) {
     let lastId = null;
     // model name -> { listing_count, refs:Set }
     const models = new Map();
-    // references with no catalog model -> grouped under "(Uncatalogued)" but still real
     let scanned = 0;
 
     while (true) {
@@ -75,7 +75,8 @@ module.exports = async function handler(req, res) {
       for (const r of data) {
         scanned++;
         if (!r.reference) continue;
-        const modelName = modelForRef(r.reference, brand) || 'Other / Uncatalogued';
+        const modelName = modelForRef(r.reference, brand);
+        if (!modelName) continue;
         if (!models.has(modelName)) models.set(modelName, { listing_count: 0, refs: new Set() });
         const m = models.get(modelName);
         m.listing_count++;

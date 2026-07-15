@@ -26,6 +26,15 @@ interface DialPoint {
   dial_color: string; count: number; avg_price: number; min_price: number; max_price: number;
 }
 
+interface CohortPoint {
+  condition: string;
+  dial_color: string;
+  count: number;
+  avg_price: number | null;
+  min_price: number | null;
+  max_price: number | null;
+}
+
 // Real liquidity — either precomputed indicators or a live-derived fallback.
 // NO invented seller/buyer numbers (every field traces to real data).
 interface LiquidityData {
@@ -67,7 +76,7 @@ interface PriceData {
   analytics_ready: boolean;
   sample_quality: 'observational' | 'provisional' | 'robust';
   selected_cohort: { condition: string; dial_color: string; count: number };
-  cohorts: { condition: string; dial_color: string; count: number }[];
+  cohorts: CohortPoint[];
   stats: {
     avg: number; median: number; min: number; max: number; range: number;
     q1: number; q3: number; iqr: number; lower_fence: number | null; upper_fence: number | null;
@@ -95,10 +104,31 @@ const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
 
+const DIAL_SWATCHES: Record<string, string> = {
+  black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
+  green: '#327253', 'mint green': '#98c9ad', white: '#f7f4ea', 'white dial': '#f7f4ea',
+  silver: '#c4c7c9', grey: '#7f858d', gray: '#7f858d', 'dark grey': '#44484f',
+  salmon: '#e59a82', pink: '#d99bb5', purple: '#76528e', yellow: '#e3bd3e',
+  orange: '#d9792b', brown: '#76513b', cream: '#e8ddbd', 'creamy white': '#eee5ce',
+  turquoise: '#42b9b2', 'tiffany blue': '#81d8d0', 'ice blue': '#b7dce5',
+  'rose gold': '#b76e79', 'white gold': '#d7d7d7', platinum: '#bfc3c7',
+};
+
+function dialSwatch(color: string) {
+  const normalized = color.trim().toLowerCase();
+  if (DIAL_SWATCHES[normalized]) return DIAL_SWATCHES[normalized];
+  if (normalized.includes('blue')) return DIAL_SWATCHES.blue;
+  if (normalized.includes('green')) return DIAL_SWATCHES.green;
+  if (normalized.includes('white')) return DIAL_SWATCHES.white;
+  if (normalized.includes('black')) return DIAL_SWATCHES.black;
+  if (normalized.includes('silver') || normalized.includes('steel')) return DIAL_SWATCHES.silver;
+  return 'linear-gradient(135deg, #d8dbe0 0%, #f8f9fa 50%, #b9bec5 100%)';
+}
+
 // ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
-  const initialReference = searchParams.get('ref') || '52506';
+  const initialReference = searchParams.get('ref') || '';
   const [query, setQuery] = useState(initialReference);
   const [data, setData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -159,7 +189,9 @@ export default function PriceResearch() {
   // Load the URL/default reference once. Typing must not start a request: the
   // former query dependency replaced this page with the loading spinner after
   // every character, which unmounted the input and dropped keyboard focus.
-  useEffect(() => { void fetchData(initialReference); }, [fetchData, initialReference]);
+  useEffect(() => {
+    if (initialReference) void fetchData(initialReference);
+  }, [fetchData, initialReference]);
 
   // ── Derived stats ─────────────────────────────────────────
   const stats = data?.stats
@@ -282,7 +314,7 @@ export default function PriceResearch() {
                 type="text" value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !loading) void fetchData(query); }}
-                placeholder="Enter reference (e.g. 52506, 126334, 5711/1A)"
+                placeholder="Enter a watch reference"
                 style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none' }}
               />
             </div>
@@ -290,19 +322,6 @@ export default function PriceResearch() {
               style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: WHITE, border: 'none', fontWeight: 600, fontSize: 14, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Searching…' : 'Search'}
             </button>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {['52506', '126334', '5711/1A'].map(ref => (
-              <button key={ref} onClick={() => { setQuery(ref); fetchData(ref); }}
-                style={{
-                  padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: 'none',
-                  backgroundColor: query === ref ? NAVY : LIGHT_GRAY,
-                  color: query === ref ? WHITE : MUTED,
-                  fontWeight: query === ref ? 600 : 400,
-                }}>
-                {ref}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -320,38 +339,50 @@ export default function PriceResearch() {
                 {data.brand}
               </div>
               <div className="flex items-baseline gap-3 mb-3">
-                <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model || 'Unknown Model'}</h2>
+                {data.model ? (
+                  <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
+                ) : (
+                  <span style={{ fontSize: 13, color: MUTED }}>Model pending catalog confirmation</span>
+                )}
                 <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{displayRef}</span>
                 {data.collection && <span style={{ fontSize: 13, color: MUTED }}>{data.collection}</span>}
               </div>
-              {data.dialColors && data.dialColors.length > 0 && (
-                <div style={{ fontSize: 14, color: MUTED }}>
-                  Dial colors: <span style={{ color: TEXT, fontWeight: 500 }}>{data.dialColors.join(', ')}</span>
-                </div>
-              )}
             </div>
 
             {data.cohorts.length > 1 && (
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3" style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 16, marginBottom: 24 }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>Comparable presentation</div>
-                  <div style={{ fontSize: 12, color: MUTED }}>Condition and dial stay separate so different configurations do not distort the market price.</div>
+              <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
+                  Every condition and dial group is visible. Select one to update the pricing summary and graph with comparable watches only.
                 </div>
-                <select
-                  aria-label="Comparable presentation"
-                  value={`${data.selected_cohort.condition}|||${data.selected_cohort.dial_color}`}
-                  onChange={(event) => {
-                    const [condition, dial] = event.target.value.split('|||');
-                    fetchData(data.reference, condition, dial);
-                  }}
-                  style={{ minWidth: 260, padding: '10px 12px', border: `1px solid ${BORDER}`, color: NAVY, backgroundColor: WHITE, fontSize: 13 }}
-                >
-                  {data.cohorts.map(cohort => (
-                    <option key={`${cohort.condition}-${cohort.dial_color}`} value={`${cohort.condition}|||${cohort.dial_color}`}>
-                      {cohort.condition} / {cohort.dial_color} ({cohort.count})
-                    </option>
-                  ))}
-                </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {data.cohorts.map(cohort => {
+                    const selected = data.selected_cohort.condition === cohort.condition
+                      && data.selected_cohort.dial_color === cohort.dial_color;
+                    return (
+                      <button
+                        key={`${cohort.condition}-${cohort.dial_color}`}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => void fetchData(data.reference, cohort.condition, cohort.dial_color)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 12px',
+                          borderRadius: 8, cursor: 'pointer', backgroundColor: selected ? '#eef1f6' : WHITE,
+                          border: `1px solid ${selected ? NAVY : BORDER}`,
+                        }}
+                      >
+                        <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto', background: dialSwatch(cohort.dial_color), border: '1px solid rgba(0,0,0,0.18)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.35)' }} />
+                        <span style={{ minWidth: 0, flex: 1 }}>
+                          <span style={{ display: 'block', color: TEXT, fontSize: 13, fontWeight: 700 }}>{cohort.dial_color}</span>
+                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{cohort.condition} · {cohort.count.toLocaleString()} listings</span>
+                        </span>
+                        <span style={{ color: GREEN, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          {cohort.avg_price == null ? 'No price' : `$${cohort.avg_price.toLocaleString()}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -518,7 +549,12 @@ export default function PriceResearch() {
                     <tbody>
                       {data.dial_analysis.map((d, i) => (
                         <tr key={i} style={{ borderBottom: `1px solid ${BORDER}` }}>
-                          <td style={{ padding: '10px 12px', color: TEXT, fontWeight: 500 }}>{d.dial_color}</td>
+                          <td style={{ padding: '10px 12px', color: TEXT, fontWeight: 500 }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: '50%', background: dialSwatch(d.dial_color), border: '1px solid rgba(0,0,0,0.18)' }} />
+                              {d.dial_color}
+                            </span>
+                          </td>
                           <td style={{ padding: '10px 12px', textAlign: 'right', color: NAVY, fontWeight: 600 }}>{d.count.toLocaleString()}</td>
                           <td style={{ padding: '10px 12px', textAlign: 'right', color: GREEN, fontWeight: 600 }}>${d.avg_price.toLocaleString()}</td>
                           <td style={{ padding: '10px 12px', textAlign: 'right', color: MUTED }}>${d.min_price.toLocaleString()}</td>
