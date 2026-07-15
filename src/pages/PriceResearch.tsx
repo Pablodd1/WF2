@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Download, ExternalLink } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Download, Eye, ImageOff, Loader2, X } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
+  id: string;
   price_usd: number;
   created_at: string;
   listing_date?: string | null;
@@ -24,6 +25,41 @@ interface MonthlyPoint {
 
 interface DialPoint {
   dial_color: string; count: number; avg_price: number; min_price: number; max_price: number;
+}
+
+interface ListingDetailData {
+  id: string;
+  brand: string;
+  reference: string;
+  price_raw: number | string | null;
+  price_usd: number;
+  currency: string | null;
+  raw_message: string;
+  raw_message_scope: 'original_post' | 'stored_source_message' | 'unavailable';
+  raw_message_lineage_id: string | null;
+  created_at: string;
+  listing_date?: string | null;
+  condition: string | null;
+  source: string | null;
+  dial_color: string | null;
+  year: number | null;
+  listing_type: string | null;
+  accessories: string[];
+  image_urls: string[];
+  has_images: boolean;
+  region: string | null;
+  source_type: string | null;
+  listing_status: string | null;
+  confidence: number | null;
+}
+
+interface CohortPoint {
+  condition: string;
+  dial_color: string;
+  count: number;
+  avg_price: number | null;
+  min_price: number | null;
+  max_price: number | null;
 }
 
 // Real liquidity — either precomputed indicators or a live-derived fallback.
@@ -67,7 +103,7 @@ interface PriceData {
   analytics_ready: boolean;
   sample_quality: 'observational' | 'provisional' | 'robust';
   selected_cohort: { condition: string; dial_color: string; count: number };
-  cohorts: { condition: string; dial_color: string; count: number }[];
+  cohorts: CohortPoint[];
   stats: {
     avg: number; median: number; min: number; max: number; range: number;
     q1: number; q3: number; iqr: number; lower_fence: number | null; upper_fence: number | null;
@@ -94,26 +130,55 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
+const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC'];
+
+const DIAL_SWATCHES: Record<string, string> = {
+  black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
+  green: '#327253', 'mint green': '#98c9ad', white: '#f7f4ea', 'white dial': '#f7f4ea',
+  silver: '#c4c7c9', grey: '#7f858d', gray: '#7f858d', 'dark grey': '#44484f',
+  salmon: '#e59a82', pink: '#d99bb5', purple: '#76528e', yellow: '#e3bd3e',
+  orange: '#d9792b', brown: '#76513b', cream: '#e8ddbd', 'creamy white': '#eee5ce',
+  turquoise: '#42b9b2', 'tiffany blue': '#81d8d0', 'ice blue': '#b7dce5',
+  'rose gold': '#b76e79', 'white gold': '#d7d7d7', platinum: '#bfc3c7',
+};
+
+function dialSwatch(color: string) {
+  const normalized = color.trim().toLowerCase();
+  if (DIAL_SWATCHES[normalized]) return DIAL_SWATCHES[normalized];
+  if (normalized.includes('blue')) return DIAL_SWATCHES.blue;
+  if (normalized.includes('green')) return DIAL_SWATCHES.green;
+  if (normalized.includes('white')) return DIAL_SWATCHES.white;
+  if (normalized.includes('black')) return DIAL_SWATCHES.black;
+  if (normalized.includes('silver') || normalized.includes('steel')) return DIAL_SWATCHES.silver;
+  return 'linear-gradient(135deg, #d8dbe0 0%, #f8f9fa 50%, #b9bec5 100%)';
+}
 
 // ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
-  const initialReference = searchParams.get('ref') || '52506';
+  const initialReference = searchParams.get('ref') || '';
   const [query, setQuery] = useState(initialReference);
   const [data, setData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedRow, setSelectedRow] = useState<RowData | null>(null);
+  const [listingDetail, setListingDetail] = useState<ListingDetailData | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
 
   // ── Drill-down picker state (brand → model → reference) ──
-  const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC'];
+  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number }[]>(
+    DEFAULT_BRANDS.map(brand => ({ brand }))
+  );
   const [pBrand, setPBrand] = useState('');
-  const [pModels, setPModels] = useState<{ model: string; listing_count: number; reference_count: number }[]>([]);
+  const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
+  const [modelQuery, setModelQuery] = useState('');
   const [pModel, setPModel] = useState('');
-  const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; avg_price: number }[]>([]);
+  const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; sample_capped?: boolean; avg_price: number }[]>([]);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
 
   const loadModels = useCallback(async (brand: string) => {
-    setPBrand(brand); setPModel(''); setPModels([]); setPRefs([]);
+    setPBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery('');
     if (!brand) return;
     setPLoading('models');
     try {
@@ -144,6 +209,8 @@ export default function PriceResearch() {
     }
     setLoading(true);
     setError('');
+    setSelectedRow(null);
+    setListingDetail(null);
     try {
       const params = new URLSearchParams({ reference: normalizedReference });
       if (condition) params.set('condition', condition);
@@ -156,10 +223,60 @@ export default function PriceResearch() {
     finally { setLoading(false); }
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/catalog-brands', { signal: controller.signal })
+      .then(response => response.json())
+      .then(payload => {
+        if (payload.success && Array.isArray(payload.brands) && payload.brands.length) setPBrands(payload.brands);
+      })
+      .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load catalog brands:', error); });
+    return () => controller.abort();
+  }, []);
+
+  const openListing = useCallback(async (row: RowData) => {
+    setSelectedRow(row);
+    setListingDetail(null);
+    setDetailError('');
+    setDetailLoading(true);
+    try {
+      const response = await fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`);
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'Listing detail is unavailable');
+      setListingDetail(payload.listing);
+    } catch (requestError) {
+      setDetailError(requestError instanceof Error ? requestError.message : 'Listing detail is unavailable');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const closeListing = useCallback(() => {
+    setSelectedRow(null);
+    setListingDetail(null);
+    setDetailError('');
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRow) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeListing();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [closeListing, selectedRow]);
+
   // Load the URL/default reference once. Typing must not start a request: the
   // former query dependency replaced this page with the loading spinner after
   // every character, which unmounted the input and dropped keyboard focus.
-  useEffect(() => { void fetchData(initialReference); }, [fetchData, initialReference]);
+  useEffect(() => {
+    if (initialReference) void fetchData(initialReference);
+  }, [fetchData, initialReference]);
 
   // ── Derived stats ─────────────────────────────────────────
   const stats = data?.stats
@@ -183,15 +300,8 @@ export default function PriceResearch() {
 
   const displayRef = data?.resolvedRef || data?.reference || query;
 
-  const listings = (data?.rows || []).filter(r => !r.is_outlier).map(r => ({
-    title: `${data?.brand || ''} ${displayRef}`.trim(),
-    priceUSD: r.price_usd,
-    price: r.price_usd,
-    currency: 'USD',
-    dial: r.dial_color || 'N/A',
-    date: (r.listing_date || r.created_at) ? (r.listing_date || r.created_at).split('T')[0] : '',
-    condition: r.condition || 'N/A',
-  }));
+  const listings = (data?.rows || []).filter(r => !r.is_outlier);
+  const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
     if (reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR') return 'Below market plausibility floor';
@@ -218,20 +328,20 @@ export default function PriceResearch() {
         <div className="mb-6" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 20 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Browse by Model</h3>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-            Only models &amp; references with real listings appear — every option is backed by actual watches.
+            Search every cataloged brand and model. References appear only when backed by real listing evidence; any approved reference can also be searched directly below.
           </div>
 
           {/* Brand chips */}
           <div className="flex gap-2 flex-wrap mb-3">
-            {BRANDS.map(b => (
-              <button key={b} onClick={() => loadModels(b)}
+            {pBrands.map(item => (
+              <button key={item.brand} onClick={() => loadModels(item.brand)} title={item.model_count ? `${item.model_count} models · ${item.reference_count} references` : undefined}
                 style={{
                   padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: 'none',
-                  backgroundColor: pBrand === b ? NAVY : WHITE,
-                  color: pBrand === b ? WHITE : MUTED,
-                  fontWeight: pBrand === b ? 600 : 400,
+                  backgroundColor: pBrand === item.brand ? NAVY : WHITE,
+                  color: pBrand === item.brand ? WHITE : MUTED,
+                  fontWeight: pBrand === item.brand ? 600 : 400,
                 }}>
-                {b}
+                {item.brand}
               </button>
             ))}
           </div>
@@ -240,8 +350,14 @@ export default function PriceResearch() {
 
           {/* Model cards */}
           {pModels.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-              {pModels.map(m => (
+            <>
+              <label style={{ display: 'block', marginBottom: 10 }}>
+                <span className="sr-only">Search models for {pBrand}</span>
+                <input type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} placeholder={`Search all ${pModels.length} ${pBrand} models`} style={{ width: 'min(100%, 420px)', height: 38, border: `1px solid ${BORDER}`, borderRadius: 7, background: WHITE, color: TEXT, padding: '0 12px', fontSize: 13 }} />
+              </label>
+              <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>{visibleModels.length} of {pModels.length} models</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+              {visibleModels.map(m => (
                 <button key={m.model} onClick={() => loadRefs(pBrand, m.model)}
                   style={{
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
@@ -249,10 +365,12 @@ export default function PriceResearch() {
                     backgroundColor: pModel === m.model ? '#eef1f6' : WHITE,
                   }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.model}</div>
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{m.listing_count.toLocaleString()} listings · {m.reference_count} refs</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{m.reference_count} catalog refs</div>
                 </button>
               ))}
-            </div>
+              </div>
+              {visibleModels.length === 0 && <div style={{ fontSize: 12, color: MUTED, marginBottom: 12 }}>No cataloged model matches “{modelQuery}”. Try the reference search for uncataloged records.</div>}
+            </>
           )}
 
           {pLoading === 'refs' && <div style={{ fontSize: 13, color: MUTED }}>Loading references…</div>}
@@ -267,7 +385,7 @@ export default function PriceResearch() {
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,
                   }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</div>
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{r.listing_count.toLocaleString()} listings · avg ${r.avg_price.toLocaleString()}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} observations · avg ${r.avg_price.toLocaleString()}</div>
                 </button>
               ))}
             </div>
@@ -282,7 +400,7 @@ export default function PriceResearch() {
                 type="text" value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !loading) void fetchData(query); }}
-                placeholder="Enter reference (e.g. 52506, 126334, 5711/1A)"
+                placeholder="Enter a watch reference"
                 style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none' }}
               />
             </div>
@@ -290,19 +408,6 @@ export default function PriceResearch() {
               style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: WHITE, border: 'none', fontWeight: 600, fontSize: 14, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Searching…' : 'Search'}
             </button>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {['52506', '126334', '5711/1A'].map(ref => (
-              <button key={ref} onClick={() => { setQuery(ref); fetchData(ref); }}
-                style={{
-                  padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: 'none',
-                  backgroundColor: query === ref ? NAVY : LIGHT_GRAY,
-                  color: query === ref ? WHITE : MUTED,
-                  fontWeight: query === ref ? 600 : 400,
-                }}>
-                {ref}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -320,38 +425,50 @@ export default function PriceResearch() {
                 {data.brand}
               </div>
               <div className="flex items-baseline gap-3 mb-3">
-                <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model || 'Unknown Model'}</h2>
+                {data.model ? (
+                  <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
+                ) : (
+                  <span style={{ fontSize: 13, color: MUTED }}>Model pending catalog confirmation</span>
+                )}
                 <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{displayRef}</span>
                 {data.collection && <span style={{ fontSize: 13, color: MUTED }}>{data.collection}</span>}
               </div>
-              {data.dialColors && data.dialColors.length > 0 && (
-                <div style={{ fontSize: 14, color: MUTED }}>
-                  Dial colors: <span style={{ color: TEXT, fontWeight: 500 }}>{data.dialColors.join(', ')}</span>
-                </div>
-              )}
             </div>
 
             {data.cohorts.length > 1 && (
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3" style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 16, marginBottom: 24 }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>Comparable presentation</div>
-                  <div style={{ fontSize: 12, color: MUTED }}>Condition and dial stay separate so different configurations do not distort the market price.</div>
+              <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
+                  Every condition and dial group is visible. Select one to update the pricing summary and graph with comparable watches only.
                 </div>
-                <select
-                  aria-label="Comparable presentation"
-                  value={`${data.selected_cohort.condition}|||${data.selected_cohort.dial_color}`}
-                  onChange={(event) => {
-                    const [condition, dial] = event.target.value.split('|||');
-                    fetchData(data.reference, condition, dial);
-                  }}
-                  style={{ minWidth: 260, padding: '10px 12px', border: `1px solid ${BORDER}`, color: NAVY, backgroundColor: WHITE, fontSize: 13 }}
-                >
-                  {data.cohorts.map(cohort => (
-                    <option key={`${cohort.condition}-${cohort.dial_color}`} value={`${cohort.condition}|||${cohort.dial_color}`}>
-                      {cohort.condition} / {cohort.dial_color} ({cohort.count})
-                    </option>
-                  ))}
-                </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {data.cohorts.map(cohort => {
+                    const selected = data.selected_cohort.condition === cohort.condition
+                      && data.selected_cohort.dial_color === cohort.dial_color;
+                    return (
+                      <button
+                        key={`${cohort.condition}-${cohort.dial_color}`}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => void fetchData(data.reference, cohort.condition, cohort.dial_color)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 12px',
+                          borderRadius: 8, cursor: 'pointer', backgroundColor: selected ? '#eef1f6' : WHITE,
+                          border: `1px solid ${selected ? NAVY : BORDER}`,
+                        }}
+                      >
+                        <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto', background: dialSwatch(cohort.dial_color), border: '1px solid rgba(0,0,0,0.18)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.35)' }} />
+                        <span style={{ minWidth: 0, flex: 1 }}>
+                          <span style={{ display: 'block', color: TEXT, fontSize: 13, fontWeight: 700 }}>{cohort.dial_color}</span>
+                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{cohort.condition} · {cohort.count.toLocaleString()} listings</span>
+                        </span>
+                        <span style={{ color: GREEN, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          {cohort.avg_price == null ? 'No price' : `$${cohort.avg_price.toLocaleString()}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -518,7 +635,12 @@ export default function PriceResearch() {
                     <tbody>
                       {data.dial_analysis.map((d, i) => (
                         <tr key={i} style={{ borderBottom: `1px solid ${BORDER}` }}>
-                          <td style={{ padding: '10px 12px', color: TEXT, fontWeight: 500 }}>{d.dial_color}</td>
+                          <td style={{ padding: '10px 12px', color: TEXT, fontWeight: 500 }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: '50%', background: dialSwatch(d.dial_color), border: '1px solid rgba(0,0,0,0.18)' }} />
+                              {d.dial_color}
+                            </span>
+                          </td>
                           <td style={{ padding: '10px 12px', textAlign: 'right', color: NAVY, fontWeight: 600 }}>{d.count.toLocaleString()}</td>
                           <td style={{ padding: '10px 12px', textAlign: 'right', color: GREEN, fontWeight: 600 }}>${d.avg_price.toLocaleString()}</td>
                           <td style={{ padding: '10px 12px', textAlign: 'right', color: MUTED }}>${d.min_price.toLocaleString()}</td>
@@ -637,13 +759,30 @@ export default function PriceResearch() {
                     </tr></thead>
                     <tbody>
                       {data.outlier_rows.slice(0, 100).map((row, index) => (
-                        <tr key={`${row.created_at}-${row.price_usd}-${index}`} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                        <tr
+                          key={row.id || `${row.created_at}-${row.price_usd}-${index}`}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`View source detail for excluded observation at $${row.price_usd.toLocaleString()}`}
+                          onClick={() => void openListing(row)}
+                          onKeyDown={event => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              void openListing(row);
+                            }
+                          }}
+                          style={{ borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
+                          onMouseEnter={event => (event.currentTarget.style.backgroundColor = '#fff9e8')}
+                          onMouseLeave={event => (event.currentTarget.style.backgroundColor = WHITE)}
+                        >
                           <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>${row.price_usd.toLocaleString()}</td>
                           <td style={{ padding: '11px 8px' }}>{(row.listing_date || row.created_at) ? (row.listing_date || row.created_at).split('T')[0] : 'Unknown'}</td>
                           <td style={{ padding: '11px 8px', color: '#8a6500' }}>{outlierReason(row.outlier_reason)}</td>
                           <td style={{ padding: '11px 8px' }}>{row.condition || 'Unspecified'}</td>
                           <td style={{ padding: '11px 8px' }}>{row.dial_color || 'Unspecified'}</td>
-                          <td style={{ padding: '11px 8px', color: MUTED }}>{row.source || 'Unknown'}</td>
+                          <td style={{ padding: '11px 8px', color: MUTED }}>
+                            <span className="flex items-center gap-2">{row.source || 'Unknown'} <Eye size={14} aria-hidden="true" /></span>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -661,8 +800,13 @@ export default function PriceResearch() {
                   No recent listings found.
                 </div>
               )}
-              {listings.slice(0, 100).map((l, i) => (
-                <ListingRow key={i} listing={l} />
+              {listings.slice(0, 100).map(row => (
+                <ListingRow
+                  key={row.id}
+                  row={row}
+                  title={`${data?.brand || ''} ${displayRef}`.trim()}
+                  onOpen={() => void openListing(row)}
+                />
               ))}
             </div>
           </>
@@ -670,6 +814,17 @@ export default function PriceResearch() {
 
         <Footer />
       </div>
+
+      {selectedRow && (
+        <ListingDetailModal
+          summary={selectedRow}
+          detail={listingDetail}
+          loading={detailLoading}
+          error={detailError}
+          onClose={closeListing}
+          outlierLabel={outlierReason(selectedRow.outlier_reason)}
+        />
+      )}
     </div>
   );
 }
@@ -699,26 +854,139 @@ function NavBar() {
   );
 }
 
-function ListingRow({ listing }: { listing: { title: string; priceUSD: number; dial: string; date: string; condition: string } }) {
+function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
+  const date = row.listing_date || row.created_at;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
+    <button type="button" onClick={onOpen} aria-label={`View source detail for ${title} at $${row.price_usd.toLocaleString()}`}
+      style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
-      <div style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: LIGHT_GRAY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, color: MUTED }}>⌚</div>
+      <div style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: LIGHT_GRAY, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: MUTED }}><Eye size={18} /></div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{listing.title}</div>
+        <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
         <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-          {listing.dial && <span className="mr-2">Dial: {listing.dial}</span>}
-          {listing.condition && <span className="mr-2">· {listing.condition}</span>}
-          {listing.date && <span>· {listing.date}</span>}
+          <span className="mr-2">Dial: {row.dial_color || 'Unspecified'}</span>
+          <span className="mr-2">· {row.condition || 'Unspecified'}</span>
+          {date && <span>· {date.split('T')[0]}</span>}
         </div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${row.price_usd.toLocaleString()}</div>
       </div>
-      <ExternalLink className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
+      <Eye className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
+    </button>
+  );
+}
+
+function ListingDetailModal({ summary, detail, loading, error, onClose, outlierLabel }: {
+  summary: RowData;
+  detail: ListingDetailData | null;
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+  outlierLabel: string;
+}) {
+  const [activeImage, setActiveImage] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const images = detail?.image_urls || [];
+  const observedAt = detail?.listing_date || detail?.created_at || summary.listing_date || summary.created_at;
+  const displayPrice = detail?.price_usd ?? summary.price_usd;
+
+  const copyRawMessage = async () => {
+    if (!detail?.raw_message) return;
+    await navigator.clipboard.writeText(detail.raw_message);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Listing source detail" style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(8, 15, 29, 0.74)', overflowY: 'auto', padding: 'clamp(12px, 3vw, 36px)' }} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <div style={{ maxWidth: 1220, margin: '0 auto', minHeight: 'calc(100vh - 72px)', background: WHITE, borderRadius: 14, overflow: 'hidden', boxShadow: '0 24px 70px rgba(0,0,0,.3)' }}>
+        <div className="flex items-center justify-between gap-4" style={{ padding: '14px 18px', borderBottom: `1px solid ${BORDER}`, position: 'sticky', top: 0, zIndex: 2, background: WHITE }}>
+          <button type="button" onClick={onClose} className="flex items-center gap-2" style={{ border: 0, background: 'transparent', color: NAVY, fontWeight: 700, cursor: 'pointer' }}><ArrowLeft size={18} /> Back to results</button>
+          <button type="button" onClick={onClose} aria-label="Close listing detail" style={{ border: 0, background: LIGHT_GRAY, width: 34, height: 34, borderRadius: 17, display: 'grid', placeItems: 'center', cursor: 'pointer', color: NAVY }}><X size={18} /></button>
+        </div>
+
+        {loading && <div className="flex items-center justify-center gap-3" style={{ minHeight: 520, color: MUTED }}><Loader2 size={22} className="animate-spin" /> Loading source record…</div>}
+        {!loading && error && <div style={{ margin: 28, padding: 20, border: '1px solid #f1c2c7', background: '#fff5f6', color: RED }}><strong>Detail unavailable.</strong> {error}</div>}
+
+        {!loading && detail && (
+          <div className="grid lg:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]">
+            <section style={{ background: '#f1f3f5', minHeight: 600, padding: 20 }}>
+              <div style={{ position: 'sticky', top: 84 }}>
+                <div style={{ minHeight: 500, height: 'min(68vh, 680px)', background: '#e5e7eb', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 10 }}>
+                  {images[activeImage] ? (
+                    <img src={images[activeImage]} alt={`${detail.brand} ${detail.reference} listing`} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
+                  ) : (
+                    <div style={{ maxWidth: 280, textAlign: 'center', color: MUTED, padding: 24 }}>
+                      <ImageOff size={42} style={{ margin: '0 auto 12px' }} />
+                      <div style={{ color: NAVY, fontWeight: 700, marginBottom: 6 }}>No linked image for this record</div>
+                      <div style={{ fontSize: 13 }}>The listing remains useful as price evidence. An image will appear here only when media is actually linked to this source record.</div>
+                    </div>
+                  )}
+                </div>
+                {images.length > 1 && <div className="flex gap-2" style={{ marginTop: 10, overflowX: 'auto' }}>{images.map((url, index) => <button type="button" key={url} onClick={() => setActiveImage(index)} aria-label={`Show image ${index + 1}`} style={{ width: 64, height: 64, border: `2px solid ${index === activeImage ? GOLD : 'transparent'}`, background: WHITE, padding: 2, flexShrink: 0, cursor: 'pointer' }}><img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></button>)}</div>}
+              </div>
+            </section>
+
+            <section style={{ padding: 'clamp(22px, 4vw, 42px)' }}>
+              <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 18 }}>
+                <span style={{ background: summary.is_outlier ? '#fff2cc' : '#eaf7ef', color: summary.is_outlier ? '#7a5900' : '#166534', padding: '6px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>
+                  {summary.is_outlier ? 'Excluded from market statistics' : 'Included in comparable set'}
+                </span>
+                {summary.is_outlier && <span style={{ color: '#7a5900', fontSize: 12 }}>{outlierLabel}</span>}
+              </div>
+
+              <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{detail.brand} {detail.reference}</h1>
+              <div style={{ color: GOLD, fontSize: 26, fontWeight: 800, marginBottom: 28 }}>${displayPrice.toLocaleString()} <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>USD normalized</span></div>
+
+              <DetailCard title="Raw source message — unchanged" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy raw message'}</button> : undefined}>
+                <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
+                  <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>NO NORMALIZATION APPLIED</span>
+                  <span style={{ color: MUTED, fontSize: 12 }}>
+                    {detail.raw_message_scope === 'original_post'
+                      ? 'Complete immutable post recovered from ingestion lineage.'
+                      : detail.raw_message_scope === 'stored_source_message'
+                        ? 'Exact source text stored with this historical listing; full-post lineage is not available.'
+                        : 'No source text is stored for this listing.'}
+                  </span>
+                </div>
+                {detail.raw_message ? <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>{detail.raw_message}</pre> : <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>No raw source message is stored for this record.</div>}
+                {detail.raw_message_lineage_id && <div style={{ marginTop: 8, color: MUTED, fontSize: 10, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>Raw lineage ID: {detail.raw_message_lineage_id}</div>}
+              </DetailCard>
+
+              <DetailCard title="Normalized record — what the parser produced">
+                <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
+                  <DetailField label="Record ID" value={detail.id} mono />
+                  <DetailField label="Observed" value={observedAt ? observedAt.split('T')[0] : null} />
+                  <DetailField label="Source" value={detail.source} />
+                  <DetailField label="Stored source price" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
+                  <DetailField label="Condition" value={detail.condition} />
+                  <DetailField label="Dial" value={detail.dial_color} />
+                  <DetailField label="Year" value={detail.year} />
+                  <DetailField label="Listing type" value={detail.listing_type} />
+                  <DetailField label="Region" value={detail.region} />
+                  <DetailField label="Source type" value={detail.source_type} />
+                  <DetailField label="Status" value={detail.listing_status} />
+                  <DetailField label="Normalization confidence" value={detail.confidence != null ? `${Math.round(detail.confidence * (detail.confidence <= 1 ? 100 : 1))}%` : null} />
+                </div>
+                {detail.accessories.length > 0 && <div style={{ marginTop: 20 }}><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Accessories stated in source</div><div className="flex flex-wrap gap-2">{detail.accessories.map(item => <span key={item} style={{ background: LIGHT_GRAY, border: `1px solid ${BORDER}`, padding: '5px 9px', borderRadius: 5, fontSize: 12 }}>{item}</span>)}</div></div>}
+              </DetailCard>
+
+            </section>
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+function DetailCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 20, marginBottom: 20 }}><div className="flex items-center justify-between gap-3" style={{ marginBottom: 18 }}><h2 style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{title}</h2>{action}</div>{children}</div>;
+}
+
+function DetailField({ label, value, mono = false }: { label: string; value: string | number | null | undefined; mono?: boolean }) {
+  return <div><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>{label}</div><div style={{ color: value == null || value === '' ? MUTED : TEXT, fontSize: 13, fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined, overflowWrap: 'anywhere' }}>{value == null || value === '' ? 'Not provided' : value}</div></div>;
 }
 
 function Footer() {

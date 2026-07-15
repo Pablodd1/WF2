@@ -54,6 +54,17 @@ function inferBrand(ref) {
   return sharedInferBrand(ref);
 }
 
+function summarizeComparableRows(rows) {
+  const validPrices = rows
+    .map(row => Number(row.price_usd))
+    .filter(value => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  const median = validPrices.length ? validPrices[Math.floor(validPrices.length / 2)] : 0;
+  const marketPriceFloorUsd = Math.max(1000, Math.round(median * 0.1));
+  const summary = summarizePrices(validPrices.filter(value => value >= marketPriceFloorUsd));
+  return { marketPriceFloorUsd, summary };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -192,19 +203,10 @@ module.exports = async function handler(req, res) {
     // A deterministic safety floor runs before IQR. Otherwise a malformed low-
     // price cluster can make the IQR lower fence negative and contaminate every
     // market statistic. Catalog-relative bands are the next refinement.
-    const preliminaryPrices = listedRows
-      .map(row => Number(row.price_usd))
-      .filter(value => Number.isFinite(value) && value > 0)
-      .sort((a, b) => a - b);
-    const preliminaryMedian = preliminaryPrices.length
-      ? preliminaryPrices[Math.floor(preliminaryPrices.length / 2)]
-      : 0;
-    const marketPriceFloorUsd = Math.max(1000, Math.round(preliminaryMedian * 0.1));
+    const selectedSummary = summarizeComparableRows(listedRows);
+    const marketPriceFloorUsd = selectedSummary.marketPriceFloorUsd;
     const validPriceRows = listedRows.filter(r => Number.isFinite(Number(r.price_usd)) && Number(r.price_usd) > 0);
-    const rawPrices = validPriceRows
-      .filter(r => Number(r.price_usd) >= marketPriceFloorUsd)
-      .map(r => r.price_usd);
-    const summary = summarizePrices(rawPrices);
+    const summary = selectedSummary.summary;
     const prices = summary.included;
     const classifiedRows = listedRows.map(row => {
       const classification = classifyPrice(row.price_usd, summary.stats, { minimumPrice: marketPriceFloorUsd });
@@ -234,16 +236,24 @@ module.exports = async function handler(req, res) {
 
     // ── Dial analysis: EVERY dial color found in real listings (rule: all must show) ──
     const dialMap = {};
-    includedRows.forEach(r => {
+    marketRows.forEach(r => {
       const dial = r.dial_color || 'Unspecified';
-      if (!dialMap[dial]) dialMap[dial] = { dial_color: dial, count: 0, sum: 0, min: Infinity, max: 0 };
-      const d = dialMap[dial];
-      d.count++; d.sum += r.price_usd;
-      d.min = Math.min(d.min, r.price_usd);
-      d.max = Math.max(d.max, r.price_usd);
+      if (!dialMap[dial]) dialMap[dial] = { dial_color: dial, rows: [] };
+      dialMap[dial].rows.push(r);
     });
     const dial_analysis = Object.values(dialMap)
-      .map(d => ({ dial_color: d.dial_color, count: d.count, avg_price: Math.round(d.sum / d.count), min_price: d.min, max_price: d.max }))
+      .map(d => {
+        const dialSummary = summarizeComparableRows(d.rows).summary;
+        if (!dialSummary.stats) return null;
+        return {
+          dial_color: d.dial_color,
+          count: dialSummary.included.length,
+          avg_price: dialSummary.stats.avg,
+          min_price: dialSummary.stats.min,
+          max_price: dialSummary.stats.max,
+        };
+      })
+      .filter(Boolean)
       .sort((a, b) => b.count - a.count);
     const dialColors = dial_analysis.map(d => d.dial_color);
 
@@ -277,6 +287,7 @@ module.exports = async function handler(req, res) {
       outliersRemoved: outlierRows.length,
       outliers: outlierRows.map(row => row.price_usd),
       outlier_rows: outlierRows.map(r => ({
+        id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year, is_outlier: true, outlier_reason: r.outlier_reason,
@@ -290,11 +301,17 @@ module.exports = async function handler(req, res) {
         dial_color: selectedCohort.dial_color,
         count: selectedCohort.count,
       },
-      cohorts: cohorts.map(cohort => ({
-        condition: cohort.condition,
-        dial_color: cohort.dial_color,
-        count: cohort.count,
-      })),
+      cohorts: cohorts.map(cohort => {
+        const cohortStats = summarizeComparableRows(cohort.rows).summary.stats;
+        return {
+          condition: cohort.condition,
+          dial_color: cohort.dial_color,
+          count: cohort.count,
+          avg_price: cohortStats?.avg ?? null,
+          min_price: cohortStats?.min ?? null,
+          max_price: cohortStats?.max ?? null,
+        };
+      }),
       methodology: {
         method: 'PLAUSIBILITY_FLOOR_THEN_IQR_1_5',
         minimum_sample: 5,
@@ -308,6 +325,7 @@ module.exports = async function handler(req, res) {
       liquidity,
       monthly, prices,
       rows: classifiedRows.map(r => ({
+        id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year,
