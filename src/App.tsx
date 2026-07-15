@@ -20,6 +20,7 @@ const PriceResearch = lazy(() => import('@/pages/PriceResearch'));
 const DemandSignals = lazy(() => import('@/pages/DemandSignals'));
 const InsightDetails = lazy(() => import('@/pages/InsightDetails'));
 const DealerLogin = lazy(() => import('@/pages/DealerLogin'));
+const DealerPortal = lazy(() => import('@/pages/DealerPortal'));
 
 export default function App() {
   return (
@@ -27,9 +28,10 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/dealer-login" element={<DealerLogin />} />
+        <Route path="/dealer" element={<DealerGate allowBetaSkip><DealerPortal /></DealerGate>} />
         <Route path="/dashboard" element={<DealerGate><OperationsDashboard /></DealerGate>} />
         <Route path="/dashboard/legacy" element={<DealerGate><Home /></DealerGate>} />
-        <Route path="/trading" element={<TradingFloor />} />
+        <Route path="/trading" element={<DealerGate allowBetaSkip><TradingFloor /></DealerGate>} />
         <Route path="/analytics" element={<DealerGate><SourceAnalytics /></DealerGate>} />
         <Route path="/analytics/legacy" element={<DealerGate><AnalyticsPage /></DealerGate>} />
         <Route path="/analytics-dashboard" element={<DealerGate><AnalyticsDashboard /></DealerGate>} />
@@ -40,7 +42,7 @@ export default function App() {
         <Route path="/demo" element={<DemoPage />} />
         <Route path="/demo-mode" element={<DemoMode />} />
         <Route path="/admin" element={<DealerGate><AdminPage /></DealerGate>} />
-        <Route path="/price-research" element={<PriceResearch />} />
+        <Route path="/price-research" element={<DealerGate allowBetaSkip><PriceResearch /></DealerGate>} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
         <Route path="*" element={<Navigate to="/" replace />} />

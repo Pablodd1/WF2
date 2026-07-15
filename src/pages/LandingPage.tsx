@@ -7,7 +7,7 @@ import { SocialShareRail } from '@/components/SocialShareRail';
 const routes = [
   { icon: Search, label: 'Price research', detail: 'Reference-level market evidence', to: '/price-research' },
   { icon: BarChart3, label: 'Trading floor', detail: 'Dated dealer listings', to: '/trading' },
-  { icon: ShieldCheck, label: 'Dealer access', detail: 'Operations and review workspace', to: '/dealer-login' },
+  { icon: ShieldCheck, label: 'Dealer access', detail: 'Secure market workspace', to: '/dealer' },
 ];
 
 const assemblyStages = [

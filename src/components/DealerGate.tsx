@@ -1,17 +1,21 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 
-interface DealerGateProps { children: ReactNode }
+interface DealerGateProps {
+  children: ReactNode;
+  allowBetaSkip?: boolean;
+}
 
-export function DealerGate({ children }: DealerGateProps) {
+export function DealerGate({ children, allowBetaSkip = false }: DealerGateProps) {
   const location = useLocation();
-  const betaSkipEnabled = import.meta.env.VITE_ENABLE_DEALER_SKIP !== 'false';
-  const [state, setState] = useState<'loading' | 'authorized' | 'denied'>(() =>
-    betaSkipEnabled && sessionStorage.getItem('wf_beta_skip') === '1' ? 'authorized' : 'loading'
+  const betaSkipEnabled = allowBetaSkip && import.meta.env.VITE_ENABLE_DEALER_SKIP !== 'false';
+  const [state, setState] = useState<'loading' | 'authorized' | 'beta' | 'denied'>(() =>
+    betaSkipEnabled && sessionStorage.getItem('wf_beta_skip') === '1' ? 'beta' : 'loading'
   );
 
   useEffect(() => {
     if (state === 'authorized') return;
+    if (state === 'beta' && betaSkipEnabled) return;
     const controller = new AbortController();
     fetch('/api/dealer-auth', { credentials: 'include', signal: controller.signal })
       .then(async response => {
@@ -22,9 +26,9 @@ export function DealerGate({ children }: DealerGateProps) {
         if (error?.name !== 'AbortError') setState('denied');
       });
     return () => controller.abort();
-  }, [state]);
+  }, [betaSkipEnabled, state]);
 
-  if (state === 'loading') {
+  if (state === 'loading' || (state === 'beta' && !betaSkipEnabled)) {
     return <div className="flex min-h-screen items-center justify-center bg-bg-primary text-sm text-text-secondary">Checking dealer session...</div>;
   }
   if (state === 'denied') {
