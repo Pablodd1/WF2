@@ -21,7 +21,7 @@ const RED = '#EF4444';
 
 const FILTER_OPTIONS = [
   { label: 'Watches', value: 'watches', group: 'Inventory' },
-  { label: 'Handbags, jewelry & accessories', value: 'luxury', group: 'Inventory' },
+  { label: 'Other luxury (unnormalized)', value: 'luxury', group: 'Inventory' },
   { label: 'Bulk listings', value: 'multi', group: 'Inventory' },
   { label: 'All inventory', value: 'all', group: 'Inventory' },
   { label: 'For sale', value: 'WTS', group: 'Intent' },
@@ -482,7 +482,7 @@ function buildListingTitle(listing: ListingRecord) {
 
 function listingKindLabel(listing: ListingRecord) {
   if (listing.listing_type === 'MULTI') return 'Multi-listing';
-  if (listing.listing_type === 'OTHER') return 'Luxury item';
+  if (listing.listing_type === 'OTHER') return 'Unnormalized luxury item';
   return 'Watch';
 }
 
