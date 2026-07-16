@@ -110,7 +110,7 @@ export async function exportDatasetExcel(records: WatchRecord[]) {
   const ws1: any[][] = [];
 
   // Title row
-  ws1.push([titleCell(`WatchFacts Dataset Export — ${stamp}`)]);
+  ws1.push([titleCell(`Curated Luxury Dataset Export — ${stamp}`)]);
   ws1.push([{
     v: `${records.length.toLocaleString()} records  ·  ${approved.length.toLocaleString()} Approved  ·  ${human.length.toLocaleString()} Human  ·  ${recycle.length.toLocaleString()} Recycle`,
     t: 's',
@@ -223,7 +223,7 @@ export async function exportDatasetExcel(records: WatchRecord[]) {
   ws3Sheet['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:6} }];
   XLSX.utils.book_append_sheet(wb, ws3Sheet, 'Brand Breakdown');
 
-  XLSX.writeFile(wb, `WatchFacts_Export_${stamp}.xlsx`);
+  XLSX.writeFile(wb, `Curated_Luxury_Export_${stamp}.xlsx`);
 }
 
 // ── CSV export ─────────────────────────────────────────────────────────────────
@@ -260,7 +260,7 @@ export function exportDatasetCsv(records: WatchRecord[]) {
   const link = document.createElement('a');
   const stamp = new Date().toISOString().slice(0, 10);
   link.href = URL.createObjectURL(blob);
-  link.download = `WatchFacts_Export_${records.length}records_${stamp}.csv`;
+  link.download = `Curated_Luxury_Export_${records.length}records_${stamp}.csv`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

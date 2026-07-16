@@ -130,7 +130,7 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
     ].map(esc).join(','));
     // Summary header block (commented lines Excel ignores in column A)
     const summary = [
-      `# WatchFacts Price Guide Analytics`,
+      `# Curated Luxury Price Guide Analytics`,
       `# Generated,${new Date().toISOString()}`,
       `# Total records,${stats.total}`,
       `# Normalized,${stats.normalized}`,
@@ -145,7 +145,7 @@ export function AnalyticsTab({ records }: AnalyticsTabProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `WatchFacts_PriceGuide_${analytics.groups.length}refs_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `Curated_Luxury_PriceGuide_${analytics.groups.length}refs_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

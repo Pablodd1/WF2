@@ -19,7 +19,7 @@ const DEMO_STEPS: DemoStep[] = [
   {
     id: 1,
     title: 'Homepage Overview',
-    description: 'WatchFacts aggregates luxury watch listings from multiple sources, normalizes data, and provides accurate pricing insights.',
+    description: 'Curated Luxury aggregates luxury watch listings from multiple sources, normalizes data, and provides accurate pricing insights.',
     screen: 'home',
     highlights: ['6,769 catalog references', '8 luxury brands', 'Real-time FX rates'],
   },
@@ -237,7 +237,7 @@ export default function DemoMode() {
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-extrabold text-text-primary tracking-tight flex items-center justify-center gap-2">
             <Monitor size={22} className="text-gold-primary" />
-            WatchFacts Demo
+            Curated Luxury Demo
           </h1>
           <p className="text-sm text-text-muted mt-1">
             Interactive presentation mode for shows and investor demos.

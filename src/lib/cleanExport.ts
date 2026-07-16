@@ -116,7 +116,7 @@ export function exportCleanExcel(watches: CleanWatch[], summary: any) {
 
   // Title
   ws1Data.push([
-    cell('WATCHFACTS CLEAN ANALYSIS REPORT', {
+    cell('CURATED LUXURY CLEAN ANALYSIS REPORT', {
       font: { bold: true, sz: 16, color: { rgb: 'FF1F4E78' } },
       alignment: { horizontal: 'center' },
     }),
@@ -315,7 +315,7 @@ export function exportCleanExcel(watches: CleanWatch[], summary: any) {
 
   // Download
   const now = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  XLSX.writeFile(wb, `WatchFacts_CleanAnalysis_${now}.xlsx`);
+  XLSX.writeFile(wb, `Curated_Luxury_CleanAnalysis_${now}.xlsx`);
 }
 
 // ═══════════════════════ CSV Export ═══════════════════════
@@ -365,7 +365,7 @@ export function exportCleanCsv(watches: CleanWatch[], _summary: any) {
   const link = document.createElement('a');
   const now = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
   link.href = URL.createObjectURL(blob);
-  link.download = `WatchFacts_CleanAnalysis_${now}.csv`;
+  link.download = `Curated_Luxury_CleanAnalysis_${now}.csv`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

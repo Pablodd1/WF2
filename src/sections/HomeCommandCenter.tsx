@@ -85,7 +85,7 @@ export function HomeCommandCenter({ workspaceRecords }: HomeCommandCenterProps) 
               <span className="h-1.5 w-1.5 rounded-full bg-success" />
               Market operations
             </div>
-            <h1 className="text-2xl font-semibold tracking-[0.02em] text-text-primary sm:text-3xl">WatchFacts</h1>
+            <h1 className="text-2xl font-semibold tracking-[0.02em] text-text-primary sm:text-3xl">Curated Luxury</h1>
             <p className="mt-1 text-sm text-text-secondary">Dealer intelligence, catalog reconciliation, and review workflow.</p>
           </div>
 
