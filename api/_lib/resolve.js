@@ -23,6 +23,11 @@ function normSlash(ref) {
 
 function inferBrand(ref) {
   if (!ref) return null;
+  const raw = String(ref).trim().toUpperCase();
+  // Omega references are commonly three or four digits followed by dotted
+  // two-digit groups (for example 123.10.28.60.06.001). Detect the original
+  // representation before normSlash intentionally removes punctuation.
+  if (/^\d{3,4}(?:\.\d{2}){3,}\.\d{3}$/.test(raw)) return 'Omega';
   const r = normSlash(ref);
   // Dots are common in AP/Cartier/OEM refs — strip them for matching
   const rClean = r.replace(/\./g, '');
@@ -54,8 +59,6 @@ function inferBrand(ref) {
   if (/^(AB|A[123])\d{4}[A-Z]?$/i.test(rClean)) return 'Breitling';
   // Hublot: HUB patterns
   if (/^HUB\d{2}/.test(rClean)) return 'Hublot';
-  // Omega: dotted format 3xxx.xx.xx
-  if (/^\d{4}\.\d{2}/.test(r)) return 'Omega';
   return null;
 }
 

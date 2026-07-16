@@ -112,8 +112,8 @@ module.exports = async function handler(req, res) {
     brand = inferBrand(rawRef);
     if (!brand) {
       return res.status(400).json({
-        error: 'brand not found. Provide ?reference=52506&brand=Rolex',
-        hint: 'Brand auto-resolve failed. Provide &brand= explicitly.'
+        error: 'Brand could not be identified for this reference. Select a brand and reference from Browse by Model.',
+        hint: 'Brand auto-resolution failed. Provide the brand explicitly.'
       });
     }
   }

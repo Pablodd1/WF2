@@ -11,6 +11,7 @@ const { listCatalogReferences } = require('./_lib/catalog');
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
 const REFERENCE_SAMPLE_LIMIT = 500;
+const MINIMUM_ANALYTICS_SAMPLE = 5;
 const LOOKUP_CONCURRENCY = 8;
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -80,7 +81,7 @@ module.exports = async function handler(req, res) {
       entry => loadReferenceEvidence(client, brand, entry)
     );
     const out = evidence
-      .filter(Boolean)
+      .filter(item => item && item.listing_count >= MINIMUM_ANALYTICS_SAMPLE)
       .sort((a, b) => b.listing_count - a.listing_count);
 
     const payload = {
