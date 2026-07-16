@@ -6,7 +6,8 @@
  * avoiding the former full-brand scan over millions of production rows.
  */
 const { getClient } = require('./_lib/supabase');
-const { listCatalogReferences } = require('./_lib/catalog');
+const { listCatalogReferences, lookupCatalog } = require('./_lib/catalog');
+const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
@@ -34,23 +35,28 @@ async function loadReferenceEvidence(client, brand, entry) {
     .eq('brand', brand)
     .eq('reference', entry.reference)
     .eq('verdict', 'APPROVED')
+    .eq('listing_type', 'WTS')
     .gt('price_usd', 0)
     .limit(REFERENCE_SAMPLE_LIMIT);
   if (error) throw error;
   if (!data?.length) return null;
 
+  const catalog = lookupCatalog(entry.reference, brand);
+  const qualified = data.filter(row => !classifyResearchEligibility({ ...row, brand }, catalog));
+  if (qualified.length < MINIMUM_ANALYTICS_SAMPLE) return null;
+
   const dials = new Map();
   let sum = 0;
-  for (const row of data) {
+  for (const row of qualified) {
     sum += Number(row.price_usd);
     const dial = row.dial_color || 'Unspecified';
     dials.set(dial, (dials.get(dial) || 0) + 1);
   }
   return {
     reference: entry.reference,
-    listing_count: data.length,
+    listing_count: qualified.length,
     sample_capped: data.length >= REFERENCE_SAMPLE_LIMIT,
-    avg_price: Math.round(sum / data.length),
+    avg_price: Math.round(sum / qualified.length),
     dial_colors: [...dials.entries()]
       .map(([dial_color, count]) => ({ dial_color, count }))
       .sort((a, b) => b.count - a.count),
