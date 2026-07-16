@@ -930,9 +930,9 @@ function NavBar() {
         <div style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif" }}>
           Curated Luxury
         </div>
-        <div className="flex gap-6" style={{ fontSize: 14 }}>
-          {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => (
-            <a key={item} href="#" style={{
+        <div className="flex gap-3 sm:gap-6" style={{ fontSize: 14 }}>
+          {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map((item, index) => (
+            <a key={item} href="#" className={index > 1 ? 'hidden md:inline' : undefined} style={{
               color: item === 'Price Research' ? GOLD : MUTED,
               fontWeight: item === 'Price Research' ? 600 : 400,
               textDecoration: 'none',
