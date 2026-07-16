@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Download, Eye, ImageOff, Loader2, X } from 'lucide-react';
-import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
+import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
@@ -165,11 +165,18 @@ function dialSwatch(color: string) {
   return 'linear-gradient(135deg, #d8dbe0 0%, #f8f9fa 50%, #b9bec5 100%)';
 }
 
+function dialChartColor(color: string) {
+  const swatch = dialSwatch(color);
+  return swatch.startsWith('#') ? swatch : '#9aa1aa';
+}
+
 // ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
   const initialReference = searchParams.get('ref') || '';
+  const initialBrand = searchParams.get('brand') || '';
   const [query, setQuery] = useState(initialReference);
+  const [queryBrand, setQueryBrand] = useState(initialBrand);
   const [data, setData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -213,7 +220,7 @@ export default function PriceResearch() {
     finally { setPLoading(''); }
   }, []);
 
-  const fetchData = useCallback(async (ref: string, condition = '', dial = '') => {
+  const fetchData = useCallback(async (ref: string, condition = '', dial = '', brand = '') => {
     const normalizedReference = ref.trim();
     if (!normalizedReference) {
       setError('Enter a reference to search');
@@ -221,15 +228,20 @@ export default function PriceResearch() {
     }
     setLoading(true);
     setError('');
+    setData(null);
     setSelectedRow(null);
     setListingDetail(null);
     try {
       const params = new URLSearchParams({ reference: normalizedReference });
+      if (brand) params.set('brand', brand);
       if (condition) params.set('condition', condition);
       if (dial) params.set('dial', dial);
       const r = await fetch(`/api/price-research?${params.toString()}`);
       const d = await r.json();
-      if (d.success) setData(d);
+      if (d.success) {
+        setData(d);
+        if (d.brand) setQueryBrand(d.brand);
+      }
       else setError(d.error || 'No data for this reference');
     } catch { setError('Failed to fetch'); }
     finally { setLoading(false); }
@@ -287,8 +299,8 @@ export default function PriceResearch() {
   // former query dependency replaced this page with the loading spinner after
   // every character, which unmounted the input and dropped keyboard focus.
   useEffect(() => {
-    if (initialReference) void fetchData(initialReference);
-  }, [fetchData, initialReference]);
+    if (initialReference) void fetchData(initialReference, '', '', initialBrand);
+  }, [fetchData, initialBrand, initialReference]);
 
   // ── Derived stats ─────────────────────────────────────────
   const stats = data?.stats
@@ -398,7 +410,7 @@ export default function PriceResearch() {
           {pRefs.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {pRefs.map(r => (
-                <button key={r.reference} onClick={() => { setQuery(r.reference); fetchData(r.reference); }}
+                <button key={r.reference} onClick={() => { setQuery(r.reference); setQueryBrand(pBrand); void fetchData(r.reference, '', '', pBrand); }}
                   style={{
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,
@@ -417,13 +429,13 @@ export default function PriceResearch() {
             <div className="flex-1 relative">
               <input
                 type="text" value={query}
-                onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !loading) void fetchData(query); }}
+                onChange={e => { setQuery(e.target.value); setQueryBrand(''); }}
+                onKeyDown={e => { if (e.key === 'Enter' && !loading) void fetchData(query, '', '', queryBrand); }}
                 placeholder="Enter a watch reference"
                 style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none' }}
               />
             </div>
-            <button onClick={() => void fetchData(query)} disabled={loading}
+            <button onClick={() => void fetchData(query, '', '', queryBrand)} disabled={loading}
               style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: WHITE, border: 'none', fontWeight: 600, fontSize: 14, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Searching…' : 'Search'}
             </button>
@@ -469,7 +481,7 @@ export default function PriceResearch() {
                         key={`${cohort.condition}-${cohort.dial_color}`}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => void fetchData(data.reference, cohort.condition, cohort.dial_color)}
+                        onClick={() => void fetchData(data.reference, cohort.condition, cohort.dial_color, data.brand)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 12px',
                           borderRadius: 8, cursor: 'pointer', backgroundColor: selected ? '#eef1f6' : WHITE,
@@ -653,6 +665,29 @@ export default function PriceResearch() {
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Dial Color Analysis</h3>
                 <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
                   Catalog-valid dial cohorts with at least five comparable observations for {displayRef}.
+                </div>
+                <div role="img" aria-label={`Average comparable price by dial color for ${displayRef}`} style={{ height: 250, marginBottom: 18 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={data.dial_analysis} margin={{ top: 8, right: 12, bottom: 12, left: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                      <XAxis dataKey="dial_color" stroke={MUTED} fontSize={11} interval={0} angle={data.dial_analysis.length > 5 ? -25 : 0} textAnchor={data.dial_analysis.length > 5 ? 'end' : 'middle'} height={data.dial_analysis.length > 5 ? 58 : 32} />
+                      <YAxis stroke={MUTED} fontSize={11} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8 }}
+                        formatter={(value: number, name: string) => [name === 'avg_price' ? `$${value.toLocaleString()}` : value.toLocaleString(), name === 'avg_price' ? 'Average price' : 'Listings']}
+                      />
+                      <Bar dataKey="avg_price" name="Average price" radius={[4, 4, 0, 0]}>
+                        {data.dial_analysis.map(dial => (
+                          <Cell
+                            key={dial.dial_color}
+                            fill={dialChartColor(dial.dial_color)}
+                            stroke={data.selected_cohort.dial_color === dial.dial_color ? NAVY : 'transparent'}
+                            strokeWidth={data.selected_cohort.dial_color === dial.dial_color ? 3 : 0}
+                          />
+                        ))}
+                      </Bar>
+                    </ComposedChart>
+                  </ResponsiveContainer>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

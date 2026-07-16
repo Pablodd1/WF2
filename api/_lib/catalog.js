@@ -32,6 +32,8 @@ function inferredOrExpectedBrand(reference, expectedBrand) {
 }
 
 function inferBrand(rawRef) {
+  const raw = String(rawRef || '').trim().toUpperCase();
+  if (/^\d{3,4}(?:\.\d{2}){3,}\.\d{3}$/.test(raw)) return 'Omega';
   const r = collapseRef(rawRef);
   if (!r) return null;
   if (/^[3-7]\d{3}\//.test(normalizeRef(rawRef))) return 'Patek Philippe';
@@ -42,7 +44,6 @@ function inferBrand(rawRef) {
   if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180|4500V|4300V|6000V)/.test(r)) return 'Vacheron Constantin';
   if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
   if (/^(79\d{4}|70\d{4})[A-Z]*$/.test(r)) return 'Tudor';
-  if (/^3\d{4}\.\d/.test(String(rawRef))) return 'Omega';
   if (/^PAM\d{3,4}$/i.test(r)) return 'Panerai';
   if (/^Q\d{5,6}$/i.test(r)) return 'Jaeger-LeCoultre';
   if (/^(AB|A[123])\d{4}[A-Z]?$/i.test(r)) return 'Breitling';
