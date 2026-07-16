@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .luxury-wordmark {
+    color: #d8bd80;
+    background: linear-gradient(180deg, #fff4c9 0%, #d9b768 38%, #9a6a22 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 1px 0 rgba(255, 245, 207, 0.28), 0 2px 0 rgba(91, 57, 13, 0.82), 0 5px 14px rgba(213, 174, 86, 0.24);
+  }
+}
+
 @layer base {
   :root {
     --background: 240 20% 4%;

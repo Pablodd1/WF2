@@ -32,8 +32,7 @@ const FILTER_OPTIONS = [
   { label: 'Multi-listings', value: 'multi', group: 'Inventory' },
   { label: 'All inventory', value: 'all', group: 'Inventory' },
   { label: 'WTS', value: 'WTS', group: 'Intent' },
-  { label: 'WTB', value: 'WTB', group: 'Intent' },
-  { label: 'NTQ', value: 'NTQ', group: 'Intent' },
+  { label: 'WTB / Looking For', value: 'WTB', group: 'Intent' },
   { label: 'Trade', value: 'TRADE', group: 'Intent' },
 ] as const;
 
@@ -48,6 +47,7 @@ interface ListingRecord {
   condition: string | null;
   year: number | null;
   listing_type: string;
+  verdict: string | null;
   source: string;
   source_type: string | null;
   listing_date: string | null;
@@ -72,7 +72,7 @@ type QualityMode = 'market' | 'archive';
 
 export default function TradingFloor() {
   const [searchParams] = useSearchParams();
-  const initialFilter = searchParams.get('item') || searchParams.get('type') || 'watches';
+  const initialFilter = searchParams.get('item') || searchParams.get('type') || 'all';
   const [activeFilter, setActiveFilter] = useState(initialFilter);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -149,7 +149,7 @@ export default function TradingFloor() {
             <div>
               <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {totalIsEstimate ? '~' : ''}{total.toLocaleString()} listings
+                {totalIsEstimate ? '~' : ''}{total.toLocaleString()} eligible listings
               </p>
             </div>
 
@@ -192,7 +192,7 @@ export default function TradingFloor() {
                       color: qualityMode === mode ? '#09090D' : MUTED,
                     }}
                   >
-                    {mode === 'market' ? 'Dated' : 'Archive'}
+                    {mode === 'market' ? 'Approved market' : 'Full archive'}
                   </button>
                 ))}
               </div>
@@ -215,8 +215,9 @@ export default function TradingFloor() {
 
       <div className="mx-auto max-w-7xl px-4 py-5">
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
-          <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong></span>
+          <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> eligible records</span>
           <span>Page <strong style={{ color: INK }}>{page}</strong> of <strong style={{ color: INK }}>{totalPages}</strong></span>
+          <span title="Records are fetched 50 at a time from Postgres for speed; pagination and search still query the server-side dataset.">50 per page keeps the browser fast; search runs on the database.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
@@ -308,8 +309,9 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       </button>
 
       <div className="mt-5 min-h-[56px]">
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>
-          {listingKindLabel(listing)} · {cleanValue(listing.listing_type) || 'Listing'}
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
+          <span>{listingKindLabel(listing)} · {cleanValue(listing.listing_type) || 'Listing'}</span>
+          <ReviewStatusBadge verdict={listing.verdict} />
         </div>
         <button
           type="button"
@@ -521,6 +523,24 @@ function InfoBadge({ icon, label }: { icon: React.ReactNode; label: string }) {
     <span className="inline-flex h-[22px] items-center gap-1 rounded-md px-2 text-[11px] font-bold" style={{ background: 'rgba(201,169,110,0.18)', color: GOLD_BRIGHT }}>
       {icon}
       {label}
+    </span>
+  );
+}
+
+function ReviewStatusBadge({ verdict }: { verdict: string | null }) {
+  const normalized = cleanValue(verdict).toUpperCase();
+  const approved = normalized === 'APPROVED';
+  return (
+    <span
+      className="inline-flex h-[22px] items-center rounded px-2 text-[10px] font-bold tracking-normal"
+      style={{
+        border: `1px solid ${approved ? 'rgba(52,211,153,0.42)' : 'rgba(245,158,11,0.5)'}`,
+        background: approved ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
+        color: approved ? '#6EE7B7' : '#FCD34D',
+      }}
+      title={approved ? 'Approved market record' : 'Visible inventory record awaiting or requiring review'}
+    >
+      {approved ? 'Approved' : 'Needs review'}
     </span>
   );
 }

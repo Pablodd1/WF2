@@ -780,30 +780,21 @@ module.exports = async function handler(req, res) {
         order: 'created_at.desc',
       });
 
-      if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
+      // NTQ is historical buyer-intent shorthand. Customer-facing WTB must
+      // include both values so every "looking for / want to buy" request is
+      // found in one demand view while the stored source classification stays
+      // unchanged for auditability.
+      if (listingType === 'WTB') params.set('listing_type', 'in.(WTB,NTQ)');
+      else if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
       if (!listingType && itemType === 'luxury') params.set('listing_type', 'eq.OTHER');
       if (!listingType && itemType === 'multi') params.set('listing_type', 'eq.MULTI');
-      // Customer-facing mode is approved market evidence only. Human/recycle
-      // records and unresolved references remain available in the archive and
-      // review workflows, never mixed into customer-facing listings.
+      if (!listingType && itemType === 'watches') params.set('listing_type', 'not.in.(MULTI,OTHER)');
+      // The Trading Floor is the complete customer-visible inventory. Human
+      // review and incomplete records remain visible with their status; only
+      // recycle records and intentionally hidden/deleted listings are omitted.
+      // Price Research applies the stricter approved/comparable-data policy.
       if (quality !== 'archive') {
-        params.set('created_at', 'not.is.null');
-        params.set('verdict', 'eq.APPROVED');
-        if (itemType === 'all') {
-          // Include approved watch rows plus unsplit multi-item and non-watch
-          // luxury rows. This is read-time classification, so the historical
-          // archive does not need an expensive destructive backfill.
-          params.set('or', '(and(reference.not.is.null,brand.neq.Unknown),listing_type.in.(MULTI,OTHER))');
-        } else if (allowedTypes.has(listingType) || itemType === 'watches' || !allowedItems.has(itemType)) {
-          params.set('reference', 'not.is.null');
-          params.set('brand', 'neq.Unknown');
-        }
-        params.set('source', 'neq.preview_seed');
-        // WTB/NTQ requests often omit an asking price. WTS and the default feed
-        // require a minimally plausible luxury-watch price.
-        if ((!listingType && (itemType === 'watches' || !allowedItems.has(itemType))) || listingType === 'WTS') {
-          params.set('price_usd', 'gte.1000');
-        }
+        params.set('or', '(verdict.neq.RECYCLE,verdict.is.null)');
       }
       if (search) {
         const escapedSearch = search.replace(/[(),.]/g, ' ').replace(/%/g, '').replace(/\*/g, '').trim();

@@ -66,8 +66,7 @@ export function Navbar({
       {/* Left Group */}
       <div className="flex items-center gap-4">
         <span
-          className="text-sm font-extrabold uppercase tracking-[0.08em] text-gold-primary"
-          style={{ textShadow: '0 0 20px rgba(201, 169, 110, 0.3)' }}
+          className="luxury-wordmark text-sm font-extrabold uppercase tracking-[0.08em]"
         >
           CURATED LUXURY
         </span>
