@@ -37,6 +37,16 @@ test('separates price cohorts by condition and dial', () => {
   assert.equal(cohorts[0].count, 2);
 });
 
+test('merges dial labels that differ only by case', () => {
+  const cohorts = buildComparableCohorts([
+    { condition: 'New', dial_color: 'Ice Blue' },
+    { condition: 'New', dial_color: 'Ice blue' },
+  ]);
+  assert.equal(cohorts.length, 1);
+  assert.equal(cohorts[0].dial_color, 'Ice Blue');
+  assert.equal(cohorts[0].count, 2);
+});
+
 test('classifies row-level outliers with an auditable reason', () => {
   const stats = summarizePrices([100, 101, 102, 103, 104, 105, 500]).stats;
   assert.deepEqual(classifyPrice(102, stats), { included: true, reason: null });

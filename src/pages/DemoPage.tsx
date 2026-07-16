@@ -526,7 +526,7 @@ export default function DemoPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `WatchFacts_Demo_${results.length}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `Curated_Luxury_Demo_${results.length}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }, [results]);
@@ -540,7 +540,7 @@ export default function DemoPage() {
     const recycle = results.filter(r => r.verdict === 'RECYCLE');
 
     const ws1: any[][] = [];
-    ws1.push([titleCell(`WatchFacts Demo Export — ${stamp}`)]);
+    ws1.push([titleCell(`Curated Luxury Demo Export — ${stamp}`)]);
           ws1.push([{
             v: `${results.length} records  ·  ${approved.length} Approved  ·  ${human.length} Human  ·  ${recycle.length} Recycle  ·  Provider: ${provider}`,
             t: 's',
@@ -626,7 +626,7 @@ export default function DemoPage() {
     ws2Sheet['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:4} }];
     XLSX.utils.book_append_sheet(wb, ws2Sheet, 'Summary');
 
-    XLSX.writeFile(wb, `WatchFacts_Demo_${stamp}.xlsx`);
+    XLSX.writeFile(wb, `Curated_Luxury_Demo_${stamp}.xlsx`);
   }, [results, provider]);
 
   const handleClear = useCallback(() => {
@@ -675,7 +675,7 @@ export default function DemoPage() {
         <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-3xl font-bold" style={{ color: '#d4af37', fontFamily: "'Playfair Display', serif" }}>
-              WatchFacts Demo
+              Curated Luxury Demo
             </h1>
             <p className="mt-2 text-sm max-w-2xl" style={{ color: '#888' }}>
               Real-time pipeline demo. Paste text, images, or a full chat — every watch flows through

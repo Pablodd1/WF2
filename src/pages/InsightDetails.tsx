@@ -359,7 +359,7 @@ function NavBar() {
   return (
     <nav style={{ backgroundColor: WHITE, borderBottom: `1px solid ${BORDER}`, padding: '12px 0' }}>
       <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
-        <a href="/" style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif", textDecoration: 'none' }}>WatchFacts</a>
+        <a href="/" style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif", textDecoration: 'none' }}>Curated Luxury</a>
         <div className="flex gap-6" style={{ fontSize: 14 }}>
           {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => (
             <a key={item} href={item === 'Price Research' ? '/price-research' : '#'} style={{ color: MUTED, textDecoration: 'none' }}>{item}</a>

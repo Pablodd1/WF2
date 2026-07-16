@@ -836,7 +836,7 @@ function NavBar() {
     <nav style={{ backgroundColor: WHITE, borderBottom: `1px solid ${BORDER}`, padding: '12px 0' }}>
       <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
         <div style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif" }}>
-          WatchFacts
+          Curated Luxury
         </div>
         <div className="flex gap-6" style={{ fontSize: 14 }}>
           {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => (

@@ -31,7 +31,7 @@ export default function DealerPortal() {
       <div className="mx-auto max-w-6xl">
         <header className="flex items-center justify-between border-b border-white/10 pb-5">
           <Link to="/" className="flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white">
-            <ArrowLeft size={16} /> WatchFacts
+            <ArrowLeft size={16} /> Curated Luxury
           </Link>
           <button type="button" onClick={exitAccess} className="flex items-center gap-2 border border-white/15 px-3 py-2 text-xs font-semibold text-white/65 transition-colors hover:border-white/40 hover:text-white">
             <LogOut size={14} /> Exit access

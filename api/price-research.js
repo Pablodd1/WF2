@@ -90,16 +90,18 @@ module.exports = async function handler(req, res) {
 
     // Resolve reference — support prefix matching (3712 -> 3712/1A)
     let targetRef = rawRef;
+    let referenceVariants = [rawRef];
     if (rawRef.length >= 3) {
-      // Exact indexed lookup first. Prefix ILIKE over millions of rows is only
-      // a fallback for genuinely partial references.
+      // Resolve exact references case-insensitively first. Historical imports
+      // contain casing variants (for example 116500LN and 116500ln); keep all
+      // equivalent stored spellings so the market query aggregates them.
       const { data: exactRefs, error: exactRefError } = await client
         .from('watch_records')
         .select('reference')
         .eq('brand', brand)
         .eq('verdict', 'APPROVED')
-        .eq('reference', rawRef)
-        .limit(1);
+        .ilike('reference', rawRef)
+        .limit(50);
 
       let refs = exactRefs;
       let refError = exactRefError;
@@ -117,9 +119,17 @@ module.exports = async function handler(req, res) {
 
       if (!refError && refs && refs.length > 0) {
         const foundRefs = [...new Set(refs.map(r => r.reference))];
-        const exact = foundRefs.find(r => normRef(r) === normRef(rawRef));
-        if (exact) targetRef = exact;
-        else if (foundRefs.length === 1) targetRef = foundRefs[0];
+        const exactVariants = foundRefs.filter(r => normRef(r) === normRef(rawRef));
+        const exact = exactVariants[0];
+        if (exact) {
+          const catalogHit = lookupCatalog(rawRef, brand || null);
+          targetRef = catalogHit?.found && catalogHit.reference ? catalogHit.reference : exact;
+          referenceVariants = exactVariants;
+        }
+        else if (foundRefs.length === 1) {
+          targetRef = foundRefs[0];
+          referenceVariants = [foundRefs[0]];
+        }
         else {
           return res.status(200).json({
             success: false,
@@ -140,7 +150,7 @@ module.exports = async function handler(req, res) {
       .from('watch_records')
       .select(columns)
       .eq('brand', brand)
-      .eq('reference', targetRef)
+      .in('reference', referenceVariants)
       .eq('verdict', 'APPROVED')
       .eq('listing_type', 'WTS')
       .order('created_at', { ascending: false })
@@ -238,8 +248,9 @@ module.exports = async function handler(req, res) {
     const dialMap = {};
     marketRows.forEach(r => {
       const dial = r.dial_color || 'Unspecified';
-      if (!dialMap[dial]) dialMap[dial] = { dial_color: dial, rows: [] };
-      dialMap[dial].rows.push(r);
+      const key = String(dial).trim().toLowerCase();
+      if (!dialMap[key]) dialMap[key] = { dial_color: String(dial).trim(), rows: [] };
+      dialMap[key].rows.push(r);
     });
     const dial_analysis = Object.values(dialMap)
       .map(d => {

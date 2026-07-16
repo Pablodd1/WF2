@@ -38,7 +38,7 @@ export default function DealerLogin() {
   return (
     <main className="min-h-screen bg-[#09090d] px-5 py-8 text-white">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col">
-        <Link to="/" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> WatchFacts</Link>
+        <Link to="/" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> Curated Luxury</Link>
         <div className="grid flex-1 items-center gap-12 py-10 lg:grid-cols-[1fr_420px]">
           <section>
             <div className="mb-5 flex h-11 w-11 items-center justify-center border border-[#c9a96e]/45 text-[#c9a96e]"><ShieldCheck size={22} /></div>

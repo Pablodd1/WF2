@@ -7,7 +7,7 @@ type ChatMessage = { role: 'assistant' | 'user'; text: string };
 
 const initialMessage: ChatMessage = {
   role: 'assistant',
-  text: 'Welcome to WatchFacts. I can direct you to listings, reference research, or dealer operations.',
+  text: 'Welcome to Curated Luxury. I can direct you to listings, reference research, or dealer operations.',
 };
 
 function fallbackResponse(message: string) {
@@ -62,9 +62,9 @@ export function FrontDeskWidget() {
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
       {open && (
-        <section className="w-[min(360px,calc(100vw-2.5rem))] border border-white/15 bg-[#111111] shadow-2xl" aria-label="WatchFacts AI front desk">
+        <section className="w-[min(360px,calc(100vw-2.5rem))] border border-white/15 bg-[#111111] shadow-2xl" aria-label="Curated Luxury AI front desk">
           <header className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-            <div className="flex items-center gap-2"><Bot size={17} className="text-[#d8bd80]" /><span className="text-sm font-semibold">WatchFacts AI</span></div>
+            <div className="flex items-center gap-2"><Bot size={17} className="text-[#d8bd80]" /><span className="text-sm font-semibold">Curated Luxury AI</span></div>
             <button onClick={() => setOpen(false)} className="p-1 text-white/60 transition-colors hover:text-white" title="Close front desk"><X size={17} /></button>
           </header>
           <div className="max-h-72 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
@@ -83,14 +83,14 @@ export function FrontDeskWidget() {
             ))}
           </div>
           <form onSubmit={sendMessage} className="flex border-t border-white/10">
-            <label className="sr-only" htmlFor="front-desk-message">Message WatchFacts AI</label>
-            <input id="front-desk-message" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={600} placeholder="Ask WatchFacts..." className="h-12 min-w-0 flex-1 bg-transparent px-4 text-sm text-white outline-none placeholder:text-white/40" />
+            <label className="sr-only" htmlFor="front-desk-message">Message Curated Luxury AI</label>
+            <input id="front-desk-message" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={600} placeholder="Ask Curated Luxury..." className="h-12 min-w-0 flex-1 bg-transparent px-4 text-sm text-white outline-none placeholder:text-white/40" />
             <button type="submit" disabled={!draft.trim() || loading} className="grid w-12 place-items-center border-l border-white/10 text-[#d8bd80] transition-colors hover:bg-white/5 disabled:text-white/20" title="Send message"><Send size={17} /></button>
           </form>
         </section>
       )}
-      <button onClick={() => setOpen((value) => !value)} className="flex h-12 items-center gap-2 bg-[#d8bd80] px-4 text-sm font-semibold text-black shadow-lg transition-transform hover:-translate-y-0.5" title="Open WatchFacts AI front desk" aria-expanded={open}>
-        <MessageCircle size={18} /> {open ? 'Close' : 'Ask WatchFacts'}
+      <button onClick={() => setOpen((value) => !value)} className="flex h-12 items-center gap-2 bg-[#d8bd80] px-4 text-sm font-semibold text-black shadow-lg transition-transform hover:-translate-y-0.5" title="Open Curated Luxury AI front desk" aria-expanded={open}>
+        <MessageCircle size={18} /> {open ? 'Close' : 'Ask Curated Luxury'}
       </button>
     </div>
   );

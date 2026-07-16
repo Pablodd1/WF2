@@ -121,7 +121,7 @@ export async function downloadStyledReport(records: ReportRecord[], filename?: s
 
   // ── SHEET 1: All Records ──
   const ws1: any[][] = [];
-  ws1.push([titleCell(`WatchFacts Colored Report — ${stamp}`)]);
+  ws1.push([titleCell(`Curated Luxury Colored Report — ${stamp}`)]);
   ws1.push([{ v: `${records.length} records`, t: 's', s: { font: { sz: 9, italic: true, color: { rgb: 'FF666666' } } } }]);
   ws1.push([]);
 
@@ -218,6 +218,6 @@ export async function downloadStyledReport(records: ReportRecord[], filename?: s
   XLSX.utils.book_append_sheet(wb, ws2Sheet, 'Summary');
 
   // Write
-  const fname = filename || `WatchFacts_Styled_Report_${stamp}.xlsx`;
+  const fname = filename || `Curated_Luxury_Styled_Report_${stamp}.xlsx`;
   XLSX.writeFile(wb, fname);
 }
