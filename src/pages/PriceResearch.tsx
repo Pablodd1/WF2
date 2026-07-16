@@ -16,7 +16,9 @@ interface RowData {
   is_outlier: boolean;
   stored_price_usd?: number;
   price_normalization?: string | null;
-  outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' | null;
+  outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' |
+    'MISSING_BRAND' | 'MISSING_REFERENCE' | 'CATALOG_MODEL_UNCONFIRMED' | 'MISSING_PRICE' |
+    'MISSING_DIAL' | 'CATALOG_DIAL_UNCONFIRMED' | 'CATALOG_DIAL_MISMATCH' | null;
 }
 
 interface MonthlyPoint {
@@ -73,6 +75,9 @@ interface LiquidityData {
   demand_score?: number | null;
   supply_score?: number | null;
   wtb_fs_ratio?: number | null;
+  demand_count?: number;
+  demand_cohorts?: { dial_color: string; count: number }[];
+  demand_sample_capped?: boolean;
 }
 
 interface PriceData {
@@ -115,7 +120,7 @@ interface PriceData {
   outlier_rows: RowData[];
   methodology: {
     method: 'IQR_1_5' | 'PLAUSIBILITY_FLOOR_THEN_IQR_1_5'; minimum_sample: number; included_count: number; excluded_count: number;
-    plausibility_floor_usd?: number; plausibility_excluded_count?: number;
+    plausibility_floor_usd?: number; plausibility_excluded_count?: number; required_field_excluded_count?: number;
     lower_fence?: number | null; upper_fence?: number | null;
   };
 }
@@ -307,6 +312,13 @@ export default function PriceResearch() {
     if (reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR') return 'Below market plausibility floor';
     if (reason === 'BELOW_IQR_FENCE') return 'Below lower IQR fence';
     if (reason === 'ABOVE_IQR_FENCE') return 'Above upper IQR fence';
+    if (reason === 'MISSING_BRAND') return 'Missing required brand';
+    if (reason === 'MISSING_REFERENCE') return 'Missing required reference';
+    if (reason === 'CATALOG_MODEL_UNCONFIRMED') return 'Model/reference not confirmed by catalog';
+    if (reason === 'MISSING_PRICE') return 'Missing required WTS price';
+    if (reason === 'MISSING_DIAL') return 'Missing required dial color';
+    if (reason === 'CATALOG_DIAL_UNCONFIRMED') return 'Dial configuration unavailable in catalog';
+    if (reason === 'CATALOG_DIAL_MISMATCH') return 'Dial is not valid for this catalog reference';
     return 'Invalid price';
   };
 
@@ -567,6 +579,21 @@ export default function PriceResearch() {
                         </div>
                       </div>
                     )}
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
+                      <div className="flex items-center justify-between">
+                        <span style={{ fontSize: 13, color: MUTED }}>Qualified WTB / looking-for demand</span>
+                        <span style={{ fontSize: 18, fontWeight: 700, color: BLUE }}>{(data.liquidity.demand_count || 0).toLocaleString()}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: MUTED, marginTop: 5 }}>
+                        Only catalog-valid dial cohorts with at least five WTB/NTQ observations are counted.
+                      </div>
+                      {(data.liquidity.demand_cohorts || []).slice(0, 4).map(cohort => (
+                        <div key={cohort.dial_color} className="mt-2 flex items-center justify-between" style={{ fontSize: 12 }}>
+                          <span style={{ color: MUTED }}>{cohort.dial_color}</span>
+                          <span style={{ color: NAVY, fontWeight: 600 }}>{cohort.count.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
                   </>
                 )}
               </div>
@@ -574,7 +601,7 @@ export default function PriceResearch() {
               {/* Pricing Summary */}
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing</h3>
-                {stats && (
+                {stats ? (
                   <>
                     <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
                       Avg:{' '}
@@ -595,12 +622,11 @@ export default function PriceResearch() {
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                       {data.sample_quality === 'robust' ? 'Robust' : data.sample_quality === 'provisional' ? 'Provisional' : 'Observational'} evidence · {stats.count} listings
                     </div>
-                    {!data.analytics_ready && (
-                      <div style={{ fontSize: 11, color: RED, marginTop: 6 }}>
-                        Fewer than five comparable listings; treat these values as observations only.
-                      </div>
-                    )}
                   </>
+                ) : (
+                  <div style={{ fontSize: 12, color: RED, lineHeight: 1.5 }}>
+                    Analytics are withheld until at least five catalog-consistent observations exist for the same reference, dial, and condition.
+                  </div>
                 )}
                 <button
                   onClick={() => {
@@ -614,12 +640,12 @@ export default function PriceResearch() {
               </div>
             </div>
 
-            {/* ── Dial Color Analysis: EVERY dial color found in real listings ── */}
+            {/* Dial cohorts that satisfy catalog and minimum-sample policy. */}
             {data.dial_analysis && data.dial_analysis.length > 0 && (
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Dial Color Analysis</h3>
                 <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
-                  Every dial color found across real listings for {displayRef} — backed by actual watches, not estimates.
+                  Catalog-valid dial cohorts with at least five comparable observations for {displayRef}.
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -654,7 +680,7 @@ export default function PriceResearch() {
             )}
 
             {/* ── Price Chart ───────────────────────────────── */}
-            {chartData.length >= 1 && (
+            {data.analytics_ready && chartData.length >= 1 && (
               <>
                 <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                   <div className="flex items-center justify-between mb-4">
@@ -712,7 +738,7 @@ export default function PriceResearch() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Comparable price set</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    A market plausibility floor is applied first, followed by the standard 1.5 x IQR method. Excluded prices remain visible below for audit.
+                    Required WTS fields and catalog configuration are checked first. Cohorts with five or more observations then use a market plausibility floor followed by the standard 1.5 x IQR method. Exclusions remain visible below.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
@@ -763,7 +789,7 @@ export default function PriceResearch() {
                           key={row.id || `${row.created_at}-${row.price_usd}-${index}`}
                           tabIndex={0}
                           role="button"
-                          aria-label={`View source detail for excluded observation at $${row.price_usd.toLocaleString()}`}
+                          aria-label={`View source detail for excluded observation${Number.isFinite(Number(row.price_usd)) ? ` at $${Number(row.price_usd).toLocaleString()}` : ''}`}
                           onClick={() => void openListing(row)}
                           onKeyDown={event => {
                             if (event.key === 'Enter' || event.key === ' ') {
@@ -775,7 +801,9 @@ export default function PriceResearch() {
                           onMouseEnter={event => (event.currentTarget.style.backgroundColor = '#fff9e8')}
                           onMouseLeave={event => (event.currentTarget.style.backgroundColor = WHITE)}
                         >
-                          <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>${row.price_usd.toLocaleString()}</td>
+                          <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>
+                            {Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0 ? `$${Number(row.price_usd).toLocaleString()}` : 'No price'}
+                          </td>
                           <td style={{ padding: '11px 8px' }}>{(row.listing_date || row.created_at) ? (row.listing_date || row.created_at).split('T')[0] : 'Unknown'}</td>
                           <td style={{ padding: '11px 8px', color: '#8a6500' }}>{outlierReason(row.outlier_reason)}</td>
                           <td style={{ padding: '11px 8px' }}>{row.condition || 'Unspecified'}</td>

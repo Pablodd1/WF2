@@ -9,6 +9,7 @@ const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
 const { lookupCatalog } = require('./_lib/catalog');
 const { buildComparableCohorts, classifyPrice, summarizePrices } = require('./_lib/market-stats.cjs');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
+const { classifyDemandEligibility, classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -25,7 +26,7 @@ function lookupModel(reference, brand) {
 // market_reference_indicators_current has never been queried by live code — if
 // column names differ, we fall back to a live-derived count. REAL DATA ONLY:
 // no invented seller/buyer numbers.
-async function lookupLiquidity(client, reference, listingCount) {
+async function lookupLiquidity(client, reference, listingCount, demand) {
   try {
     const { data, error } = await client
       .from('market_reference_indicators_current')
@@ -44,10 +45,42 @@ async function lookupLiquidity(client, reference, listingCount) {
         supply_score: d.supply_score,
         wtb_fs_ratio: d.wtb_fs_ratio,
         listing_count: listingCount,
+        ...demand,
       };
     }
   } catch { /* fall through to live count */ }
-  return { source: 'live_fallback', listing_count: listingCount };
+  return { source: 'live_fallback', listing_count: listingCount, ...demand };
+}
+
+async function lookupDemand(client, brand, referenceVariants, catalog) {
+  const { data, error } = await client
+    .from('watch_records')
+    .select('id,brand,reference,dial_color,listing_type,verdict')
+    .eq('brand', brand)
+    .in('reference', referenceVariants)
+    .in('listing_type', ['WTB', 'NTQ'])
+    .in('verdict', ['APPROVED', 'HUMAN'])
+    .limit(5000);
+  if (error) return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
+
+  const eligible = (data || []).filter(row => !classifyDemandEligibility(row, catalog));
+  const grouped = new Map();
+  for (const row of eligible) {
+    const dial = String(row.dial_color || '').trim();
+    const key = dial.toLowerCase();
+    if (!key) continue;
+    const current = grouped.get(key) || { dial_color: dial, count: 0 };
+    current.count += 1;
+    grouped.set(key, current);
+  }
+  const demandCohorts = [...grouped.values()]
+    .filter(cohort => cohort.count >= 5)
+    .sort((a, b) => b.count - a.count);
+  return {
+    demand_count: demandCohorts.reduce((sum, cohort) => sum + cohort.count, 0),
+    demand_cohorts: demandCohorts,
+    demand_sample_capped: (data || []).length >= 5000,
+  };
 }
 
 function inferBrand(ref) {
@@ -145,7 +178,7 @@ module.exports = async function handler(req, res) {
     // reference does not produce a chart made only from its newest day.
     const pageSize = 1000;
     const sampleLimit = 5000;
-    const columns = 'id,price_raw,price_usd,currency,raw_message,created_at,listing_date,condition,source,dial_color,year,listing_type';
+    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,created_at,listing_date,condition,source,dial_color,year,listing_type';
     const buildRowsQuery = (from, to) => client
       .from('watch_records')
       .select(columns)
@@ -188,18 +221,24 @@ module.exports = async function handler(req, res) {
     // Exclude synthetic/test sources. mysql_auction_watches is historical market
     // evidence and must not be discarded from analytics.
     const excludedSources = new Set(['bulk_test_100', 'test_run', 'mysql_market_refs']);
-    const marketRows = rows
+    const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
         const normalized = normalizeMarketRow(row, targetRef);
         return { ...normalized, stored_price_usd: row.price_usd, price_usd: normalized.analytics_price_usd };
       });
-    const currencyCorrections = marketRows.filter(row => row.price_normalization).length;
+    const catalogHit = lookupCatalog(targetRef, brand || null);
+    const requiredFieldExclusions = normalizedRows
+      .map(row => ({ row, reason: classifyResearchEligibility(row, catalogHit) }))
+      .filter(item => item.reason)
+      .map(({ row, reason }) => ({ ...row, is_outlier: true, outlier_reason: reason }));
+    const marketRows = normalizedRows.filter(row => !classifyResearchEligibility(row, catalogHit));
+    const currencyCorrections = normalizedRows.filter(row => row.price_normalization).length;
     const isUnknownDial = value => {
       const normalized = String(value || '').trim().toUpperCase();
       return !normalized || ['UNKNOWN', 'UNSPECIFIED', 'N/A', 'NA', 'NONE', 'NULL', '-'].includes(normalized);
     };
-    const unknownDialCount = marketRows.filter(row => isUnknownDial(row.dial_color)).length;
+    const unknownDialCount = normalizedRows.filter(row => isUnknownDial(row.dial_color)).length;
 
     const cohorts = buildComparableCohorts(marketRows);
     const requestedCondition = String(req.query.condition || '').trim().toLowerCase();
@@ -223,7 +262,10 @@ module.exports = async function handler(req, res) {
       return { ...row, is_outlier: !classification.included, outlier_reason: classification.reason };
     });
     const includedRows = classifiedRows.filter(row => !row.is_outlier && row.price_usd > 0);
-    const outlierRows = classifiedRows.filter(row => row.is_outlier && row.outlier_reason !== 'INVALID_PRICE');
+    const outlierRows = [
+      ...requiredFieldExclusions,
+      ...classifiedRows.filter(row => row.is_outlier && row.outlier_reason !== 'INVALID_PRICE'),
+    ];
 
     // Monthly aggregation
     const monthlyMap = {};
@@ -255,7 +297,7 @@ module.exports = async function handler(req, res) {
     const dial_analysis = Object.values(dialMap)
       .map(d => {
         const dialSummary = summarizeComparableRows(d.rows).summary;
-        if (!dialSummary.stats) return null;
+        if (!dialSummary.analytics_ready || !dialSummary.stats) return null;
         return {
           dial_color: d.dial_color,
           count: dialSummary.included.length,
@@ -269,8 +311,9 @@ module.exports = async function handler(req, res) {
     const dialColors = dial_analysis.map(d => d.dial_color);
 
     // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
-    const model = lookupModel(targetRef, brand);
-    const liquidity = await lookupLiquidity(client, targetRef, marketRows.length);
+    const model = catalogHit?.found ? (catalogHit.model || null) : lookupModel(targetRef, brand);
+    const demand = await lookupDemand(client, brand, referenceVariants, catalogHit);
+    const liquidity = await lookupLiquidity(client, targetRef, marketRows.length, demand);
 
     res.status(200).json({
       success: true, brand, reference: rawRef,
@@ -278,10 +321,10 @@ module.exports = async function handler(req, res) {
       model, dialColors,
       dial_analysis,
       dial_data_quality: {
-        known_count: marketRows.length - unknownDialCount,
+        known_count: normalizedRows.length - unknownDialCount,
         unknown_count: unknownDialCount,
-        completeness_percent: marketRows.length
-          ? Math.round(((marketRows.length - unknownDialCount) / marketRows.length) * 1000) / 10
+        completeness_percent: normalizedRows.length
+          ? Math.round(((normalizedRows.length - unknownDialCount) / normalizedRows.length) * 1000) / 10
           : 0,
         status: unknownDialCount === 0 ? 'complete' : 'incomplete',
       },
@@ -306,21 +349,21 @@ module.exports = async function handler(req, res) {
       })),
       analytics_ready: summary.analytics_ready,
       sample_quality: summary.sample_quality,
-      stats: summary.stats,
+      stats: summary.analytics_ready ? summary.stats : null,
       selected_cohort: {
         condition: selectedCohort.condition,
         dial_color: selectedCohort.dial_color,
         count: selectedCohort.count,
       },
       cohorts: cohorts.map(cohort => {
-        const cohortStats = summarizeComparableRows(cohort.rows).summary.stats;
+        const cohortSummary = summarizeComparableRows(cohort.rows).summary;
         return {
           condition: cohort.condition,
           dial_color: cohort.dial_color,
           count: cohort.count,
-          avg_price: cohortStats?.avg ?? null,
-          min_price: cohortStats?.min ?? null,
-          max_price: cohortStats?.max ?? null,
+          avg_price: cohortSummary.analytics_ready ? (cohortSummary.stats?.avg ?? null) : null,
+          min_price: cohortSummary.analytics_ready ? (cohortSummary.stats?.min ?? null) : null,
+          max_price: cohortSummary.analytics_ready ? (cohortSummary.stats?.max ?? null) : null,
         };
       }),
       methodology: {
@@ -328,6 +371,7 @@ module.exports = async function handler(req, res) {
         minimum_sample: 5,
         included_count: includedRows.length,
         excluded_count: outlierRows.length,
+        required_field_excluded_count: requiredFieldExclusions.length,
         plausibility_floor_usd: marketPriceFloorUsd,
         plausibility_excluded_count: outlierRows.filter(row => row.outlier_reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR').length,
         lower_fence: summary.stats?.lower_fence ?? null,

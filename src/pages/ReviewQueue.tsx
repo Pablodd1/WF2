@@ -47,6 +47,20 @@ interface ShadowProgress {
   checkpointDelayed?: boolean;
 }
 
+interface ShadowQueueApiItem {
+  id: string;
+  candidate?: Record<string, string | number | null>;
+  source?: Record<string, string | null>;
+  changeFlags?: string[];
+  analyzedAt: string;
+  priority?: number;
+  decision?: {
+    disposition?: ReviewItem['disposition'];
+    reasons?: string[];
+    catalog?: Record<string, string | null>;
+  };
+}
+
 export default function ReviewQueue() {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
@@ -58,8 +72,8 @@ export default function ReviewQueue() {
   const [decisionBusy, setDecisionBusy] = useState<string | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
 
-  // The queue is read-only: a later audited endpoint will handle reviewer
-  // decisions. Do not let a client-side click mutate market records.
+  // Decisions are sent to the audited server transaction. The client never
+  // writes market records directly.
   useEffect(() => {
     let active = true;
     const params = new URLSearchParams({ limit: '100', sort: reasonFilter ? 'recent' : 'priority' });
@@ -71,24 +85,24 @@ export default function ReviewQueue() {
       })
       .then(data => {
         if (!active) return;
-        setItems((data.items || []).map((item: any): ReviewItem => {
+        setItems(((data.items || []) as ShadowQueueApiItem[]).map((item): ReviewItem => {
           const candidate = item.candidate || {};
           const catalog = item.decision?.catalog || {};
           const ready = item.decision?.disposition === 'READY_FOR_HUMAN_APPROVAL';
           return {
             id: item.id,
-            reference: candidate.reference || item.source?.reference || 'Unresolved',
-            brand: candidate.brand || item.source?.brand || 'Unknown',
+            reference: String(candidate.reference || item.source?.reference || 'Unresolved'),
+            brand: String(candidate.brand || item.source?.brand || 'Unknown'),
             model: catalog.model || catalog.collection || 'Catalog review',
             dial: 'Unverified',
-            price: candidate.price_usd || candidate.price_raw || 0,
-            currency: candidate.currency || item.source?.currency || 'Unknown',
+            price: Number(candidate.price_usd || candidate.price_raw || 0),
+            currency: String(candidate.currency || item.source?.currency || 'Unknown'),
             confidence: ready ? 95 : item.changeFlags?.includes('CURRENCY_AMBIGUOUS') ? 40 : 65,
             aiFields: item.changeFlags || [],
             catalogFields: catalog.reference ? ['reference', 'brand'] : [],
             status: 'pending',
             submittedAt: item.analyzedAt,
-            listingTitle: candidate.raw_line || 'No deterministic candidate extracted',
+            listingTitle: String(candidate.raw_line || 'No deterministic candidate extracted'),
             reviewReasons: item.decision?.reasons || [],
             disposition: item.decision?.disposition || 'HUMAN_REVIEW',
             priority: Number(item.priority || 0),
@@ -197,7 +211,7 @@ export default function ReviewQueue() {
             Human Review Queue
           </h1>
           <p className="text-sm text-text-muted mt-1">
-            Catalog-confirmed candidates are ready for human approval; other rows remain blocked for review.
+            Catalog-confirmed candidates are ready for human approval and audited publication; other rows remain blocked for review.
           </p>
           {loadError && <p className="text-xs text-red-400 mt-2">{loadError}</p>}
         </div>
@@ -352,7 +366,7 @@ export default function ReviewQueue() {
                       className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-emerald-500 text-black text-xs font-bold disabled:opacity-50"
                     >
                       {decisionBusy === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                      Approve
+                      Approve & publish
                     </button>
                   )}
                   {item.status === 'pending' && (
