@@ -224,7 +224,7 @@ module.exports = async function handler(req, res) {
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
-        const normalized = normalizeMarketRow(row, targetRef);
+        const normalized = normalizeMarketRow(row, [rawRef, targetRef]);
         return { ...normalized, stored_price_usd: row.price_usd, price_usd: normalized.analytics_price_usd };
       });
     let catalogHit = lookupCatalog(targetRef, brand || null);
