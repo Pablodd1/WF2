@@ -15,14 +15,36 @@ function explicitAmount(line, currencies) {
 }
 
 function referenceLine(rawMessage, reference) {
-  const ref = compact(reference);
-  if (!ref) return null;
-  return String(rawMessage || '').split(/\r?\n|\\r\\n/).find(line => compact(line).includes(ref)) || null;
+  const refs = (Array.isArray(reference) ? reference : [reference]).map(compact).filter(Boolean);
+  if (!refs.length) return null;
+  return String(rawMessage || '').split(/\r?\n|\\r\\n/).find(line => refs.some(ref => compact(line).includes(ref))) || null;
+}
+
+function referenceBlock(rawMessage, reference) {
+  const refs = (Array.isArray(reference) ? reference : [reference]).map(compact).filter(Boolean);
+  const lines = String(rawMessage || '').split(/\r?\n|\\r\\n/);
+  const index = lines.findIndex(line => refs.some(ref => compact(line).includes(ref)));
+  if (index < 0) return null;
+  const block = [lines[index]];
+  for (let offset = 1; offset <= 4 && index + offset < lines.length; offset += 1) {
+    const next = lines[index + offset].trim();
+    if (!next) break;
+    const tokens = next.toUpperCase().match(/[A-Z0-9]+(?:\/[A-Z0-9-]+)?/g) || [];
+    const containsOtherReference = tokens.some(token => {
+      const normalized = compact(token);
+      if (refs.some(ref => normalized.includes(ref))) return false;
+      if (/^(?:19|20)\d{2}$/.test(normalized)) return false;
+      return token.includes('/') || /\d/.test(token) && normalized.length >= 5;
+    });
+    if (containsOtherReference) break;
+    block.push(next);
+  }
+  return block.join(' ');
 }
 
 function normalizeMarketRow(row, reference) {
   const stored = Number(row.price_usd);
-  const line = referenceLine(row.raw_message, reference);
+  const line = referenceBlock(row.raw_message, reference);
   if (!line) return { ...row, analytics_price_usd: stored, price_normalization: null };
   const usd = explicitAmount(line, ['USDT', 'USD', 'US\\$', 'U\\$']);
   if (usd) {
@@ -37,4 +59,4 @@ function normalizeMarketRow(row, reference) {
   return { ...row, analytics_price_usd: stored, price_normalization: null };
 }
 
-module.exports = { normalizeMarketRow, referenceLine };
+module.exports = { normalizeMarketRow, referenceBlock, referenceLine };
