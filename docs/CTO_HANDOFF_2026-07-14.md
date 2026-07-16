@@ -1,5 +1,9 @@
 # WatchFacts CTO Handoff - 2026-07-14
 
+> Historical snapshot. Continue from `docs/CTO_HANDOFF_2026-07-16.md`, which records
+> the completed normalization scan, merged PRs #6/#7, current pending queues, and
+> cross-computer bootstrap instructions.
+
 ## Purpose
 
 This document is the durable handoff for continuing the WatchFacts repository audit,

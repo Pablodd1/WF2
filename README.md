@@ -1,5 +1,9 @@
 # WatchFacts
 
+> Current CTO continuation guide: [`docs/CTO_HANDOFF_2026-07-16.md`](docs/CTO_HANDOFF_2026-07-16.md).
+> The user-facing product name is **Curated Luxury**; repository and legacy service
+> identifiers remain WatchFacts/wf unless a separate infrastructure migration is approved.
+
 ![WatchFacts](https://img.shields.io/badge/WatchFacts-v2-gold)
 
 **All-in-one watch intelligence platform** — parse WhatsApp dealer messages, extract watch details, enrich with reference catalog data, and export colored Excel/CSV reports.
