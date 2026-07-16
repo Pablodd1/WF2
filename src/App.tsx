@@ -8,8 +8,6 @@ const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const TradingFloor = lazy(() => import('@/pages/TradingFloor'));
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'));
 const SourceAnalytics = lazy(() => import('@/pages/SourceAnalytics'));
-const AnalyticsDashboard = lazy(() => import('@/pages/AnalyticsDashboard'));
-const ReviewPage = lazy(() => import('@/pages/ReviewPage'));
 const ReviewQueue = lazy(() => import('@/pages/ReviewQueue'));
 const CleanPage = lazy(() => import('@/pages/CleanPage'));
 const ReprocessPage = lazy(() => import('@/pages/ReprocessPage'));
@@ -34,11 +32,12 @@ export default function App() {
         <Route path="/trading" element={<DealerGate allowBetaSkip><TradingFloor /></DealerGate>} />
         <Route path="/analytics" element={<DealerGate><SourceAnalytics /></DealerGate>} />
         <Route path="/analytics/legacy" element={<DealerGate><AnalyticsPage /></DealerGate>} />
-        <Route path="/analytics-dashboard" element={<DealerGate><AnalyticsDashboard /></DealerGate>} />
-        <Route path="/review" element={<DealerGate><ReviewPage /></DealerGate>} />
+        <Route path="/analytics-dashboard" element={<Navigate to="/analytics" replace />} />
+        <Route path="/review" element={<Navigate to="/review-queue" replace />} />
         <Route path="/review-queue" element={<DealerGate><ReviewQueue /></DealerGate>} />
         <Route path="/clean" element={<DealerGate><CleanPage /></DealerGate>} />
         <Route path="/reprocess" element={<DealerGate><ReprocessPage /></DealerGate>} />
+        <Route path="/study" element={<Navigate to="/clean" replace />} />
         <Route path="/demo" element={<DemoPage />} />
         <Route path="/demo-mode" element={<DemoMode />} />
         <Route path="/admin" element={<DealerGate><AdminPage /></DealerGate>} />

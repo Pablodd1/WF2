@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Bot, MessageCircle, Send, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -31,6 +31,16 @@ export function FrontDeskWidget() {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([initialMessage]);
 
+  useEffect(() => {
+    const openFrontDesk = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      setOpen(true);
+      if (detail?.message) setDraft(detail.message.slice(0, 600));
+    };
+    window.addEventListener('curated-luxury:front-desk', openFrontDesk);
+    return () => window.removeEventListener('curated-luxury:front-desk', openFrontDesk);
+  }, []);
+
   const sendMessage = async (event?: FormEvent<HTMLFormElement>, shortcut?: string) => {
     event?.preventDefault();
     const text = (shortcut || draft).trim();
@@ -60,7 +70,7 @@ export function FrontDeskWidget() {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
+    <div className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-3 z-50 flex flex-col items-end gap-3 sm:bottom-5 sm:right-5">
       {open && (
         <section className="w-[min(360px,calc(100vw-2.5rem))] border border-white/15 bg-[#111111] shadow-2xl" aria-label="Curated Luxury AI front desk">
           <header className="flex items-center justify-between border-b border-white/10 px-4 py-3">
@@ -89,8 +99,8 @@ export function FrontDeskWidget() {
           </form>
         </section>
       )}
-      <button onClick={() => setOpen((value) => !value)} className="flex h-12 items-center gap-2 bg-[#d8bd80] px-4 text-sm font-semibold text-black shadow-lg transition-transform hover:-translate-y-0.5" title="Open Curated Luxury AI front desk" aria-expanded={open}>
-        <MessageCircle size={18} /> {open ? 'Close' : 'Ask Curated Luxury'}
+      <button onClick={() => setOpen((value) => !value)} className="flex h-11 w-11 items-center justify-center bg-[#d8bd80] text-sm font-semibold text-black shadow-lg transition-transform hover:-translate-y-0.5 sm:h-12 sm:w-auto sm:gap-2 sm:px-4" title="Open Curated Luxury AI front desk" aria-label={open ? 'Close Curated Luxury AI front desk' : 'Open Curated Luxury AI front desk'} aria-expanded={open}>
+        <MessageCircle size={18} /> <span className="hidden sm:inline">{open ? 'Close' : 'Ask Curated Luxury'}</span>
       </button>
     </div>
   );

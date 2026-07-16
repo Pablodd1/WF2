@@ -13,11 +13,11 @@ interface NavbarProps {
 }
 
 export function Navbar({
-  totalProcessed = 0,
-  normalizedCount = 0,
-  residueCount = 0,
-  throughputRate = 142,
-  avgLatency = 847,
+  totalProcessed,
+  normalizedCount,
+  residueCount,
+  throughputRate,
+  avgLatency,
 }: NavbarProps) {
   const navigate = useNavigate();
   const [time, setTime] = useState('');
@@ -55,6 +55,8 @@ export function Navbar({
   }, []);
 
   const formatNum = (n: number) => n.toLocaleString();
+  const hasPipelineCounts = [totalProcessed, normalizedCount, residueCount].every(value => typeof value === 'number');
+  const hasRuntimeMetrics = typeof throughputRate === 'number' && typeof avgLatency === 'number';
 
   return (
     <motion.header
@@ -78,7 +80,7 @@ export function Navbar({
         <span className="text-[13px] font-medium text-text-secondary font-mono tracking-wide w-[140px] text-center">
           {time}
         </span>
-        <div className="flex items-center gap-1 text-[11px] font-mono">
+        {hasPipelineCounts && <div className="flex items-center gap-1 text-[11px] font-mono">
           <span className="text-muted uppercase tracking-wider mr-1">TOTAL</span>
           <motion.span
             initial={{ scale: 1.2 }}
@@ -86,7 +88,7 @@ export function Navbar({
             transition={{ type: 'spring', stiffness: 100, damping: 15 }}
             className="font-bold text-text-primary"
           >
-            {formatNum(totalProcessed)}
+            {formatNum(totalProcessed!)}
           </motion.span>
           <span className="text-muted mx-1">/</span>
           <span className="text-muted uppercase tracking-wider mr-1">NORM</span>
@@ -96,7 +98,7 @@ export function Navbar({
             transition={{ type: 'spring', stiffness: 100, damping: 15 }}
             className="font-bold text-success"
           >
-            {formatNum(normalizedCount)}
+            {formatNum(normalizedCount!)}
           </motion.span>
           <span className="text-muted mx-1">/</span>
           <span className="text-muted uppercase tracking-wider mr-1">RES</span>
@@ -106,9 +108,9 @@ export function Navbar({
             transition={{ type: 'spring', stiffness: 100, damping: 15 }}
             className="font-bold text-danger"
           >
-            {formatNum(residueCount)}
+            {formatNum(residueCount!)}
           </motion.span>
-        </div>
+        </div>}
       </div>
 
       {/* Right Group */}
@@ -118,7 +120,7 @@ export function Navbar({
             <LogOut size={14} />
           </button>
         )}
-        <div className="flex items-center gap-2">
+        {hasRuntimeMetrics && <div className="flex items-center gap-2">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A96E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
           </svg>
@@ -128,8 +130,8 @@ export function Navbar({
               {throughputRate} rec/min
             </span>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
+        </div>}
+        {hasRuntimeMetrics && <div className="flex items-center gap-2">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A96E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
@@ -140,7 +142,7 @@ export function Navbar({
               {avgLatency} ms
             </span>
           </div>
-        </div>
+        </div>}
       </div>
     </motion.header>
   );
