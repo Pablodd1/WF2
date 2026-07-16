@@ -63,7 +63,7 @@ export default function LandingPage() {
   return (
     <main className="min-h-screen bg-[#080808] text-white">
       <header className="relative z-20 flex h-16 items-center justify-between border-b border-white/10 px-5 sm:px-8 lg:px-12">
-        <Link to="/" className="text-sm font-extrabold uppercase tracking-[0.16em] text-white">Curated Luxury</Link>
+        <Link to="/" className="luxury-wordmark text-sm font-extrabold uppercase tracking-[0.16em]">Curated Luxury</Link>
         <nav className="flex items-center gap-5 text-xs font-medium text-white/70 sm:gap-7">
           <Link to="/price-research" className="transition-colors hover:text-white">Research</Link>
           <Link to="/trading" className="transition-colors hover:text-white">Trading</Link>
@@ -191,7 +191,7 @@ export default function LandingPage() {
       </section>
 
       <footer className="flex flex-col gap-3 border-t border-white/10 px-5 py-6 text-[11px] uppercase tracking-[0.1em] text-white/45 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
-        <span>Curated Luxury</span>
+        <span className="luxury-wordmark">Curated Luxury</span>
         <span className="flex items-center gap-2"><Building2 size={13} /> Dealer network intelligence</span>
         <Link to="/dealer-login" className="text-white/70 transition-colors hover:text-white">Open operations</Link>
       </footer>

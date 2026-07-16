@@ -780,7 +780,12 @@ module.exports = async function handler(req, res) {
         order: 'created_at.desc',
       });
 
-      if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
+      // NTQ is historical buyer-intent shorthand. Customer-facing WTB must
+      // include both values so every "looking for / want to buy" request is
+      // found in one demand view while the stored source classification stays
+      // unchanged for auditability.
+      if (listingType === 'WTB') params.set('listing_type', 'in.(WTB,NTQ)');
+      else if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
       if (!listingType && itemType === 'luxury') params.set('listing_type', 'eq.OTHER');
       if (!listingType && itemType === 'multi') params.set('listing_type', 'eq.MULTI');
       // Customer-facing mode is approved market evidence only. Human/recycle

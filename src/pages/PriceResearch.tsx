@@ -476,9 +476,9 @@ export default function PriceResearch() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               {/* Volume */}
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Market Volume</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Market Sample</h3>
                 <div style={{ fontSize: 14, color: MUTED }}>
-                  # of Listings:{' '}
+                  Sampled WTS observations:{' '}
                   <span style={{ fontSize: 36, fontWeight: 700, color: NAVY, display: 'block', marginTop: 4 }}>
                     {data.totalListings.toLocaleString()}
                   </span>
@@ -502,7 +502,7 @@ export default function PriceResearch() {
                 )}
                 {data.sampleCapped && (
                   <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6 }}>
-                    Analytics use the newest {data.sampledListings.toLocaleString()} of {data.totalListings.toLocaleString()} matching listings.
+                    At least {data.sampledListings.toLocaleString()} approved WTS observations match. Analytics use the newest bounded sample for database efficiency; this is not an exact lifetime count.
                   </div>
                 )}
               </div>
@@ -793,7 +793,7 @@ export default function PriceResearch() {
 
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
               <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
-                Recent Listings ({listings.length} of {data.totalListings})
+                Recent Sample ({listings.length} shown of {data.sampledListings.toLocaleString()} analyzed)
               </div>
               {listings.length === 0 && (
                 <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: 14 }}>

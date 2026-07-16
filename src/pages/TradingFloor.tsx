@@ -32,8 +32,7 @@ const FILTER_OPTIONS = [
   { label: 'Multi-listings', value: 'multi', group: 'Inventory' },
   { label: 'All inventory', value: 'all', group: 'Inventory' },
   { label: 'WTS', value: 'WTS', group: 'Intent' },
-  { label: 'WTB', value: 'WTB', group: 'Intent' },
-  { label: 'NTQ', value: 'NTQ', group: 'Intent' },
+  { label: 'WTB / Looking For', value: 'WTB', group: 'Intent' },
   { label: 'Trade', value: 'TRADE', group: 'Intent' },
 ] as const;
 
@@ -149,7 +148,7 @@ export default function TradingFloor() {
             <div>
               <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {totalIsEstimate ? '~' : ''}{total.toLocaleString()} listings
+                {totalIsEstimate ? '~' : ''}{total.toLocaleString()} eligible listings
               </p>
             </div>
 
@@ -192,7 +191,7 @@ export default function TradingFloor() {
                       color: qualityMode === mode ? '#09090D' : MUTED,
                     }}
                   >
-                    {mode === 'market' ? 'Dated' : 'Archive'}
+                    {mode === 'market' ? 'Approved market' : 'Full archive'}
                   </button>
                 ))}
               </div>
@@ -215,8 +214,9 @@ export default function TradingFloor() {
 
       <div className="mx-auto max-w-7xl px-4 py-5">
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
-          <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong></span>
+          <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> eligible records</span>
           <span>Page <strong style={{ color: INK }}>{page}</strong> of <strong style={{ color: INK }}>{totalPages}</strong></span>
+          <span title="Records are fetched 50 at a time from Postgres for speed; pagination and search still query the server-side dataset.">50 per page keeps the browser fast; search runs on the database.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
