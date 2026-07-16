@@ -72,7 +72,8 @@ function normalizeDialValue(raw) {
 
 function uniqueCatalogDials(values) {
   const unique = new Map();
-  for (const raw of Array.isArray(values) ? values : []) {
+  const sourceValues = Array.isArray(values) ? values : (values == null ? [] : [values]);
+  for (const raw of sourceValues) {
     // Catalog imports occasionally store comma-delimited values in one cell.
     for (const part of String(raw || '').split(/[,;|]/)) {
       const normalized = normalizeDialValue(part);

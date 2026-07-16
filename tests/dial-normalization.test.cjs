@@ -69,6 +69,10 @@ test('preserves catalog variants instead of collapsing them to base colors', () 
   );
 });
 
+test('accepts a scalar dial value from the legacy catalog', () => {
+  assert.deepEqual(uniqueCatalogDials('Blue'), ['Blue']);
+});
+
 test('flags conflicting source and explicit text for review', () => {
   const result = resolveDial({
     sourceDial: 'Black',
