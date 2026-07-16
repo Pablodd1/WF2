@@ -68,7 +68,7 @@ async function run() {
     body: JSON.stringify(payload),
   });
   const body = await response.text();
-  if (!response.ok) throw new Error(`Supabase ${response.status}: ${body.slice(0, 500)}`);
+  if (!response.ok) throw new Error(`Supabase ${response.status}: ${body}`);
   const written = JSON.parse(body);
   console.log(JSON.stringify({ status: 'applied', records_written: written.length, listing_type: 'OTHER', normalization_status: 'UNNORMALIZED' }, null, 2));
 }
