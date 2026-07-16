@@ -772,6 +772,7 @@ export default function PriceResearch() {
             )}
 
             {/* ── Listings Table ──────────────────────────────── */}
+            {data.analytics_ready ? (
             <section style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '24px 0', marginBottom: 24 }}>
               <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
                 <div style={{ flex: 1 }}>
@@ -816,6 +817,22 @@ export default function PriceResearch() {
                 </div>
               </div>
             </section>
+            ) : (
+              <section aria-label="Insufficient qualified market evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
+                <div className="flex items-start gap-3">
+                  <AlertTriangle size={20} color="#8a6500" style={{ flexShrink: 0, marginTop: 1 }} />
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Insufficient qualified market evidence</h3>
+                    <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginTop: 5 }}>
+                      Price statistics and charts require at least five approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort.
+                    </p>
+                    <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
+                      {data.sampledListings.toLocaleString()} observations checked · {data.outliersRemoved.toLocaleString()} retained as excluded evidence · 0 qualified comparables
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {data.outlier_rows.length > 0 && (
               <section style={{ marginBottom: 28 }}>
@@ -868,11 +885,11 @@ export default function PriceResearch() {
 
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
               <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
-                Recent Sample ({listings.length} shown of {data.sampledListings.toLocaleString()} analyzed)
+                Qualified Comparable Sample ({listings.length} shown of {data.count.toLocaleString()} included)
               </div>
               {listings.length === 0 && (
                 <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: 14 }}>
-                  No recent listings found.
+                  No qualified comparable listings are available for this cohort.
                 </div>
               )}
               {listings.slice(0, 100).map(row => (
