@@ -25,6 +25,16 @@ test('accepts the narrow white and silver marketplace/catalog vocabulary equival
   );
 });
 
+test('accepts a matching dial from a scalar legacy catalog field', () => {
+  assert.equal(
+    classifyResearchEligibility(
+      { brand: 'Patek Philippe', reference: '3712/1A', dial_color: 'Blue', price_usd: 120000 },
+      { found: true, model: 'Nautilus Moon Phase', dialColors: 'Blue' },
+    ),
+    null,
+  );
+});
+
 test('requires a catalog model, dial and price', () => {
   assert.equal(classifyResearchEligibility(valid, { found: true, model: null, dialColors: ['Black'] }), 'CATALOG_MODEL_UNCONFIRMED');
   assert.equal(classifyResearchEligibility({ ...valid, dial_color: 'Unknown' }, catalog), 'MISSING_DIAL');

@@ -65,3 +65,11 @@ test('exposes every modeled brand to Price Research browsing', () => {
   }
   assert.ok(brands.every(entry => entry.model_count > 0 && entry.reference_count > 0));
 });
+
+test('resolves a model-less Patek base reference to its modeled canonical family', () => {
+  const match = lookupCatalog('5712/1A', 'Patek Philippe');
+  assert.equal(match.found, true);
+  assert.equal(match.brand, 'Patek Philippe');
+  assert.equal(match.model, 'Nautilus');
+  assert.equal(match.matchedRef, '5712/1A-001');
+});

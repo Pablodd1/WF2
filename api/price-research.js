@@ -227,7 +227,22 @@ module.exports = async function handler(req, res) {
         const normalized = normalizeMarketRow(row, targetRef);
         return { ...normalized, stored_price_usd: row.price_usd, price_usd: normalized.analytics_price_usd };
       });
-    const catalogHit = lookupCatalog(targetRef, brand || null);
+    let catalogHit = lookupCatalog(targetRef, brand || null);
+    // Historical Patek listings commonly omit the catalog's terminal variant
+    // suffix (for example 5712/1A vs 5712/1A-001). An image-only enrichment
+    // record must not block the modeled canonical family used for validation.
+    if ((!catalogHit?.found || !catalogHit.model)
+      && /^\d{4}\/1A$/i.test(targetRef)
+      && String(brand || '').toUpperCase() === 'PATEK PHILIPPE') {
+      const canonicalVariant = lookupCatalog(`${targetRef}-001`, brand);
+      if (canonicalVariant?.found && canonicalVariant.model) catalogHit = canonicalVariant;
+    }
+    // The legacy catalog stores some single dial values as a scalar string,
+    // while the normalized catalog stores arrays. Present one stable contract
+    // to the eligibility gate regardless of source generation.
+    if (catalogHit?.found && catalogHit.dialColors != null && !Array.isArray(catalogHit.dialColors)) {
+      catalogHit = { ...catalogHit, dialColors: [catalogHit.dialColors] };
+    }
     const requiredFieldExclusions = normalizedRows
       .map(row => ({ row, reason: classifyResearchEligibility(row, catalogHit) }))
       .filter(item => item.reason)

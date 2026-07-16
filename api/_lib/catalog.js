@@ -182,16 +182,18 @@ function lookupCatalog(reference, expectedBrand = null) {
   const sourceExact = sourceExactMatch(ref, expectedBrand);
   if (sourceExact) return sourceExact;
 
+  let incompleteExact = null;
   for (const map of [_catalog, _enriched]) {
     const direct = legacyMatch(map, reference, expectedBrand, 'exact');
-    if (direct) return direct;
+    if (direct?.model) return direct;
+    if (direct && !incompleteExact) incompleteExact = direct;
   }
 
   const collapsed = collapseRef(reference);
   for (const map of [_sourceByBrandReference, _catalog, _enriched]) {
     for (const [key, entry] of map) {
       const entryRef = map === _sourceByBrandReference ? key.split('|').slice(1).join('|') : key;
-      if (collapseRef(entryRef) === collapsed && compatibleWithBrand(entry, expectedBrand)) {
+      if (collapseRef(entryRef) === collapsed && entry.model && compatibleWithBrand(entry, expectedBrand)) {
         return found(entry, 'collapsed', entryRef);
       }
     }
@@ -209,7 +211,10 @@ function lookupCatalog(reference, expectedBrand = null) {
     }
   }
 
-  return empty;
+  // An exact enrichment record may contain only a claimed reference and image.
+  // Prefer a modeled canonical-family candidate above, but retain that exact
+  // evidence when no useful catalog candidate exists.
+  return incompleteExact || empty;
 }
 
 function catalogStats() {
