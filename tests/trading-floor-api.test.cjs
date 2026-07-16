@@ -42,18 +42,21 @@ async function runQuery(query) {
 test('recent inventory excludes recycle rows and undated imports', async () => {
   const url = await runQuery({ quality: 'market' });
   assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
+  assert.equal(url.searchParams.get('id'), 'not.like.preview_demo_*');
   assert.equal(url.searchParams.get('created_at'), 'not.is.null');
 });
 
 test('all inventory still excludes recycle rows but includes undated imports', async () => {
   const url = await runQuery({ quality: 'archive' });
   assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
+  assert.equal(url.searchParams.get('id'), 'not.like.preview_demo_*');
   assert.equal(url.searchParams.has('created_at'), false);
 });
 
 test('reference search reaches dated and undated non-recycle inventory', async () => {
   const url = await runQuery({ quality: 'market', q: '116500LN' });
   assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
+  assert.equal(url.searchParams.get('id'), 'not.like.preview_demo_*');
   assert.equal(url.searchParams.get('reference'), 'eq.116500LN');
   assert.equal(url.searchParams.has('created_at'), false);
 });

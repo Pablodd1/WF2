@@ -794,6 +794,9 @@ module.exports = async function handler(req, res) {
       // all-inventory view and every explicit search still include those rows.
       // Price Research applies its own stricter approved/comparable-data policy.
       params.set('or', '(verdict.neq.RECYCLE,verdict.is.null)');
+      // Supabase preview bootstrap rows are useful for deployment checks, but
+      // must never be presented as dealer inventory in a customer environment.
+      params.set('id', 'not.like.preview_demo_*');
       if (quality !== 'archive' && !search) {
         params.set('created_at', 'not.is.null');
       }
