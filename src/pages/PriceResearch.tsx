@@ -118,6 +118,13 @@ interface PriceData {
   prices: number[];
   rows: RowData[];
   outlier_rows: RowData[];
+  evidence?: {
+    comparable_returned: number;
+    comparable_total: number;
+    outliers_returned: number;
+    outliers_total: number;
+    truncated: boolean;
+  };
   methodology: {
     method: 'IQR_1_5' | 'PLAUSIBILITY_FLOOR_THEN_IQR_1_5'; minimum_sample: number; included_count: number; excluded_count: number;
     plausibility_floor_usd?: number; plausibility_excluded_count?: number; required_field_excluded_count?: number;
@@ -766,6 +773,11 @@ export default function PriceResearch() {
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
                     Exclusions stay visible below for audit and human review. They are not deleted from the database.
                   </div>
+                  {data.evidence?.truncated && (
+                    <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
+                      Showing the newest {data.evidence.outliers_returned.toLocaleString()} excluded observations for responsive review. Aggregate statistics use all {data.evidence.outliers_total.toLocaleString()} exclusions in the sampled cohort.
+                    </div>
+                  )}
                 </div>
               </div>
             </section>

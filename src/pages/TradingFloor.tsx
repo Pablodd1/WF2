@@ -13,6 +13,7 @@ import {
   User,
   X,
 } from 'lucide-react';
+import { FrontDeskWidget } from '@/components/FrontDeskWidget';
 
 const GOLD = '#C9A96E';
 const GOLD_BRIGHT = '#D4B87A';
@@ -149,7 +150,7 @@ export default function TradingFloor() {
             <div>
               <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {totalIsEstimate ? '~' : ''}{total.toLocaleString()} eligible listings
+                {totalIsEstimate ? '~' : ''}{total.toLocaleString()} customer-visible listings
               </p>
             </div>
 
@@ -192,7 +193,7 @@ export default function TradingFloor() {
                       color: qualityMode === mode ? '#09090D' : MUTED,
                     }}
                   >
-                    {mode === 'market' ? 'Approved market' : 'Full archive'}
+                    {mode === 'market' ? 'Recent first' : 'Include undated'}
                   </button>
                 ))}
               </div>
@@ -215,7 +216,7 @@ export default function TradingFloor() {
 
       <div className="mx-auto max-w-7xl px-4 py-5">
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
-          <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> eligible records</span>
+          <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</span>
           <span>Page <strong style={{ color: INK }}>{page}</strong> of <strong style={{ color: INK }}>{totalPages}</strong></span>
           <span title="Records are fetched 50 at a time from Postgres for speed; pagination and search still query the server-side dataset.">50 per page keeps the browser fast; search runs on the database.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
@@ -273,6 +274,7 @@ export default function TradingFloor() {
           </div>
         )}
       </div>
+      <FrontDeskWidget />
     </main>
   );
 }
@@ -298,6 +300,7 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
 
 function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
+  const actionable = isActionableListing(listing);
 
   return (
     <article
@@ -311,7 +314,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       <div className="mt-5 min-h-[56px]">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
           <span>{listingKindLabel(listing)} · {cleanValue(listing.listing_type) || 'Listing'}</span>
-          <ReviewStatusBadge verdict={listing.verdict} />
+          <ReviewStatusBadge listing={listing} />
         </div>
         <button
           type="button"
@@ -344,7 +347,11 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       <div className="mt-3 text-[15px]" style={{ color: INK }}>Posted: {meta.postedDate}</div>
 
       <div className="mt-auto pt-4">
-        <ActionButton label="CHECK AVAILABILITY" />
+        <ActionButton
+          label={actionable ? 'CHECK AVAILABILITY' : 'VIEW LISTING EVIDENCE'}
+          muted={!actionable}
+          onClick={actionable ? () => openAvailabilityRequest(listing) : onSelect}
+        />
         <button
           type="button"
           onClick={onSelect}
@@ -360,6 +367,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
 function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
+  const actionable = isActionableListing(listing);
 
   return (
     <section className="mb-8 grid gap-8 lg:grid-cols-[minmax(320px,504px)_1fr]" aria-label="Listing details">
@@ -427,7 +435,11 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               </div>
 
               <div className="mt-8 space-y-2.5">
-                <ActionButton label="CHECK AVAILABILITY" />
+                <ActionButton
+                  label={actionable ? 'CHECK AVAILABILITY' : 'VIEW LISTING EVIDENCE'}
+                  muted={!actionable}
+                  onClick={actionable ? () => openAvailabilityRequest(listing) : undefined}
+                />
                 <button
                   type="button"
                   className="flex h-[45px] w-full items-center justify-center gap-2 rounded-full text-[13px] font-bold text-white"
@@ -448,7 +460,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             <DetailRow label="Brand / maker" value={cleanValue(listing.brand) || 'Not identified'} />
             <DetailRow label="Reference" value={cleanValue(listing.reference) || (listing.listing_type === 'MULTI' ? 'Pending item split' : 'Not listed')} />
             <DetailRow label="Condition" value={cleanValue(listing.condition)} />
-            <DetailRow label="Dial" value={cleanValue(listing.dial_color)} />
+            <DetailRow label="Dial" value={displayDial(listing.dial_color) || 'Not identified'} />
             <DetailRow label="Year" value={listing.year ? String(listing.year) : 'Not listed'} />
             <DetailRow label="Type" value={cleanValue(listing.listing_type)} />
           </div>
@@ -487,12 +499,19 @@ function ListingImage({ listing, className, large = false }: { listing: ListingR
   );
 }
 
-function ActionButton({ label }: { label: string }) {
+function ActionButton({ label, muted = false, onClick }: { label: string; muted?: boolean; onClick?: () => void }) {
   return (
     <button
       type="button"
-      className="flex h-[47px] w-full items-center justify-center gap-1.5 rounded-full border-2 text-[13px] font-semibold"
-      style={{ borderColor: GOLD, color: GOLD_BRIGHT, background: 'rgba(201,169,110,0.06)' }}
+      onClick={onClick}
+      disabled={!onClick}
+      className="flex h-[47px] w-full items-center justify-center gap-1.5 rounded-full border-2 text-[13px] font-semibold disabled:cursor-default"
+      style={{
+        borderColor: muted ? 'rgba(156,163,175,0.42)' : GOLD,
+        color: muted ? MUTED : GOLD_BRIGHT,
+        background: muted ? 'rgba(156,163,175,0.05)' : 'rgba(201,169,110,0.06)',
+        opacity: onClick ? 1 : 0.72,
+      }}
     >
       <MessageCircle size={15} />
       {label}
@@ -527,20 +546,21 @@ function InfoBadge({ icon, label }: { icon: React.ReactNode; label: string }) {
   );
 }
 
-function ReviewStatusBadge({ verdict }: { verdict: string | null }) {
-  const normalized = cleanValue(verdict).toUpperCase();
-  const approved = normalized === 'APPROVED';
+function ReviewStatusBadge({ listing }: { listing: ListingRecord }) {
+  const normalized = cleanValue(listing.verdict).toUpperCase();
+  const actionable = isActionableListing(listing);
+  const label = actionable ? 'Market ready' : normalized === 'APPROVED' ? 'Incomplete' : 'Needs review';
   return (
     <span
       className="inline-flex h-[22px] items-center rounded px-2 text-[10px] font-bold tracking-normal"
       style={{
-        border: `1px solid ${approved ? 'rgba(52,211,153,0.42)' : 'rgba(245,158,11,0.5)'}`,
-        background: approved ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
-        color: approved ? '#6EE7B7' : '#FCD34D',
+        border: `1px solid ${actionable ? 'rgba(52,211,153,0.42)' : 'rgba(245,158,11,0.5)'}`,
+        background: actionable ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
+        color: actionable ? '#6EE7B7' : '#FCD34D',
       }}
-      title={approved ? 'Approved market record' : 'Visible inventory record awaiting or requiring review'}
+      title={actionable ? 'Approved record with the required market fields' : 'Visible inventory evidence awaiting or requiring review'}
     >
-      {approved ? 'Approved' : 'Needs review'}
+      {label}
     </span>
   );
 }
@@ -601,7 +621,7 @@ function buildListingTitle(listing: ListingRecord) {
     cleanValue(listing.reference),
     cleanValue(listing.condition),
     listing.year ? `${listing.year}year` : '',
-    cleanValue(listing.dial_color),
+    displayDial(listing.dial_color),
   ].filter(Boolean);
   return parts.length ? parts.join(' ') : `${listingKindLabel(listing)} listing`;
 }
@@ -660,6 +680,33 @@ function cleanValue(value: string | number | null | undefined) {
   const text = String(value).trim();
   if (!text || /^unknown$/i.test(text) || /^null$/i.test(text)) return '';
   return text;
+}
+
+function displayDial(value: string | null | undefined) {
+  const dial = cleanValue(value);
+  return dial && !/^\d+(?:\.\d+)?$/.test(dial) ? dial : '';
+}
+
+function openAvailabilityRequest(listing: ListingRecord) {
+  const identity = [cleanValue(listing.brand), cleanValue(listing.reference)].filter(Boolean).join(' ');
+  window.dispatchEvent(new CustomEvent('curated-luxury:front-desk', {
+    detail: { message: `Please check availability for ${identity || 'this listing'} (listing ${listing.id}).` },
+  }));
+}
+
+function isActionableListing(listing: ListingRecord) {
+  const approved = cleanValue(listing.verdict).toUpperCase() === 'APPROVED';
+  const brand = cleanValue(listing.brand);
+  const reference = cleanValue(listing.reference);
+  const validReference = Boolean(reference) && /\d/.test(reference) && reference.toLowerCase() !== brand.toLowerCase();
+  const validDial = Boolean(displayDial(listing.dial_color));
+  const hasPrice = Number(listing.price_usd) > 0 || Number(listing.price_raw) > 0;
+
+  if (listing.listing_type === 'WTB' || listing.listing_type === 'NTQ') {
+    return approved && Boolean(brand && validReference && validDial);
+  }
+  if (listing.listing_type === 'MULTI') return false;
+  return approved && Boolean(brand && validReference && validDial && hasPrice);
 }
 
 function hashString(value: string) {

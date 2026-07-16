@@ -315,6 +315,11 @@ module.exports = async function handler(req, res) {
     const demand = await lookupDemand(client, brand, referenceVariants, catalogHit);
     const liquidity = await lookupLiquidity(client, targetRef, marketRows.length, demand);
 
+    const outlierEvidenceLimit = 100;
+    const comparableEvidenceLimit = 250;
+    const serializedOutliers = outlierRows.slice(0, outlierEvidenceLimit);
+    const serializedComparables = classifiedRows.slice(0, comparableEvidenceLimit);
+
     res.status(200).json({
       success: true, brand, reference: rawRef,
       resolvedRef: targetRef !== rawRef ? targetRef : null,
@@ -339,8 +344,8 @@ module.exports = async function handler(req, res) {
       count: prices.length,
       rawCount: validPriceRows.length,
       outliersRemoved: outlierRows.length,
-      outliers: outlierRows.map(row => row.price_usd),
-      outlier_rows: outlierRows.map(r => ({
+      outliers: serializedOutliers.map(row => row.price_usd),
+      outlier_rows: serializedOutliers.map(r => ({
         id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
@@ -377,9 +382,16 @@ module.exports = async function handler(req, res) {
         lower_fence: summary.stats?.lower_fence ?? null,
         upper_fence: summary.stats?.upper_fence ?? null,
       },
+      evidence: {
+        comparable_returned: serializedComparables.length,
+        comparable_total: classifiedRows.length,
+        outliers_returned: serializedOutliers.length,
+        outliers_total: outlierRows.length,
+        truncated: classifiedRows.length > comparableEvidenceLimit || outlierRows.length > outlierEvidenceLimit,
+      },
       liquidity,
       monthly, prices,
-      rows: classifiedRows.map(r => ({
+      rows: serializedComparables.map(r => ({
         id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,

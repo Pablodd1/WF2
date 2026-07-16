@@ -789,12 +789,13 @@ module.exports = async function handler(req, res) {
       if (!listingType && itemType === 'luxury') params.set('listing_type', 'eq.OTHER');
       if (!listingType && itemType === 'multi') params.set('listing_type', 'eq.MULTI');
       if (!listingType && itemType === 'watches') params.set('listing_type', 'not.in.(MULTI,OTHER)');
-      // The Trading Floor is the complete customer-visible inventory. Human
-      // review and incomplete records remain visible with their status; only
-      // recycle records and intentionally hidden/deleted listings are omitted.
-      // Price Research applies the stricter approved/comparable-data policy.
-      if (quality !== 'archive') {
-        params.set('or', '(verdict.neq.RECYCLE,verdict.is.null)');
+      // Customer-facing inventory never includes RECYCLE records. The recent
+      // view avoids letting undated legacy imports dominate page one, while the
+      // all-inventory view and every explicit search still include those rows.
+      // Price Research applies its own stricter approved/comparable-data policy.
+      params.set('or', '(verdict.neq.RECYCLE,verdict.is.null)');
+      if (quality !== 'archive' && !search) {
+        params.set('created_at', 'not.is.null');
       }
       if (search) {
         const escapedSearch = search.replace(/[(),.]/g, ' ').replace(/%/g, '').replace(/\*/g, '').trim();
