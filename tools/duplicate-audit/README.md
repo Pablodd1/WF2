@@ -1,0 +1,34 @@
+# Duplicate Audit
+
+This tool is read-only. It scans `watch_records`, produces local reports, and never updates or deletes Supabase rows.
+
+## Prerequisite
+
+Run `tools/duplicate-audit/create-indexes.sql` manually in the production SQL editor outside peak traffic. Do not wrap it in a transaction. The `(brand, id)` index is required for reliable keyset pagination on the production archive.
+
+## Patek Pilot
+
+```powershell
+$env:DUPLICATE_AUDIT_BRAND = "Patek Philippe"
+$env:DUPLICATE_AUDIT_MAX_ROWS = "1000"
+$env:DUPLICATE_AUDIT_PAGE_SIZE = "250"
+railway run npm run audit:duplicates
+```
+
+## Full Brand
+
+```powershell
+$env:DUPLICATE_AUDIT_BRAND = "Patek Philippe"
+Remove-Item Env:DUPLICATE_AUDIT_MAX_ROWS -ErrorAction SilentlyContinue
+$env:DUPLICATE_AUDIT_PAGE_SIZE = "500"
+railway run npm run audit:duplicates
+```
+
+Reports are written under `audit-output/duplicates/<brand>/` and are intentionally ignored by Git because they contain production record IDs. The Markdown summary redacts dealer identity with a one-way hash.
+
+## Interpretation
+
+- `suppress_from_analytics=true` is a proposal, not an applied production decision.
+- Bundle-risk rows are always review-only.
+- Price updates remain in historical Price Research.
+- Matching inventory from different dealers is never auto-collapsed.
