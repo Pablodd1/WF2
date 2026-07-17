@@ -58,30 +58,36 @@ const accessPoints = [
   { icon: ShieldCheck, label: 'Private access', detail: 'Secure workspace for dealers and partners', to: '/dealer-login' },
 ];
 
-const watchIntelligenceSteps = [
+const categoryIntelligenceSteps = [
   {
     number: '01',
-    title: 'Read the object',
-    detail: 'Source material, configuration, and provenance stay connected to the listing from the first signal.',
-    image: '/images/watch-build/01-exploded.jpg',
+    title: 'Important watches',
+    detail: 'Reference, configuration, condition, and market evidence are kept distinct before they become comparable.',
+    image: '/images/watch-build/04-finished.jpg',
   },
   {
     number: '02',
-    title: 'Separate the details',
-    detail: 'Reference, dial, condition, and price are considered individually before they become comparable market data.',
-    image: '/images/watch-build/02-components.jpg',
+    title: 'High jewelry',
+    detail: 'Signatures, stones, material, condition, and provenance give exceptional pieces their proper context.',
+    image: '/images/editorial/high-jewelry.webp',
   },
   {
     number: '03',
-    title: 'Place it in context',
-    detail: 'Catalog confirmation and market history help distinguish a real signal from a misleading one.',
-    image: '/images/watch-build/03-resolved.jpg',
+    title: 'Rare handbags',
+    detail: 'Edition, leather, hardware, condition, and documentation are part of the story behind each object.',
+    image: '/images/editorial/rare-handbags.webp',
   },
   {
     number: '04',
-    title: 'Make the market useful',
-    detail: 'The result is a dated observation that collectors and dealers can actually use.',
-    image: '/images/watch-build/04-finished.jpg',
+    title: 'Collector cars',
+    detail: 'Rarity, specification, history, and preservation matter as much as the drive itself.',
+    image: '/images/editorial/collector-cars.png',
+  },
+  {
+    number: '05',
+    title: 'Singular objects',
+    detail: 'Art, design, and unusual pieces are presented with the detail they need to be understood.',
+    image: '/images/editorial/singular-objects.webp',
   },
 ];
 
@@ -225,14 +231,14 @@ export default function LandingPage() {
       <section className="bg-[#080808] px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-28">
         <div className="mx-auto max-w-[1440px]">
           <div className="mb-12 grid gap-5 border-b border-white/12 pb-7 lg:grid-cols-[0.7fr_1.3fr] lg:gap-20">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#d8bd80]">Watch intelligence</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#d8bd80]">The Curated view</p>
             <div>
-              <h2 className="max-w-4xl text-3xl font-medium leading-[1.05] sm:text-5xl">A considered view of the details behind a watch.</h2>
-              <p className="mt-5 max-w-2xl text-sm leading-6 text-white/55 sm:text-base sm:leading-7">For watches, Curated Luxury brings raw market signals, catalog context, and careful review into a clearer market picture. The collection stays broader; the method stays exact.</p>
+              <h2 className="max-w-4xl text-3xl font-medium leading-[1.05] sm:text-5xl">A considered view of the details behind every exceptional object.</h2>
+              <p className="mt-5 max-w-2xl text-sm leading-6 text-white/55 sm:text-base sm:leading-7">Curated Luxury is built for more than watches. Across high jewelry, rare handbags, collector cars, art, and singular objects, the same principle applies: context turns a listing into something worth understanding.</p>
             </div>
           </div>
-          <div className="grid gap-5 md:grid-cols-2">
-            {watchIntelligenceSteps.map((step) => (
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {categoryIntelligenceSteps.map((step) => (
               <article key={step.number} className="group overflow-hidden border border-white/10 bg-[#10100f]">
                 <div className="aspect-[16/9] overflow-hidden bg-black">
                   <img src={step.image} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.025]" />
