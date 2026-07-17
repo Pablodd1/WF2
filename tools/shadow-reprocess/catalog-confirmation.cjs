@@ -25,7 +25,7 @@ function confirmCatalogCandidate(candidate) {
   if (!match.found) {
     return { confirmed: false, reason: 'CATALOG_NOT_FOUND', match };
   }
-  if (!['exact', 'collapsed'].includes(match.matchType)) {
+  if (!['exact', 'exact_alias', 'collapsed'].includes(match.matchType)) {
     return { confirmed: false, reason: 'CATALOG_PARTIAL_MATCH', match };
   }
   if (match.brand && candidate.brand && normalizeBrand(match.brand) !== normalizeBrand(candidate.brand)) {

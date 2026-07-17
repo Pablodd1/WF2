@@ -66,7 +66,7 @@ function analyzeRecord(record) {
     const candidateBrand = candidate.context.brand_context || record.brand || null;
     const candidateReference = candidate.reference || record.reference || null;
     const catalog = candidateReference ? lookupCatalog(candidateReference, candidateBrand) : null;
-    const exactCatalog = catalog?.found && ['exact', 'exact_inferred_brand', 'collapsed'].includes(catalog.matchType)
+    const exactCatalog = catalog?.found && ['exact', 'exact_alias', 'exact_inferred_brand', 'collapsed'].includes(catalog.matchType)
       ? catalog
       : null;
     const dial = resolveDial({

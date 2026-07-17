@@ -6,6 +6,7 @@ export default function DealerLogin() {
   const navigate = useNavigate();
   const location = useLocation();
   const destination = (location.state as { from?: string } | null)?.from || '/dealer';
+  const betaDestinations = new Set(['/dealer', '/trading', '/price-research']);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,7 +35,10 @@ export default function DealerLogin() {
 
   function skipForBeta() {
     sessionStorage.setItem('wf_beta_skip', '1');
-    navigate(destination, { replace: true });
+    // A visitor may have reached login after attempting a protected Admin or
+    // review route. Beta access is browse-only, so returning to that route
+    // would immediately redirect back here and make Skip look broken.
+    navigate(betaDestinations.has(destination) ? destination : '/dealer', { replace: true });
   }
 
   return (

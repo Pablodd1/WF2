@@ -14,6 +14,8 @@ let _catalog = null;
 let _enriched = null;
 let _sourceByBrandReference = null;
 let _sourceByReference = null;
+let _curationOverrides = null;
+let _curationAliases = null;
 
 function normalizeRef(ref) {
   return String(ref || '').toUpperCase().replace(/[^A-Z0-9/\\-]/g, '');
@@ -58,6 +60,46 @@ function compatibleWithBrand(entry, expectedBrand) {
 
 function found(entry, matchType, matchedRef) {
   return Object.assign({ found: true, matchType, matchedRef }, entry);
+}
+
+function curationKey(brand, reference) {
+  return `${normalizeBrand(brand)}|${normalizeRef(reference)}`;
+}
+
+function loadCuration() {
+  if (_curationOverrides && _curationAliases) return;
+  _curationOverrides = new Map();
+  _curationAliases = new Map();
+  try {
+    const curation = JSON.parse(readFileSync(resolve(process.cwd(), 'api/dictionaries/catalog-curation.json'), 'utf8'));
+    for (const item of curation.overrides || []) {
+      if (item?.brand && item?.reference) _curationOverrides.set(curationKey(item.brand, item.reference), item);
+    }
+    for (const item of curation.aliases || []) {
+      if (item?.brand && item?.alias && item?.canonical_reference) {
+        _curationAliases.set(curationKey(item.brand, item.alias), item);
+      }
+    }
+  } catch (error) {
+    console.error('[catalog] failed to load catalog curation:', error.message);
+  }
+}
+
+function applyCuration(entry, reference = null) {
+  if (!entry) return entry;
+  loadCuration();
+  const override = _curationOverrides.get(curationKey(entry.brand, reference || entry.reference));
+  if (!override) return entry;
+  const allowedDials = new Set(override.dial_colors || []);
+  return {
+    ...entry,
+    dialColors: override.dial_colors || entry.dialColors,
+    variants: Array.isArray(entry.variants)
+      ? entry.variants.filter(variant => allowedDials.has(variant.dial_color))
+      : entry.variants,
+    source: 'catalog_curation',
+    curationReason: override.reason || null,
+  };
 }
 
 function loadCatalogs() {
@@ -124,7 +166,7 @@ function loadCatalogs() {
         variants: item.variants || [],
         source: 'local_catalog_v1',
       };
-      _sourceByBrandReference.set(`${normalizeBrand(brand)}|${ref}`, entry);
+        _sourceByBrandReference.set(`${normalizeBrand(brand)}|${ref}`, entry);
       const candidates = _sourceByReference.get(ref) || [];
       candidates.push(entry);
       _sourceByReference.set(ref, candidates);
@@ -137,17 +179,17 @@ function loadCatalogs() {
 function sourceExactMatch(ref, expectedBrand) {
   if (expectedBrand) {
     const entry = _sourceByBrandReference.get(`${normalizeBrand(expectedBrand)}|${ref}`);
-    return entry ? found(entry, 'exact', ref) : null;
+    return entry ? found(applyCuration(entry, ref), 'exact', ref) : null;
   }
 
   const candidates = _sourceByReference.get(ref) || [];
-  if (candidates.length === 1) return found(candidates[0], 'exact', ref);
+  if (candidates.length === 1) return found(applyCuration(candidates[0], ref), 'exact', ref);
   if (candidates.length > 1) {
     const inferred = inferBrand(ref);
     const inferredCandidate = inferred
       ? candidates.find(entry => normalizeBrand(entry.brand) === normalizeBrand(inferred))
       : null;
-    if (inferredCandidate) return found(inferredCandidate, 'exact_inferred_brand', ref);
+    if (inferredCandidate) return found(applyCuration(inferredCandidate, ref), 'exact_inferred_brand', ref);
     return {
       found: false,
       brand: null,
@@ -158,6 +200,23 @@ function sourceExactMatch(ref, expectedBrand) {
     };
   }
   return null;
+}
+
+function curatedAliasMatch(ref, expectedBrand) {
+  if (!expectedBrand) return null;
+  loadCuration();
+  const alias = _curationAliases.get(curationKey(expectedBrand, ref));
+  if (!alias) return null;
+  const canonicalRef = normalizeRef(alias.canonical_reference);
+  const canonical = sourceExactMatch(canonicalRef, alias.brand);
+  if (!canonical) return null;
+  const { found: _found, matchType: _matchType, matchedRef: _matchedRef, ...entry } = canonical;
+  return found({
+    ...entry,
+    source: 'catalog_curation',
+    aliasOf: canonicalRef,
+    curationReason: alias.reason || canonical.curationReason || null,
+  }, 'exact_alias', canonicalRef);
 }
 
 function legacyMatch(map, reference, expectedBrand, matchType) {
@@ -178,6 +237,9 @@ function lookupCatalog(reference, expectedBrand = null) {
   };
   const ref = normalizeRef(reference);
   if (!ref) return empty;
+
+  const curatedAlias = curatedAliasMatch(ref, expectedBrand);
+  if (curatedAlias) return curatedAlias;
 
   const sourceExact = sourceExactMatch(ref, expectedBrand);
   if (sourceExact) return sourceExact;

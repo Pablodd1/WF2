@@ -1,0 +1,18 @@
+{
+  "overrides": [
+    {
+      "brand": "Patek Philippe",
+      "reference": "5712/1A-001",
+      "dial_colors": ["Blue"],
+      "reason": "The source importer split a single black-blue dial description into Black and Blue variants. Curated market evidence treats this steel reference as Blue."
+    }
+  ],
+  "aliases": [
+    {
+      "brand": "Patek Philippe",
+      "alias": "5712/1A",
+      "canonical_reference": "5712/1A-001",
+      "reason": "Dealer-market shorthand for the steel Nautilus 5712/1A-001 configuration."
+    }
+  ]
+}
