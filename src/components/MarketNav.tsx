@@ -14,8 +14,8 @@ export function MarketNav() {
     <nav className="border-b border-white/10 bg-[#09090d] text-white" aria-label="Marketplace navigation">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-4 py-3">
         <Link to="/" className="flex min-w-0 items-center gap-3 text-white">
-          <span className="grid h-9 w-9 shrink-0 place-items-center border border-[#c9a96e]/60 font-serif text-sm text-[#d4b87a]">CL</span>
-          <span className="hidden truncate font-serif text-lg sm:block">Curated Luxury</span>
+          <span className="grid h-12 w-12 shrink-0 place-items-center border border-[#c9a96e]/60 font-serif text-lg text-[#d4b87a]">CL</span>
+          <span className="hidden truncate font-serif text-xl sm:block">Curated Luxury</span>
         </Link>
         <div className="flex max-w-full items-center gap-4 overflow-x-auto text-sm sm:gap-6">
           {LINKS.map(link => {

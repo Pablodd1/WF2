@@ -148,16 +148,16 @@ interface PriceData {
   };
 }
 
-const NAVY = '#f6f1e8';
-const GOLD = '#c9a96e';
-const WHITE = '#111118';
-const LIGHT_GRAY = '#16161f';
-const BORDER = 'rgba(201,169,110,0.24)';
-const TEXT = '#f6f1e8';
-const MUTED = '#9ca3af';
-const GREEN = '#22c55e';
-const RED = '#ef4444';
-const BLUE = '#4f7fe8';
+const NAVY = '#1a2744';
+const GOLD = '#c9a03a';
+const WHITE = '#ffffff';
+const LIGHT_GRAY = '#f8f9fa';
+const BORDER = '#e9ecef';
+const TEXT = '#212529';
+const MUTED = '#6c757d';
+const GREEN = '#198754';
+const RED = '#dc3545';
+const BLUE = '#0d6efd';
 const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC'];
 
 const DIAL_SWATCHES: Record<string, string> = {

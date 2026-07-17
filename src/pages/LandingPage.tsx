@@ -99,18 +99,18 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-[#080808] text-white">
-      <header className="relative z-20 flex h-16 items-center justify-between border-b border-white/10 px-5 sm:px-8 lg:px-12">
+      <header className="relative z-20 flex min-h-24 items-center justify-between border-b border-white/10 px-5 py-3 sm:px-8 lg:px-12">
         <Link to="/" aria-label="Curated Luxury home">
-          <img src="/images/curated-luxury-logo-dark.png" alt="Curated Luxury" className="h-9 w-auto" />
+          <img src="/images/curated-luxury-logo-dark.png" alt="Curated Luxury" className="h-[72px] w-auto max-w-[min(68vw,430px)] object-contain" />
         </Link>
-        <nav className="flex items-center gap-5 text-xs font-medium text-white/70 sm:gap-7">
+        <nav className="hidden items-center gap-5 text-xs font-medium text-white/70 sm:flex sm:gap-7">
           <Link to="/trading" className="transition-colors hover:text-white">Collection</Link>
           <Link to="/price-research" className="transition-colors hover:text-white">Watch intelligence</Link>
           <Link to="/dealer-login" className="hidden transition-colors hover:text-white sm:block">Private access</Link>
         </nav>
       </header>
 
-      <section ref={heroRef} className="relative isolate flex min-h-[calc(94svh-4rem)] items-end overflow-hidden border-b border-white/10 bg-black px-5 pb-10 pt-16 sm:px-8 sm:pb-14 lg:px-12 lg:pb-16">
+      <section ref={heroRef} className="relative isolate flex min-h-[calc(94svh-6rem)] items-end overflow-hidden border-b border-white/10 bg-black px-5 pb-10 pt-16 sm:px-8 sm:pb-14 lg:px-12 lg:pb-16">
         <div ref={heroMediaRef} className="absolute -inset-[5%] z-[-2] origin-center will-change-transform">
           <video
             className="h-full w-full object-cover"
@@ -127,6 +127,16 @@ export default function LandingPage() {
           </video>
         </div>
         <div className="absolute inset-0 z-[-1] bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.28)_52%,rgba(0,0,0,0.92)_100%)]" />
+
+        <div className="pointer-events-none absolute inset-x-5 top-[18%] z-0 text-center sm:inset-x-8 lg:inset-x-12">
+          <div
+            className="mx-auto w-fit max-w-full bg-[linear-gradient(180deg,#fff4c7_0%,#d9b653_28%,#9b6618_58%,#f4d982_82%,#78500f_100%)] bg-clip-text px-2 font-serif text-[clamp(2.8rem,8vw,8.5rem)] font-semibold leading-[0.82] text-transparent"
+            style={{ letterSpacing: '0.06em', filter: 'drop-shadow(0 3px 1px rgba(44,25,0,.9)) drop-shadow(0 12px 24px rgba(0,0,0,.58))' }}
+          >
+            CURATED LUXURY
+          </div>
+          <div className="mx-auto mt-3 h-px w-40 bg-[linear-gradient(90deg,transparent,#d8bd80,transparent)] sm:w-72" />
+        </div>
 
         <div className="relative z-10 max-w-3xl">
           <p className="mb-5 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#d8bd80]">Private luxury marketplace</p>
@@ -262,7 +272,7 @@ export default function LandingPage() {
       </section>
 
       <footer className="flex flex-col gap-3 border-t border-white/10 px-5 py-6 text-[11px] uppercase tracking-[0.1em] text-white/45 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
-        <img src="/images/curated-luxury-logo-dark.png" alt="Curated Luxury" className="h-8 w-auto" />
+        <img src="/images/curated-luxury-logo-dark.png" alt="Curated Luxury" className="h-16 w-auto max-w-[260px] object-contain" />
         <span className="flex items-center gap-2"><Building2 size={13} /> Exceptional objects, thoughtfully considered</span>
         <Link to="/dealer-login" className="text-white/70 transition-colors hover:text-white">Private access</Link>
       </footer>
