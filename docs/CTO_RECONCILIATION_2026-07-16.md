@@ -15,8 +15,9 @@
 ### Trading Floor
 
 - Added an `images=true` server filter.
-- Added a bounded horizontal “Featured with verified source images” rail above the first Trading Floor page.
+- Added a bounded horizontal source-linked image rail above the first Trading Floor page.
 - The rail fetches at most 100 image-backed records and does not alter the normal 50-row server pagination, search, eligibility, or total counts.
+- Promotion into the rail is stricter than image linkage: approved WTS, complete brand/reference/dial, confidence 85-100, and plausible USD pricing. Image lineage alone does not imply normalization approval.
 - Listings without media continue using stable placeholders.
 
 ### Confidence safety

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { isCustomerSafeFeaturedListing } from '../lib/featuredListings';
 import { useSearchParams } from 'react-router-dom';
 import {
   Globe2,
@@ -138,7 +139,9 @@ export default function TradingFloor() {
         const params = new URLSearchParams({ item: 'watches', images: 'true', quality: 'archive', page: '1', pageSize: '100' });
         const response = await fetch(`/api/ingest?${params}`, { signal: controller.signal });
         const data = await response.json() as TradingFloorResponse;
-        if (response.ok && data.status === 'ok') setFeaturedListings(data.records || []);
+        if (response.ok && data.status === 'ok') {
+          setFeaturedListings((data.records || []).filter(isCustomerSafeFeaturedListing));
+        }
       } catch (caught) {
         if ((caught as Error).name !== 'AbortError') console.warn('Image showcase unavailable:', caught);
       }
@@ -278,7 +281,8 @@ function FeaturedImageRail({ listings, onSelect }: { listings: ListingRecord[]; 
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Visual inventory</div>
-          <h2 id="featured-listings-heading" className="mt-1 text-xl font-semibold" style={{ color: INK }}>Featured with verified source images</h2>
+          <h2 id="featured-listings-heading" className="mt-1 text-xl font-semibold" style={{ color: INK }}>Featured watches with source-linked images</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-5" style={{ color: MUTED }}>Approved WTS records with complete identity, plausible pricing, and customer-safe confidence.</p>
         </div>
         <span className="text-xs" style={{ color: MUTED }}>{listings.length} linked listings</span>
       </div>
