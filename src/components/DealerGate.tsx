@@ -8,7 +8,10 @@ interface DealerGateProps {
 
 export function DealerGate({ children, allowBetaSkip = false }: DealerGateProps) {
   const location = useLocation();
-  const betaSkipEnabled = allowBetaSkip && import.meta.env.VITE_ENABLE_DEALER_SKIP !== 'false';
+  // The demo entry point is deliberately limited to the routes that pass
+  // allowBetaSkip. Do not let a stale Vercel build variable show the Skip
+  // button while silently rejecting the session on the next route.
+  const betaSkipEnabled = allowBetaSkip;
   const [state, setState] = useState<'loading' | 'authorized' | 'beta' | 'denied'>(() =>
     betaSkipEnabled && sessionStorage.getItem('wf_beta_skip') === '1' ? 'beta' : 'loading'
   );
