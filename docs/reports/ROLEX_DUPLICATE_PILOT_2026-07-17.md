@@ -1,4 +1,4 @@
-# Rolex Duplicate Audit Pilot
+# Rolex Repost and Duplicate-Candidate Audit Pilot
 
 ## Executive Result
 
@@ -7,7 +7,7 @@ The read-only pilot scanned 1,000 production `watch_records` rows for `Rolex` on
 | Metric | Result |
 | --- | ---: |
 | Rows scanned | 1,000 |
-| Candidate duplicate or repost members | 202 |
+| Repost or duplicate-candidate members | 202 |
 | Safe automatic suppressions proposed | 1 |
 | Review-only candidates | 201 |
 | Bundle-like source rows | 506 |
@@ -16,7 +16,7 @@ The read-only pilot scanned 1,000 production `watch_records` rows for `Rolex` on
 | Exact raw-message matches | 2 |
 | Likely reposts | 3 |
 
-No production row was changed, hidden, or deleted.
+No production row was changed, hidden, or deleted. The 202 figure is a review queue, not a count of duplicate physical watches and not a deletion recommendation.
 
 ## Interpretation
 
@@ -25,6 +25,15 @@ Most candidates are dated price updates, not duplicate physical watches. They re
 More than half of the pilot came from bundle-like dealer messages. Those rows are review-only because their normalized fields can originate from separate lines of the same source message. They must be segmented before any duplicate decision is trusted.
 
 Only one row met the conservative proposal for analytics suppression. Suppression is not yet applied: it requires a reversible duplicate-cluster record, reviewer sampling, and shadow-count reconciliation before it affects Trading Floor or Price Research totals.
+
+## Correct Reading of the Result
+
+| Classification | What it means | Customer-facing action today |
+| --- | --- | --- |
+| `PRICE_UPDATE_REPOST` | Same source/configuration reappeared with a different dated price | Keep historical observation; count only once in a future unique-offer view after review. |
+| `EXACT_LISTING` / `EXACT_RAW_MESSAGE` | Stronger repeated-source evidence | Review for reversible cluster membership; do not delete the source. |
+| `LIKELY_REPOST` | Similar evidence, but not conclusive | Human review only. |
+| Bundle-like source | Several listing lines may share one source message | Segment before any duplicate decision. |
 
 ## Next Step
 
