@@ -529,19 +529,24 @@ export default function PriceResearch() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               {/* Volume */}
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Market Activity</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Comparable evidence</h3>
                 <div style={{ fontSize: 14, color: MUTED }}>
-                  Unique comparable offers:{' '}
+                  Unique offers after eligibility checks:{' '}
                   <span style={{ fontSize: 36, fontWeight: 700, color: NAVY, display: 'block', marginTop: 4 }}>
                     {(data.unique_offer_count ?? data.count).toLocaleString()}
                   </span>
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
-                  {data.count} comparable listings · {data.outliersRemoved} statistical price outliers
+                  Final chart set: {data.count.toLocaleString()} observations · {data.outliersRemoved} statistical price outliers removed
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                   Cohort: {data.selected_cohort.condition} / {data.selected_cohort.dial_color}
                 </div>
+                {data.eligible_observation_count != null && (
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 6, lineHeight: 1.4 }}>
+                    Evidence path: {data.sampledListings.toLocaleString()} rows sampled → {data.eligible_observation_count.toLocaleString()} passed WTS and catalog checks → {data.count.toLocaleString()} in this chart cohort.
+                  </div>
+                )}
                 {(data.repost_count || 0) > 0 && (
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                     {data.repost_count?.toLocaleString()} dealer reposts counted once.
@@ -806,7 +811,8 @@ export default function PriceResearch() {
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
-                      ['Raw observations', data.rawCount],
+                      ['Selected cohort with usable price', data.rawCount],
+                      ['Passed WTS/catalog gate', data.eligible_observation_count ?? 0],
                       ['Included', data.methodology.included_count],
                       ['Total exclusions', data.methodology.excluded_count],
                       ['Statistical outliers', data.methodology.statistical_outlier_count ?? data.outliersRemoved],

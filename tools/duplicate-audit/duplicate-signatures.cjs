@@ -32,11 +32,17 @@ function stripDateTokens(value) {
     .trim();
 }
 
-function dealerIdentity(row) {
+function verifiedDealerIdentity(row) {
   const explicit = compact(row.seller_phone || row.seller_id || row.dealer_id);
   if (explicit) return explicit;
   const phone = String(row.raw_message || '').match(/\+\d[\d\s()-]{7,18}/)?.[0];
   if (phone) return phone.replace(/\D/g, '');
+  return '';
+}
+
+function dealerIdentity(row) {
+  const verified = verifiedDealerIdentity(row);
+  if (verified) return verified;
   return compact(row.seller_name);
 }
 
@@ -92,27 +98,31 @@ function priceDifferencePercent(a, b) {
 function classifyPair(canonical, candidate) {
   const a = signaturesFor(canonical);
   const b = signaturesFor(candidate);
-  const sameSource = sourceIdentity(canonical) && sourceIdentity(canonical) === sourceIdentity(candidate);
+  // Never treat the generic ingestion source (for example MYSQL_RAW) as dealer
+  // identity. Automatic suppression requires a real phone/dealer identifier.
+  const canonicalDealer = verifiedDealerIdentity(canonical);
+  const candidateDealer = verifiedDealerIdentity(candidate);
+  const sameDealer = canonicalDealer && canonicalDealer === candidateDealer;
   const sameConfig = a.configuration && a.configuration === b.configuration;
   const sameMarketConfig = a.marketConfiguration && a.marketConfiguration === b.marketConfiguration;
   const priceDelta = priceDifferencePercent(canonical.price_usd, candidate.price_usd);
 
   if (a.exactRaw && a.exactRaw === b.exactRaw) {
-    return { type: 'EXACT_RAW_MESSAGE', confidence: 1, suppressFromAnalytics: true };
+    return { type: 'EXACT_RAW_MESSAGE', confidence: sameDealer ? 1 : 0.8, suppressFromAnalytics: Boolean(sameDealer) };
   }
   if (a.dateAgnosticRaw && a.dateAgnosticRaw === b.dateAgnosticRaw) {
-    return { type: 'DATE_SHIFTED_REPOST', confidence: sameSource ? 0.97 : 0.82, suppressFromAnalytics: Boolean(sameSource) };
+    return { type: 'DATE_SHIFTED_REPOST', confidence: sameDealer ? 0.97 : 0.82, suppressFromAnalytics: Boolean(sameDealer) };
   }
   if (a.exactListing && a.exactListing === b.exactListing) {
-    return { type: 'EXACT_LISTING', confidence: sameSource ? 0.99 : 0.75, suppressFromAnalytics: Boolean(sameSource) };
+    return { type: 'EXACT_LISTING', confidence: sameDealer ? 0.99 : 0.75, suppressFromAnalytics: Boolean(sameDealer) };
   }
-  if (sameConfig && sameSource && priceDelta !== null && priceDelta <= 0.01) {
+  if (sameConfig && sameDealer && priceDelta !== null && priceDelta <= 0.01) {
     return { type: 'LIKELY_REPOST', confidence: 0.92, suppressFromAnalytics: false };
   }
-  if (sameConfig && sameSource && priceDelta !== null && priceDelta > 0.01) {
+  if (sameConfig && sameDealer && priceDelta !== null && priceDelta > 0.01) {
     return { type: 'PRICE_UPDATE_REPOST', confidence: 0.9, suppressFromAnalytics: false };
   }
-  if (sameMarketConfig && !sameSource) {
+  if (sameMarketConfig && !sameDealer) {
     return { type: 'POSSIBLE_SHARED_INVENTORY', confidence: 0.55, suppressFromAnalytics: false };
   }
   return null;
@@ -122,6 +132,7 @@ module.exports = {
   classifyPair,
   compact,
   dealerIdentity,
+  verifiedDealerIdentity,
   hash,
   listingIdentity,
   normalizedText,
