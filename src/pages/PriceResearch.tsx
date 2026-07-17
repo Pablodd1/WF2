@@ -112,6 +112,7 @@ interface PriceData {
   count: number;
   rawCount: number;
   outliersRemoved: number;
+  excludedEvidenceCount?: number;
   analytics_ready: boolean;
   sample_quality: 'observational' | 'provisional' | 'robust';
   selected_cohort: { condition: string; dial_color: string; count: number };
@@ -138,6 +139,7 @@ interface PriceData {
   methodology: {
     method: 'IQR_1_5' | 'PLAUSIBILITY_FLOOR_THEN_IQR_1_5'; minimum_sample: number; included_count: number; excluded_count: number;
     plausibility_floor_usd?: number; plausibility_excluded_count?: number; required_field_excluded_count?: number;
+    statistical_outlier_count?: number;
     repost_excluded_count?: number;
     lower_fence?: number | null; upper_fence?: number | null;
   };
@@ -528,7 +530,7 @@ export default function PriceResearch() {
                   </span>
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
-                  {data.count} comparable listings · {data.outliersRemoved} outliers flagged
+                  {data.count} comparable listings · {data.outliersRemoved} statistical price outliers
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                   Cohort: {data.selected_cohort.condition} / {data.selected_cohort.dial_color}
@@ -799,7 +801,10 @@ export default function PriceResearch() {
                     {[
                       ['Raw observations', data.rawCount],
                       ['Included', data.methodology.included_count],
-                      ['Excluded', data.methodology.excluded_count],
+                      ['Total exclusions', data.methodology.excluded_count],
+                      ['Statistical outliers', data.methodology.statistical_outlier_count ?? data.outliersRemoved],
+                      ['Required-field failures', data.methodology.required_field_excluded_count ?? 0],
+                      ['Reposts counted once', data.methodology.repost_excluded_count ?? 0],
                       ['Plausibility floor', data.methodology.plausibility_floor_usd ? `$${data.methodology.plausibility_floor_usd.toLocaleString()}` : 'N/A'],
                       ['IQR', data.stats ? `$${data.stats.iqr.toLocaleString()}` : 'N/A'],
                       ['Q1', data.stats ? `$${data.stats.q1.toLocaleString()}` : 'N/A'],
@@ -816,14 +821,14 @@ export default function PriceResearch() {
                 </div>
                 <div style={{ width: 'min(100%, 280px)', paddingTop: 2 }}>
                   <div className="flex items-center gap-2" style={{ color: data.outliersRemoved ? '#8a6500' : GREEN, fontWeight: 700, fontSize: 14 }}>
-                    <AlertTriangle size={17} /> {data.outliersRemoved} excluded outlier{data.outliersRemoved === 1 ? '' : 's'}
+                    <AlertTriangle size={17} /> {data.outliersRemoved} statistical price outlier{data.outliersRemoved === 1 ? '' : 's'}
                   </div>
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
                     Exclusions stay visible below for audit and human review. They are not deleted from the database.
                   </div>
                   {data.evidence?.truncated && (
                     <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
-                      Showing the newest {data.evidence.outliers_returned.toLocaleString()} excluded observations for responsive review. Aggregate statistics use all {data.evidence.outliers_total.toLocaleString()} exclusions in the sampled cohort.
+                      Showing the newest {data.evidence.outliers_returned.toLocaleString()} excluded observations for responsive review. This evidence includes required-field failures, reposts, plausibility failures, and IQR outliers. Aggregate statistics use all {data.evidence.outliers_total.toLocaleString()} exclusions in the sampled cohort.
                     </div>
                   )}
                 </div>
@@ -839,7 +844,7 @@ export default function PriceResearch() {
                       Price statistics and charts require at least five approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
-                      {data.sampledListings.toLocaleString()} observations checked · {data.outliersRemoved.toLocaleString()} retained as excluded evidence · 0 qualified comparables
+                      {data.sampledListings.toLocaleString()} observations checked · {(data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · 0 qualified comparables
                     </div>
                   </div>
                 </div>

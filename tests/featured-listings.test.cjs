@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'featuredListings.ts'), 'utf8')
-  .replace(/type FeaturedListing = \{[\s\S]*?\};\n/, '')
+  .replace(/type FeaturedListing = \{[\s\S]*?\};\r?\n/, '')
   .replace(/: string \| null \| undefined/g, '')
   .replace(/: FeaturedListing/g, '')
   .replace('export function', 'function');

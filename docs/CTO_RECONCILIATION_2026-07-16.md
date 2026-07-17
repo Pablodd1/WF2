@@ -44,7 +44,7 @@ No image is attached by visual similarity or filename guesswork.
 
 ## Tests
 
-- 21 focused tests passed: media lineage, confidence capping, price outliers, five-observation analytics threshold, configuration cohorts, catalog/dial eligibility, and WTS/WTB requirements.
+- 24 focused tests passed: media lineage, featured-listing promotion, confidence capping, price outliers, five-observation analytics threshold, configuration cohorts, catalog/dial eligibility, and WTS/WTB requirements.
 - Production build passed.
 - Existing repository-wide lint debt remains separate from this change.
 
@@ -66,11 +66,13 @@ No image is attached by visual similarity or filename guesswork.
 
 ### P0 - Data correctness
 
-1. Apply the `(brand, id)` concurrent index required by the duplicate auditor.
-2. Complete the Patek duplicate/repost report, review false positives, then scan brand by brand.
-3. Add reversible duplicate cluster/member tables; do not delete raw evidence.
-4. Continue bundle segmentation before trusting normalized columns from multi-watch messages.
-5. Complete the currency evidence/rate/variance audit, including `HDK` aliases and ambiguous `$` context.
+1. Restore dealer/poster lineage. Historical `watch_records` contains `seller_name` and `seller_phone`, but imported rows do not reliably populate them. Add a `dealers` entity and immutable `dealer_id` linkage from source company/channel/message identity; never infer or expose a dealer from unverified text.
+2. Backfill historical poster identity from `raw_records.raw_data.company_id` and other verified source keys, recording unresolved rows instead of guessing. Preserve live sender/channel identity in the same contract and report WTS/WTB activity per verified dealer.
+3. Apply the `(brand, id)` concurrent index required by the duplicate auditor.
+4. Complete the Patek duplicate/repost report, review false positives, then scan brand by brand.
+5. Add reversible duplicate cluster/member tables; do not delete raw evidence.
+6. Continue bundle segmentation before trusting normalized columns from multi-watch messages.
+7. Complete the currency evidence/rate/variance audit, including `HDK` aliases and ambiguous `$` context.
 
 ### P1 - Catalog and normalization
 
