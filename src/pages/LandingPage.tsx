@@ -96,12 +96,24 @@ export default function LandingPage() {
   const heroRef = useRef<HTMLElement>(null);
   const heroMediaRef = useRef<HTMLDivElement>(null);
   const [showSplash, setShowSplash] = useState(true);
+  const [splashVideoReady, setSplashVideoReady] = useState(false);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const timeout = window.setTimeout(() => setShowSplash(false), reducedMotion ? 250 : 1400);
-    return () => window.clearTimeout(timeout);
+    if (reducedMotion) {
+      const timeout = window.setTimeout(() => setShowSplash(false), 250);
+      return () => window.clearTimeout(timeout);
+    }
+
+    const fallback = window.setTimeout(() => setShowSplash(false), 5000);
+    return () => window.clearTimeout(fallback);
   }, []);
+
+  useEffect(() => {
+    if (!splashVideoReady) return;
+    const timeout = window.setTimeout(() => setShowSplash(false), 2600);
+    return () => window.clearTimeout(timeout);
+  }, [splashVideoReady]);
 
   useEffect(() => {
     const hero = heroRef.current;
@@ -135,14 +147,20 @@ export default function LandingPage() {
     <main className="min-h-screen bg-[#080808] text-white">
       {showSplash && (
         <div className="fixed inset-0 z-[100] grid place-items-center overflow-hidden bg-[#070706] px-6" role="status" aria-label="Loading Curated Luxury">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(205,167,78,0.24),transparent_17%),linear-gradient(130deg,#070706_5%,#15110a_50%,#070706_92%)]" />
-          <div className="relative flex flex-col items-center text-center motion-safe:animate-[fade-in_380ms_ease-out]">
-            <div className="mb-7 h-16 w-16 rounded-full border border-[#e8cf8d]/45 bg-[radial-gradient(circle_at_38%_32%,#fff8cf_0%,#d3ac4e_32%,#74480d_70%,#201303_100%)] shadow-[0_0_70px_rgba(217,182,83,.35)] motion-safe:animate-[pulse_1.2s_ease-in-out_infinite]" />
-            <p className="bg-[linear-gradient(180deg,#fff4c7_0%,#d9b653_36%,#8d5a13_100%)] bg-clip-text font-serif text-[clamp(2.1rem,7vw,5rem)] font-semibold leading-none tracking-[0.08em] text-transparent">
-              CURATED LUXURY
-            </p>
-            <span className="mt-5 text-[10px] font-medium uppercase tracking-[0.28em] text-[#e1c77e]/75">Exceptional objects, thoughtfully considered</span>
-          </div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(205,167,78,0.24),transparent_48%),linear-gradient(130deg,#070706_5%,#15110a_50%,#070706_92%)]" />
+          <video
+            className="relative h-full w-full object-contain"
+            autoPlay
+            muted
+            playsInline
+            preload="auto"
+            onCanPlay={() => setSplashVideoReady(true)}
+            onEnded={() => setShowSplash(false)}
+            aria-hidden="true"
+          >
+            <source src="/video/curated-luxury-splash.mp4" type="video/mp4" />
+          </video>
+          <span className="absolute bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.28em] text-[#e1c77e]/75">Curated Luxury</span>
         </div>
       )}
       <header className="relative z-20 flex min-h-24 items-center justify-between border-b border-white/10 px-5 py-3 sm:px-8 lg:px-12">
