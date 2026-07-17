@@ -10,7 +10,9 @@ export default function DealerLogin() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const betaSkipEnabled = import.meta.env.VITE_ENABLE_DEALER_SKIP === 'true';
+  // Demo access is deliberately limited to the public marketplace routes guarded
+  // with allowBetaSkip. Set this to "false" in Vercel to remove the button.
+  const betaSkipEnabled = import.meta.env.VITE_ENABLE_DEALER_SKIP !== 'false';
 
   async function login(event: React.FormEvent) {
     event.preventDefault();
@@ -54,8 +56,8 @@ export default function DealerLogin() {
             </form>
             {betaSkipEnabled && (
               <div className="mt-5 border-t border-white/10 pt-5">
-                <button type="button" onClick={skipForBeta} className="h-10 w-full border border-white/20 text-xs font-semibold text-white/75 transition-colors hover:border-white/45 hover:text-white">Enter marketplace demo</button>
-                <p className="mt-2 text-center text-[11px] leading-5 text-amber-200/65">Demo access is limited to this browser tab. Dealer actions still require an authenticated account.</p>
+                <button type="button" onClick={skipForBeta} className="h-10 w-full border border-white/20 text-xs font-semibold text-white/75 transition-colors hover:border-white/45 hover:text-white">Skip sign in and explore demo</button>
+                <p className="mt-2 text-center text-[11px] leading-5 text-amber-200/65">No password needed for the marketplace demo. Dealer actions still require an authenticated account.</p>
               </div>
             )}
           </section>
