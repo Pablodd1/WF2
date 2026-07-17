@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "shadow:progress": "node tools/shadow-reprocess/shadow-progress-report.cjs",
     "media:pilot": "node tools/mission-images/pilot-link-images.cjs",
+    "media:lineage-pilot": "node tools/mission-images/link-images-from-raw-lineage.cjs",
     "media:seed-manifest": "node tools/mission-images/seed-media-manifest.cjs",
     "media:publish-other-pilot": "node tools/mission-images/publish-other-pilot.cjs",
     "test:normalization": "node --test tests/normalization-v4.test.cjs tests/dial-normalization.test.cjs tests/market-row-normalization.test.cjs tests/market-stats.test.cjs tests/price-research-eligibility.test.cjs tests/shadow-reprocess.test.cjs tests/promotion-policy.test.cjs tests/catalog-confirmation.test.cjs tests/review-decision-policy.test.cjs"

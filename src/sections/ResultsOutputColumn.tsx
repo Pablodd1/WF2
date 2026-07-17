@@ -4,6 +4,7 @@ import { CheckCircle, AlertTriangle } from 'lucide-react';
 import { BrandBadge } from '@/components/ui/BrandBadge';
 import { ConditionBadge } from '@/components/ui/ConditionBadge';
 import type { ResultCard } from '@/hooks/usePipelineSimulation';
+import { confidencePercent } from '@/lib/confidence';
 
 interface ResultsOutputColumnProps {
   cards: ResultCard[];
@@ -23,7 +24,7 @@ const cardVariants = {
 
 const NormalizedCard = memo(function NormalizedCard({ card }: { card: ResultCard }) {
   const { record } = card;
-  const confidencePct = record.confidence != null ? Math.round(record.confidence * 100) : 0;
+  const confidencePct = confidencePercent(record.confidence);
 
   return (
     <motion.div
