@@ -103,7 +103,7 @@ export default function LandingPage() {
         <Link to="/" aria-label="Curated Luxury home">
           <img src="/images/curated-luxury-logo-dark.png" alt="Curated Luxury" className="h-[72px] w-auto max-w-[min(68vw,430px)] object-contain" />
         </Link>
-        <nav className="flex items-center gap-5 text-xs font-medium text-white/70 sm:gap-7">
+        <nav className="hidden items-center gap-5 text-xs font-medium text-white/70 sm:flex sm:gap-7">
           <Link to="/trading" className="transition-colors hover:text-white">Collection</Link>
           <Link to="/price-research" className="transition-colors hover:text-white">Watch intelligence</Link>
           <Link to="/dealer-login" className="hidden transition-colors hover:text-white sm:block">Private access</Link>
