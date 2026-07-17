@@ -95,23 +95,26 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const heroRef = useRef<HTMLElement>(null);
   const heroMediaRef = useRef<HTMLDivElement>(null);
+  const splashVideoRef = useRef<HTMLVideoElement>(null);
   const [showSplash, setShowSplash] = useState(true);
   const [splashVideoReady, setSplashVideoReady] = useState(false);
 
   useEffect(() => {
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reducedMotion) {
-      const timeout = window.setTimeout(() => setShowSplash(false), 250);
-      return () => window.clearTimeout(timeout);
+    const video = splashVideoRef.current;
+    if (video) {
+      video.currentTime = 0;
+      void video.play().catch(() => {
+        // The poster remains visible until the fallback dismisses the splash.
+      });
     }
 
-    const fallback = window.setTimeout(() => setShowSplash(false), 5000);
+    const fallback = window.setTimeout(() => setShowSplash(false), 6500);
     return () => window.clearTimeout(fallback);
   }, []);
 
   useEffect(() => {
     if (!splashVideoReady) return;
-    const timeout = window.setTimeout(() => setShowSplash(false), 2600);
+    const timeout = window.setTimeout(() => setShowSplash(false), 4200);
     return () => window.clearTimeout(timeout);
   }, [splashVideoReady]);
 
@@ -149,12 +152,15 @@ export default function LandingPage() {
         <div className="fixed inset-0 z-[100] grid place-items-center overflow-hidden bg-[#070706] px-6" role="status" aria-label="Loading Curated Luxury">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(205,167,78,0.24),transparent_48%),linear-gradient(130deg,#070706_5%,#15110a_50%,#070706_92%)]" />
           <video
-            className="relative h-full w-full object-contain"
+            ref={splashVideoRef}
+            className="relative h-full w-full object-cover sm:object-contain"
             autoPlay
             muted
             playsInline
             preload="auto"
-            onCanPlay={() => setSplashVideoReady(true)}
+            poster="/images/curated-luxury-logo-dark.png"
+            onLoadedData={() => setSplashVideoReady(true)}
+            onPlaying={() => setSplashVideoReady(true)}
             onEnded={() => setShowSplash(false)}
             aria-hidden="true"
           >
@@ -183,29 +189,6 @@ export default function LandingPage() {
         <a href="#collections" aria-label="Scroll to collections" className="absolute bottom-6 right-5 hidden items-center gap-3 text-[10px] font-medium uppercase tracking-[0.12em] text-white/55 transition-colors hover:text-white sm:flex lg:right-12">
           Discover more <ArrowDown size={14} />
         </a>
-      </section>
-
-      <section className="border-b border-white/10 bg-[#080808] px-5 py-20 sm:px-8 sm:py-28 lg:px-12 lg:py-36">
-        <div className="mx-auto grid max-w-[1440px] gap-10 lg:grid-cols-[0.7fr_1.3fr] lg:gap-20">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#d8bd80]">Private luxury marketplace</p>
-          <div>
-            <h2 className="max-w-4xl text-4xl font-medium leading-[1.05] sm:text-5xl lg:text-7xl">
-              Objects beyond the ordinary.<br />
-              <span className="text-white/42">It is a point of view.</span>
-            </h2>
-            <p className="mt-8 max-w-2xl text-base leading-7 text-white/58 sm:text-lg sm:leading-8">
-              We bring exceptional objects into one considered marketplace. Some are icons. Others are known only to devoted collectors. Each deserves to be seen with context, care, and an appreciation for what makes it singular.
-            </p>
-            <div className="mt-9 flex flex-wrap gap-3">
-              <button onClick={() => navigate('/trading')} className="flex h-12 items-center gap-2 bg-white px-5 text-sm font-semibold text-black transition-colors hover:bg-[#d8bd80]">
-                Explore the collection <ArrowRight size={17} />
-              </button>
-              <button onClick={() => navigate('/price-research')} className="flex h-12 items-center gap-2 border border-white/35 px-5 text-sm font-semibold text-white transition-colors hover:border-white">
-                Watch intelligence <Search size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
       </section>
 
       <section id="collections" className="bg-[#0d0d0d] px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-28">
@@ -242,6 +225,34 @@ export default function LandingPage() {
                 </div>
               </Link>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="relative overflow-hidden border-y border-[#b98a2d]/25 bg-[#080808] px-5 py-24 sm:px-8 sm:py-32 lg:px-12 lg:py-40">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_46%,rgba(205,167,78,0.13),transparent_38%),linear-gradient(130deg,transparent_10%,rgba(255,255,255,0.025)_48%,transparent_74%)]" />
+        <div className="relative mx-auto max-w-[1100px] text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#d8bd80]">Private luxury marketplace</p>
+          <h2 className="mt-7 text-4xl font-medium leading-[1.02] sm:text-6xl lg:text-8xl">
+            Objects beyond the ordinary.<br />
+            <span className="text-white/42">It is a point of view.</span>
+          </h2>
+          <p className="mx-auto mt-8 max-w-3xl text-base leading-7 text-white/58 sm:text-lg sm:leading-8">
+            We bring exceptional objects into one considered marketplace. Some are icons. Others are known only to devoted collectors. Each deserves to be seen with context, care, and an appreciation for what makes it singular.
+          </p>
+          <div className="mt-11 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <button
+              onClick={() => navigate('/trading')}
+              className="group flex h-14 min-w-[240px] items-center justify-center gap-2 border border-[#f1d996]/65 bg-[linear-gradient(145deg,#f5df9a_0%,#c99b3d_36%,#8f641c_72%,#e3bd64_100%)] px-7 text-sm font-bold text-[#171006] shadow-[inset_0_1px_0_rgba(255,255,255,0.72),inset_0_-3px_8px_rgba(79,47,4,0.36),0_10px_28px_rgba(184,132,31,0.2)] transition-transform hover:-translate-y-0.5"
+            >
+              Explore the collection <ArrowRight size={17} className="transition-transform group-hover:translate-x-1" />
+            </button>
+            <button
+              onClick={() => navigate('/price-research')}
+              className="group flex h-14 min-w-[240px] items-center justify-center gap-2 border border-[#d5af55]/55 bg-[linear-gradient(145deg,#33250d_0%,#151007_52%,#3a2a0f_100%)] px-7 text-sm font-bold text-[#f0d487] shadow-[inset_0_1px_0_rgba(255,230,167,0.25),inset_0_-3px_7px_rgba(0,0,0,0.72),0_10px_28px_rgba(184,132,31,0.12)] transition-transform hover:-translate-y-0.5 hover:text-[#ffe9aa]"
+            >
+              Watch intelligence <Search size={16} className="transition-transform group-hover:scale-110" />
+            </button>
           </div>
         </div>
       </section>
