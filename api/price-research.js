@@ -11,6 +11,7 @@ const { buildComparableCohorts, classifyPrice, summarizePrices } = require('./_l
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
 const { classifyDemandEligibility, classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
+const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
@@ -217,7 +218,7 @@ module.exports = async function handler(req, res) {
         analytics_ready: false, listing_count: 0,
         sample_quality: 'observational',
         selected_cohort: { condition: 'Unspecified', dial_color: 'Unspecified', count: 0 },
-        cohorts: [], outliers: [], outlier_rows: [], outliersRemoved: 0, rawCount: 0,
+        cohorts: [], outliers: [], outlier_rows: [], outliersRemoved: 0, excludedEvidenceCount: 0, rawCount: 0,
         methodology: { method: 'IQR_1_5', minimum_sample: 5, included_count: 0, excluded_count: 0 },
         stats: null, liquidity: null, monthly: [], prices: [], rows: []
       });
@@ -291,11 +292,10 @@ module.exports = async function handler(req, res) {
       return { ...row, is_outlier: !classification.included, outlier_reason: classification.reason };
     });
     const includedRows = classifiedRows.filter(row => !row.is_outlier && row.price_usd > 0);
-    const outlierRows = [
-      ...requiredFieldExclusions,
-      ...repostRows.map(row => ({ ...row, is_outlier: true, outlier_reason: 'REPOST_DUPLICATE' })),
-      ...classifiedRows.filter(row => row.is_outlier && row.outlier_reason !== 'INVALID_PRICE'),
-    ];
+    const {
+      statisticalOutlierRows,
+      allExcludedRows: outlierRows,
+    } = partitionExcludedEvidence(requiredFieldExclusions, repostRows, classifiedRows);
 
     // Monthly aggregation
     const monthlyMap = {};
@@ -376,8 +376,9 @@ module.exports = async function handler(req, res) {
       sampleCapped: rows.length >= sampleLimit,
       count: prices.length,
       rawCount: validPriceRows.length,
-      outliersRemoved: outlierRows.length,
-      outliers: serializedOutliers.map(row => row.price_usd),
+      outliersRemoved: statisticalOutlierRows.length,
+      excludedEvidenceCount: outlierRows.length,
+      outliers: statisticalOutlierRows.map(row => row.price_usd),
       outlier_rows: serializedOutliers.map(r => ({
         id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
@@ -409,6 +410,7 @@ module.exports = async function handler(req, res) {
         minimum_sample: 5,
         included_count: includedRows.length,
         excluded_count: outlierRows.length,
+        statistical_outlier_count: statisticalOutlierRows.length,
         required_field_excluded_count: requiredFieldExclusions.length,
         repost_excluded_count: repostRows.length,
         plausibility_floor_usd: marketPriceFloorUsd,

@@ -2,11 +2,9 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { DealerGate } from '@/components/DealerGate';
 
-const Home = lazy(() => import('@/pages/Home'));
 const OperationsDashboard = lazy(() => import('@/pages/OperationsDashboard'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const TradingFloor = lazy(() => import('@/pages/TradingFloor'));
-const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'));
 const SourceAnalytics = lazy(() => import('@/pages/SourceAnalytics'));
 const ReviewQueue = lazy(() => import('@/pages/ReviewQueue'));
 const CleanPage = lazy(() => import('@/pages/CleanPage'));
@@ -28,10 +26,10 @@ export default function App() {
         <Route path="/dealer-login" element={<DealerLogin />} />
         <Route path="/dealer" element={<DealerGate allowBetaSkip><DealerPortal /></DealerGate>} />
         <Route path="/dashboard" element={<DealerGate><OperationsDashboard /></DealerGate>} />
-        <Route path="/dashboard/legacy" element={<DealerGate><Home /></DealerGate>} />
+        <Route path="/dashboard/legacy" element={<Navigate to="/dashboard" replace />} />
         <Route path="/trading" element={<DealerGate allowBetaSkip><TradingFloor /></DealerGate>} />
         <Route path="/analytics" element={<DealerGate><SourceAnalytics /></DealerGate>} />
-        <Route path="/analytics/legacy" element={<DealerGate><AnalyticsPage /></DealerGate>} />
+        <Route path="/analytics/legacy" element={<Navigate to="/analytics" replace />} />
         <Route path="/analytics-dashboard" element={<Navigate to="/analytics" replace />} />
         <Route path="/review" element={<Navigate to="/review-queue" replace />} />
         <Route path="/review-queue" element={<DealerGate><ReviewQueue /></DealerGate>} />

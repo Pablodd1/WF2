@@ -64,7 +64,6 @@ export default function SourceAnalytics() {
             <p className="mt-1 max-w-2xl text-sm text-text-muted">Live normalization evidence and review workload. Price statistics remain reference-specific in Price Research.</p>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/analytics/legacy" className="text-xs font-semibold text-text-muted hover:text-text-primary">Legacy snapshot</Link>
             <button onClick={() => void load()} disabled={loading} className="flex h-9 items-center gap-2 border border-border-default bg-bg-card px-3 text-xs font-semibold text-text-secondary hover:border-gold-muted disabled:opacity-50">
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
             </button>
