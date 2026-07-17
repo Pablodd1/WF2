@@ -12,10 +12,15 @@ const jobName = process.env.SHADOW_JOB_NAME || 'normalization-v4-production';
 const batchSize = Math.max(100, Math.min(Number(process.env.SHADOW_BATCH_SIZE || 1000), 5000));
 const rowsPerLease = Math.max(batchSize, Number(process.env.SHADOW_ROWS_PER_LEASE || 10000));
 const idleDelayMs = Math.max(1000, Number(process.env.SHADOW_IDLE_DELAY_MS || 15000));
+const workerMode = String(process.env.SHADOW_WORKER_MODE || 'cursor').trim().toLowerCase();
 const holder = `railway:${process.env.RAILWAY_DEPLOYMENT_ID || process.env.HOSTNAME || 'worker'}:${process.pid}:${randomUUID()}`;
 
 if (!baseUrl || !key) {
   throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
+}
+
+if (!['cursor', 'queue'].includes(workerMode)) {
+  throw new Error('SHADOW_WORKER_MODE must be cursor or queue');
 }
 
 function sleep(ms) {
@@ -56,6 +61,60 @@ async function releaseLease() {
   } catch (error) {
     console.error(JSON.stringify({ event: 'lease_release_failed', error: error.message }));
   }
+}
+
+async function releaseQueueWork(sourceRecordIds, error) {
+  if (!sourceRecordIds.length) return;
+  try {
+    await callRpc('release_normalization_shadow_work', {
+      p_holder: holder,
+      p_source_record_ids: sourceRecordIds,
+      p_error: error.message || String(error),
+      p_retry_seconds: 60,
+      p_max_attempts: 8,
+    });
+  } catch (releaseError) {
+    console.error(JSON.stringify({ event: 'queue_release_failed', error: releaseError.message }));
+  }
+}
+
+async function runQueueLease() {
+  let processed = 0;
+  let changed = 0;
+
+  while (processed < rowsPerLease) {
+    const limit = Math.min(batchSize, rowsPerLease - processed);
+    const records = await callRpc('claim_normalization_shadow_work', {
+      p_holder: holder,
+      p_limit: limit,
+      p_lease_seconds: 900,
+    });
+    if (!records?.length) return { processed, changed, complete: true, queue: true };
+
+    const sourceRecordIds = records.map(record => record.id);
+    try {
+      const shadowRows = records.map(analyzeRecord);
+      await rest('normalization_shadow_v4?on_conflict=source_record_id', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(shadowRows),
+      });
+      const completed = await callRpc('complete_normalization_shadow_work', {
+        p_holder: holder,
+        p_source_record_ids: sourceRecordIds,
+      });
+      if (Number(completed) !== sourceRecordIds.length) {
+        throw new Error(`Queue completion mismatch: expected ${sourceRecordIds.length}, completed ${completed}`);
+      }
+      processed += records.length;
+      changed += shadowRows.filter(row => row.change_flags.length > 0).length;
+    } catch (error) {
+      await releaseQueueWork(sourceRecordIds, error);
+      throw error;
+    }
+  }
+
+  return { processed, changed, complete: false, queue: true };
 }
 
 async function runLease() {
@@ -105,7 +164,7 @@ async function runLease() {
 }
 
 async function main() {
-  console.log(JSON.stringify({ event: 'worker_started', jobName, batchSize, rowsPerLease, holder }));
+  console.log(JSON.stringify({ event: 'worker_started', jobName, workerMode, batchSize, rowsPerLease, holder }));
   do {
     try {
       const acquired = await acquireLease();
@@ -115,8 +174,8 @@ async function main() {
         continue;
       }
       try {
-        const result = await runLease();
-        console.log(JSON.stringify({ event: 'lease_complete', jobName, ...result }));
+        const result = workerMode === 'queue' ? await runQueueLease() : await runLease();
+        console.log(JSON.stringify({ event: 'lease_complete', jobName, workerMode, ...result }));
         await sleep(result.complete ? idleDelayMs : 250);
       } finally {
         await releaseLease();

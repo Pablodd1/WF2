@@ -1,0 +1,31 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const migration = fs.readFileSync(
+  path.join(__dirname, '../supabase/migrations/20260717193000_normalization_shadow_work_queue.sql'),
+  'utf8',
+);
+const worker = fs.readFileSync(
+  path.join(__dirname, '../tools/shadow-reprocess/railway-worker.cjs'),
+  'utf8',
+);
+
+test('normalization work queue claims rows with SKIP LOCKED rather than source ID ordering', () => {
+  assert.match(migration, /normalization_shadow_work_queue/);
+  assert.match(migration, /FOR UPDATE SKIP LOCKED/);
+  assert.match(migration, /claim_normalization_shadow_work/);
+  assert.match(migration, /complete_normalization_shadow_work/);
+  assert.match(migration, /release_normalization_shadow_work/);
+  assert.doesNotMatch(migration, /INSERT INTO public\.normalization_shadow_work_queue[\s\S]*SELECT id FROM public\.watch_records/);
+});
+
+test('Railway worker can opt into queue mode while retaining a safe legacy default', () => {
+  assert.match(worker, /SHADOW_WORKER_MODE.*cursor/);
+  assert.match(worker, /workerMode === 'queue' \? await runQueueLease\(\) : await runLease\(\)/);
+  assert.match(worker, /claim_normalization_shadow_work/);
+  assert.match(worker, /releaseQueueWork/);
+});
