@@ -42,6 +42,14 @@ test('does not auto-collapse matching stock from different dealers', () => {
   assert.equal(result.suppressFromAnalytics, false);
 });
 
+test('does not use a generic ingestion source as dealer identity', () => {
+  const first = { ...base, seller_phone: '', source: 'MYSQL_RAW', raw_message: '5712/1A Blue Used USD 93k' };
+  const second = { ...base, seller_phone: '', source: 'MYSQL_RAW', raw_message: '5712/1A Blue Used USD 93k' };
+  const result = classifyPair(first, second);
+  assert.equal(result.type, 'EXACT_RAW_MESSAGE');
+  assert.equal(result.suppressFromAnalytics, false);
+});
+
 test('date token normalization preserves price and reference', () => {
   const value = stripDateTokens('5712/1A 7/2026 USD 93,000');
   assert.match(value, /5712\/1A/);
