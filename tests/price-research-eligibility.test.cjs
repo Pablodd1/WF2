@@ -41,6 +41,13 @@ test('requires a catalog model, dial and price', () => {
   assert.equal(classifyResearchEligibility({ ...valid, price_usd: null }, catalog), 'MISSING_PRICE');
 });
 
+test('rejects unsplit bundle source rows from price analytics', () => {
+  assert.equal(
+    classifyResearchEligibility({ ...valid, bundle_candidate_count: 3 }, catalog),
+    'BUNDLE_SOURCE_UNSPLIT',
+  );
+});
+
 test('WTB demand requires identity and dial but not an asking price', () => {
   assert.equal(classifyDemandEligibility({ ...valid, price_usd: null }, catalog), null);
   assert.equal(classifyDemandEligibility({ ...valid, dial_color: 'Purple', price_usd: null }, catalog), 'CATALOG_DIAL_MISMATCH');

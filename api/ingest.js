@@ -791,6 +791,7 @@ module.exports = async function handler(req, res) {
       if (!listingType && itemType === 'luxury') params.set('listing_type', 'eq.OTHER');
       if (!listingType && itemType === 'multi') params.set('listing_type', 'eq.MULTI');
       if (!listingType && itemType === 'watches') params.set('listing_type', 'not.in.(MULTI,OTHER)');
+      if (!listingType && itemType === 'all') params.set('listing_type', 'neq.MULTI');
       if (imagesOnly) params.set('has_images', 'eq.true');
       // Customer-facing inventory never includes RECYCLE records. The recent
       // view avoids letting undated legacy imports dominate page one, while the

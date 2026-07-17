@@ -9,6 +9,9 @@ import {
   Search,
   X,
 } from 'lucide-react';
+import { LuxFiBanner } from '../components/LuxFiBanner';
+import { MarketNav } from '../components/MarketNav';
+import { rateMarketPrice, type MarketPriceRating } from '../lib/marketPriceRating';
 
 const GOLD = '#C9A96E';
 const GOLD_BRIGHT = '#D4B87A';
@@ -59,6 +62,20 @@ interface TradingFloorResponse {
   records?: ListingRecord[];
   total?: number;
   totalIsEstimate?: boolean;
+}
+
+interface ListingContact {
+  contact_available: boolean;
+  dealer_name?: string;
+  whatsapp_url?: string;
+  reason?: string;
+}
+
+interface ListingBenchmark {
+  loading: boolean;
+  count: number;
+  stats: { avg: number; median: number; min: number; max: number } | null;
+  rating: MarketPriceRating;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -154,6 +171,8 @@ export default function TradingFloor() {
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <MarketNav />
+      <LuxFiBanner />
       <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 14px 32px rgba(0,0,0,0.28)' }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -220,7 +239,7 @@ export default function TradingFloor() {
         </div>
 
         {selectedListing ? (
-          <ListingDetails listing={selectedListing} onClose={() => setSelectedListing(null)} />
+          <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={() => setSelectedListing(null)} />
         ) : loading && listings.length === 0 ? (
           <div className="flex justify-center py-16">
             <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
@@ -369,14 +388,6 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
           label="CHECK AVAILABILITY"
           onClick={onSelect}
         />
-        <button
-          type="button"
-          onClick={onSelect}
-          className="mt-3 h-9 w-full text-sm font-medium"
-          style={{ color: GOLD_BRIGHT }}
-        >
-          Listing details
-        </button>
       </div>
     </article>
   );
@@ -384,9 +395,42 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
 function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
+  const canLoadBenchmark = Boolean(listing.reference && listing.brand && listing.listing_type === 'WTS');
+  const [contact, setContact] = useState<ListingContact | null>(null);
+  const [benchmark, setBenchmark] = useState<ListingBenchmark>({
+    loading: canLoadBenchmark,
+    count: 0,
+    stats: null,
+    rating: rateMarketPrice(listing.price_usd, null, 0),
+  });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/listing-contact?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
+      .then(response => response.json())
+      .then(payload => setContact(payload))
+      .catch(error => { if (error?.name !== 'AbortError') setContact({ contact_available: false, reason: 'CONTACT_UNAVAILABLE' }); });
+
+    if (!canLoadBenchmark) return () => controller.abort();
+    const reference = listing.reference as string;
+    const params = new URLSearchParams({ reference, brand: listing.brand });
+    if (listing.condition) params.set('condition', listing.condition);
+    if (listing.dial_color) params.set('dial', listing.dial_color);
+    fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })
+      .then(response => response.json())
+      .then(payload => {
+        const count = Number(payload?.count || 0);
+        const stats = payload?.analytics_ready && payload?.stats ? payload.stats : null;
+        setBenchmark({ loading: false, count, stats, rating: rateMarketPrice(listing.price_usd, stats, count) });
+      })
+      .catch(error => {
+        if (error?.name !== 'AbortError') setBenchmark({ loading: false, count: 0, stats: null, rating: rateMarketPrice(listing.price_usd, null, 0) });
+      });
+    return () => controller.abort();
+  }, [canLoadBenchmark, listing]);
 
   return (
-    <section className="mb-8 grid gap-8 lg:grid-cols-[minmax(320px,504px)_1fr]" aria-label="Listing details">
+    <section className="mb-8 grid gap-8 lg:grid-cols-[minmax(320px,504px)_1fr]" aria-label="Selected listing">
       <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
         <ListingImage listing={listing} className="h-[648px] w-full" large />
       </div>
@@ -394,7 +438,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       <div className="space-y-8">
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <div className="flex items-start justify-between gap-4">
-            <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Post Information:</h2>
+            <h2 className="font-serif text-2xl font-medium tracking-normal" style={{ color: INK }}>{meta.title}</h2>
             <button
               type="button"
               aria-label="Close listing details"
@@ -407,42 +451,61 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </button>
           </div>
 
-          <div className="mt-8">
-            <div className="text-[15px] leading-6" style={{ color: INK }}>{meta.title}</div>
-            <div className="text-[15px] leading-6" style={{ color: INK }}>{meta.rawPriceLabel}</div>
+          <div className="mt-6">
+            <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</div>
+            <div className="mt-1 text-sm" style={{ color: MUTED }}>{meta.rawPriceLabel}</div>
           </div>
 
-          <div className="mt-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="text-[13px] break-all" style={{ color: MUTED }}>Listing {listing.id}</div>
-            <div className="text-[15px]" style={{ color: INK }}>
+          <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
+            {[displayDial(listing.dial_color), cleanValue(listing.condition), listing.year ? String(listing.year) : ''].filter(Boolean).map(value => (
+              <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: BORDER }}>{value}</span>
+            ))}
+          </div>
+
+          <div className="mt-6 text-[15px]" style={{ color: INK }}>
               <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
-            </div>
           </div>
-
         </div>
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Availability</h2>
-          <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-            Dealer contact is not linked to this historical record yet. Save the listing ID and contact the WatchFacts desk for verification.
-          </p>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Check availability</h2>
+          {contact?.contact_available && contact.whatsapp_url ? (
+            <>
+              <p className="mt-3 text-sm" style={{ color: MUTED }}>Contact {contact.dealer_name || 'the verified dealer'} directly about this item.</p>
+              <a href={contact.whatsapp_url} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
+                <MessageCircle size={18} /> Continue on WhatsApp
+              </a>
+            </>
+          ) : (
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Dealer contact has not yet been verified for this historical listing.</p>
+          )}
         </div>
 
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Listing Details:</h2>
-          <div className="mt-5 grid gap-3 text-[15px] sm:grid-cols-2" style={{ color: INK }}>
-            <DetailRow label="Category" value={listingKindLabel(listing)} />
-            <DetailRow label="Brand / maker" value={cleanValue(listing.brand) || 'Not identified'} />
-            <DetailRow label="Reference" value={cleanValue(listing.reference) || (listing.listing_type === 'MULTI' ? 'Pending item split' : 'Not listed')} />
-            <DetailRow label="Condition" value={cleanValue(listing.condition)} />
-            <DetailRow label="Dial" value={displayDial(listing.dial_color) || 'Not identified'} />
-            <DetailRow label="Year" value={listing.year ? String(listing.year) : 'Not listed'} />
-            <DetailRow label="Type" value={cleanValue(listing.listing_type)} />
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: benchmark.rating.color }}>Price rating</div>
+              <div className="mt-2 text-xl font-semibold" style={{ color: INK }}>{benchmark.loading ? 'Calculating…' : benchmark.rating.label}</div>
+              {!benchmark.loading && <p className="mt-2 text-sm leading-6" style={{ color: MUTED }}>{benchmark.rating.reason}</p>}
+            </div>
+            <div className="h-3 w-3 shrink-0 rounded-full" style={{ background: benchmark.rating.color }} />
           </div>
+          {benchmark.stats && benchmark.count >= 5 && (
+            <div className="mt-6 grid grid-cols-3 gap-3 border-t pt-5 text-center" style={{ borderColor: BORDER }}>
+              <MarketStat label="Min" value={benchmark.stats.min} />
+              <MarketStat label="Average" value={benchmark.stats.avg} />
+              <MarketStat label="Max" value={benchmark.stats.max} />
+            </div>
+          )}
+          <div className="mt-4 text-xs" style={{ color: MUTED }}>{benchmark.count.toLocaleString()} outlier-clean comparable offers</div>
         </div>
       </div>
     </section>
   );
+}
+
+function MarketStat({ label, value }: { label: string; value: number }) {
+  return <div><div className="text-[11px] uppercase" style={{ color: MUTED }}>{label}</div><div className="mt-1 text-sm font-semibold" style={{ color: INK }}>${Math.round(value).toLocaleString()}</div></div>;
 }
 
 function ListingImage({ listing, className, large = false }: { listing: ListingRecord; className: string; large?: boolean }) {
@@ -499,15 +562,6 @@ function RegionLabel({ region }: { region: string }) {
     <div className="flex items-center gap-1 text-[13px] font-semibold uppercase" style={{ color: MUTED }}>
       <Globe2 size={16} fill={GOLD} color={GOLD} />
       <span>{region}</span>
-    </div>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border px-3 py-2" style={{ borderColor: BORDER, background: PANEL }}>
-      <div className="text-[11px] uppercase" style={{ color: MUTED }}>{label}</div>
-      <div className="mt-1 font-medium" style={{ color: INK }}>{value}</div>
     </div>
   );
 }

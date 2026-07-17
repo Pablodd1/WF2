@@ -4,6 +4,7 @@ const { comparisonKey, normalizeDialValue, uniqueCatalogDials } = require('./dia
 
 function classifyResearchEligibility(row, catalog) {
   const price = Number(row?.price_usd);
+  if (Number(row?.bundle_candidate_count || 0) > 1) return 'BUNDLE_SOURCE_UNSPLIT';
   if (!row?.brand || String(row.brand).trim().toUpperCase() === 'UNKNOWN') return 'MISSING_BRAND';
   if (!row?.reference) return 'MISSING_REFERENCE';
   if (!catalog?.found || !catalog.model) return 'CATALOG_MODEL_UNCONFIRMED';
