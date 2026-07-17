@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Eye, ImageOff, Loader2, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { LuxFiBanner } from '../components/LuxFiBanner';
+import { MarketNav } from '../components/MarketNav';
+import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
@@ -19,7 +22,7 @@ interface RowData {
   outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' |
     'MISSING_BRAND' | 'MISSING_REFERENCE' | 'CATALOG_MODEL_UNCONFIRMED' | 'MISSING_PRICE' |
     'MISSING_DIAL' | 'CATALOG_DIAL_UNCONFIRMED' | 'CATALOG_DIAL_MISMATCH' |
-    'REPOST_DUPLICATE' | null;
+    'REPOST_DUPLICATE' | 'BUNDLE_SOURCE_UNSPLIT' | null;
 }
 
 interface MonthlyPoint {
@@ -145,16 +148,16 @@ interface PriceData {
   };
 }
 
-const NAVY = '#1a2744';
-const GOLD = '#c9a03a';
-const WHITE = '#ffffff';
-const LIGHT_GRAY = '#f8f9fa';
-const BORDER = '#e9ecef';
-const TEXT = '#212529';
-const MUTED = '#6c757d';
-const GREEN = '#198754';
-const RED = '#dc3545';
-const BLUE = '#0d6efd';
+const NAVY = '#f6f1e8';
+const GOLD = '#c9a96e';
+const WHITE = '#111118';
+const LIGHT_GRAY = '#16161f';
+const BORDER = 'rgba(201,169,110,0.24)';
+const TEXT = '#f6f1e8';
+const MUTED = '#9ca3af';
+const GREEN = '#22c55e';
+const RED = '#ef4444';
+const BLUE = '#4f7fe8';
 const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC'];
 
 const DIAL_SWATCHES: Record<string, string> = {
@@ -353,14 +356,16 @@ export default function PriceResearch() {
     if (reason === 'CATALOG_DIAL_UNCONFIRMED') return 'Dial configuration unavailable in catalog';
     if (reason === 'CATALOG_DIAL_MISMATCH') return 'Dial is not valid for this catalog reference';
     if (reason === 'REPOST_DUPLICATE') return 'Dealer repost already counted once';
+    if (reason === 'BUNDLE_SOURCE_UNSPLIT') return 'Unsplit multi-listing source';
     return 'Invalid price';
   };
 
   return (
     <div style={{ backgroundColor: WHITE, color: TEXT, fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh' }}>
-      <NavBar />
+      <MarketNav />
+      <LuxFiBanner />
 
-      <div style={{ backgroundColor: NAVY, color: WHITE, padding: '32px 0' }}>
+      <div style={{ backgroundColor: '#09090d', color: TEXT, padding: '32px 0' }}>
         <div className="max-w-6xl mx-auto px-4">
           <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
@@ -443,15 +448,17 @@ export default function PriceResearch() {
           <div className="flex gap-2 mb-3">
             <div className="flex-1 relative">
               <input
+                data-testid="price-reference-input"
+                aria-label="Watch reference"
                 type="text" value={query}
                 onChange={e => { setQuery(e.target.value); setQueryBrand(''); }}
                 onKeyDown={e => { if (e.key === 'Enter' && !loading) void fetchData(query, '', '', queryBrand); }}
                 placeholder="Enter a watch reference"
-                style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none' }}
+                style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, background: LIGHT_GRAY, color: TEXT, fontSize: 14, outline: 'none', position: 'relative', zIndex: 1 }}
               />
             </div>
             <button onClick={() => void fetchData(query, '', '', queryBrand)} disabled={loading}
-              style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: WHITE, border: 'none', fontWeight: 600, fontSize: 14, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+              style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: '#09090d', border: 'none', fontWeight: 600, fontSize: 14, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Searching…' : 'Search'}
             </button>
           </div>
@@ -951,6 +958,8 @@ export default function PriceResearch() {
           error={detailError}
           onClose={closeListing}
           outlierLabel={outlierReason(selectedRow.outlier_reason)}
+          benchmark={data?.stats}
+          comparableCount={data?.count || 0}
         />
       )}
     </div>
@@ -958,21 +967,6 @@ export default function PriceResearch() {
 }
 
 // ── Sub-Components ─────────────────────────────────────────────
-
-function NavBar() {
-  return (
-    <nav style={{ backgroundColor: WHITE, borderBottom: `1px solid ${BORDER}`, padding: '12px 0' }}>
-      <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
-        <Link to="/" style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif", textDecoration: 'none' }}>Curated Luxury</Link>
-        <div className="flex gap-3 sm:gap-6" style={{ fontSize: 14 }}>
-          <Link to="/trading" style={{ color: MUTED, textDecoration: 'none', paddingBottom: 4 }}>Trading Floor</Link>
-          <Link to="/price-research" style={{ color: GOLD, fontWeight: 600, textDecoration: 'none', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>Price Research</Link>
-          <Link to="/dealer" className="hidden md:inline" style={{ color: MUTED, textDecoration: 'none', paddingBottom: 4 }}>Dealer Workspace</Link>
-        </div>
-      </div>
-    </nav>
-  );
-}
 
 function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
   const date = row.listing_date || row.created_at;
@@ -998,19 +992,22 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
   );
 }
 
-function ListingDetailModal({ summary, detail, loading, error, onClose, outlierLabel }: {
+function ListingDetailModal({ summary, detail, loading, error, onClose, outlierLabel, benchmark, comparableCount }: {
   summary: RowData;
   detail: ListingDetailData | null;
   loading: boolean;
   error: string;
   onClose: () => void;
   outlierLabel: string;
+  benchmark: MarketBenchmark | null | undefined;
+  comparableCount: number;
 }) {
   const [activeImage, setActiveImage] = useState(0);
   const [copied, setCopied] = useState(false);
   const images = detail?.image_urls || [];
   const observedAt = detail?.listing_date || detail?.created_at || summary.listing_date || summary.created_at;
   const displayPrice = detail?.price_usd ?? summary.price_usd;
+  const rating = rateMarketPrice(displayPrice, benchmark || null, comparableCount);
 
   const copyRawMessage = async () => {
     if (!detail?.raw_message) return;
@@ -1060,6 +1057,18 @@ function ListingDetailModal({ summary, detail, loading, error, onClose, outlierL
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{detail.brand} {detail.reference}</h1>
               <div style={{ color: GOLD, fontSize: 26, fontWeight: 800, marginBottom: 28 }}>${displayPrice.toLocaleString()} <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>USD normalized</span></div>
 
+              <DetailCard title="Price rating">
+                <div className="flex items-start gap-4">
+                  <div style={{ minWidth: 88, borderRadius: 8, padding: '11px 10px', textAlign: 'center', background: `${rating.color}18`, color: rating.color, border: `1px solid ${rating.color}55`, fontWeight: 800, fontSize: 13 }}>{rating.label}</div>
+                  <div style={{ color: MUTED, fontSize: 13, lineHeight: 1.55 }}>{rating.reason}</div>
+                </div>
+                {benchmark && comparableCount >= 5 && <div className="grid grid-cols-3 gap-3" style={{ marginTop: 18 }}>
+                  <Metric label="Comparable low" value={`$${benchmark.min.toLocaleString()}`} />
+                  <Metric label="Comparable average" value={`$${benchmark.avg.toLocaleString()}`} />
+                  <Metric label="Comparable high" value={`$${benchmark.max.toLocaleString()}`} />
+                </div>}
+              </DetailCard>
+
               <DetailCard title="Raw source message — unchanged" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy raw message'}</button> : undefined}>
                 <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
                   <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>NO NORMALIZATION APPLIED</span>
@@ -1101,7 +1110,12 @@ function ListingDetailModal({ summary, detail, loading, error, onClose, outlierL
   );
 }
 
+function Metric({ label, value }: { label: string; value: string }) {
+  return <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 10 }}><div style={{ color: MUTED, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div><div style={{ color: TEXT, fontSize: 14, fontWeight: 800, marginTop: 3 }}>{value}</div></div>;
+}
+
 function DetailCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+  if (title.startsWith('Raw source') || title.startsWith('Normalized record')) return null;
   return <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 20, marginBottom: 20 }}><div className="flex items-center justify-between gap-3" style={{ marginBottom: 18 }}><h2 style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{title}</h2>{action}</div>{children}</div>;
 }
 

@@ -1,4 +1,4 @@
-import { ArrowLeft, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, LockKeyhole } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -10,7 +10,7 @@ export default function DealerLogin() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const betaSkipEnabled = import.meta.env.VITE_ENABLE_DEALER_SKIP !== 'false';
+  const betaSkipEnabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEALER_SKIP === 'true';
 
   async function login(event: React.FormEvent) {
     event.preventDefault();
@@ -39,15 +39,8 @@ export default function DealerLogin() {
     <main className="min-h-screen bg-[#09090d] px-5 py-8 text-white">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col">
         <Link to="/" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> Curated Luxury</Link>
-        <div className="grid flex-1 items-center gap-12 py-10 lg:grid-cols-[1fr_420px]">
-          <section>
-            <div className="mb-5 flex h-11 w-11 items-center justify-center border border-[#c9a96e]/45 text-[#c9a96e]"><ShieldCheck size={22} /></div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Controlled dealer access</p>
-            <h1 className="max-w-xl font-serif text-4xl leading-tight sm:text-5xl">Your market operations workspace.</h1>
-            <p className="mt-5 max-w-lg text-sm leading-7 text-white/60">Access Price Search, the Trading Floor, and the WatchFacts rated-dealer network. Accounts are provisioned by WatchFacts; public registration is disabled.</p>
-          </section>
-
-          <section className="border border-white/12 bg-[#111118] p-6 sm:p-8">
+        <div className="flex flex-1 items-center justify-center py-10">
+          <section className="w-full max-w-[420px] border border-white/12 bg-[#111118] p-6 sm:p-8">
             <div className="mb-6 flex items-center gap-3"><LockKeyhole size={20} className="text-[#c9a96e]" /><h2 className="text-lg font-semibold">Dealer login</h2></div>
             <form onSubmit={login} className="space-y-4">
               <label className="block text-xs font-medium text-white/65">Email

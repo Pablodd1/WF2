@@ -9,6 +9,7 @@ const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
 const { lookupCatalog } = require('./_lib/catalog');
 const { buildComparableCohorts, classifyPrice, summarizePrices } = require('./_lib/market-stats.cjs');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
+const { segmentDealerMessage } = require('./_lib/normalization-v4.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
 const { classifyDemandEligibility, classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
@@ -234,6 +235,7 @@ module.exports = async function handler(req, res) {
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {
           ...normalized,
+          bundle_candidate_count: segmentDealerMessage(row.raw_message || '').length,
           dial_color: normalizedDial.known ? normalizedDial.value : normalized.dial_color,
           stored_price_usd: row.price_usd,
           price_usd: normalized.analytics_price_usd,
