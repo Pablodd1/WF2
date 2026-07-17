@@ -282,7 +282,7 @@ function FeaturedImageRail({ listings, onSelect }: { listings: ListingRecord[]; 
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Visual inventory</div>
           <h2 id="featured-listings-heading" className="mt-1 text-xl font-semibold" style={{ color: INK }}>Featured watches with source-linked images</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-5" style={{ color: MUTED }}>Approved WTS records with complete identity, plausible pricing, and customer-safe confidence.</p>
+          <p className="mt-1 max-w-2xl text-xs leading-5" style={{ color: MUTED }}>Prequalified WTS records with complete identity, plausible pricing, and bounded confidence.</p>
         </div>
         <span className="text-xs" style={{ color: MUTED }}>{listings.length} linked listings</span>
       </div>

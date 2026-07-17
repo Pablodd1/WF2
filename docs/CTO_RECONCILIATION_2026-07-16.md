@@ -18,6 +18,7 @@
 - Added a bounded horizontal source-linked image rail above the first Trading Floor page.
 - The rail fetches at most 100 image-backed records and does not alter the normal 50-row server pagination, search, eligibility, or total counts.
 - Promotion into the rail is stricter than image linkage: approved WTS, complete brand/reference/dial, confidence 85-100, and plausible USD pricing. Image lineage alone does not imply normalization approval.
+- Current pilot result: 39 of 100 linked rows pass the automated promotion gate; 61 are withheld. A human visual/catalog agreement check remains mandatory before production release because field completeness cannot prove that the image, brand, reference, and dial agree.
 - Listings without media continue using stable placeholders.
 
 ### Confidence safety
