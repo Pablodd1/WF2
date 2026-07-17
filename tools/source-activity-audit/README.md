@@ -29,3 +29,5 @@ railway run npm run audit:sources
 ```
 
 Reports are written to `audit-output/source-activity/`, which is ignored by Git. Delete the checkpoint or choose a different `SOURCE_AUDIT_OUTPUT` to begin a new audit.
+
+`SOURCE_AUDIT_INCLUDE_RAW_MESSAGE` defaults to `false` so the full archive scan does not transfer millions of large message bodies. Set it to `true` only for a bounded pilot that needs structured chat-envelope phone fallback. Full reporting still uses source-company lineage and populated seller columns.

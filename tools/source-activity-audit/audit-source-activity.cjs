@@ -10,6 +10,7 @@ const maxRows = Math.max(0, Number(process.env.SOURCE_AUDIT_MAX_ROWS || 0));
 const outputDir = path.resolve(process.env.SOURCE_AUDIT_OUTPUT || 'audit-output/source-activity');
 const statePath = path.join(outputDir, 'checkpoint.json');
 const resume = String(process.env.SOURCE_AUDIT_RESUME || 'true').toLowerCase() !== 'false';
+const includeRawMessage = String(process.env.SOURCE_AUDIT_INCLUDE_RAW_MESSAGE || 'false').toLowerCase() === 'true';
 
 function required(name) {
   const value = process.env[name];
@@ -48,8 +49,10 @@ function increment(target, key, amount = 1) {
 }
 
 async function fetchPage(baseUrl, serviceKey, lastId) {
+  const columns = ['id', 'seller_phone', 'seller_name', 'listing_type', 'listing_date', 'created_at', 'source', 'source_type', 'flags'];
+  if (includeRawMessage) columns.push('raw_message');
   const params = new URLSearchParams({
-    select: 'id,seller_phone,seller_name,raw_message,listing_type,listing_date,created_at,source,source_type,flags',
+    select: columns.join(','),
     order: 'id.asc',
     limit: String(pageSize),
   });
@@ -130,6 +133,7 @@ function writeReports(state) {
   const summary = {
     generatedAt: new Date().toISOString(),
     complete: !maxRows,
+    rawMessageEnvelopeScan: includeRawMessage,
     rowsScanned: state.rowsScanned,
     observedPosterCount: posters.length,
     resolvedRows: state.resolvedRows,
