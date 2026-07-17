@@ -14,6 +14,7 @@ import { ConfidenceRing } from './ui/ConfidenceRing';
 import { DialColorSwatch } from './ui/DialColorSwatch';
 import { DemandBadge } from './ui/DemandBadge';
 import { StageDot } from './ui/StageDot';
+import { confidencePercent } from '@/lib/confidence';
 
 interface DetailModalProps {
   record: WatchRecord | null;
@@ -151,7 +152,7 @@ export function DetailModal({ record, open, onClose, onApprove, onEdit, onFlag, 
 
   if (!record) return null;
 
-  const confidencePct = Math.round(record.confidence * 100);
+  const confidencePct = confidencePercent(record.confidence);
   const varianceGood = Math.abs(record.priceVariance) <= 10;
   const varianceBad = Math.abs(record.priceVariance) > 20;
 

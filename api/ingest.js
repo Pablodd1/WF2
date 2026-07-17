@@ -768,6 +768,7 @@ module.exports = async function handler(req, res) {
       const itemType = String(req.query?.item || '').toLowerCase();
       const search = String(req.query?.q || '').trim().slice(0, 100);
       const quality = String(req.query?.quality || 'market').toLowerCase();
+      const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
       const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'OTHER']);
       const allowedItems = new Set(['all', 'watches', 'luxury', 'multi']);
       const start = (page - 1) * pageSize;
@@ -790,6 +791,7 @@ module.exports = async function handler(req, res) {
       if (!listingType && itemType === 'luxury') params.set('listing_type', 'eq.OTHER');
       if (!listingType && itemType === 'multi') params.set('listing_type', 'eq.MULTI');
       if (!listingType && itemType === 'watches') params.set('listing_type', 'not.in.(MULTI,OTHER)');
+      if (imagesOnly) params.set('has_images', 'eq.true');
       // Customer-facing inventory never includes RECYCLE records. The recent
       // view avoids letting undated legacy imports dominate page one, while the
       // all-inventory view and every explicit search still include those rows.

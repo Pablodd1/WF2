@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { WatchRecord, StageName } from '@/types';
+import { confidencePercent } from '@/lib/confidence';
 
 export interface StageMessage {
   stage: StageName;
@@ -44,7 +45,7 @@ function generateStageMessage(stage: StageName, record: WatchRecord, failed: boo
       : `Reference ${record.reference || 'UNKNOWN'} matched against catalog`,
     NORMALIZE: `Price normalized to USD ${record.price?.toLocaleString() || 'N/A'}`,
     ENRICH: `Added market comparables (n=${record.marketComparables || 0})`,
-    ML_SCORE: `Confidence ${record.confidence != null ? (record.confidence * 100).toFixed(0) : 'N/A'}% — ${record.outcomeClassification || 'UNKNOWN'} classification`,
+    ML_SCORE: `Confidence ${record.confidence != null ? confidencePercent(record.confidence) : 'N/A'}% — ${record.outcomeClassification || 'UNKNOWN'} classification`,
   };
   return messages[stage] || `${stage}: Processing...`;
 }

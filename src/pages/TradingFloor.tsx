@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { isCustomerSafeFeaturedListing } from '../lib/featuredListings';
 import { useSearchParams } from 'react-router-dom';
 import {
   Globe2,
@@ -69,6 +70,7 @@ export default function TradingFloor() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [listings, setListings] = useState<ListingRecord[]>([]);
+  const [featuredListings, setFeaturedListings] = useState<ListingRecord[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
   const [total, setTotal] = useState(0);
   const [totalIsEstimate, setTotalIsEstimate] = useState(false);
@@ -130,6 +132,24 @@ export default function TradingFloor() {
     return () => controller.abort();
   }, [activeFilter, page, pageSize, search]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadFeatured() {
+      try {
+        const params = new URLSearchParams({ item: 'watches', images: 'true', quality: 'archive', page: '1', pageSize: '100' });
+        const response = await fetch(`/api/ingest?${params}`, { signal: controller.signal });
+        const data = await response.json() as TradingFloorResponse;
+        if (response.ok && data.status === 'ok') {
+          setFeaturedListings((data.records || []).filter(isCustomerSafeFeaturedListing));
+        }
+      } catch (caught) {
+        if ((caught as Error).name !== 'AbortError') console.warn('Image showcase unavailable:', caught);
+      }
+    }
+    void loadFeatured();
+    return () => controller.abort();
+  }, []);
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -188,6 +208,10 @@ export default function TradingFloor() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-5">
+        {featuredListings.length > 0 && page === 1 && !search && (
+          <FeaturedImageRail listings={featuredListings} onSelect={setSelectedListing} />
+        )}
+
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</span>
           <span>Page <strong style={{ color: INK }}>{page}</strong> of <strong style={{ color: INK }}>{totalPages}</strong></span>
@@ -248,6 +272,42 @@ export default function TradingFloor() {
         )}
       </div>
     </main>
+  );
+}
+
+function FeaturedImageRail({ listings, onSelect }: { listings: ListingRecord[]; onSelect: (listing: ListingRecord) => void }) {
+  return (
+    <section className="mb-8" aria-labelledby="featured-listings-heading">
+      <div className="mb-4 flex items-end justify-between gap-4">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Visual inventory</div>
+          <h2 id="featured-listings-heading" className="mt-1 text-xl font-semibold" style={{ color: INK }}>Featured watches with source-linked images</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-5" style={{ color: MUTED }}>Prequalified WTS records with complete identity, plausible pricing, and bounded confidence.</p>
+        </div>
+        <span className="text-xs" style={{ color: MUTED }}>{listings.length} linked listings</span>
+      </div>
+      <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 hide-scrollbar">
+        {listings.map(listing => {
+          const meta = getListingMeta(listing);
+          return (
+            <button
+              key={`featured-${listing.id}`}
+              type="button"
+              onClick={() => onSelect(listing)}
+              className="group w-[220px] shrink-0 snap-start overflow-hidden rounded-md border text-left transition hover:-translate-y-0.5 sm:w-[250px]"
+              style={{ borderColor: BORDER, background: SURFACE }}
+            >
+              <img src={listing.thumbnail_url || ''} alt={meta.title} className="h-[250px] w-full object-cover sm:h-[286px]" loading="lazy" />
+              <span className="block min-h-[92px] px-4 py-3">
+                <span className="block truncate text-sm font-medium" style={{ color: INK }}>{meta.title}</span>
+                <span className="mt-1 block text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</span>
+                <span className="mt-2 block text-[11px] uppercase tracking-[0.12em]" style={{ color: MUTED }}>View listing</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "shadow:progress": "node tools/shadow-reprocess/shadow-progress-report.cjs",
     "media:pilot": "node tools/mission-images/pilot-link-images.cjs",
+    "media:lineage-pilot": "node tools/mission-images/link-images-from-raw-lineage.cjs",
     "media:seed-manifest": "node tools/mission-images/seed-media-manifest.cjs",
     "media:publish-other-pilot": "node tools/mission-images/publish-other-pilot.cjs",
     "audit:duplicates": "node tools/duplicate-audit/audit-brand.cjs",
