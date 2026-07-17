@@ -11,9 +11,9 @@ export default function DealerLogin() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  // Demo access is deliberately limited to the public marketplace routes guarded
-  // with allowBetaSkip. Set this to "false" in Vercel to remove the button.
-  const betaSkipEnabled = import.meta.env.VITE_ENABLE_DEALER_SKIP !== 'false';
+  // Demo access is deliberately limited by DealerGate to browse-only routes.
+  // Keep the entry point visible regardless of stale deployment variables.
+  const betaSkipEnabled = true;
 
   async function login(event: React.FormEvent) {
     event.preventDefault();
