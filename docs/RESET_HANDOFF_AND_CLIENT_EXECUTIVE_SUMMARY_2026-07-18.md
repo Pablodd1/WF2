@@ -2,10 +2,14 @@
 
 ## Reset Handoff and Client Executive Summary
 
-**As of:** July 18, 2026  
-**Repository:** `Pablodd1/wf`  
-**Production:** `https://watchfacts-poc.vercel.app`  
-**Production branch:** `main`  
+**As of:** July 18, 2026
+
+**Repository:** `Pablodd1/wf`
+
+**Production:** `https://watchfacts-poc.vercel.app`
+
+**Production branch:** `main`
+
 **Latest verified merge:** PR #36, merge commit `b9c0c73`
 
 This document is the restart-safe source of truth for continuing the CTO rollout on another computer. It also summarizes the client-facing value delivered during the July 12-18 engineering window.
