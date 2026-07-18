@@ -246,6 +246,13 @@ function inferIntent(line, inherited = null) {
   return inherited || 'WTS';
 }
 
+function inferCondition(line, inherited = null) {
+  const text = String(line || '');
+  if (/\b(?:used|pre[\s-]?owned|worn|second[\s-]?hand)\b/i.test(text)) return 'Used';
+  if (/\b(?:brand\s+new|new|unworn|bnib|nos)\b/i.test(text)) return 'New';
+  return inherited || null;
+}
+
 function segmentDealerMessage(rawMessage) {
   const candidates = [];
   let context = {};
@@ -272,6 +279,7 @@ function segmentDealerMessage(rawMessage) {
         ...context,
         brand_context: inferredBrand || explicitBrand || context.brand_context || null,
         intent_context: inferIntent(line, context.intent_context),
+        condition_context: inferCondition(line, context.condition_context),
       },
       prices: extractPriceObservations(line, context),
     });

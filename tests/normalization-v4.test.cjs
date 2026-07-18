@@ -204,3 +204,13 @@ test('extracts all 13 watches from the Hong Kong inventory fixture', () => {
   assert.equal(candidates[11].context.brand_context, 'Patek Philippe');
   assert.equal(candidates[12].context.brand_context, 'Rolex');
 });
+
+test('explicit listing condition overrides an inherited section condition', () => {
+  const candidates = segmentDealerMessage(`Audemars Piguet Brand New
+15202bc salmon 2019 used full set 855k hkd
+15510ST black N11/2025 New 365k hkd`);
+
+  assert.equal(candidates.length, 2);
+  assert.equal(candidates[0].context.condition_context, 'Used');
+  assert.equal(candidates[1].context.condition_context, 'New');
+});
