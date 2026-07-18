@@ -4,9 +4,9 @@ Date: 2026-07-18
 
 ## Executive decision
 
-The v4.2 bundle parser changes passed the 10,000-parent release gate and are ready for code review and deployment as a separately checkpointed shadow job. They are not approved for automatic child materialization or duplicate suppression yet.
+The v4.2 bundle parser changes passed the 10,000-parent release gate. The exact cohort has now been persisted to the shadow table and reconciled, and a 25-parent child canary has been written to staging. Automatic bulk child materialization, live promotion, and duplicate suppression remain unapproved.
 
-The validation was read-only. No `watch_records`, shadow rows, Trading Floor records, Price Research records, or production review decisions were changed.
+The initial release-gate validation was read-only. The later rollout changed only `normalization_shadow_v4` and `watch_staging`; it did not change `watch_records`, Trading Floor records, Price Research records, or production review decisions.
 
 ## Scope
 
@@ -96,20 +96,46 @@ A new one-shot shadow job, `normalization-v42-bundle-canary`, completed successf
 | Sample no-change / pending | 246 / 754 |
 | Sample dial-ambiguous rows | 22 |
 
-The cursor worker scans the archive by source ID. Therefore, this persisted run validates the v4.2 deployment, lease, checkpoint, and shadow-write path over the first 10,000 archive rows; it is not the same bundle-only cohort used by the read-only release gate. Bundle child materialization remains blocked until a bundle-targeted queue or reconciliation tool persists and compares that exact cohort.
+The cursor worker scans the archive by source ID. Therefore, this persisted run validates the v4.2 deployment, lease, checkpoint, and shadow-write path over the first 10,000 archive rows; it is not the same bundle-only cohort used by the read-only release gate. The archive-cursor run is separate from the exact bundle cohort evidence below.
+
+## Exact bundle persistence and staging evidence
+
+The bundle-targeted tool selected the same first 10,000 ordered bundle parents, reran v4.2 from immutable source messages, persisted only to `normalization_shadow_v4`, refetched the cohort, and compared stable hashes:
+
+| Exact cohort check | Result |
+| --- | ---: |
+| Parents selected / sources found | 10,000 / 10,000 |
+| Child candidates | 115,486 |
+| Exact raw-line lineage | 115,486 (100%) |
+| Persisted shadow rows / exact matches | 10,000 / 10,000 |
+| Persisted mismatches | 0 |
+| Live rows promoted or mutated | 0 |
+
+A bounded 25-parent canary then generated 329 deterministic children and wrote them only to `watch_staging`:
+
+| Staging check | Result |
+| --- | ---: |
+| Parents / source rows | 25 / 25 |
+| Children generated and persisted | 329 / 329 |
+| Missing lineage / persisted rows | 0 / 0 |
+| Persisted mismatches | 0 |
+| Explicitly review-required children | 184 |
+| Verdict / confidence | `PENDING` / `0` |
+
+The dry run caught source-level dial leakage (`15202BC salmon ...` inheriting `Black`). The staging guard now recognizes a known dial term only when it immediately follows the exact reference, preserves the inherited value as evidence, and adds `DIAL_RAW_SOURCE_CONFLICT`. The corrected row stages as `Salmon`; it is not silently approved.
 
 ## Safe rollout sequence
 
-1. Merge and deploy the parser/test changes after CI passes.
-2. Start a new shadow-only job such as `normalization-v42-bundle-canary`; do not mutate `watch_records`.
-3. The 10,000-parent read-only gate is complete; preserve its report as release evidence.
-4. Add a bundle-targeted queue or cohort filter, then persist and reconcile the exact release-gate cohort against the local report.
+1. Parser/test changes are merged and the separately named shadow worker completed.
+2. The 10,000-parent read-only gate and exact shadow reconciliation are complete; preserve their reports as release evidence.
+3. Continue to keep `watch_records` immutable during bundle review.
+4. Bundle-targeted selection and exact 10,000-parent reconciliation are complete.
 5. Confirm Price Research excludes plausibility failures, unresolved prices/currencies, and unsplit parents.
-6. Approve and materialize child records in a bounded batch only after the shadow review passes.
+6. The first 25-parent staging canary is complete; human/catalog review is required before any promotion.
 7. Suppress duplicate parents only after child lineage and counts reconcile.
 
 ## Release condition
 
 Code merge: approved after CI.
 
-Production data mutation: not approved in this report. The read-only 10,000-row gate passed, but persisted shadow output must still reconcile under a separate checkpointed v4.2 job before bounded child materialization is approved.
+Live production promotion: not approved in this report. Shadow reconciliation and the staging-only canary passed, but bulk materialization and customer-facing promotion require human/catalog review evidence.
