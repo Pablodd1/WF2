@@ -81,16 +81,29 @@ Repository-wide lint still reports the previously documented baseline of 154 err
 
 ## Railway status
 
-The Railway service is online, but the current job `normalization-v4-dial-production` is complete at its existing cursor. Logs repeatedly show `processed=0, complete=true`, followed by `lease_busy`. It is not applying this v4.2 bundle work.
+The prior Railway job `normalization-v4-dial-production` remains complete at its existing cursor and was not reused.
 
-Do not reset or reuse that checkpoint. The v4.2 rollout needs a distinct job name/checkpoint so it can be monitored independently and resumed safely.
+A new one-shot shadow job, `normalization-v42-bundle-canary`, completed successfully after PR #41 merged:
+
+| Persisted shadow check | Result |
+| --- | ---: |
+| Rows analyzed | 10,000 |
+| Rows with proposed changes | 7,401 |
+| Last source record ID | `042bf015-795f-4dfe-a232-9d0cdb558255` |
+| Live rows promoted or mutated | 0 |
+| Bounded evidence sample | 1,000 rows |
+| Sample WTS / WTB | 843 / 157 |
+| Sample no-change / pending | 246 / 754 |
+| Sample dial-ambiguous rows | 22 |
+
+The cursor worker scans the archive by source ID. Therefore, this persisted run validates the v4.2 deployment, lease, checkpoint, and shadow-write path over the first 10,000 archive rows; it is not the same bundle-only cohort used by the read-only release gate. Bundle child materialization remains blocked until a bundle-targeted queue or reconciliation tool persists and compares that exact cohort.
 
 ## Safe rollout sequence
 
 1. Merge and deploy the parser/test changes after CI passes.
 2. Start a new shadow-only job such as `normalization-v42-bundle-canary`; do not mutate `watch_records`.
 3. The 10,000-parent read-only gate is complete; preserve its report as release evidence.
-4. Deploy the same cohort through the new shadow-only job and reconcile its persisted shadow output against this local report.
+4. Add a bundle-targeted queue or cohort filter, then persist and reconcile the exact release-gate cohort against the local report.
 5. Confirm Price Research excludes plausibility failures, unresolved prices/currencies, and unsplit parents.
 6. Approve and materialize child records in a bounded batch only after the shadow review passes.
 7. Suppress duplicate parents only after child lineage and counts reconcile.
