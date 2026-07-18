@@ -220,9 +220,11 @@ The v4.2 parser has now passed a read-only 10,000-parent gate covering 115,486 e
 
 The final evidence and rollout boundary are recorded in `docs/BUNDLE_CANARY_V42_2026-07-18.md`. The code is approved for review and a separately checkpointed shadow deployment. Automatic child materialization and duplicate suppression remain unapproved until persisted shadow output reconciles with the read-only report.
 
+PR #41 merged to `main` at merge commit `da85af4`. The separately named Railway one-shot job `normalization-v42-bundle-canary` then persisted 10,000 archive rows with 7,401 proposed changes and no live-row promotion. Its checkpoint is `042bf015-795f-4dfe-a232-9d0cdb558255`. This proves the v4.2 lease/checkpoint/shadow-write path, but the cursor cohort is the first 10,000 archive rows rather than the 10,000 bundle-only parents in the release audit. Do not claim bundle materialization is complete.
+
 1. Review and merge the final 10,000-parent gate corrections after CI passes.
 2. Deploy a distinct shadow-only job such as `normalization-v42-bundle-canary`; do not reuse the completed v4.1 checkpoint.
-3. Reconcile the persisted 10,000-parent shadow output against the final read-only gate.
+3. Add a bundle-targeted queue/filter and reconcile the exact 10,000-parent bundle cohort against the final read-only gate.
 4. Export and review the complete multi-listing queue.
 5. Materialize approved child listings in bounded batches.
 6. Run duplicate suppression review only after children exist.
