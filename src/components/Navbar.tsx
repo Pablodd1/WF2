@@ -3,6 +3,7 @@ import { StatusPill } from './ui/StatusPill';
 import { motion } from 'framer-motion';
 import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { MarketHeader } from './MarketHeader';
 
 interface NavbarProps {
   totalProcessed?: number;
@@ -59,11 +60,13 @@ export function Navbar({
   const hasRuntimeMetrics = typeof throughputRate === 'number' && typeof avgLatency === 'number';
 
   return (
+    <>
+    <MarketHeader compact className="sticky top-0 z-50" />
     <motion.header
       initial={{ y: -56, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.4, ease: [0, 0, 0.2, 1] as [number, number, number, number] }}
-      className="sticky top-0 z-50 h-14 bg-bg-card border-b border-border-default flex items-center justify-between px-5"
+      className="sticky top-[61px] z-40 h-14 bg-bg-card border-b border-border-default flex items-center justify-between px-5"
     >
       {/* Left Group */}
       <div className="flex items-center gap-4">
@@ -145,5 +148,6 @@ export function Navbar({
         </div>}
       </div>
     </motion.header>
+    </>
   );
 }
