@@ -12,6 +12,10 @@ const CURRENCY_ALIASES = [
 ];
 
 const CURRENCY_TOKEN = CURRENCY_ALIASES.map(item => item.pattern).join('|');
+// Dealer shorthand "HK" is accepted only when directly attached to a price.
+// It is intentionally excluded from message/section context because phrases
+// such as "arrive HK" describe location rather than currency.
+const PRICE_CURRENCY_TOKEN = `${CURRENCY_TOKEN}|HK`;
 const MULTIPLIERS = {
   k: 1_000,
   mil: 1_000,
@@ -40,7 +44,7 @@ const BRAND_HEADERS = [
 
 function normalizeCurrencyToken(token) {
   const clean = String(token || '').toUpperCase().replace(/\s/g, '');
-  if (/^(HKD|HDK|HK\$|H\.?K\.?D\.?)$/.test(clean) || /港币|港幣/.test(token)) return 'HKD';
+  if (/^(HKD|HDK|HK|HK\$|H\.?K\.?D\.?)$/.test(clean) || /港币|港幣/.test(token)) return 'HKD';
   if (/^(USD|US\$|U\$)$/.test(clean)) return 'USD';
   if (clean === 'USDT') return 'USDT';
   if (clean === 'EUR' || clean === '€') return 'EUR';
@@ -93,7 +97,7 @@ function extractPriceObservations(text, context = {}) {
   const seen = new Set();
   const line = String(text || '');
 
-  const add = (raw, rawNumber, multiplier, rawCurrency, index, evidence) => {
+  const add = (raw, rawNumber, multiplier, rawCurrency, index, evidence, direction = 'other') => {
     const amount = parseNumber(rawNumber, multiplier);
     const currency = normalizeCurrencyToken(rawCurrency);
     if (!amount || !currency) return;
@@ -110,17 +114,62 @@ function extractPriceObservations(text, context = {}) {
       confidence: 98,
       currency_evidence: evidence,
       index,
+      end: index + raw.length,
+      direction,
+      raw_number: String(rawNumber || ''),
+      had_multiplier: Boolean(multiplier),
     });
   };
 
-  const leftCurrency = new RegExp(`(${CURRENCY_TOKEN})\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?`, 'gi');
-  const rightCurrency = new RegExp(`([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?\\s*(${CURRENCY_TOKEN})`, 'gi');
+  const leftCurrency = new RegExp(`(?<![A-Za-z])(${PRICE_CURRENCY_TOKEN})\\s*[:=]?\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?`, 'gi');
+  const rightCurrency = new RegExp(`(?<![A-Za-z0-9])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?\\s*(${PRICE_CURRENCY_TOKEN})`, 'gi');
 
   for (const match of line.matchAll(leftCurrency)) {
-    add(match[0], match[2], match[3], match[1], match.index, 'explicit_line_currency');
+    const amount = parseNumber(match[2], match[3]);
+    const followedByDateSeparator = /^\s*\//.test(line.slice(match.index + match[0].length));
+    const yearLike = !match[3] && amount >= 1900 && amount <= 2099;
+    if (followedByDateSeparator || yearLike) continue;
+    add(match[0], match[2], match[3], match[1], match.index, 'explicit_line_currency', 'prefix');
   }
   for (const match of line.matchAll(rightCurrency)) {
-    add(match[0], match[1], match[2], match[3], match.index, 'explicit_line_currency');
+    const amount = parseNumber(match[1], match[2]);
+    const precededByDateSeparator = line.slice(0, match.index).trimEnd().endsWith('/')
+      && !match[2]
+      && amount <= 31;
+    const yearLike = !match[2] && amount >= 1900 && amount <= 2099;
+    if (precededByDateSeparator || yearLike) continue;
+    add(match[0], match[1], match[2], match[3], match.index, 'explicit_line_currency', 'suffix');
+  }
+
+  // In "2018 HKD 720,000" both directional regexes touch the same HKD token.
+  // The currency-prefixed amount is the intended price; the preceding value
+  // is commonly a year, limited-edition count, or other watch attribute.
+  const rejectedOverlaps = new Set();
+  for (const suffix of observations.filter(observation => observation.direction === 'suffix')) {
+    const prefix = observations.find(other => (
+      other.direction === 'prefix'
+      && other.currency_original === suffix.currency_original
+      && other.index >= suffix.index
+      && other.index < suffix.end
+    ));
+    if (!prefix) continue;
+
+    // "498k USDT 3.85m HKD" is a dual-currency bridge: the amount consumed by
+    // the USDT prefix is also explicitly paired with the following HKD token.
+    // Preserve the two outward-facing pairs and reject the artificial bridge.
+    const trailingPair = observations.some(other => (
+      other !== suffix
+      && other.direction === 'suffix'
+      && other.currency_original !== prefix.currency_original
+      && other.amount_original === prefix.amount_original
+      && other.index > prefix.index
+      && other.index < prefix.end
+    ));
+    const yearLike = suffix.amount_original >= 1900 && suffix.amount_original <= 2099;
+    const suffixHasExplicitScale = suffix.had_multiplier
+      || /[.,]\d{3}/.test(suffix.raw_number)
+      || (suffix.amount_original >= 10_000 && !yearLike);
+    rejectedOverlaps.add(trailingPair && suffixHasExplicitScale ? prefix : suffix);
   }
 
   // A bare dollar sign inherits an explicit section/message currency. Without
@@ -138,21 +187,26 @@ function extractPriceObservations(text, context = {}) {
     if (bare) add(bare[0], bare[1], bare[2], context.currency_context, bare.index, 'section_currency');
   }
 
-  observations.sort((a, b) => a.index - b.index);
-  observations.forEach((entry, index) => {
+  const accepted = observations.filter(observation => !rejectedOverlaps.has(observation));
+  accepted.sort((a, b) => a.index - b.index);
+  accepted.forEach((entry, index) => {
     entry.price_type = index === 0 ? 'ASK_PRICE' : 'ALT_CURRENCY_PRICE';
     entry.is_primary = index === 0;
     delete entry.index;
+    delete entry.end;
+    delete entry.direction;
+    delete entry.raw_number;
+    delete entry.had_multiplier;
   });
 
   const discount_percent = extractDiscount(line);
   const retail_price = extractRetailPrice(line, discount_percent);
-  if (observations.length && discount_percent != null) {
-    observations[0].discount_percent = discount_percent;
-    observations[0].retail_price = retail_price;
+  if (accepted.length && discount_percent != null) {
+    accepted[0].discount_percent = discount_percent;
+    accepted[0].retail_price = retail_price;
   }
 
-  return observations;
+  return accepted;
 }
 
 function detectBrandHeader(line) {
