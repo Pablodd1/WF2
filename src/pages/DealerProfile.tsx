@@ -7,7 +7,6 @@ interface ProfilePayload {
   dealer: {
     id: string; display_name: string | null; company_name: string | null; country_code: string | null; city: string | null;
     rating: number | null; review_count: number; whatsapp_group_count: number; avatar_url: string | null; profile_summary: string | null;
-    directory_url: string | null;
   };
   stats: { total_posts: number; wts_posts: number; wtb_posts: number; active_listings: number; first_post_at: string | null; last_post_at: string | null; posting_years: number } | null;
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; listing_type: string; listing_date: string | null; created_at: string; raw_message?: string }>;

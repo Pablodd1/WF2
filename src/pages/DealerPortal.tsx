@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, LogOut, Search, ShieldCheck, Store, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BadgeCheck, LogOut, Search, ShieldCheck, Store, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 const portalLinks = [
@@ -70,14 +70,6 @@ export default function DealerPortal() {
             </Link>
           ))}
 
-          <a href="https://watchfacts.com/rated-dealers" target="_blank" rel="noreferrer" className="group flex min-h-48 flex-col justify-between border border-white/12 bg-[#111118] p-6 transition-colors hover:border-[#c9a96e]/55 sm:p-7 md:col-span-2 md:flex-row md:items-end">
-            <div>
-              <div className="flex h-10 w-10 items-center justify-center border border-white/15 text-[#c9a96e]"><BadgeCheck size={19} /></div>
-              <h2 className="mt-7 text-2xl font-semibold">Rated Dealers</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/52">Open the WatchFacts dealer-rating directory for counterparty verification and reputation checks.</p>
-            </div>
-            <span className="mt-8 flex shrink-0 items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#c9a96e] md:ml-8">Open WatchFacts.com <ArrowUpRight size={15} /></span>
-          </a>
         </section>
 
         {betaAccess && (

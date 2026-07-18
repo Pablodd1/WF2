@@ -27,6 +27,7 @@ WatchFacts is a watch-market intelligence platform. The system ingests dealer me
 - Do not discard outliers; flag them and preserve them.
 - Do not load millions of rows into browser memory.
 - Every normalized record must retain lineage to source message, context block or line, parser version, media, and decision evidence.
+- Treat third-party or legacy dealer directories as private reconciliation evidence only. Do not expose their URLs in customer navigation or profiles, and do not create or verify a dealer solely because a directory entry exists.
 
 ## Normalization Prime Directive
 

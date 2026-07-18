@@ -43,6 +43,12 @@
 5. Validate dealer profile counts after lineage backfill.
 6. Run production browser smoke tests after the branch deployment completes.
 
+The rated-dealer URL is an internal research source supplied to assist identity
+reconciliation when a dealer cannot be resolved from WatchFacts data. It is not
+a customer-facing partner link, must not appear in site navigation or dealer
+profiles, and must not be imported as a verified dealer without independent
+matching evidence and approval.
+
 ## Safety conditions
 
 - No source raw message is overwritten.
