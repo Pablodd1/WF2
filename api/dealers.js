@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
   try {
     let query = authorization.client
       .from('dealers')
-      .select('id,slug,display_name,company_name,country_code,city,rating,review_count,whatsapp_group_count,avatar_url,profile_summary,verified_at', { count: 'planned' })
+      .select('id,slug,display_name,company_name,country_code,city,rating,review_count,whatsapp_group_count,avatar_url,profile_summary,verified_at', { count: 'exact' })
       .eq('status', 'VERIFIED')
       .order('rating', { ascending: false, nullsFirst: false })
       .order('display_name', { ascending: true })
