@@ -99,6 +99,28 @@ test('retains an existing structured source price when a marketplace title has n
   assert.equal(result.review_status, 'NO_CHANGE');
 });
 
+test('does not copy a collapsed parent price into bundle children without line prices', () => {
+  const result = analyzeRecord({
+    id: 'bundle-parent-price',
+    raw_message: 'RM010Ti open cert full set\nRM67-01 blue dial\nRM35-03 white dial',
+    brand: 'Richard Mille',
+    reference: 'RM010TI',
+    currency: 'USDT',
+    price_raw: 1_390_000,
+    price_usd: 1_390_000,
+    listing_type: 'WTS',
+  });
+
+  assert.equal(result.candidate_count, 3);
+  assert.ok(result.change_flags.includes('BUNDLE_SPLIT_REQUIRED'));
+  for (const candidate of result.proposed_candidates) {
+    assert.equal(candidate.price_raw, null);
+    assert.equal(candidate.price_usd, null);
+    assert.equal(candidate.currency, null);
+    assert.deepEqual(candidate.prices, []);
+  }
+});
+
 test('proposes a catalog-backed dial only for a deterministic single-dial reference', () => {
   const result = analyzeRecord({
     id: 'dial-1',

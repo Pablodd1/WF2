@@ -205,6 +205,83 @@ test('extracts all 13 watches from the Hong Kong inventory fixture', () => {
   assert.equal(candidates[12].context.brand_context, 'Rolex');
 });
 
+test('accepts HK only beside a price without treating location text as currency context', () => {
+  const suffix = extractPriceObservations('4.2m HK');
+  const prefix = extractPriceObservations('HK 380k');
+  assert.equal(suffix[0].amount_original, 4_200_000);
+  assert.equal(suffix[0].currency_original, 'HKD');
+  assert.equal(prefix[0].amount_original, 380_000);
+  assert.equal(prefix[0].currency_original, 'HKD');
+
+  const locationOnly = segmentDealerMessage('126334 Used 2023 $125000 arrive HK');
+  assert.deepEqual(locationOnly[0].prices, []);
+  assert.equal(locationOnly[0].context.currency_context, undefined);
+});
+
+test('does not absorb an alphanumeric certificate token into an HKD price', () => {
+  const prices = extractPriceObservations('5711/1A white, 2019y, SC330,950k hkd');
+  assert.equal(prices.length, 1);
+  assert.equal(prices[0].amount_original, 950_000);
+  assert.equal(prices[0].currency_original, 'HKD');
+});
+
+test('prefers the amount after a shared currency token over a preceding year or edition count', () => {
+  const year = extractPriceObservations('15202BA yellow NOS 2018 HKD 720,000');
+  const edition = extractPriceObservations('26620IO Black Panther 2021 Ltd 250 HKD 1,450,000');
+  assert.deepEqual(year.map(price => price.amount_original), [720_000]);
+  assert.deepEqual(edition.map(price => price.amount_original), [1_450_000]);
+
+  const explicitPair = extractPriceObservations('105,000HK$/13,500US$');
+  assert.deepEqual(explicitPair.map(price => [price.amount_original, price.currency_original]), [
+    [105_000, 'HKD'],
+    [13_500, 'USD'],
+  ]);
+});
+
+test('keeps both outward prices when a currency token bridges two explicit amounts', () => {
+  const prices = extractPriceObservations('RM65-01 LeBron James N10/25 498k Usdt 3.85m hkd');
+  assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original, price.amount_usd]), [
+    [498_000, 'USDT', 498_000],
+    [3_850_000, 'HKD', 493_590],
+  ]);
+});
+
+test('prefers prefix pairs when a year or date fragment starts a currency chain', () => {
+  const yearChain = extractPriceObservations('New 5072R 2024 HKD 1.545M USDT 200,000');
+  const dateChain = extractPriceObservations('New RM07-01 2025/8HKD 2.04m usdt 260000');
+  assert.deepEqual(yearChain.map(price => [price.amount_original, price.currency_original]), [
+    [1_545_000, 'HKD'],
+    [200_000, 'USDT'],
+  ]);
+  assert.deepEqual(dateChain.map(price => [price.amount_original, price.currency_original]), [
+    [2_040_000, 'HKD'],
+    [260_000, 'USDT'],
+  ]);
+});
+
+test('accepts punctuation between an explicit currency and amount', () => {
+  const prices = extractPriceObservations('5980/60G-001 N8/25 HKD:1340000');
+  assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original]), [
+    [1_340_000, 'HKD'],
+  ]);
+});
+
+test('does not replace a valid price with a following month or year', () => {
+  const month = extractPriceObservations('6007G red $225,000hkd 5/2025');
+  const year = extractPriceObservations('5711/110P $3,200,000hkd 2019');
+  assert.deepEqual(month.map(price => [price.amount_original, price.currency_original]), [
+    [225_000, 'HKD'],
+  ]);
+  assert.deepEqual(year.map(price => [price.amount_original, price.currency_original]), [
+    [3_200_000, 'HKD'],
+  ]);
+});
+
+test('does not parse date fragments as standalone currency prices', () => {
+  assert.deepEqual(extractPriceObservations('5980/60G 12/2025 HKD'), []);
+  assert.deepEqual(extractPriceObservations('5726/1A blue 2025/8 HK'), []);
+});
+
 test('explicit listing condition overrides an inherited section condition', () => {
   const candidates = segmentDealerMessage(`Audemars Piguet Brand New
 15202bc salmon 2019 used full set 855k hkd

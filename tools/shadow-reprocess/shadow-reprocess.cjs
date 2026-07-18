@@ -60,7 +60,11 @@ function analyzeRecord(record) {
   const proposed = candidates.map(candidate => {
     const parsedPrices = candidate.prices || [];
     const sourceCurrencyPrice = parsedPrices.length ? null : sourceCurrencyTextObservation(candidate, record);
-    const retainedSourcePrice = parsedPrices.length || sourceCurrencyPrice ? null : sourcePriceObservation(record);
+    // A collapsed parent price cannot be assigned to an arbitrary child. Only
+    // retain a structured source price when the message resolves to one watch.
+    const retainedSourcePrice = candidates.length === 1 && !parsedPrices.length && !sourceCurrencyPrice
+      ? sourcePriceObservation(record)
+      : null;
     const prices = sourceCurrencyPrice ? [sourceCurrencyPrice] : retainedSourcePrice ? [retainedSourcePrice] : parsedPrices;
     const primary = prices.find(price => price.is_primary) || prices[0] || null;
     const candidateBrand = candidate.context.brand_context || record.brand || null;

@@ -17,6 +17,7 @@
     "audit:smallest-brands": "node tools/brand-qa/audit-smallest-brands.cjs",
     "audit:sources": "node tools/source-activity-audit/audit-source-activity.cjs",
     "export:multilistings": "node tools/multilisting/export-multilistings.cjs",
+    "audit:bundle-canary": "node tools/shadow-reprocess/bundle-canary-report.cjs",
     "admin:provision": "node tools/admin/provision-auth-user.cjs",
     "dealers:stage-sources": "node tools/dealer-lineage/stage-source-candidates.cjs",
     "test:normalization": "node --test tests/normalization-v4.test.cjs tests/dial-normalization.test.cjs tests/market-row-normalization.test.cjs tests/market-stats.test.cjs tests/price-research-eligibility.test.cjs tests/shadow-reprocess.test.cjs tests/normalization-work-queue.test.cjs tests/promotion-policy.test.cjs tests/catalog-confirmation.test.cjs tests/review-decision-policy.test.cjs tests/zero-hallucination-contract.test.cjs"

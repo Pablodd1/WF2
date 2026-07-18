@@ -10,7 +10,11 @@
 
 **Production branch:** `main`
 
-**Latest verified merge:** PR #36, merge commit `b9c0c73`
+**Latest verified merge:** PR #39, merge commit `74d5e0a`
+
+## Latest CTO update - v4.2 bundle canary
+
+The read-only 1,000-parent bundle canary is complete. It preserved all 11,287 candidates and exact raw-line lineage while reducing suspicious sub-$500 parser outputs from 1,558 to 107 (93.1%). No production data was changed. The active Railway cursor job is complete and is not applying v4.2; the next safe step is a distinct 10,000-row shadow-only v4.2 job. Full evidence and rollout conditions are in `docs/BUNDLE_CANARY_V42_2026-07-18.md`.
 
 This document is the restart-safe source of truth for continuing the CTO rollout on another computer. It also summarizes the client-facing value delivered during the July 12-18 engineering window.
 
