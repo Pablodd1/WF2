@@ -200,7 +200,7 @@ This is an equivalent-effort estimate, not a claim of clocked billable hours.
 ### Staged, not promoted
 
 - 337 deterministic dial proposals.
-- Approximately 757,433 bundle/multi-listing source proposals.
+- Approximately 757,433 bundle/multi-listing source proposals. The exact first 10,000 bundle parents are reconciled in shadow, and 329 children from 25 parents are staged as `PENDING` with confidence `0`.
 - 1,580 source company identifiers awaiting rated-dealer reconciliation.
 - Duplicate candidates awaiting bundle splitting and human review.
 
@@ -222,12 +222,12 @@ The final evidence and rollout boundary are recorded in `docs/BUNDLE_CANARY_V42_
 
 PR #41 merged to `main` at merge commit `da85af4`. The separately named Railway one-shot job `normalization-v42-bundle-canary` then persisted 10,000 archive rows with 7,401 proposed changes and no live-row promotion. Its checkpoint is `042bf015-795f-4dfe-a232-9d0cdb558255`. This proves the v4.2 lease/checkpoint/shadow-write path, but the cursor cohort is the first 10,000 archive rows rather than the 10,000 bundle-only parents in the release audit. Do not claim bundle materialization is complete.
 
-1. Review and merge the final 10,000-parent gate corrections after CI passes.
-2. Deploy a distinct shadow-only job such as `normalization-v42-bundle-canary`; do not reuse the completed v4.1 checkpoint.
-3. Add a bundle-targeted queue/filter and reconcile the exact 10,000-parent bundle cohort against the final read-only gate.
-4. Export and review the complete multi-listing queue.
-5. Materialize approved child listings in bounded batches.
-6. Run duplicate suppression review only after children exist.
+1. Completed: merge the v4.2 parser corrections and deploy the separately named shadow worker.
+2. Completed: reconcile the exact 10,000-parent bundle cohort with 10,000/10,000 stable matches.
+3. Completed: stage a 25-parent canary with 329/329 children persisted, 184 explicit review rows, and no live-row changes.
+4. Export the complete multi-listing queue and review/stage later cohorts in checkpointed batches.
+5. Human/catalog-review staged children before any promotion.
+6. Run duplicate suppression only after the relevant child cohort exists and reconciles.
 7. Obtain an authenticated Rated Dealers export and reconcile the 1,580 staged identities.
 8. Backfill `watch_records.dealer_id` from approved matches and validate profile totals.
 9. Expand the image-lineage pilot beyond 100 only after customer-safety QA.
