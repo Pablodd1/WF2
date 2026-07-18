@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { isCustomerSafeFeaturedListing } from '../lib/featuredListings';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Globe2,
   Grid,
@@ -66,7 +66,13 @@ interface TradingFloorResponse {
 
 interface ListingContact {
   contact_available: boolean;
+  dealer_id?: string;
   dealer_name?: string;
+  dealer_profile_url?: string;
+  dealer_rating?: number | null;
+  dealer_review_count?: number;
+  dealer_group_count?: number;
+  dealer_stats?: { active_listings: number; wts_posts: number; wtb_posts: number } | null;
   whatsapp_url?: string;
   reason?: string;
 }
@@ -83,9 +89,10 @@ type ViewMode = 'grid' | 'list';
 export default function TradingFloor() {
   const [searchParams] = useSearchParams();
   const initialFilter = searchParams.get('item') || searchParams.get('type') || 'all';
+  const initialSearch = searchParams.get('q') || '';
   const [activeFilter, setActiveFilter] = useState(initialFilter);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
   const [listings, setListings] = useState<ListingRecord[]>([]);
   const [featuredListings, setFeaturedListings] = useState<ListingRecord[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
@@ -397,6 +404,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const canLoadBenchmark = Boolean(listing.reference && listing.brand && listing.listing_type === 'WTS');
   const [contact, setContact] = useState<ListingContact | null>(null);
+  const [rawMessage, setRawMessage] = useState<string | null>(null);
   const [benchmark, setBenchmark] = useState<ListingBenchmark>({
     loading: canLoadBenchmark,
     count: 0,
@@ -410,6 +418,10 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       .then(response => response.json())
       .then(payload => setContact(payload))
       .catch(error => { if (error?.name !== 'AbortError') setContact({ contact_available: false, reason: 'CONTACT_UNAVAILABLE' }); });
+    fetch(`/api/trading-listing?id=${encodeURIComponent(listing.id)}`, { credentials: 'include', signal: controller.signal })
+      .then(async response => response.ok ? response.json() : null)
+      .then(payload => setRawMessage(payload?.listing?.raw_message || null))
+      .catch(error => { if (error?.name !== 'AbortError') setRawMessage(null); });
 
     if (!canLoadBenchmark) return () => controller.abort();
     const reference = listing.reference as string;
@@ -469,6 +481,11 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Check availability</h2>
+          {contact?.dealer_profile_url && (
+            <Link to={contact.dealer_profile_url} className="mt-4 block border-y py-3 text-sm" style={{ borderColor: BORDER, color: GOLD_BRIGHT }}>
+              View dealer profile{contact.dealer_rating != null ? ` · ${Number(contact.dealer_rating).toFixed(2)} rating` : ''}{contact.dealer_stats ? ` · ${Number(contact.dealer_stats.active_listings).toLocaleString()} active listings` : ''}
+            </Link>
+          )}
           {contact?.contact_available && contact.whatsapp_url ? (
             <>
               <p className="mt-3 text-sm" style={{ color: MUTED }}>Contact {contact.dealer_name || 'the verified dealer'} directly about this item.</p>
@@ -477,7 +494,16 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               </a>
             </>
           ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Dealer contact has not yet been verified for this historical listing.</p>
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>{contact?.dealer_profile_url ? 'This dealer profile is verified; direct WhatsApp contact is awaiting consent or a verified phone.' : 'Dealer identity has not yet been verified for this historical listing.'}</p>
+          )}
+        </div>
+
+        <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Raw source message</h2>
+          {rawMessage ? (
+            <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{rawMessage}</pre>
+          ) : (
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Sign in with a credentialed dealer or administrator account to inspect preserved source evidence.</p>
           )}
         </div>
 

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildComparableCohorts, classifyPrice, summarizePrices } = require('../api/_lib/market-stats.cjs');
+const { buildComparableCohorts, buildDialGroups, classifyPrice, summarizePrices } = require('../api/_lib/market-stats.cjs');
 
 test('uses standard 1.5 IQR fences and preserves outliers separately', () => {
   const result = summarizePrices([100, 101, 102, 103, 104, 105, 500]);
@@ -45,6 +45,19 @@ test('merges dial labels that differ only by case', () => {
   assert.equal(cohorts.length, 1);
   assert.equal(cohorts[0].dial_color, 'Ice Blue');
   assert.equal(cohorts[0].count, 2);
+});
+
+test('groups one dial once while preserving condition counts', () => {
+  const groups = buildDialGroups([
+    { condition: 'New', dial_color: 'Blue' },
+    { condition: 'Used', dial_color: 'Blue' },
+    { condition: null, dial_color: 'blue' },
+    { condition: 'New', dial_color: 'Green' },
+  ]);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].dial_color, 'Blue');
+  assert.equal(groups[0].count, 3);
+  assert.deepEqual(groups[0].condition_counts, { New: 1, Used: 1, Unspecified: 1 });
 });
 
 test('classifies row-level outliers with an auditable reason', () => {

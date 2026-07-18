@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-const LINKS = [
+const PUBLIC_LINKS = [
   { to: '/', label: 'Home' },
   { to: '/trading', label: 'Trading Floor' },
   { to: '/price-research', label: 'Price Research' },
@@ -9,6 +10,22 @@ const LINKS = [
 
 export function MarketNav() {
   const location = useLocation();
+  const [role, setRole] = useState('');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/dealer-auth', { credentials: 'include', signal: controller.signal })
+      .then(async response => response.ok ? response.json() : null)
+      .then(result => setRole(String(result?.user?.role || '')))
+      .catch(error => { if (error?.name !== 'AbortError') setRole(''); });
+    return () => controller.abort();
+  }, []);
+
+  const links = [
+    ...PUBLIC_LINKS,
+    ...(role ? [{ to: '/dealers', label: 'Dealers' }] : []),
+    ...(role === 'admin' ? [{ to: '/dashboard', label: 'Dashboard' }] : []),
+  ];
 
   return (
     <nav className="border-b border-white/10 bg-[#09090d] text-white" aria-label="Marketplace navigation">
@@ -18,7 +35,7 @@ export function MarketNav() {
           <span className="hidden truncate font-serif text-xl sm:block">Curated Luxury</span>
         </Link>
         <div className="flex max-w-full items-center gap-4 overflow-x-auto text-sm sm:gap-6">
-          {LINKS.map(link => {
+          {links.map(link => {
             const active = link.to === '/' ? location.pathname === '/' : location.pathname.startsWith(link.to);
             return (
               <Link

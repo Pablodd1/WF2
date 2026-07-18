@@ -88,5 +88,21 @@ function buildComparableCohorts(rows) {
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
-module.exports = { buildComparableCohorts, classifyPrice, percentile, summarizePrices };
+function buildDialGroups(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const dial_color = normalizeDimension(row.dial_color);
+    const key = dial_color.toLowerCase();
+    if (!groups.has(key)) groups.set(key, { key, dial_color, rows: [], condition_counts: {} });
+    const group = groups.get(key);
+    const condition = normalizeDimension(row.condition);
+    group.rows.push(row);
+    group.condition_counts[condition] = (group.condition_counts[condition] || 0) + 1;
+  }
+  return [...groups.values()]
+    .map(group => ({ ...group, count: group.rows.length }))
+    .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
+module.exports = { buildComparableCohorts, buildDialGroups, classifyPrice, percentile, summarizePrices };
 

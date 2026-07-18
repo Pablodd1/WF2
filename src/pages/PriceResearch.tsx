@@ -68,6 +68,15 @@ interface CohortPoint {
   max_price: number | null;
 }
 
+interface DialGroupPoint {
+  dial_color: string;
+  count: number;
+  condition_counts: Record<string, number>;
+  avg_price: number | null;
+  min_price: number | null;
+  max_price: number | null;
+}
+
 // Real liquidity — either precomputed indicators or a live-derived fallback.
 // NO invented seller/buyer numbers (every field traces to real data).
 interface LiquidityData {
@@ -120,6 +129,7 @@ interface PriceData {
   sample_quality: 'observational' | 'provisional' | 'robust';
   selected_cohort: { condition: string; dial_color: string; count: number };
   cohorts: CohortPoint[];
+  dial_groups?: DialGroupPoint[];
   stats: {
     avg: number; median: number; min: number; max: number; range: number;
     q1: number; q3: number; iqr: number; lower_fence: number | null; upper_fence: number | null;
@@ -488,36 +498,55 @@ export default function PriceResearch() {
               </div>
             </div>
 
-            {data.cohorts.length > 1 && (
+            {(data.dial_groups || []).length > 0 && (
               <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
-                  Every condition and dial group is visible. Select one to update the pricing summary and graph with comparable watches only.
+                  Each dial appears once. Condition is shown and filtered separately; unspecified evidence is never assumed to be used.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {data.cohorts.map(cohort => {
-                    const selected = data.selected_cohort.condition === cohort.condition
-                      && data.selected_cohort.dial_color === cohort.dial_color;
+                  {(data.dial_groups || []).map(group => {
+                    const selected = data.selected_cohort.dial_color === group.dial_color;
+                    const conditionSummary = Object.entries(group.condition_counts || {})
+                      .map(([condition, count]) => `${condition}: ${count}`)
+                      .join(' · ');
                     return (
                       <button
-                        key={`${cohort.condition}-${cohort.dial_color}`}
+                        key={group.dial_color}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => void fetchData(data.reference, cohort.condition, cohort.dial_color, data.brand)}
+                        onClick={() => void fetchData(data.reference, '', group.dial_color, data.brand)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 12px',
                           borderRadius: 8, cursor: 'pointer', backgroundColor: selected ? '#eef1f6' : WHITE,
                           border: `1px solid ${selected ? NAVY : BORDER}`,
                         }}
                       >
-                        <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto', background: dialSwatch(cohort.dial_color), border: '1px solid rgba(0,0,0,0.18)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.35)' }} />
+                        <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto', background: dialSwatch(group.dial_color), border: '1px solid rgba(0,0,0,0.18)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.35)' }} />
                         <span style={{ minWidth: 0, flex: 1 }}>
-                          <span style={{ display: 'block', color: TEXT, fontSize: 13, fontWeight: 700 }}>{cohort.dial_color}</span>
-                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{cohort.condition} · {cohort.count.toLocaleString()} listings</span>
+                          <span style={{ display: 'block', color: TEXT, fontSize: 13, fontWeight: 700 }}>{group.dial_color}</span>
+                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{group.count.toLocaleString()} listings</span>
+                          <span style={{ display: 'block', color: MUTED, fontSize: 10, marginTop: 2 }}>{conditionSummary}</span>
                         </span>
                         <span style={{ color: GREEN, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                          {cohort.avg_price == null ? 'No price' : `$${cohort.avg_price.toLocaleString()}`}
+                          {group.avg_price == null ? 'No price' : `$${group.avg_price.toLocaleString()}`}
                         </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                  {['All conditions', ...Object.keys((data.dial_groups || []).find(group => group.dial_color === data.selected_cohort.dial_color)?.condition_counts || {})].map(condition => {
+                    const selected = data.selected_cohort.condition === condition;
+                    return (
+                      <button
+                        key={condition}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => void fetchData(data.reference, condition === 'All conditions' ? '' : condition, data.selected_cohort.dial_color, data.brand)}
+                        style={{ padding: '7px 11px', borderRadius: 6, border: `1px solid ${selected ? NAVY : BORDER}`, background: selected ? NAVY : WHITE, color: selected ? WHITE : TEXT, fontSize: 12, cursor: 'pointer' }}
+                      >
+                        {condition}
                       </button>
                     );
                   })}
