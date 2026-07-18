@@ -213,20 +213,13 @@ function extractPrice(text) {
     if (m) {
       const n = parseInt(m[1]);
       if (n >= 10000 && n % 500 === 0) {
-        result = { price: n, currency: 'HKD', conf: 0.50, flags: ['bare_number_guessed_hkd'] };
+        result = { price: n, currency: null, conf: 0.35, flags: ['currency_ambiguous'] };
       }
     }
   }
   
   // FIX #2A: Missing K suffix — if price < 1000 and luxury watch, multiply by 1000
-  if (result.price && result.price < 1000 && result.price > 0) {
-    const curr = (result.currency || '').toUpperCase();
-    if (['HKD','USD','USDT'].includes(curr)) {
-      result.price = result.price * 1000;
-      result.flags.push('missing_k_suffix_corrected');
-      result.conf -= 15;
-    }
-  }
+  // Never add a missing K/M multiplier. Ambiguous amounts require review.
   
   // FIX #2C: Sanity check — price < 5000 on luxury watch = human review
   if (result.price && result.price < 5000 && result.price > 0) {
@@ -322,7 +315,7 @@ function extractWatch(text) {
       const { brand, conf: bConf } = detectBrand(clean, null);
       return {
         brand, reference: null, model_name: null, year: null, manufacture_month: null,
-        price_original: priceData.price, currency_original: priceData.currency || 'HKD',
+        price_original: priceData.price, currency_original: priceData.currency || null,
         condition: null, dial_color: null, case_material: null,
         bracelet_material: null, papers: null, box: null, full_set: null,
         movement_type: null, case_size_mm: null,
@@ -394,10 +387,7 @@ function extractWatch(text) {
   }
   
   // FIX #2: price flags → penalize
-  if (priceData.flags.includes('missing_k_suffix_corrected')) {
-    overall -= 0.15;
-    errors.push('price_missing_k_suffix');
-  }
+  // Missing multipliers are not silently repaired.
   if (priceData.flags.includes('european_comma_format')) {
     overall -= 0.10;
     errors.push('price_european_comma');
@@ -573,20 +563,7 @@ module.exports = async (req, res) => {
     }
     
     // Vision enrichment
-    if (enrichVision) {
-      for (const listing of listings) {
-        if (!listing.dial_color && listing.reference) {
-          const refDial = inferDialFromRef(listing.reference);
-          if (refDial) {
-            listing.dial_color = refDial;
-            listing.dial_confidence = 0.40;
-            listing.dial_source = 'reference-suffix';
-            listing.extraction_confidence.overall = Math.round(Math.min(listing.extraction_confidence.overall + 0.05, 1.0) * 100) / 100;
-            stats.visionEnriched++;
-          }
-        }
-      }
-    }
+    // Image/catalog validation is downstream and never overwrites raw claims here.
     
     listings.sort((a,b) => b.extraction_confidence.overall - a.extraction_confidence.overall);
     

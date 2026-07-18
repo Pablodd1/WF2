@@ -120,7 +120,7 @@ function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>):
 
   // Currency detection from raw message if price seems off or missing
   // Skip regex re-parse if priceUSD already present in data (col 5)
-  let originalCurrency = raw.currency || 'USD';
+  let originalCurrency = raw.currency || '';
   let originalPrice = raw.price || 0;
   let finalPrice = effectivePrice;
   // Only run expensive detectCurrency if priceUSD column is missing/zero

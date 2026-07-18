@@ -355,7 +355,7 @@ export async function runPipeline(
   let dialColor = normalizeDialColor(extracted.extractedDial);
   let condition = normalizeCondition(extracted.extractedCondition);
   const year = extracted.extractedYear;
-  const currency = extracted.extractedCurrency || 'USD';
+  const currency = extracted.extractedCurrency || '';
   const originalPrice = extracted.extractedRawPrice;
   const hasBox = extracted.extractedHasBox ?? false;
   const hasPapers = extracted.extractedHasPapers ?? false;

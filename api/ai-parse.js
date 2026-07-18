@@ -7,6 +7,7 @@
  */
 
 const KIMI_URL = 'https://api.moonshot.ai/v1/chat/completions';
+const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
 
 const SYS = `You are a luxury watch expert parsing WhatsApp chat listings.
 Extract ALL watch listings from the message. For each listing extract:
@@ -20,11 +21,13 @@ Extract ALL watch listings from the message. For each listing extract:
 - intent: "SELL" if offering for sale, "BUY" if looking to purchase (WTB, want to buy, looking for, NTQ, ISO), "INQUIRY" if asking a question
 
 Rules:
-1. Reference suffixes indicate dial: LN=Black, LB=Blue, LV=Green, CHNR=Brown, R=Brown, G=Blue, J=Champagne, P=Blue, ST=Blue, OR=Pink, TI=Grey, BC=Black
+1. Do not infer dial color from a reference suffix. Return null unless the raw message states it.
 2. If multiple listings are present, return an ARRAY of objects.
 3. If only one listing, return a single object (not array).
-4. ALWAYS resolve brand from reference number if not stated. Examples: 5164R→Patek Philippe, 116610LV→Rolex, IW328904→IWC, 5146R→Patek Philippe, RM11-03→Richard Mille, 15400ST→Audemars Piguet, 5712/1A→Patek Philippe
-5. Return ONLY valid JSON. No markdown, no explanations.`;
+4. Do not invent a brand. Return null when it is not explicit; catalog reconciliation may validate it later.
+5. Return ONLY valid JSON. No markdown, no explanations.
+
+${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}`;
 
 /** Try Gemini first (handles multi-listing natively), then Kimi line-by-line */
 async function tryAI(text, gKey, kKey, cKey) {

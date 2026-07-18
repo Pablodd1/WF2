@@ -24,6 +24,7 @@
 
 const catalogLib = require('./_lib/catalog.js');
 const { lookupCatalog } = catalogLib;
+const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
 const visionLib = require('./_lib/vision.js');
 const { analyzeImage } = visionLib;
 
@@ -392,7 +393,7 @@ function regexParse(chunk) {
   // Pre-extract currency from the raw text so we can reject reference
   // candidates that are actually price+currency tokens.
   const CURRENCY_FROM_TEXT = (text.match(/\b(hkd|usdt|usd|eur|chf|gbp|sgd)\b/i) || [])[1] ||
-    (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/\$/.test(text) ? 'USD' : null)));
+    (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/US\$|U\$/i.test(text) ? 'USD' : null)));
   
   // Collect ALL candidate references, then pick the best one (catalog match > first match)
   const candidates = [];
@@ -511,26 +512,6 @@ function regexParse(chunk) {
   for (const [re, color] of DIAL_PATTERNS) {
     if (re.test(text)) { out.dialColor = color; break; }
   }
-  // Infer from reference suffix if no explicit dial color found (Rolex-only)
-  if (!out.dialColor && out.reference) {
-    const SUFFIX_DIAL = {
-      'BLNR': 'Blue Black', 'BLRO': 'Red Blue', 'GRNR': 'Green Black',
-      'CHNR': 'Brown', 'RBOW': 'Rainbow',
-      'LB': 'Blue', 'LV': 'Green', 'LN': 'Black', 'ST': 'Blue',
-      'OR': 'Pink', 'TI': 'Grey', 'BC': 'Black',
-    };
-    const refUpper = out.reference.toUpperCase();
-    // Only apply to Rolex 6-digit refs (e.g. 116610LN, 126710BLNR)
-    // Patek/AP/RM suffixes = case material (R=Rose Gold, ST=Steel), NOT dial color
-    const isRolexRef = /^\d{6}[A-Z]{2,5}$/.test(refUpper);
-    if (isRolexRef) {
-      const suffixes = Object.keys(SUFFIX_DIAL).sort((a, b) => b.length - a.length);
-      for (const suf of suffixes) {
-        if (refUpper.endsWith(suf)) { out.dialColor = SUFFIX_DIAL[suf]; break; }
-      }
-    }
-  }
-
   // ── YEAR + WARRANTY (WF_YEAR_WARRANTY) ───────────────────────────────
   // Product-owner rule: batch / warranty-card codes (N5/26, 5/2026, n2.26,
   // 05-26, N11) are NOT the manufacture year — they identify the warranty
@@ -590,14 +571,15 @@ function regexParse(chunk) {
     // Extract currency: m[0] contains the full match like "USDT 57,650" or "$12,500"
     const curMatch = m[0].match(CUR_NAME_RE);
     let cur = curMatch ? curMatch[0].toUpperCase() : null;
+    const ambiguousDollar = m[0].includes('$') && !m[0].includes('HK$') && !/US\$|U\$/i.test(m[0]);
     if (!cur) {
       // Symbol-based fallback
       if (m[0].includes('HK$')) cur = 'HKD';
-      else if (m[0].includes('$')) cur = 'USD';
+      else if (/US\$|U\$/i.test(m[0])) cur = 'USD';
       else if (m[0].includes('€')) cur = 'EUR';
       else if (m[0].includes('£')) cur = 'GBP';
     }
-    if (!cur) continue;
+    if (!cur && !ambiguousDollar) continue;
     let val = parseFloat((m[1] || '').replace(/,/g, ''));
     const suf = (m[2] || '').toLowerCase();
     if (suf === 'm') val *= 1_000_000;
@@ -650,7 +632,7 @@ function regexParse(chunk) {
     
     let rawCur = (m[2] || '').toLowerCase();
     let cur;
-    if (rawCur === '$') cur = 'USD';
+    if (rawCur === '$') cur = null;
     else if (rawCur === 'euro') cur = 'EUR';
     else cur = rawCur.toUpperCase();
     let val = parseFloat((m[1] || '').replace(/,/g, ''));
@@ -678,8 +660,7 @@ function regexParse(chunk) {
       if (suf === 'm') val *= 1_000_000;
       else if (suf === 'k') val *= 1_000;
       if (!isNaN(val) && val >= 100 && val < 100_000_000) {
-        const inferredCur = CURRENCY_FROM_TEXT || 'HKD';  // WF_BARE_CCY_HKD
-        priceEntries.push({ value: Math.round(val), currency: inferredCur, raw: bareM[0], index: bareM.index });
+        priceEntries.push({ value: Math.round(val), currency: CURRENCY_FROM_TEXT, raw: bareM[0], index: bareM.index });
       }
     }
   }
@@ -760,7 +741,7 @@ function regexParse(chunk) {
   if (!out.currency && priceEntries.length === 0) {
     let cur = (text.match(new RegExp(`\b(${CUR_RE})\b`, 'i')) || [])[1];
     if (!cur) {
-      cur = (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/\$/.test(text) ? 'USD' : null)));
+      cur = (/€/.test(text) ? 'EUR' : (/£/.test(text) ? 'GBP' : (/US\$|U\$/i.test(text) ? 'USD' : null)));
     }
     if (cur) out.currency = cur.toUpperCase();
   }
@@ -928,8 +909,10 @@ async function fetchT(url, opts = {}, ms = 12000) {
 }
 
 const SYSTEM_PROMPT = `You are a luxury watch expert parsing WhatsApp dealer listings.
-Return ONLY valid JSON with: reference, dialColor, brand (Patek Philippe|Audemars Piguet|Rolex|Richard Mille|Unknown), condition (New|Used|Unknown), year (4-digit or null), price (number), currency (HKD|USD|USDT|EUR), confidence (0-100).
-Reference suffix -> dial: LN=Black LB=Blue LV=Green CHNR=Brown R=Brown G=Blue J=Champagne ST=Blue. No markdown.`;
+Return ONLY valid JSON with: reference, dialColor, brand, condition, year, price, currency, confidence.
+Use JSON null for missing or ambiguous fields. Do not infer dial from reference suffix. No markdown.
+
+${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}`;
 
 function buildUserPrompt(rawMessage, currentGuess) {
   return `Regex guess: ${JSON.stringify(currentGuess || {})}\nRaw:\n"""\n${rawMessage}\n"""\nReturn ONLY JSON:`;
@@ -1254,8 +1237,8 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
         dialColor: ai.dialColor || parsed.dialColor,
         condition: (ai.condition && ai.condition !== 'Unknown' && ai.condition !== null) ? ai.condition : parsed.condition,
         year: ai.year ?? parsed.year,
-        price: ai.price ?? parsed.price,
-        currency: ai.currency || parsed.currency,
+        price: parsed.price,
+        currency: parsed.currency,
         intent: parsed.intent || 'UNKNOWN',  // preserve regex intent (AI doesn't know this)
         priceMatrix: parsed.priceMatrix || [],  // preserve multi-currency price data
         _priceValidated: parsed._priceValidated,
@@ -1413,6 +1396,9 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
 
   // ───────── VERDICT GATE ─────────
   const identified = !!parsed.reference && parsed.brand !== 'Unknown';
+  const aiAssisted = stages.some(stage => stage.stage === 'AI_TEXT' && stage.engine !== 'skipped');
+  const catalogConfirmed = stages.some(stage => stage.stage === 'CATALOG' && stage.data?.found === true);
+  const completeSellEvidence = !!parsed.price && !!parsed.currency;
   let verdict, reason;
   if (imageVerdict === 'MISMATCH') {
     verdict = 'HUMAN';
@@ -1431,7 +1417,7 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   } else if (!identified && confidence < RECYCLE_FLOOR) {
     verdict = 'RECYCLE';
     reason = 'Not enough information to identify the watch (no clear brand/reference).';
-  } else if (confidence >= APPROVE_THRESHOLD) {
+  } else if (confidence >= APPROVE_THRESHOLD && identified && catalogConfirmed && completeSellEvidence && !aiAssisted) {
     verdict = 'APPROVED';
     reason = `High confidence (${Math.round(confidence)}%) — auto-approved.`;
   } else {

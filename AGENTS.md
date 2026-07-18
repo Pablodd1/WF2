@@ -20,6 +20,18 @@ WatchFacts is a watch-market intelligence platform. The system ingests dealer me
 - Do not load millions of rows into browser memory.
 - Every normalized record must retain lineage to source message, context block or line, parser version, media, and decision evidence.
 
+## Normalization Prime Directive
+
+Price Research uses an evidence-first acceptance standard. "100% accuracy" means no unverified value is admitted; it does not mean every raw listing can be completed automatically.
+
+- The raw listing message is the sole extraction source for price, currency, date, condition, and intent.
+- Missing, ambiguous, or conflicting values must be stored as JSON/SQL `null` with a review reason. Never store the literal string `[NULL]`.
+- Never infer price or currency from geography, phone number, dealer, group, price magnitude, market value, reference, model, or catalog.
+- A bare `$` is ambiguous unless inherited explicit message/section context is preserved with the candidate.
+- Catalog and online evidence may validate identity/configuration only. They cannot create or overwrite listing price, currency, date, condition, or intent.
+- AI output is a suggestion for review. AI-only price or currency values are ineligible for Price Research and cannot auto-approve a record.
+- Silent typo repair and silent `K`/`M` expansion are prohibited. Preserve raw text and route uncertainty to review.
+
 ## Required Phase 1 Behavior
 
 Phase 1 is documentation and audit only. Do not change product behavior, schemas, deployment config, API contracts, or UI behavior unless the user explicitly approves a follow-up fix branch.

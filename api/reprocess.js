@@ -30,6 +30,7 @@
  */
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
 const APPROVE_THRESHOLD = 85;
 const HUMAN_THRESHOLD = 65;
 const BATCH_SIZE = 20; // max records per DeepSeek API call
@@ -42,7 +43,9 @@ const RATES = {
 };
 
 function toUSD(amount, currency) {
-  const rate = RATES[(currency || 'USD').toUpperCase()] || 1.0;
+  if (!amount || !currency) return null;
+  const rate = RATES[String(currency).toUpperCase()];
+  if (!rate) return null;
   return Math.round(amount * rate);
 }
 
@@ -75,8 +78,7 @@ function parseCurrency(text) {
   if (/\bCHF\b/.test(t)) return 'CHF';
   if (/\bSGD\b/.test(t)) return 'SGD';
   if (/\bCNY\b|\bRMB\b/.test(t)) return 'CNY';
-  if (/\bUSD\b|\$/.test(t)) return 'USD';
-  // Default for dealer channels is HKD when no currency stated and price > 50k
+  if (/\bUSD\b|US\$|U\$/.test(t)) return 'USD';
   return null;
 }
 
@@ -279,9 +281,11 @@ IMPORTANT RULES:
 1. Blue-circle emoji (🔵) at start = Patek Philippe listing in this channel
 2. N5/2026 or N3/2026 etc = "New, production year 2026/2023 etc" — condition=New, year=that year
 3. "k" suffix = thousands. "1.83m" = 1,830,000. "990k" = 990,000
-4. No explicit currency? If message context suggests HK dealer and price > 50k → HKD. If "usdt" → USDT.
+4. No explicit currency? Return null. Never infer currency from dealer context or price magnitude.
 5. Reference suffixes indicate material NOT necessarily dial: /1A=steel, /1G=gold, /1R=rose gold, /1P=platinum
-6. Return ONLY the JSON object. No markdown, no explanation.`;
+6. Return ONLY the JSON object. No markdown, no explanation.
+
+${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}`;
 
   const userPrompt = `Regex pre-parse result: ${JSON.stringify(currentGuess)}
 
@@ -348,10 +352,12 @@ IMPORTANT RULES:
 1. Blue-circle emoji (🔵) at start = Patek Philippe listing in this channel
 2. N5/2026 or N3/2026 etc = "New, production year 2026/2023 etc" — condition=New, year=that year
 3. "k" suffix = thousands. "1.83m" = 1,830,000. "990k" = 990,000
-4. No explicit currency? If message context suggests HK dealer and price > 50k → HKD. If "usdt" → USDT.
+4. No explicit currency? Return null. Never infer currency from dealer context or price magnitude.
 5. Reference suffixes indicate material NOT necessarily dial: /1A=steel, /1G=gold, /1R=rose gold, /1P=platinum
 6. Return ONLY the JSON object { "results": [...] }. No markdown, no explanation.
-7. The array MUST have exactly ${n} elements, one per input watch, preserving input order.`;
+7. The array MUST have exactly ${n} elements, one per input watch, preserving input order.
+
+${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}`;
 
   // Build an array of watch entries for the user prompt
   const watchEntries = batchItems.map((item, i) =>
@@ -415,8 +421,6 @@ function mergeLLM(parsed, llm) {
   if (!out.dial && llm.dialColor && llm.dialColor !== 'Unknown') out.dial = llm.dialColor;
   if (!out.condition && llm.condition && llm.condition !== 'Unknown') out.condition = llm.condition;
   if (!out.year && llm.year) out.year = llm.year;
-  if (!out.price && llm.price) out.price = llm.price;
-  if (!out.currency && llm.currency && llm.currency !== 'Unknown') out.currency = llm.currency;
   // LLM confidence boost
   const llmConf = parseInt(llm.confidence) || 0;
   out.confidence = Math.max(out.confidence, llmConf);
@@ -431,6 +435,9 @@ function verdictGate(parsed) {
   const hasPrice = !!(parsed.price && parsed.price > 0);
   const conf = parsed.confidence || 0;
 
+  // AI-assisted identity/configuration remains a suggestion until confirmed.
+  if (parsed.source === 'llm') return (hasRef || hasBrand) ? 'HUMAN' : 'RECYCLE';
+
   // Hard recycle: no ref and no brand
   if (!hasRef && !hasBrand) return 'RECYCLE';
   // Hard recycle: confidence too low
@@ -438,8 +445,6 @@ function verdictGate(parsed) {
 
   // APPROVED: 85+ with ref + brand + price
   if (conf >= APPROVE_THRESHOLD && hasRef && hasBrand && hasPrice) return 'APPROVED';
-  // APPROVED: 85+ with ref + brand (no price but strong otherwise)
-  if (conf >= APPROVE_THRESHOLD && hasRef && hasBrand) return 'APPROVED';
   // HUMAN: 65-84 with ref or brand
   if (conf >= HUMAN_THRESHOLD && (hasRef || hasBrand)) return 'HUMAN';
   // HUMAN: has ref or brand but low confidence
@@ -449,9 +454,8 @@ function verdictGate(parsed) {
 
 // ── Convert priceUSD ──
 function computePriceUSD(parsed) {
-  if (!parsed.price) return null;
-  const cur = (parsed.currency || 'USD').toUpperCase();
-  return toUSD(parsed.price, cur);
+  if (!parsed.price || !parsed.currency) return null;
+  return toUSD(parsed.price, parsed.currency);
 }
 
 // ── Main handler ──

@@ -13,6 +13,8 @@
  * Body: { rawMessage, currentGuess? }
  */
 
+const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -33,7 +35,7 @@ module.exports = async function handler(req, res) {
   const systemPrompt = `You are a luxury watch co-pilot helping a human reviewer fix a record the parser couldn't fully understand.
 
 Your job:
-1. Look at the dealer message and infer what watch they mean
+1. Extract only what the dealer message explicitly supports
 2. If multiple interpretations exist, give the 2-3 most likely
 3. Highlight ambiguities the human should double-check
 4. Use your knowledge of:
@@ -51,13 +53,15 @@ Return JSON with:
   "dialColor": "most likely dial color",
   "condition": "New/Used/Like New",
   "year": number or null,
-  "price": number,
-  "currency": "USD/HKD/etc.",
+  "price": number or null,
+  "currency": "USD/HKD/etc." or null,
   "confidence": 0-100,
   "interpretations": ["interpretation 1", "interpretation 2", "interpretation 3"],
   "ambiguities": ["thing to double-check 1", "thing 2"],
-  "reasoning": "why you picked this"
-}`;
+  "reasoning": "cite the exact raw evidence; identify unsupported fields"
+}
+
+${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}`;
 
   const userPrompt = currentGuess
     ? `Raw dealer message: "${rawMessage}"\n\nCurrent parser guess: ${JSON.stringify(currentGuess)}\n\nHelp the human verify or correct this.`
