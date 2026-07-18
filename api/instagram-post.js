@@ -13,7 +13,7 @@ function generateCaption(watch) {
   const condition = watch.condition || '';
   const year = watch.year || '';
   const price = watch.price ? watch.price.toLocaleString() : '';
-  const currency = watch.currency || 'HKD';
+  const currency = watch.currency || 'Unresolved currency';
 
   let caption = '';
 

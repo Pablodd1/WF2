@@ -10,6 +10,7 @@
  */
 
 const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
+const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
 const APPROVE_THRESHOLD = 85;
 const RECYCLE_FLOOR = 35;
 
@@ -48,7 +49,9 @@ async function refreshRates() {
 }
 
 function toUSD(amount, currency) {
-  const rate = _rates[currency?.toUpperCase()] || 1.0;
+  if (!amount || !currency) return null;
+  const rate = _rates[currency.toUpperCase()];
+  if (!rate) return null;
   return Math.round(amount * rate);
 }
 
@@ -817,7 +820,7 @@ function regexExtract(text) {
   price = kPrice2 || explicitPrice2 || price;
   if (pM2) {
     const cs = (pM2[2] || '').toUpperCase();
-    if (cs === '$' || cs === 'USD') currency = 'USD';
+    if (cs === 'USD') currency = 'USD';
     else if (cs === 'HKD' || cs === 'HK$') currency = 'HKD';
     else if (cs === 'EUR' || cs === '€') currency = 'EUR';
     else if (cs === 'USDT') currency = 'USDT';
@@ -826,7 +829,7 @@ function regexExtract(text) {
     if (/\bhkd\b|hk\$/i.test(text)) currency = 'HKD';
     else if (/\busdt\b/i.test(text)) currency = 'USDT';
     else if (/\beur\b|€/i.test(text)) currency = 'EUR';
-    else if (/\$|usd\b/i.test(text)) currency = 'USD';
+    else if (/\bUSD\b|US\$|U\$/i.test(text)) currency = 'USD';
   }
 
   let confidence = 0;
@@ -855,10 +858,12 @@ Analyze the provided raw message and extract:
 - confidence: Your confidence 0-100.
 
 Rules:
-1. If the brand is omitted but the reference is highly iconic (e.g., '126710', '5711', '15500'), infer the brand.
+1. If the brand is omitted, return null. Catalog reconciliation may validate the reference later.
 2. Map abbreviations: 'VC' -> 'Vacheron Constantin', 'AP' -> 'Audemars Piguet', 'PP' -> 'Patek Philippe', 'JLC' -> 'Jaeger-LeCoultre', 'AL&S' or 'Lange' -> 'A. Lange & Sohne'.
 3. If the message is just generic noise (e.g., 'Brand New Rolex' with no model/reference), return null for reference.
-4. Reference suffix -> dial: LN=Black LB=Blue LV=Green CHNR=Brown R=Brown G=Blue J=Champagne ST=Blue OR=Pink TI=Grey BC=Black.
+4. Do not infer dial from a reference suffix. Return null unless the raw message states the dial.
+
+${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}
 
 Output MUST be a valid JSON object with these exact keys: reference, brand, dialColor, condition, year, price, currency, confidence.`;
 
@@ -1018,6 +1023,7 @@ async function analyzeOne(chunk, ctx) {
 
   let parsed = regexExtract(chunk);
   let confidence = parsed.confidence;
+  let aiAssisted = false;
   stages.push({ stage: 'PARSE', engine: 'regex', confidence, data: { ...parsed }, note: 'code-first extraction' });
 
   const needsAi = !parsed.ref || !parsed.brand || confidence < APPROVE_THRESHOLD;
@@ -1030,10 +1036,11 @@ async function analyzeOne(chunk, ctx) {
         dial: ai.dialColor || parsed.dial,
         condition: ai.condition || parsed.condition,
         year: ai.year ?? parsed.year,
-        price: ai.price ?? parsed.price,
-        currency: ai.currency || parsed.currency,
+        price: parsed.price,
+        currency: parsed.currency,
         confidence: Math.min(ai.confidence ?? confidence, 100),
       };
+      aiAssisted = true;
       confidence = parsed.confidence;
       stages.push({ stage: 'AI_TEXT', engine: 'kimi-k2.6', confidence, data: { ...parsed }, note: 'AI parsed messy text' });
     } catch (e) {
@@ -1044,7 +1051,7 @@ async function analyzeOne(chunk, ctx) {
   const brand = normBrand(parsed.brand);
   const dialColor = normDial(parsed.dial);
   const condition = normCondition(parsed.condition);
-  const currency = parsed.currency || 'USD';
+  const currency = parsed.currency || null;
   const originalPrice = parsed.price;
   const year = parsed.year;
 
@@ -1112,8 +1119,8 @@ async function analyzeOne(chunk, ctx) {
     }
   }
 
-  const priceUSD = originalPrice ? toUSD(originalPrice, currency) : null;
-  stages.push({ stage: 'CURRENCY', engine: 'exchange', confidence, data: { originalPrice, currency, priceUSD, rate: _rates[currency] }, note: `Converted ${currency} to USD` });
+  const priceUSD = originalPrice && currency ? toUSD(originalPrice, currency) : null;
+  stages.push({ stage: 'CURRENCY', engine: 'exchange', confidence, data: { originalPrice, currency, priceUSD, rate: currency ? _rates[currency] : null }, note: priceUSD == null ? 'Currency unresolved; conversion withheld' : `Converted ${currency} to USD` });
 
   const flags = [];
   if (!reference) flags.push('MISSING_REFERENCE');
@@ -1128,7 +1135,7 @@ async function analyzeOne(chunk, ctx) {
   if (!identified && confidence < RECYCLE_FLOOR) {
     verdict = 'RECYCLE';
     reason = 'Not enough information to identify the watch.';
-  } else if (confidence >= APPROVE_THRESHOLD && !outlierFlag) {
+  } else if (confidence >= APPROVE_THRESHOLD && identified && catalogEntry && originalPrice && currency && priceUSD && !outlierFlag && !aiAssisted) {
     verdict = 'APPROVED';
     reason = `High confidence (${Math.round(confidence)}%) — auto-approved.`;
   } else {

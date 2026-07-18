@@ -225,7 +225,7 @@ export function DetailModal({ record, open, onClose, onApprove, onEdit, onFlag, 
                       ${editing ? (editForm.price || 0).toLocaleString() : record.price.toLocaleString()}
                     </div>
                     <div className="text-sm text-text-muted mt-0.5">
-                      {editing ? (editForm.originalCurrency || 'USD') : record.originalCurrency} {record.originalPrice.toLocaleString()}
+                      {editing ? (editForm.originalCurrency || 'Unresolved') : (record.originalCurrency || 'Unresolved')} {record.originalPrice.toLocaleString()}
                     </div>
                   </div>
 
@@ -261,7 +261,8 @@ export function DetailModal({ record, open, onClose, onApprove, onEdit, onFlag, 
                       </div>
                       <div>
                         <span className={labelCls}>Currency</span>
-                        <select value={editForm.originalCurrency || 'USD'} onChange={e => updateField('originalCurrency', e.target.value)} className={inputCls}>
+                        <select value={editForm.originalCurrency || ''} onChange={e => updateField('originalCurrency', e.target.value)} className={inputCls}>
+                          <option value="">Unresolved</option>
                           {CURRENCY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>

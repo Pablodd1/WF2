@@ -76,9 +76,9 @@ function normalizeSymbol(sym: string): string {
     'S$': 'SGD', 'SGD': 'SGD',
     'A$': 'AUD', 'AUD': 'AUD',
     'C$': 'CAD', 'CAD': 'CAD',
-    'US$': 'USD', '$': 'USD',
+    'US$': 'USD',
   };
-  return map[sym] || 'USD';
+  return map[sym] || '';
 }
 
 export function formatCurrencyUSD(amount: number): string {

@@ -113,7 +113,7 @@ export async function enrichRecords(
       year: normalized.year,
       priceUSD: normalized.priceUSD || raw.priceUSD || 0,
       originalPrice: normalized.originalPrice || raw.price || 0,
-      currency: normalized.currency || raw.currency || 'USD',
+      currency: normalized.currency || raw.currency || '',
       hasBox: normalized.hasBox,
       hasPapers: normalized.hasPapers,
       materials: normalized.materials,

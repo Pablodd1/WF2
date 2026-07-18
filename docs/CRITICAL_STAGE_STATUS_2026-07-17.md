@@ -1,5 +1,18 @@
 # Critical Stage Status - 2026-07-17
 
+## Zero-Hallucination Normalization Gate
+
+Normalization accuracy is now enforced as an acceptance gate: unsupported values remain `null` and route to review instead of being completed by inference.
+
+- Bare `$` no longer defaults to USD without preserved explicit context.
+- Missing currency no longer defaults to USD or HKD.
+- AI suggestions cannot fill missing price/currency or auto-approve a priced observation.
+- Missing `K`/`M` multipliers are not silently repaired.
+- Unresolved currency prevents USD conversion and Price Research admission.
+- Catalog and online evidence validate identity/configuration only.
+
+The shared contract lives in `api/_lib/ai-normalization-contract.cjs` and is enforced by `tests/zero-hallucination-contract.test.cjs`.
+
 ## 2026-07-18 follow-up
 
 - The splash is now mounted at the application shell, so direct entry to Dealer Login, Trading Floor, and Price Research shows the same Curated Luxury opening sequence as the homepage.

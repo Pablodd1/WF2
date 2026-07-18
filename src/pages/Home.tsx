@@ -104,14 +104,12 @@ export default function Home() {
             dialColor: ai.dialColor || record.dialColor,
             condition: ai.condition || record.condition,
             year: ai.year ?? record.year,
-            price: ai.price || record.price,
-            originalCurrency: ai.currency || record.originalCurrency,
-            confidence: ai.confidence?.[0] && ai.confidence[0] >= 50
-              ? Math.round(ai.confidence[0])
-              : Math.min(100, record.confidence + 25), // Boost by 25 for human-verified
+            price: record.price,
+            originalCurrency: record.originalCurrency,
+            confidence: record.confidence,
           };
           // Route to correct pipeline: ≥90 auto-approve, 60-89 AI review, <60 human
-          updated.isResidue = updated.confidence < 60;
+          updated.isResidue = true;
           // Update the record in local state (replace in records)
           // Note: records from useWatchData are read-only; edit is cosmetic in this session
           console.log('[Save] Record', record.id, 're-parsed, confidence:', updated.confidence,
@@ -120,13 +118,7 @@ export default function Home() {
       }
     } catch (e) {
       console.error('[Save] AI re-parse failed:', e);
-      // Even if AI fails, mark as human-approved with boosted confidence
-      const updated: WatchRecord = {
-        ...record,
-        confidence: Math.min(100, record.confidence + 15),
-        isResidue: false,
-      };
-      void updated; // read-only dataset, edit is cosmetic
+      // Failure never increases confidence or changes review state.
     }
   }, [records]);
 
