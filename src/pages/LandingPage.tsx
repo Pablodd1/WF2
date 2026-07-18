@@ -114,18 +114,18 @@ export default function LandingPage() {
       <MarketHeader className="sticky top-0" />
 
       <section ref={heroRef} className="relative isolate flex min-h-[68svh] items-center justify-center overflow-hidden border-b border-white/10 bg-black px-5 sm:min-h-[calc(94svh-6rem)] sm:px-8 lg:px-12" aria-label="Curated Luxury">
-        <div ref={heroMediaRef} className="absolute -inset-[5%] z-[-2] origin-center will-change-transform">
+        <div ref={heroMediaRef} className="absolute -inset-[5%] z-[-2] origin-center opacity-45 will-change-transform">
           <video className="h-full w-full object-cover" autoPlay muted loop playsInline preload="metadata" poster="/video/curated-luxury-hero-poster.jpg" aria-hidden="true">
             <source src="/video/curated-luxury-hero.webm" type="video/webm" />
             <source src="/video/curated-luxury-hero.mp4" type="video/mp4" />
           </video>
         </div>
-        <div className="absolute inset-0 z-[-1] bg-[linear-gradient(180deg,rgba(0,0,0,0.3)_0%,rgba(0,0,0,0.16)_45%,rgba(0,0,0,0.52)_100%)]" />
+        <div className="absolute inset-0 z-[-1] bg-[linear-gradient(180deg,rgba(0,0,0,0.72)_0%,rgba(0,0,0,0.58)_46%,rgba(0,0,0,0.78)_100%)]" />
 
         <div className="relative z-10 max-w-full text-center">
           <h1
-            className="bg-[linear-gradient(180deg,#fff4c7_0%,#d9b653_28%,#9b6618_58%,#f4d982_82%,#78500f_100%)] bg-clip-text px-2 font-serif text-[clamp(2.5rem,8vw,8.5rem)] font-semibold leading-[0.9] text-transparent"
-            style={{ letterSpacing: '0.06em', filter: 'drop-shadow(0 3px 1px rgba(44,25,0,.9)) drop-shadow(0 12px 24px rgba(0,0,0,.58))' }}
+            className="px-2 font-serif text-[clamp(2.5rem,8vw,8.5rem)] font-semibold leading-[0.9] text-[#d8bd80]"
+            style={{ letterSpacing: '0.06em' }}
           >
             CURATED LUXURY
           </h1>
