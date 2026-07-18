@@ -2,6 +2,14 @@
 
 These instructions apply to the whole repository.
 
+## Current Continuation Handoff
+
+Before continuing work after July 18, 2026, read
+`docs/RESET_HANDOFF_AND_CLIENT_EXECUTIVE_SUMMARY_2026-07-18.md`. It records the
+latest merged production state, verified counts, client deliverables, staged
+data operations, restart commands, and approval gates. Older dated rollout
+documents remain historical evidence and must not override the newer handoff.
+
 ## Mission
 
 WatchFacts is a watch-market intelligence platform. The system ingests dealer messages, preserves raw evidence, splits messages into candidate listings, classifies WTS/WTB intent, normalizes watches and prices, reconciles references against catalog data, validates media when available, routes uncertainty to review, and powers Trading Floor, Price Research, Admin, and analytics.
