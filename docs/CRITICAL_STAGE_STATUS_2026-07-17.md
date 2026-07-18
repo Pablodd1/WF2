@@ -1,5 +1,16 @@
 # Critical Stage Status - 2026-07-17
 
+## 2026-07-18 follow-up
+
+- The splash is now mounted at the application shell, so direct entry to Dealer Login, Trading Floor, and Price Research shows the same Curated Luxury opening sequence as the homepage.
+- The central homepage statement follows the collection grid and its two customer destinations use dimensional gold treatments on desktop and mobile.
+- Production Trading Floor reports approximately 2,391,989 customer-visible rows through server pagination.
+- Shadow v4 has analyzed 2,631,468 rows. The baseline scan is complete; approximately 2,000,805 changed proposals remain pending review or targeted remediation.
+- Railway was recovered from an orphaned worker lease. The current worker is healthy, but the legacy cursor is complete and the durable queue migration is not yet present in production. It must not be described as actively normalizing historical rows until the queue schema and controlled backfill are applied.
+- A bounded global dial audit scanned 10,000 rows without a table-scan timeout. It sampled 447 unknown dials: 426 unresolved, 11 deterministic proposed corrections, and 10 catalog-ambiguous cases. No production watch row was changed.
+- Price Research production canaries passed for Patek 3712/1A, Patek 5712/1A, Rolex 116500LN, and Rolex 52506. The Rolex 52506 included cohort has a $34,000 minimum; sub-$4,200 observations are retained as excluded evidence and do not affect the market statistics.
+- All 70 targeted normalization, catalog, promotion, queue, dial, price, and review-policy tests pass.
+
 ## Verified production state
 
 - `main` includes the image-showcase and duplicate-audit merges.

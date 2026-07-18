@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { ArrowDown, ArrowRight, BarChart3, Building2, Search, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SocialShareRail } from '@/components/SocialShareRail';
@@ -95,28 +95,6 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const heroRef = useRef<HTMLElement>(null);
   const heroMediaRef = useRef<HTMLDivElement>(null);
-  const splashVideoRef = useRef<HTMLVideoElement>(null);
-  const [showSplash, setShowSplash] = useState(true);
-  const [splashVideoReady, setSplashVideoReady] = useState(false);
-
-  useEffect(() => {
-    const video = splashVideoRef.current;
-    if (video) {
-      video.currentTime = 0;
-      void video.play().catch(() => {
-        // The poster remains visible until the fallback dismisses the splash.
-      });
-    }
-
-    const fallback = window.setTimeout(() => setShowSplash(false), 6500);
-    return () => window.clearTimeout(fallback);
-  }, []);
-
-  useEffect(() => {
-    if (!splashVideoReady) return;
-    const timeout = window.setTimeout(() => setShowSplash(false), 4200);
-    return () => window.clearTimeout(timeout);
-  }, [splashVideoReady]);
 
   useEffect(() => {
     const hero = heroRef.current;
@@ -148,27 +126,6 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-[#080808] text-white">
-      {showSplash && (
-        <div className="fixed inset-0 z-[100] grid place-items-center overflow-hidden bg-[#070706] px-6" role="status" aria-label="Loading Curated Luxury">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(205,167,78,0.24),transparent_48%),linear-gradient(130deg,#070706_5%,#15110a_50%,#070706_92%)]" />
-          <video
-            ref={splashVideoRef}
-            className="relative h-full w-full object-cover sm:object-contain"
-            autoPlay
-            muted
-            playsInline
-            preload="auto"
-            poster="/images/curated-luxury-logo-dark.png"
-            onLoadedData={() => setSplashVideoReady(true)}
-            onPlaying={() => setSplashVideoReady(true)}
-            onEnded={() => setShowSplash(false)}
-            aria-hidden="true"
-          >
-            <source src="/video/curated-luxury-splash.mp4" type="video/mp4" />
-          </video>
-          <span className="absolute bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.28em] text-[#e1c77e]/75">Curated Luxury</span>
-        </div>
-      )}
       <header className="relative z-20 flex min-h-24 items-center justify-between border-b border-white/10 px-5 py-3 sm:px-8 lg:px-12">
         <Link to="/" aria-label="Curated Luxury home">
           <img src="/images/curated-luxury-logo-dark.png" alt="Curated Luxury" className="h-[72px] w-auto max-w-[min(68vw,430px)] object-contain" />
