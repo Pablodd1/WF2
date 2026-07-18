@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ArrowDown, ArrowRight, BarChart3, Building2, Search, ShieldCheck } from 'lucide-react';
+import { ArrowDown, ArrowRight, BarChart3, Boxes, Building2, Gem, Search, ShieldCheck, Store } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SocialShareRail } from '@/components/SocialShareRail';
 
@@ -49,6 +49,24 @@ const services = [
     number: '03',
     title: 'Acquire',
     detail: 'Connect with the market through a discreet, considered path from interest to ownership.',
+  },
+];
+
+const audiences = [
+  {
+    icon: Gem,
+    title: 'Collectors',
+    detail: 'Discover rare objects with the context, market evidence, and discretion needed to collect with conviction.',
+  },
+  {
+    icon: Store,
+    title: 'Dealers',
+    detail: 'Present exceptional inventory, understand current demand, and connect serious clients to the right opportunity.',
+  },
+  {
+    icon: Boxes,
+    title: 'Wholesalers',
+    detail: 'Read supply across the market, compare dated pricing signals, and move inventory through a trusted professional network.',
   },
 ];
 
@@ -120,11 +138,40 @@ export default function LandingPage() {
             CURATED LUXURY
           </h1>
           <div className="mx-auto mt-5 h-px w-40 bg-[linear-gradient(90deg,transparent,#d8bd80,transparent)] sm:w-72" />
+          <p className="mx-auto mt-6 max-w-2xl px-4 text-xs font-medium uppercase leading-6 text-white/72 sm:text-sm" style={{ letterSpacing: '0.12em' }}>
+            A considered marketplace for collectors, dealers, and wholesalers
+          </p>
         </div>
 
         <a href="#collections" aria-label="Scroll to collections" className="absolute bottom-6 right-5 hidden items-center gap-3 text-[10px] font-medium uppercase tracking-[0.12em] text-white/55 transition-colors hover:text-white sm:flex lg:right-12">
           Discover more <ArrowDown size={14} />
         </a>
+      </section>
+
+      <section className="border-b border-white/10 bg-[#080808] px-5 py-16 sm:px-8 sm:py-20 lg:px-12">
+        <div className="mx-auto max-w-[1440px]">
+          <div className="grid gap-8 border-b border-white/10 pb-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-end">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#d8bd80]">One connected market</p>
+              <h2 className="mt-4 text-3xl font-medium leading-tight sm:text-5xl">Built for every side of the trade.</h2>
+            </div>
+            <p className="max-w-2xl text-sm leading-7 text-white/56 lg:justify-self-end">
+              Curated Luxury brings exceptional objects, professional inventory, and market intelligence into one disciplined environment without flattening the different needs of buyers and sellers.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3">
+            {audiences.map(({ icon: Icon, title, detail }, index) => (
+              <div key={title} className="border-b border-white/10 py-8 md:min-h-64 md:border-b-0 md:border-r md:px-8 md:first:pl-0 md:last:border-r-0 md:last:pr-0">
+                <div className="flex items-center justify-between">
+                  <Icon size={22} className="text-[#d8bd80]" />
+                  <span className="font-mono text-[10px] text-white/36">0{index + 1}</span>
+                </div>
+                <h3 className="mt-12 text-2xl font-medium sm:text-3xl">{title}</h3>
+                <p className="mt-4 max-w-sm text-sm leading-6 text-white/55">{detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section id="collections" className="bg-[#0d0d0d] px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-28">
@@ -190,14 +237,14 @@ export default function LandingPage() {
         <div className="mx-auto max-w-[1440px]">
           <div className="grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-24">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8f681b]">A private client perspective</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8f681b]">A connected market perspective</p>
               <h2 className="mt-5 max-w-3xl text-4xl font-medium leading-[1.05] sm:text-6xl">
                 The right object changes the room around it.
               </h2>
             </div>
             <div className="self-end">
               <p className="max-w-xl text-base leading-7 text-black/62 sm:text-lg sm:leading-8">
-                Collecting is personal. Curated Luxury is designed for thoughtful discovery, informed consideration, and discreet access to pieces that are difficult to replace and impossible to ignore.
+                Collecting is personal; the market behind it is connected. Curated Luxury gives collectors a clearer path to discovery while giving dealers and wholesalers a disciplined way to present, compare, and move exceptional inventory.
               </p>
               <Link to="/trading" className="mt-8 inline-flex items-center gap-2 border-b border-black/35 pb-2 text-sm font-semibold transition-colors hover:border-black">
                 View current opportunities <ArrowRight size={16} />
@@ -225,7 +272,7 @@ export default function LandingPage() {
               <h2 className="mt-4 text-3xl font-medium sm:text-5xl">Choose your point of entry.</h2>
             </div>
             <p className="max-w-md text-sm leading-6 text-white/52 sm:justify-self-end">
-              Browse the live marketplace, examine watch-market evidence, or enter the secure dealer workspace.
+              Collectors can browse the live marketplace and watch intelligence. Dealers and wholesalers can enter the secure professional workspace.
             </p>
           </div>
 
