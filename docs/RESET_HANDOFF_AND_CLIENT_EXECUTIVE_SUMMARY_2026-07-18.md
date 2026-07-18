@@ -222,6 +222,26 @@ This is an equivalent-effort estimate, not a claim of clocked billable hours.
 
 ## Multi-listing export: what to do after running the command
 
+### Current workstation diagnosis
+
+The attempted command on July 18 was launched from
+`work/wf` on branch `codex/zero-hallucination-normalization` at commit
+`ae33a08`. That stale checkout does not contain
+`tools/multilisting/export-multilistings.cjs`; no exporter process and no
+`audit-output/multilistings` output were found afterward. Therefore the full
+export did **not** start. Do not treat it as completed.
+
+Run it only from a fresh clone or checkout of `main` containing merge commit
+`89e52d5` or later. Confirm the script first:
+
+```powershell
+git checkout main
+git pull origin main
+Test-Path .\tools\multilisting\export-multilistings.cjs
+```
+
+The last command must return `True`.
+
 The exporter writes locally to the checkout from which it was launched:
 
 ```text
