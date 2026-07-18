@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
   try {
     let query = authorization.client
       .from('dealers')
-      .select('id,slug,display_name,company_name,country_code,city,rating,review_count,whatsapp_group_count,avatar_url,directory_url,profile_summary,verified_at,status,contact_consent');
+      .select('id,slug,display_name,company_name,country_code,city,rating,review_count,whatsapp_group_count,avatar_url,profile_summary,verified_at,status,contact_consent');
     query = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(identity) ? query.eq('id', identity) : query.eq('slug', identity);
     const { data: dealer, error } = await query.maybeSingle();
     if (error) throw error;

@@ -114,6 +114,7 @@ Required order:
 - Scanned 17,000 raw source records and staged 1,580 explicit company identifiers as `PENDING`.
 - No staged identifier was falsely presented as a verified rated dealer.
 - Production currently reports zero verified dealer profiles until the authenticated legacy directory is reconciled.
+- The supplied rated-dealer website is private research assistance only. Do not link customers to it, display its URL on profiles, or create/verify dealers from it without matching evidence and approval.
 
 ### 8. Trading Floor and customer experience
 
