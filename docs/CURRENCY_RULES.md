@@ -13,6 +13,18 @@
 9. Use asking price for analytics.
 10. Compare explicit dual-currency prices for plausibility.
 
+## Explicit HKD Vocabulary
+
+- `HKD`, `HK$`, dotted `H.K.D.`, `港币`, and `港幣` normalize to HKD.
+- `HDK` is accepted as a documented dealer typo for HKD only when it is an
+  explicit currency token in the raw message.
+- `K` and `mil` mean one thousand.
+- `M`, `MN`, `mill`, and `million` mean one million.
+- `W` and `万` mean ten thousand.
+- Currency and multiplier tokens may appear before or after the amount.
+- A multiplier without explicit line currency or inherited section currency
+  remains unresolved.
+
 ## Required Regression Examples
 
 ```text
