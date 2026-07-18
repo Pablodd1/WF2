@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, LogOut, Search, ShieldCheck, Store } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, LogOut, Search, ShieldCheck, Store, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 const portalLinks = [
@@ -13,6 +13,12 @@ const portalLinks = [
     description: 'Browse current dealer inventory, WTS and WTB signals, and source evidence.',
     to: '/trading',
     icon: Store,
+  },
+  {
+    title: 'Dealer Directory',
+    description: 'Review verified counterparties, ratings, market activity, and current inventory.',
+    to: '/dealers',
+    icon: Users,
   },
 ];
 

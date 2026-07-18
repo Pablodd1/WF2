@@ -196,6 +196,14 @@ export default function AdminPage() {
               onClick={() => { window.location.href = '/price-research'; }}
               loading={false}
             />
+            <BulkActionCard
+              title="Separate multi-listings"
+              desc="Review raw bundle messages and their proposed child listings before duplicate suppression"
+              icon={Package}
+              color="text-amber-400"
+              onClick={() => { window.location.href = '/multi-listings'; }}
+              loading={false}
+            />
 
             <div className="flex items-center gap-2 mt-6 mb-2">
               <Package size={14} className="text-gold-primary" />

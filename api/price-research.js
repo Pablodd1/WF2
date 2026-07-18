@@ -7,7 +7,7 @@
 const { getClient } = require('./_lib/supabase');
 const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
 const { lookupCatalog } = require('./_lib/catalog');
-const { buildComparableCohorts, classifyPrice, summarizePrices } = require('./_lib/market-stats.cjs');
+const { buildComparableCohorts, buildDialGroups, classifyPrice, summarizePrices } = require('./_lib/market-stats.cjs');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { segmentDealerMessage } = require('./_lib/normalization-v4.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
@@ -273,12 +273,23 @@ module.exports = async function handler(req, res) {
     const unknownDialCount = normalizedRows.filter(row => isUnknownDial(row.dial_color)).length;
 
     const cohorts = buildComparableCohorts(marketRows);
+    const dialGroups = buildDialGroups(marketRows);
     const requestedCondition = String(req.query.condition || '').trim().toLowerCase();
     const requestedDial = String(req.query.dial || '').trim().toLowerCase();
-    const selectedCohort = cohorts.find(cohort =>
-      (!requestedCondition || cohort.condition.toLowerCase() === requestedCondition)
-      && (!requestedDial || cohort.dial_color.toLowerCase() === requestedDial)
-    ) || cohorts[0] || { condition: 'Unspecified', dial_color: 'Unspecified', rows: [], count: 0 };
+    const selectedDialGroup = dialGroups.find(group =>
+      !requestedDial || group.dial_color.toLowerCase() === requestedDial
+    ) || dialGroups[0] || { dial_color: 'Unspecified', rows: [], count: 0, condition_counts: {} };
+    const selectedRows = requestedCondition && requestedCondition !== 'all'
+      ? selectedDialGroup.rows.filter(row => String(row.condition || 'Unspecified').trim().toLowerCase() === requestedCondition)
+      : selectedDialGroup.rows;
+    const selectedCohort = {
+      condition: requestedCondition && requestedCondition !== 'all'
+        ? (selectedRows[0]?.condition || 'Unspecified')
+        : 'All conditions',
+      dial_color: selectedDialGroup.dial_color,
+      rows: selectedRows,
+      count: selectedRows.length,
+    };
     const listedRows = selectedCohort.rows;
 
     // A deterministic safety floor runs before IQR. Otherwise a malformed low-
@@ -405,6 +416,17 @@ module.exports = async function handler(req, res) {
           avg_price: cohortSummary.analytics_ready ? (cohortSummary.stats?.avg ?? null) : null,
           min_price: cohortSummary.analytics_ready ? (cohortSummary.stats?.min ?? null) : null,
           max_price: cohortSummary.analytics_ready ? (cohortSummary.stats?.max ?? null) : null,
+        };
+      }),
+      dial_groups: dialGroups.map(group => {
+        const groupSummary = summarizeComparableRows(group.rows).summary;
+        return {
+          dial_color: group.dial_color,
+          count: group.count,
+          condition_counts: group.condition_counts,
+          avg_price: groupSummary.analytics_ready ? (groupSummary.stats?.avg ?? null) : null,
+          min_price: groupSummary.analytics_ready ? (groupSummary.stats?.min ?? null) : null,
+          max_price: groupSummary.analytics_ready ? (groupSummary.stats?.max ?? null) : null,
         };
       }),
       methodology: {

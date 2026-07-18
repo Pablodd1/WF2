@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, BarChart3, Eye, Shield, DollarSign, Users, ShoppingBag } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Eye, Shield, DollarSign, Users, ShoppingBag, Layers3 } from 'lucide-react';
 
 interface TabNavProps {
   totalProcessed?: number;
@@ -125,6 +125,21 @@ export function TabNav({ totalProcessed }: TabNavProps) {
           <span className="text-[9px] bg-bg-elevated text-text-muted px-1.5 py-0.5 rounded ml-1">
             Owner
           </span>
+        </NavLink>
+
+        <NavLink
+          to="/multi-listings"
+          className={({ isActive }) =>
+            `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
+              isActive
+                ? 'text-gold-primary border-gold-primary'
+                : 'text-text-muted border-transparent hover:text-text-secondary'
+            }`
+          }
+        >
+          <Layers3 size={14} />
+          Multi Listings
+          <span className="text-[9px] bg-bg-elevated text-text-muted px-1.5 py-0.5 rounded ml-1">Split Review</span>
         </NavLink>
       </div>
     </div>

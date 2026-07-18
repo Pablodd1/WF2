@@ -17,6 +17,9 @@ const DemandSignals = lazy(() => import('@/pages/DemandSignals'));
 const InsightDetails = lazy(() => import('@/pages/InsightDetails'));
 const DealerLogin = lazy(() => import('@/pages/DealerLogin'));
 const DealerPortal = lazy(() => import('@/pages/DealerPortal'));
+const DealerDirectory = lazy(() => import('@/pages/DealerDirectory'));
+const DealerProfile = lazy(() => import('@/pages/DealerProfile'));
+const MultiListings = lazy(() => import('@/pages/MultiListings'));
 
 export default function App() {
   return (
@@ -25,7 +28,7 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/dealer-login" element={<DealerLogin />} />
         <Route path="/dealer" element={<DealerGate allowBetaSkip><DealerPortal /></DealerGate>} />
-        <Route path="/dashboard" element={<DealerGate><OperationsDashboard /></DealerGate>} />
+        <Route path="/dashboard" element={<DealerGate allowedRoles={['admin']}><OperationsDashboard /></DealerGate>} />
         <Route path="/dashboard/legacy" element={<Navigate to="/dashboard" replace />} />
         <Route path="/trading" element={<DealerGate allowBetaSkip><TradingFloor /></DealerGate>} />
         <Route path="/analytics" element={<DealerGate><SourceAnalytics /></DealerGate>} />
@@ -38,7 +41,10 @@ export default function App() {
         <Route path="/study" element={<Navigate to="/clean" replace />} />
         <Route path="/demo" element={<DemoPage />} />
         <Route path="/demo-mode" element={<DemoMode />} />
-        <Route path="/admin" element={<DealerGate><AdminPage /></DealerGate>} />
+        <Route path="/admin" element={<DealerGate allowedRoles={['admin']}><AdminPage /></DealerGate>} />
+        <Route path="/multi-listings" element={<DealerGate allowedRoles={['admin']}><MultiListings /></DealerGate>} />
+        <Route path="/dealers" element={<DealerGate><DealerDirectory /></DealerGate>} />
+        <Route path="/dealers/:dealerId" element={<DealerGate><DealerProfile /></DealerGate>} />
         <Route path="/price-research" element={<DealerGate allowBetaSkip><PriceResearch /></DealerGate>} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
