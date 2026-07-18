@@ -33,7 +33,7 @@ The duplicate scanner now:
 2. Builds signatures from each candidate rather than the collapsed source row.
 3. Excludes unresolved bundle envelopes from duplicate comparison.
 4. Keeps every match involving split lineage review-only.
-5. Persists scan signatures in SQLite and checkpoints after every Supabase page.
+5. Persists the in-memory signature index to a durable checkpoint during the scan.
 
 A 1,000-row Patek validation produced 3,018 bundle child candidates. It kept
 210 unresolved bundle envelopes out of suppression and classified all 1,518

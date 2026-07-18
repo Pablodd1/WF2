@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { auditCandidates } = require('../tools/duplicate-audit/audit-brand.cjs');
+const { auditCandidates } = require('../tools/duplicate-audit/bundle-candidates.cjs');
 
 test('splits bundle rows into candidate-level records before duplicate analysis', () => {
   const row = {
