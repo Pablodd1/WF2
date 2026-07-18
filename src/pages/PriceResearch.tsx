@@ -191,6 +191,10 @@ function dialSwatch(color: string) {
   return 'linear-gradient(135deg, #d8dbe0 0%, #f8f9fa 50%, #b9bec5 100%)';
 }
 
+function conditionLabel(condition: string) {
+  return condition === 'Unknown' || condition === 'Unspecified' ? 'Condition unspecified' : condition;
+}
+
 function dialChartColor(color: string) {
   const swatch = dialSwatch(color);
   return swatch.startsWith('#') ? swatch : '#9aa1aa';
@@ -508,8 +512,8 @@ export default function PriceResearch() {
                   {(data.dial_groups || []).map(group => {
                     const selected = data.selected_cohort.dial_color === group.dial_color;
                     const conditionSummary = Object.entries(group.condition_counts || {})
-                      .map(([condition, count]) => `${condition}: ${count}`)
-                      .join(' · ');
+                      .map(([condition, count]) => `${conditionLabel(condition)}: ${count}`)
+                      .join(' | ');
                     return (
                       <button
                         key={group.dial_color}
@@ -546,7 +550,7 @@ export default function PriceResearch() {
                         onClick={() => void fetchData(data.reference, condition === 'All conditions' ? '' : condition, data.selected_cohort.dial_color, data.brand)}
                         style={{ padding: '7px 11px', borderRadius: 6, border: `1px solid ${selected ? NAVY : BORDER}`, background: selected ? NAVY : WHITE, color: selected ? WHITE : TEXT, fontSize: 12, cursor: 'pointer' }}
                       >
-                        {condition}
+                        {conditionLabel(condition)}
                       </button>
                     );
                   })}
