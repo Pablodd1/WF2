@@ -4,6 +4,7 @@
  * not make the main analytics response unnecessarily large.
  */
 const { getClient } = require('./_lib/supabase');
+const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 
 function collectUrls(value, found = []) {
   if (Array.isArray(value)) {
@@ -70,6 +71,10 @@ module.exports = async function handler(req, res) {
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Listing not found' });
     const rawSource = await resolveRawSource(client, data);
+    const normalized = normalizeMarketRow(
+      { ...data, raw_message: rawSource.text },
+      data.reference,
+    );
 
     const imageUrls = [...new Set([
       ...collectUrls(data.thumbnail_url),
@@ -84,7 +89,9 @@ module.exports = async function handler(req, res) {
         brand: data.brand,
         reference: data.reference,
         price_raw: data.price_raw,
-        price_usd: data.price_usd,
+        price_usd: normalized.analytics_price_usd,
+        stored_price_usd: data.price_usd,
+        price_normalization: normalized.price_normalization,
         currency: data.currency,
         raw_message: rawSource.text,
         raw_message_scope: rawSource.scope,

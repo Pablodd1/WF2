@@ -10,6 +10,8 @@ import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating'
 interface RowData {
   id: string;
   price_usd: number;
+  stored_price_usd?: number | null;
+  price_normalization?: string | null;
   created_at: string;
   listing_date?: string | null;
   dial_color: string | null;
@@ -17,8 +19,6 @@ interface RowData {
   source: string;
   year: number | null;
   is_outlier: boolean;
-  stored_price_usd?: number;
-  price_normalization?: string | null;
   outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' |
     'MISSING_BRAND' | 'MISSING_REFERENCE' | 'CATALOG_MODEL_UNCONFIRMED' | 'MISSING_PRICE' |
     'MISSING_DIAL' | 'CATALOG_DIAL_UNCONFIRMED' | 'CATALOG_DIAL_MISMATCH' |
@@ -39,6 +39,8 @@ interface ListingDetailData {
   reference: string;
   price_raw: number | string | null;
   price_usd: number;
+  stored_price_usd?: number | null;
+  price_normalization?: string | null;
   currency: string | null;
   raw_message: string;
   raw_message_scope: 'original_post' | 'stored_source_message' | 'unavailable';
@@ -1045,7 +1047,16 @@ function ListingDetailModal({ summary, detail, loading, error, onClose, outlierL
   const [copied, setCopied] = useState(false);
   const images = detail?.image_urls || [];
   const observedAt = detail?.listing_date || detail?.created_at || summary.listing_date || summary.created_at;
-  const displayPrice = detail?.price_usd ?? summary.price_usd;
+  // The summary price is the exact value used by the comparable-set and
+  // outlier calculations. A legacy detail row may still contain an older
+  // currency conversion, so it must never replace the analytics value here.
+  const displayPrice = Number.isFinite(Number(summary.price_usd)) && Number(summary.price_usd) > 0
+    ? Number(summary.price_usd)
+    : Number(detail?.price_usd || 0);
+  const storedPrice = detail?.stored_price_usd ?? summary.stored_price_usd;
+  const normalizationReason = summary.price_normalization || detail?.price_normalization;
+  const priceWasCorrected = normalizationReason && Number.isFinite(Number(storedPrice))
+    && Math.round(Number(storedPrice)) !== Math.round(displayPrice);
   const rating = rateMarketPrice(displayPrice, benchmark || null, comparableCount);
 
   const copyRawMessage = async () => {
@@ -1094,7 +1105,12 @@ function ListingDetailModal({ summary, detail, loading, error, onClose, outlierL
               </div>
 
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{detail.brand} {detail.reference}</h1>
-              <div style={{ color: GOLD, fontSize: 26, fontWeight: 800, marginBottom: 28 }}>${displayPrice.toLocaleString()} <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>USD normalized</span></div>
+              <div style={{ color: GOLD, fontSize: 26, fontWeight: 800, marginBottom: priceWasCorrected ? 8 : 28 }}>${displayPrice.toLocaleString()} <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>USD normalized</span></div>
+              {priceWasCorrected && (
+                <div style={{ marginBottom: 24, padding: '9px 11px', borderLeft: `3px solid ${GOLD}`, background: '#fffaf0', color: '#725817', fontSize: 12, lineHeight: 1.45 }}>
+                  Analytics correction applied from the exact reference line. Stored legacy value: ${Number(storedPrice).toLocaleString()}.
+                </div>
+              )}
 
               <DetailCard title="Price rating">
                 <div className="flex items-start gap-4">
