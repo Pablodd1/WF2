@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { MarketHeader } from './MarketHeader';
 
 const PUBLIC_LINKS = [
-  { to: '/', label: 'Home' },
-  { to: '/trading', label: 'Trading Floor' },
-  { to: '/price-research', label: 'Price Research' },
   { to: '/dealer-login', label: 'Dealer Login' },
 ];
 
@@ -28,29 +26,28 @@ export function MarketNav() {
   ];
 
   return (
-    <nav className="border-b border-white/10 bg-[#09090d] text-white" aria-label="Marketplace navigation">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-4 py-3">
-        <Link to="/" className="flex min-w-0 items-center gap-3 text-white">
-          <span className="grid h-12 w-12 shrink-0 place-items-center border border-[#c9a96e]/60 font-serif text-lg text-[#d4b87a]">CL</span>
-          <span className="hidden truncate font-serif text-xl sm:block">Curated Luxury</span>
-        </Link>
-        <div className="flex max-w-full items-center gap-4 overflow-x-auto text-sm sm:gap-6">
-          {links.map(link => {
-            const active = link.to === '/' ? location.pathname === '/' : location.pathname.startsWith(link.to);
-            return (
-              <Link
-                key={link.to}
-                to={link.to}
-                aria-current={active ? 'page' : undefined}
-                className="shrink-0 border-b-2 py-2 transition-colors"
-                style={{ borderColor: active ? '#c9a96e' : 'transparent', color: active ? '#d4b87a' : '#a8a8b3' }}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-    </nav>
+    <div className="bg-[#09090d] text-white">
+      <MarketHeader compact />
+      {links.length > 0 && (
+        <nav className="border-b border-white/10" aria-label="Dealer navigation">
+          <div className="mx-auto flex max-w-7xl items-center justify-end gap-4 overflow-x-auto px-4 py-2 text-xs sm:gap-6 sm:px-6 lg:px-8">
+            {links.map(link => {
+              const active = location.pathname.startsWith(link.to);
+              return (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  aria-current={active ? 'page' : undefined}
+                  className="shrink-0 border-b py-1.5 transition-colors"
+                  style={{ borderColor: active ? '#c9a96e' : 'transparent', color: active ? '#d4b87a' : '#a8a8b3' }}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
+    </div>
   );
 }

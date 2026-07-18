@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { ArrowDown, ArrowRight, BarChart3, Boxes, Building2, Gem, Search, ShieldCheck, Store } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SocialShareRail } from '@/components/SocialShareRail';
+import { MarketHeader } from '@/components/MarketHeader';
 
 const collections = [
   {
@@ -110,16 +111,7 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-[#080808] text-white">
-      <header className="relative z-20 flex min-h-24 items-center justify-between border-b border-white/10 px-5 py-3 sm:px-8 lg:px-12">
-        <Link to="/" aria-label="Curated Luxury home">
-          <img src="/images/curated-luxury-logo-dark.png" alt="Curated Luxury" className="h-[72px] w-auto max-w-[min(68vw,430px)] object-contain" />
-        </Link>
-        <nav className="hidden items-center gap-5 text-xs font-medium text-white/70 sm:flex sm:gap-7">
-          <Link to="/trading" className="transition-colors hover:text-white">Collection</Link>
-          <Link to="/price-research" className="transition-colors hover:text-white">Watch intelligence</Link>
-          <Link to="/dealer-login" className="hidden transition-colors hover:text-white sm:block">Private access</Link>
-        </nav>
-      </header>
+      <MarketHeader className="sticky top-0" />
 
       <section ref={heroRef} className="relative isolate flex min-h-[68svh] items-center justify-center overflow-hidden border-b border-white/10 bg-black px-5 sm:min-h-[calc(94svh-6rem)] sm:px-8 lg:px-12" aria-label="Curated Luxury">
         <div ref={heroMediaRef} className="absolute -inset-[5%] z-[-2] origin-center will-change-transform">
