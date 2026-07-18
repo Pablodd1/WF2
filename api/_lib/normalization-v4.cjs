@@ -121,8 +121,8 @@ function extractPriceObservations(text, context = {}) {
     });
   };
 
-  const leftCurrency = new RegExp(`(?<![A-Za-z])(${PRICE_CURRENCY_TOKEN})\\s*[:=]?\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?`, 'gi');
-  const rightCurrency = new RegExp(`(?<![A-Za-z0-9])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?\\s*(${PRICE_CURRENCY_TOKEN})`, 'gi');
+  const leftCurrency = new RegExp(`(?<![A-Za-z])(${PRICE_CURRENCY_TOKEN})\\s*[:=]?\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
+  const rightCurrency = new RegExp(`(?<![A-Za-z0-9])(?!19\\d{2}\\s*[,;]|20\\d{2}\\s*[,;])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?\\s*(${PRICE_CURRENCY_TOKEN})`, 'gi');
 
   for (const match of line.matchAll(leftCurrency)) {
     const amount = parseNumber(match[2], match[3]);
@@ -174,7 +174,7 @@ function extractPriceObservations(text, context = {}) {
 
   // A bare dollar sign inherits an explicit section/message currency. Without
   // context it remains unresolved instead of silently becoming USD.
-  const dollarPattern = new RegExp(`\\$\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?`, 'gi');
+  const dollarPattern = new RegExp(`\\$\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
   for (const match of line.matchAll(dollarPattern)) {
     const contextCurrency = context.currency_context || null;
     if (contextCurrency) {
@@ -183,8 +183,18 @@ function extractPriceObservations(text, context = {}) {
   }
 
   if (!observations.length && context.currency_context) {
-    const bare = line.match(new RegExp(`\\b(\\d{1,3}(?:[.,]\\d{3})+|\\d+(?:[.,]\\d+)?)\\s*(${MULTIPLIER_TOKEN})\\b`, 'i'));
-    if (bare) add(bare[0], bare[1], bare[2], context.currency_context, bare.index, 'section_currency');
+    const bare = line.match(new RegExp(`\\b(\\d{1,3}(?:[.,]\\d{3})+|\\d+(?:[.,]\\d+)?)\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z])`, 'i'));
+    if (bare) {
+      const multiplier = String(bare[2] || '').toLowerCase();
+      const integerToken = /^\d{4,}$/.test(bare[1]);
+      const millionScale = /^(?:m|mn|mil|mill|million)$/.test(multiplier);
+      // Tokens such as Rolex 14060M are references, not 14.06B prices. When
+      // currency is inherited, leave this ambiguous instead of manufacturing
+      // a price. An explicit adjacent currency still follows the rules above.
+      if (!(integerToken && millionScale)) {
+        add(bare[0], bare[1], bare[2], context.currency_context, bare.index, 'section_currency');
+      }
+    }
   }
 
   const accepted = observations.filter(observation => !rejectedOverlaps.has(observation));

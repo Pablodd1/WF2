@@ -282,6 +282,34 @@ test('does not parse date fragments as standalone currency prices', () => {
   assert.deepEqual(extractPriceObservations('5726/1A blue 2025/8 HK'), []);
 });
 
+test('does not concatenate a comma-delimited year with the following price', () => {
+  const cases = [
+    ['Brand new 26656ti,N12/2024,3.1M hkd ready hk', 3_100_000],
+    ['Brand new 15605sk blue,N4/2025,255K HKD', 255_000],
+    ['Brand new 5990/1r N8/2024,1.99M hkd,ready hk', 1_990_000],
+  ];
+  for (const [raw, amount] of cases) {
+    const prices = extractPriceObservations(raw);
+    assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original]), [
+      [amount, 'HKD'],
+    ]);
+  }
+});
+
+test('does not treat the first letter of a following word as a multiplier', () => {
+  const prices = extractPriceObservations('79010SG-0001 new 2021 NOS HKD 20,000 White Tag');
+  assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original]), [
+    [20_000, 'HKD'],
+  ]);
+});
+
+test('does not treat a reference ending in M as a section-inherited million price', () => {
+  const prices = extractPriceObservations('9??14060M black oys 18y Card 65600', {
+    currency_context: 'HKD',
+  });
+  assert.deepEqual(prices, []);
+});
+
 test('explicit listing condition overrides an inherited section condition', () => {
   const candidates = segmentDealerMessage(`Audemars Piguet Brand New
 15202bc salmon 2019 used full set 855k hkd

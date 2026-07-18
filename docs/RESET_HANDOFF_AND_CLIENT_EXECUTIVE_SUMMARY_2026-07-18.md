@@ -214,9 +214,15 @@ This is an equivalent-effort estimate, not a claim of clocked billable hours.
 
 ## Next execution sequence
 
-1. Regenerate a 1,000-record bundle canary with `v4.2-line-condition`.
-2. Review candidate count, condition, price, currency, reference, and exact line lineage.
-3. Expand the checkpointed shadow rerun only after the canary passes.
+### Latest bundle release gate
+
+The v4.2 parser has now passed a read-only 10,000-parent gate covering 115,486 extracted candidates. Candidate counts were unchanged, every candidate retained exact raw-line lineage, no source rows or references were missing, and 32,181 ambiguous price/currency candidates remained unresolved rather than guessed. The gate found and corrected three additional parser collisions involving comma-delimited dates, following words whose first letter resembled a multiplier, and references such as Rolex `14060M`.
+
+The final evidence and rollout boundary are recorded in `docs/BUNDLE_CANARY_V42_2026-07-18.md`. The code is approved for review and a separately checkpointed shadow deployment. Automatic child materialization and duplicate suppression remain unapproved until persisted shadow output reconciles with the read-only report.
+
+1. Review and merge the final 10,000-parent gate corrections after CI passes.
+2. Deploy a distinct shadow-only job such as `normalization-v42-bundle-canary`; do not reuse the completed v4.1 checkpoint.
+3. Reconcile the persisted 10,000-parent shadow output against the final read-only gate.
 4. Export and review the complete multi-listing queue.
 5. Materialize approved child listings in bounded batches.
 6. Run duplicate suppression review only after children exist.

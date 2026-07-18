@@ -5,8 +5,9 @@ const path = require('node:path');
 const { analyzeRecord } = require('./shadow-reprocess.cjs');
 
 const VERSION = 'v4.2-line-condition';
-const limit = Math.max(1, Math.min(Number(process.env.BUNDLE_CANARY_ROWS || 1000), 5000));
+const limit = Math.max(1, Math.min(Number(process.env.BUNDLE_CANARY_ROWS || 1000), 10000));
 const pageSize = Math.max(50, Math.min(Number(process.env.BUNDLE_CANARY_PAGE_SIZE || 250), 500));
+const sourceConcurrency = Math.max(1, Math.min(Number(process.env.BUNDLE_CANARY_CONCURRENCY || 5), 10));
 const afterId = String(process.env.BUNDLE_CANARY_AFTER_ID || '').trim();
 const outputDir = path.resolve(process.env.BUNDLE_CANARY_OUTPUT || 'audit-output/bundle-canary-v42');
 
@@ -46,13 +47,23 @@ async function fetchShadowRows(baseUrl, key) {
 
 async function fetchSourceRows(baseUrl, key, ids) {
   const rows = [];
-  for (let index = 0; index < ids.length; index += 100) {
-    const batch = ids.slice(index, index + 100);
-    const params = new URLSearchParams({
-      select: 'id,raw_message,brand,reference,price_raw,price_usd,currency,listing_type,dial_color,parser_version',
-      id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
-    });
-    rows.push(...await rest(baseUrl, key, 'watch_records', params));
+  const batches = [];
+  for (let index = 0; index < ids.length; index += 100) batches.push(ids.slice(index, index + 100));
+  for (let index = 0; index < batches.length; index += sourceConcurrency) {
+    const group = batches.slice(index, index + sourceConcurrency);
+    const pages = await Promise.all(group.map(batch => {
+      const params = new URLSearchParams({
+        select: 'id,raw_message,brand,reference,price_raw,price_usd,currency,listing_type,dial_color,parser_version',
+        id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+      });
+      return rest(baseUrl, key, 'watch_records', params);
+    }));
+    rows.push(...pages.flat());
+    process.stderr.write(`${JSON.stringify({
+      event: 'bundle_canary_source_progress',
+      fetched: rows.length,
+      requested: ids.length,
+    })}\n`);
   }
   return rows;
 }
@@ -96,7 +107,9 @@ function summarize(shadowRows, sourceRows) {
     unresolvedPriceCandidates: 0,
     unresolvedCurrencyCandidates: 0,
     lowPriceCandidates: 0,
+    lowPriceCandidatesByEvidence: {},
     millionPlusPriceCandidates: 0,
+    millionPlusPriceCandidatesByEvidence: {},
   };
   const samples = {
     explicitConditionChanges: [],
@@ -169,6 +182,7 @@ function summarize(shadowRows, sourceRows) {
       if (!candidate.currency) summary.unresolvedCurrencyCandidates += 1;
       if (candidate.price_usd && candidate.price_usd < 500) {
         summary.lowPriceCandidates += 1;
+        increment(summary.lowPriceCandidatesByEvidence, candidate.currency_evidence);
         if (samples.lowPrices.length < 50) {
           samples.lowPrices.push({
             source_record_id: source.id,
@@ -177,11 +191,13 @@ function summarize(shadowRows, sourceRows) {
             price_usd: candidate.price_usd,
             price_raw: candidate.price_raw,
             currency: candidate.currency || null,
+            currency_evidence: candidate.currency_evidence || null,
           });
         }
       }
       if (candidate.price_usd && candidate.price_usd >= 1000000) {
         summary.millionPlusPriceCandidates += 1;
+        increment(summary.millionPlusPriceCandidatesByEvidence, candidate.currency_evidence);
         if (samples.millionPlusPrices.length < 50) {
           samples.millionPlusPrices.push({
             source_record_id: source.id,
@@ -190,6 +206,7 @@ function summarize(shadowRows, sourceRows) {
             price_usd: candidate.price_usd,
             price_raw: candidate.price_raw,
             currency: candidate.currency || null,
+            currency_evidence: candidate.currency_evidence || null,
           });
         }
       }
@@ -201,6 +218,7 @@ function summarize(shadowRows, sourceRows) {
             reference: candidate.reference || null,
             price_usd: candidate.price_usd,
             currency: candidate.currency || null,
+            currency_evidence: candidate.currency_evidence || null,
           });
         }
       }
@@ -223,6 +241,7 @@ async function main() {
     normalizationVersion: VERSION,
     readOnly: true,
     afterId: afterId || null,
+    lastSourceId: shadowRows.at(-1)?.source_record_id || null,
     ...result,
   };
   fs.mkdirSync(outputDir, { recursive: true });
