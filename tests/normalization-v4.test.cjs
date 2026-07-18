@@ -38,6 +38,39 @@ test('parses Chinese HKD labels and ten-thousand multipliers without a USD fallb
   assert.equal(prices[0].currency_evidence, 'explicit_line_currency');
 });
 
+test('normalizes explicit HDK typo markers before and after the amount', () => {
+  const prefix = extractPriceObservations('HDK 380K');
+  const suffix = extractPriceObservations('380K HDK');
+  for (const prices of [prefix, suffix]) {
+    assert.equal(prices.length, 1);
+    assert.equal(prices[0].amount_original, 380_000);
+    assert.equal(prices[0].currency_original, 'HKD');
+    assert.equal(prices[0].amount_usd, 48_718);
+    assert.equal(prices[0].currency_evidence, 'explicit_line_currency');
+  }
+});
+
+test('parses explicit mil, mill, and million multipliers on either side of HKD', () => {
+  const cases = [
+    ['HKD 380 mil', 380_000],
+    ['380 mil HKD', 380_000],
+    ['HKD 1.2 mill', 1_200_000],
+    ['1.2 million HKD', 1_200_000],
+  ];
+
+  for (const [raw, expected] of cases) {
+    const prices = extractPriceObservations(raw);
+    assert.equal(prices.length, 1, raw);
+    assert.equal(prices[0].amount_original, expected, raw);
+    assert.equal(prices[0].currency_original, 'HKD', raw);
+  }
+});
+
+test('does not assign a currency to a multiplier without explicit or inherited evidence', () => {
+  assert.deepEqual(extractPriceObservations('380 mil'), []);
+  assert.deepEqual(extractPriceObservations('1.2 million'), []);
+});
+
 test('inherits Chinese HKD section context for bare dollar prices', () => {
   const candidates = segmentDealerMessage('\u6e2f\u5e01\n126500 White N5/26 $283000');
   assert.equal(candidates.length, 1);
