@@ -31,6 +31,15 @@ test('uses the claimed reference when catalog normalization adds a variant suffi
   assert.equal(result.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
 });
 
+test('keeps an explicit Patek USD amount instead of a legacy double conversion', () => {
+  const result = normalizeMarketRow({
+    price_usd: 31917,
+    raw_message: '5712/1R Used 2024 Fullset HKD1,920,000 / USD249,350',
+  }, '5712/1R');
+  assert.equal(result.analytics_price_usd, 249350);
+  assert.equal(result.price_normalization, 'EXPLICIT_USD_FROM_REFERENCE_LINE');
+});
+
 test('reads an explicit USD equivalent from the short multiline listing block', () => {
   const result = normalizeMarketRow(
     { price_usd: 1305000, raw_message: '5712/1A blue\n2024 Full set\nNew Buckle\nHKD 1.305m\nusdt 168k' },
