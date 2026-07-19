@@ -243,7 +243,7 @@ async function scan() {
       counts.mismatchRows += 1;
       bump(counts.bySeverity, finding.severity);
       bump(counts.byReason, finding.price_normalization);
-      bump(counts.byBrand, finding.brand);
+      bump(counts.byBrand, String(finding.brand || 'UNKNOWN').trim().toUpperCase());
       for (const flag of finding.flags) bump(counts.byFlag, flag);
       if (finding.canary_eligible) {
         counts.canaryEligible += 1;
