@@ -18,6 +18,7 @@ const {
 } = require('./_lib/normalization-v4.cjs');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { requireServiceToken } = require('./_lib/require-service-token.cjs');
+const { sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -827,15 +828,16 @@ module.exports = async function handler(req, res) {
       );
       if (!resp.ok) throw new Error(`Supabase returned ${resp.status}`);
       const records = await resp.json();
+      const customerRecords = Array.isArray(records) ? records.map(sanitizeTradingRecord) : [];
       const contentRange = resp.headers.get('content-range') || '';
       const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
       return res.status(200).json({
-        count: Array.isArray(records) ? records.length : 0,
+        count: customerRecords.length,
         total,
         page,
         pageSize,
         totalIsEstimate: true,
-        records: Array.isArray(records) ? records : [],
+        records: customerRecords,
         status: 'ok',
         accessMode: serviceKey ? 'server_key' : 'publishable_read_only',
       });

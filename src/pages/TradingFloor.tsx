@@ -54,6 +54,8 @@ interface ListingRecord {
   has_images: boolean;
   thumbnail_url: string | null;
   region: string | null;
+  data_quality_issues?: string[];
+  data_quality_review_required?: boolean;
 }
 
 interface TradingFloorResponse {
@@ -371,6 +373,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       <div className="mt-5 min-h-[56px]">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
           <span>{listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}</span>
+          {listing.data_quality_review_required && <span className="rounded-full border px-2 py-0.5" style={{ borderColor: '#B7791F', color: '#F6C453' }}>Data under review</span>}
         </div>
         <button
           type="button"
@@ -473,6 +476,12 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: BORDER }}>{value}</span>
             ))}
           </div>
+
+          {listing.data_quality_review_required && (
+            <p className="mt-5 border-l-2 pl-3 text-sm leading-6" style={{ borderColor: '#B7791F', color: '#F6C453' }}>
+              One or more normalized fields were withheld because they conflict with the source data. The original listing remains preserved for review.
+            </p>
+          )}
 
           <div className="mt-6 text-[15px]" style={{ color: INK }}>
               <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
