@@ -8,8 +8,8 @@ function compact(value) {
 
 function explicitAmount(line, currencies) {
   const labels = currencies.join('|');
-  const before = new RegExp(`(?:${labels})\\s*[:=$-]?\\s*([\\d][\\d.,]*)\\s*(K|M|MN|W|万)?`, 'i');
-  const after = new RegExp(`([\\d][\\d.,]*)\\s*(K|M|MN|W|万)?\\s*(?:${labels})`, 'i');
+  const before = new RegExp(`(?:${labels})\\s*[:=$-]?\\s*([\\d][\\d.,]*)\\s*(K|M|MN|W|\\u4E07)?(?![\\dA-Z])`, 'i');
+  const after = new RegExp(`([\\d][\\d.,]*)\\s*(K|M|MN|W|\\u4E07)?\\s*(?:${labels})`, 'i');
   const match = line.match(before) || line.match(after);
   return match ? parseNumber(match[1], match[2]) : null;
 }
@@ -43,7 +43,8 @@ function referenceBlock(rawMessage, reference) {
 }
 
 function normalizeMarketRow(row, reference) {
-  const stored = Number(row.price_usd);
+  const parsedStored = Number(row.price_usd);
+  const stored = Number.isFinite(parsedStored) && parsedStored > 0 ? parsedStored : null;
   const line = referenceBlock(row.raw_message, reference);
   if (!line) return { ...row, analytics_price_usd: stored, price_normalization: null };
   const usd = explicitAmount(line, ['USDT', 'USD', 'US\\$', 'U\\$']);
@@ -51,7 +52,7 @@ function normalizeMarketRow(row, reference) {
     const converted = Math.round(usd);
     return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_USD_FROM_REFERENCE_LINE' : null };
   }
-  const hkd = explicitAmount(line, ['HKD', 'HK\\$']);
+  const hkd = explicitAmount(line, ['HKD', 'HDK', 'HK\\$']);
   if (hkd) {
     const converted = Math.round(hkd / 7.8);
     return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_HKD_FROM_REFERENCE_LINE' : null };

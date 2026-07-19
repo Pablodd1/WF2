@@ -48,3 +48,36 @@ test('reads an explicit USD equivalent from the short multiline listing block', 
   assert.equal(result.analytics_price_usd, 168000);
   assert.equal(result.price_normalization, 'EXPLICIT_USD_FROM_REFERENCE_LINE');
 });
+test('recovers an explicit HKD price when the stored USD price is null', () => {
+  const result = normalizeMarketRow({
+    price_usd: null,
+    price_raw: null,
+    currency: null,
+    raw_message: '5712/1A blue 2024 HDK 871k',
+  }, '5712/1A');
+  assert.equal(result.analytics_price_usd, 111667);
+  assert.equal(result.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
+});
+
+test('keeps an unsupported structured currency unresolved', () => {
+  const result = normalizeMarketRow({
+    price_usd: null,
+    price_raw: 100000,
+    currency: 'CNY',
+    raw_message: '5712/1A blue full set',
+  }, '5712/1A');
+  assert.equal(result.analytics_price_usd, null);
+  assert.equal(result.price_normalization, null);
+});
+
+test('does not treat a repeated reference after HKD as the HKD amount', () => {
+  const result = normalizeMarketRow(
+    {
+      price_usd: 365000,
+      raw_message: '15202bc salmon 2019 used full set 855k hkd\n15202bc salmon 2021 Brand New 885k hkd',
+    },
+    '15202BC',
+  );
+  assert.equal(result.analytics_price_usd, 109615);
+  assert.equal(result.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
+});
