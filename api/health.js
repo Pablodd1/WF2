@@ -1,58 +1,23 @@
-/**
- * GET /api/health
- * Health check endpoint for WatchFacts monitoring.
- */
+'use strict';
+
 module.exports = async function handler(req, res) {
-  const fs = require('fs');
-  const path = require('path');
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const status = {
-    status: 'ok',
-    service: 'watchfacts-poc',
-    timestamp: new Date().toISOString(),
-    checks: {},
-  };
-
-  // Check enriched_refs.json (catalog)
-  try {
-    const catalogPath = path.resolve(process.cwd(), 'public', 'enriched_refs.json');
-    const raw = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
-    status.checks.catalog = {
-      ok: true,
-      refs: Array.isArray(raw) ? raw.length : 'unknown',
-    };
-  } catch (e) {
-    status.checks.catalog = { ok: false, error: e.message };
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+  if (!supabaseUrl || !serviceKey) {
+    return res.status(503).json({ status: 'degraded', database: 'not_configured' });
   }
 
-  // Check parsedWatches.json (dataset)
   try {
-    const dataPath = path.resolve(process.cwd(), 'public', 'parsedWatches.json');
-    const raw = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-    status.checks.dataset = {
-      ok: true,
-      records: Array.isArray(raw) ? raw.length : 'unknown',
-    };
-  } catch (e) {
-    status.checks.dataset = { ok: false, error: e.message };
+    const response = await fetch(`${supabaseUrl}/rest/v1/watch_records?select=id&limit=1`, {
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) throw new Error(`database returned ${response.status}`);
+    return res.status(200).json({ status: 'ok', database: 'reachable', timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('[health] Database probe failed:', error.message);
+    return res.status(503).json({ status: 'degraded', database: 'unreachable', timestamp: new Date().toISOString() });
   }
-
-  // Check Supabase env
-  status.checks.supabase = {
-    ok: !!(process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL),
-  };
-
-  // Check AI provider keys (presence only)
-  status.checks.aiProviders = {
-    anthropic: !!process.env.ANTHROPIC_API_KEY,
-    openai: !!process.env.OPENAI_API_KEY,
-    deepseek: !!process.env.DEEPSEEK_API_KEY,
-    gemini: !!process.env.GEMINI_API_KEY,
-    kimi: !!process.env.KIMI_API_KEY,
-  };
-
-  const allOk = status.checks.catalog.ok && status.checks.dataset.ok;
-  if (!allOk) status.status = 'degraded';
-
-  res.status(200).json(status);
-}
+};

@@ -26,7 +26,8 @@
     "admin:provision": "node tools/admin/provision-auth-user.cjs",
     "dealers:stage-sources": "node tools/dealer-lineage/stage-source-candidates.cjs",
     "audit:dealer-reconciliation": "node tools/dealer-lineage/audit-reconciliation.cjs",
-    "test:normalization": "node --test tests/normalization-v4.test.cjs tests/dial-normalization.test.cjs tests/market-row-normalization.test.cjs tests/market-stats.test.cjs tests/price-research-eligibility.test.cjs tests/shadow-reprocess.test.cjs tests/normalization-work-queue.test.cjs tests/promotion-policy.test.cjs tests/catalog-confirmation.test.cjs tests/review-decision-policy.test.cjs tests/zero-hallucination-contract.test.cjs tests/bundle-cohort.test.cjs"
+    "test:normalization": "node --test tests/normalization-v4.test.cjs tests/dial-normalization.test.cjs tests/market-row-normalization.test.cjs tests/market-stats.test.cjs tests/price-research-eligibility.test.cjs tests/shadow-reprocess.test.cjs tests/normalization-work-queue.test.cjs tests/promotion-policy.test.cjs tests/catalog-confirmation.test.cjs tests/review-decision-policy.test.cjs tests/zero-hallucination-contract.test.cjs tests/bundle-cohort.test.cjs",
+    "test:security": "node --test tests/service-token.test.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

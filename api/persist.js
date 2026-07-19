@@ -18,6 +18,7 @@
  */
 
 const BATCH_SIZE = 500;
+const { authorizeMutation } = require('./_lib/authorize-mutation.cjs');
 
 /**
  * Split an array into chunks of at most `size` elements.
@@ -111,6 +112,7 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
+  if (!await authorizeMutation(req, res, new Set(['reviewer', 'admin']))) return;
 
   // ── Env vars ────────────────────────────────────────────────
   const supabaseUrl = process.env.SUPABASE_URL;
