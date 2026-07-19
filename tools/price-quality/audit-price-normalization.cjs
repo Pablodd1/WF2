@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { normalizeMarketRow, referenceBlock } = require('../../api/_lib/market-row-normalization.cjs');
+const { segmentDealerMessage } = require('../../api/_lib/normalization-v4.cjs');
 
 const DEFAULT_OUTPUT = 'audit-output/price-normalization/mismatches.json';
 const DEFAULT_CSV_OUTPUT = 'audit-output/price-normalization/mismatches.csv';
@@ -10,6 +11,13 @@ const DEFAULT_PAGE_SIZE = 500;
 const DEFAULT_MAX_ROWS = 5000;
 const DEFAULT_MIN_DELTA_PCT = 5;
 const DEFAULT_SAMPLE_LIMIT = 200;
+const DEFAULT_CANARY_LIMIT = 100;
+const CANARY_POLICY_VERSION = 'price-canary-v2-reference-context';
+
+const AUTOMATIC_EVIDENCE = new Set([
+  'EXPLICIT_HKD_FROM_REFERENCE_LINE',
+  'EXPLICIT_USD_FROM_REFERENCE_LINE',
+]);
 
 function required(name) {
   const value = process.env[name];
@@ -74,6 +82,29 @@ function classifyMismatch(row, normalizedPrice, normalizationReason, evidenceLin
   };
 }
 
+function evaluateCanaryEligibility(row, finding) {
+  const exclusions = [];
+  const candidates = segmentDealerMessage(row.raw_message || '');
+  const candidateCount = candidates.length;
+  const sourceReference = compact(row.reference);
+  const candidateReference = compact(candidates[0]?.reference);
+
+  if (String(row.listing_type || '').toUpperCase() !== 'WTS') exclusions.push('NOT_WTS');
+  if (!row.brand || /^UNKNOWN$/i.test(String(row.brand).trim())) exclusions.push('UNKNOWN_BRAND');
+  if (!AUTOMATIC_EVIDENCE.has(finding.price_normalization)) exclusions.push('NOT_EXPLICIT_LINE_CURRENCY');
+  if (candidateCount !== 1) exclusions.push('BUNDLE_OR_MULTILISTING');
+  if (candidateCount === 1 && sourceReference !== candidateReference) exclusions.push('REFERENCE_CONTEXT_MISMATCH');
+  if (finding.flags.includes('REPEATED_REFERENCE_BLOCK_REVIEW')) exclusions.push('REPEATED_REFERENCE');
+  if (finding.flags.includes('NORMALIZED_PRICE_BELOW_LUXURY_FLOOR')) exclusions.push('BELOW_LUXURY_FLOOR');
+  if (!finding.evidence_line) exclusions.push('NO_REFERENCE_LINE_EVIDENCE');
+
+  return {
+    canary_eligible: exclusions.length === 0,
+    candidate_count: candidateCount,
+    canary_exclusions: exclusions,
+  };
+}
+
 function auditRow(row, options = {}) {
   const minDeltaPct = options.minDeltaPct ?? DEFAULT_MIN_DELTA_PCT;
   const stored = Number(row.price_usd);
@@ -88,7 +119,7 @@ function auditRow(row, options = {}) {
 
   const evidenceLine = referenceBlock(row.raw_message, row.reference);
   const classification = classifyMismatch(row, normalizedPrice, normalized.price_normalization, evidenceLine);
-  return {
+  const finding = {
     id: row.id,
     brand: row.brand || null,
     reference: row.reference || null,
@@ -105,6 +136,7 @@ function auditRow(row, options = {}) {
     evidence_line: evidenceLine,
     raw_message_preview: String(row.raw_message || '').slice(0, 500),
   };
+  return { ...finding, ...evaluateCanaryEligibility(row, finding) };
 }
 
 function bump(map, key) {
@@ -180,18 +212,22 @@ async function scan() {
   const maxRows = numberFromEnv('PRICE_AUDIT_MAX_ROWS', DEFAULT_MAX_ROWS, 1, 500000);
   const minDeltaPct = numberFromEnv('PRICE_AUDIT_MIN_DELTA_PCT', DEFAULT_MIN_DELTA_PCT, 0.01, 100);
   const sampleLimit = numberFromEnv('PRICE_AUDIT_SAMPLE_LIMIT', DEFAULT_SAMPLE_LIMIT, 1, 10000);
+  const canaryLimit = numberFromEnv('PRICE_AUDIT_CANARY_LIMIT', DEFAULT_CANARY_LIMIT, 1, 1000);
   const outputPath = path.resolve(process.env.PRICE_AUDIT_OUTPUT || DEFAULT_OUTPUT);
   const csvPath = path.resolve(process.env.PRICE_AUDIT_CSV_OUTPUT || DEFAULT_CSV_OUTPUT);
 
   let scanned = 0;
   let lastId = '';
   const samples = [];
+  const canaryCandidates = [];
   const counts = {
     mismatchRows: 0,
     bySeverity: {},
     byReason: {},
     byFlag: {},
     byBrand: {},
+    canaryEligible: 0,
+    byCanaryExclusion: {},
   };
 
   while (scanned < maxRows) {
@@ -209,6 +245,12 @@ async function scan() {
       bump(counts.byReason, finding.price_normalization);
       bump(counts.byBrand, finding.brand);
       for (const flag of finding.flags) bump(counts.byFlag, flag);
+      if (finding.canary_eligible) {
+        counts.canaryEligible += 1;
+        if (canaryCandidates.length < canaryLimit) canaryCandidates.push(finding);
+      } else {
+        for (const exclusion of finding.canary_exclusions) bump(counts.byCanaryExclusion, exclusion);
+      }
       if (samples.length < sampleLimit) samples.push(finding);
     }
 
@@ -232,9 +274,23 @@ async function scan() {
       maxRows,
       minDeltaPct,
       sampleLimit,
+      canaryLimit,
     },
     counts,
     samples,
+    canaryCandidates,
+    canaryReleaseGate: {
+      policyVersion: CANARY_POLICY_VERSION,
+      mode: 'READ_ONLY_PROPOSAL',
+      productionWrites: false,
+      requiredBeforeWrite: [
+        'Review every canary evidence line against its raw source message.',
+        'Confirm no canary source record is a bundle, repeated-reference block, or sub-$500 normalized value.',
+        'Write approved corrections to a dedicated price remediation review table, never over an existing normalization shadow row.',
+        'Re-run Price Research for corrected references and compare included and excluded observations before promotion.',
+        'Require a reversible source-id and old/new-value ledger before any watch_records update.',
+      ],
+    },
     recommendations: [
       'Keep Price Research and detail modals using raw-message-derived prices when explicit line currency evidence exists.',
       'Use this report as the review queue for any future stored price_usd remediation.',
@@ -254,4 +310,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { auditRow, classifyMismatch, percentDelta };
+module.exports = { auditRow, classifyMismatch, evaluateCanaryEligibility, percentDelta, CANARY_POLICY_VERSION };
