@@ -17,6 +17,7 @@ const {
   segmentDealerMessage,
 } = require('./_lib/normalization-v4.cjs');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
+const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -746,15 +747,6 @@ module.exports = async function handler(req, res) {
         total: 0,
         records: [],
         status: 'supabase_not_configured',
-        configuration: {
-          supabaseUrlPresent: Boolean(supabaseUrl),
-          serviceRoleKeyPresent: Boolean(serviceRoleKey),
-          secretKeyPresent: Boolean(secretKey),
-          serverKeyPresent: Boolean(serviceKey),
-          publishableKeyPresent: Boolean(publishableKey),
-          vercelRuntime: Boolean(process.env.VERCEL),
-          gitBranch: process.env.VERCEL_GIT_COMMIT_REF || null,
-        },
       });
     }
     try {
@@ -853,6 +845,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!requireServiceToken(req, res)) return;
 
   if (!supabaseUrl || !serviceKey) {
     return res.status(503).json({

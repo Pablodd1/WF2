@@ -4,14 +4,17 @@
  * No shell commands, no password escaping issues.
  */
 const { createClient } = require('@supabase/supabase-js');
+const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (!requireServiceToken(req, res)) return;
 
-  const limit = Math.min(req.body?.limit || 100, 500);
-  const table = req.body?.table || 'wts';
-  const offset = req.body?.offset || 0;
+  const limit = Math.min(500, Math.max(1, Number.parseInt(String(req.body?.limit || 100), 10) || 100));
+  const table = String(req.body?.table || 'wts').toLowerCase();
+  const offset = Math.max(0, Number.parseInt(String(req.body?.offset || 0), 10) || 0);
+  if (!['wts', 'wtb'].includes(table)) return res.status(400).json({ error: 'table must be wts or wtb' });
 
   try {
     const legacyDb = {
@@ -45,7 +48,8 @@ module.exports = async function handler(req, res) {
          AND reference IS NOT NULL AND reference != '' 
          AND price > 0
          AND title NOT LIKE '%WTB%' AND title NOT LIKE '%WANT TO BUY%'
-         ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset}`
+         ORDER BY created_on DESC LIMIT ? OFFSET ?`,
+        [limit, offset]
       );
     } else {
       [rows] = await conn.execute(
@@ -53,7 +57,8 @@ module.exports = async function handler(req, res) {
          FROM auctions
          WHERE title IS NOT NULL 
          AND (title LIKE '%WTB%' OR title LIKE '%WANT TO BUY%' OR title LIKE '%LOOKING FOR%')
-         ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset}`
+         ORDER BY created_on DESC LIMIT ? OFFSET ?`,
+        [limit, offset]
       );
     }
     await conn.end();

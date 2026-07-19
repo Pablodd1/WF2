@@ -23,6 +23,7 @@
  */
 
 const JOMASHOP_BASE = 'https://www.jomashop.com';
+const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 
 // Map jomashop brand URL slugs
 const JOMASHOP_BRANDS = {
@@ -166,7 +167,7 @@ async function supabaseUpsert(record, supabaseUrl, serviceKey) {
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -183,6 +184,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+  if (!requireServiceToken(req, res)) return;
 
   const { source = 'jomashop', brand, limit = 10 } = req.body || {};
 
