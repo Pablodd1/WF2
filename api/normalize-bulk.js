@@ -24,6 +24,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 
 // ─── BRAND_CANONICAL ────────────────────────────────────────────────────────
 const BRAND_CANONICAL = {
@@ -398,9 +399,10 @@ function normalizeRecords(records) {
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); return res.status(405).json({ error: 'Method not allowed' }); }
+  if (!requireServiceToken(req, res)) return;
 
   const body = req.body || {};
 

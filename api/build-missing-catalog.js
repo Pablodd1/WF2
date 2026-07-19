@@ -19,7 +19,7 @@ const { readFileSync, writeFileSync, existsSync } = require('fs');
 const { resolve } = require('path');
 
 const PUBLIC_DIR = resolve(process.cwd(), 'public');
-const ADMIN_KEY = process.env.ADMIN_KEY || 'wf-admin-2026';
+const ADMIN_KEY = process.env.ADMIN_KEY;
 
 function normRef(ref) {
   return String(ref || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -83,6 +83,9 @@ function findMissingRefs(known) {
 }
 
 module.exports = async (req, res) => {
+  if (!ADMIN_KEY) {
+    return res.status(503).json({ error: 'Admin authentication is not configured', success: false });
+  }
   // Auth
   const key = req.headers['x-admin-key'] || req.query.key || (req.body && req.body.admin_key);
   if (key !== ADMIN_KEY) {

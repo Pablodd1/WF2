@@ -8,6 +8,7 @@
  * Response: { matched: true, brand, reference, dial_color } or { matched: false }
  */
 const { getClient } = require('./_lib/supabase');
+const { authorizeMutation } = require('./_lib/authorize-mutation.cjs');
 
 let _cache = null;
 let _cacheAt = 0;
@@ -27,7 +28,7 @@ async function loadCache(client) {
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const client = getClient();
@@ -52,6 +53,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    if (!await authorizeMutation(req, res, new Set(['admin']))) return;
     const { pattern, brand, reference, dial_color } = req.body || {};
     if (!pattern) return res.status(400).json({ error: 'pattern required' });
 
