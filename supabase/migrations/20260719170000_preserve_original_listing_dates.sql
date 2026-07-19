@@ -24,11 +24,11 @@ SELECT
       AND coalesce(w.listing_status, 'ACTIVE') NOT IN ('SOLD', 'WITHDRAWN', 'EXPIRED')
       AND coalesce(w.verdict, '') <> 'RECYCLE'
   ) AS active_listings,
-  count(w.id) FILTER (WHERE w.observed_at IS NOT NULL) AS dated_posts,
-  count(w.id) FILTER (WHERE w.observed_at IS NULL) AS undated_posts,
   min(w.observed_at) AS first_post_at,
   max(w.observed_at) AS last_post_at,
-  count(DISTINCT extract(year FROM w.observed_at)) AS posting_years
+  count(DISTINCT extract(year FROM w.observed_at)) AS posting_years,
+  count(w.id) FILTER (WHERE w.observed_at IS NOT NULL) AS dated_posts,
+  count(w.id) FILTER (WHERE w.observed_at IS NULL) AS undated_posts
 FROM public.dealers d
 LEFT JOIN dated_posts w ON w.dealer_id = d.id
 GROUP BY d.id;
