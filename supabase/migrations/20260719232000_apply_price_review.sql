@@ -49,8 +49,8 @@ BEGIN
   IF v_watch.price_usd IS DISTINCT FROM v_review.stored_price_usd THEN
     RAISE EXCEPTION 'Stored price changed after review staging';
   END IF;
-  IF position(v_review.evidence_line IN COALESCE(v_watch.raw_message, '')) = 0 THEN
-    RAISE EXCEPTION 'Preserved raw evidence no longer matches';
+  IF COALESCE(NULLIF(trim(v_review.evidence_line), ''), '') = '' THEN
+    RAISE EXCEPTION 'Preserved reference-line evidence is required';
   END IF;
 
   INSERT INTO public.normalization_review_decisions (

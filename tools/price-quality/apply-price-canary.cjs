@@ -25,12 +25,21 @@ async function rest(resource, options = {}) {
 
 async function main() {
   const rows = await rest('price_remediation_review?select=*&normalization_version=eq.market-line-v1&review_status=eq.PENDING&order=id.asc&limit=100');
+  const ids = rows.map(row => row.source_record_id);
+  const sourceRows = ids.length
+    ? await rest(`watch_records?select=id,reference,raw_message,price_usd,listing_type&id=in.(${ids.join(',')})&limit=100`)
+    : [];
+  const sourceById = new Map(sourceRows.map(row => [row.id, row]));
+  const compact = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const approved = rows.filter(row =>
     ['EXPLICIT_HKD_FROM_REFERENCE_LINE', 'EXPLICIT_USD_FROM_REFERENCE_LINE'].includes(row.normalization_reason)
     && Number(row.proposed_price_usd) >= 500
     && String(row.evidence_line || '').trim()
     && !row.audit_flags?.includes('REPEATED_REFERENCE_BLOCK_REVIEW')
-    && !row.audit_flags?.includes('NORMALIZED_PRICE_BELOW_LUXURY_FLOOR'));
+    && !row.audit_flags?.includes('NORMALIZED_PRICE_BELOW_LUXURY_FLOOR')
+    && sourceById.get(row.source_record_id)?.listing_type === 'WTS'
+    && Number(sourceById.get(row.source_record_id)?.price_usd) === Number(row.stored_price_usd)
+    && compact(sourceById.get(row.source_record_id)?.raw_message).includes(compact(sourceById.get(row.source_record_id)?.reference)));
   const applied = [];
   if (apply) {
     for (const row of approved) {
