@@ -26,7 +26,8 @@ module.exports = async function handler(req, res) {
         .select('id,brand,reference,dial_color,condition,price_usd,currency,listing_type,listing_date,created_at,listing_status,verdict,raw_message')
         .eq('dealer_id', dealer.id)
         .or('verdict.is.null,verdict.neq.RECYCLE')
-        .order('created_at', { ascending: false })
+        .order('listing_date', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: true })
         .limit(50),
     ]);
     if (statsResult.error) throw statsResult.error;

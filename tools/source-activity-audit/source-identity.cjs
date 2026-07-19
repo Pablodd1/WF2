@@ -35,11 +35,9 @@ function intentBucket(value) {
 }
 
 function postingYear(row) {
-  for (const value of [row.listing_date, row.created_at]) {
-    if (!value) continue;
-    const timestamp = Date.parse(value);
-    if (Number.isFinite(timestamp)) return new Date(timestamp).getUTCFullYear();
-  }
+  if (!row.listing_date) return null;
+  const timestamp = Date.parse(row.listing_date);
+  if (Number.isFinite(timestamp)) return new Date(timestamp).getUTCFullYear();
   return null;
 }
 

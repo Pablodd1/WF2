@@ -8,7 +8,7 @@ interface ProfilePayload {
     id: string; display_name: string | null; company_name: string | null; country_code: string | null; city: string | null;
     rating: number | null; review_count: number; whatsapp_group_count: number; avatar_url: string | null; profile_summary: string | null;
   };
-  stats: { total_posts: number; wts_posts: number; wtb_posts: number; active_listings: number; first_post_at: string | null; last_post_at: string | null; posting_years: number } | null;
+  stats: { total_posts: number; wts_posts: number; wtb_posts: number; active_listings: number; dated_posts: number; undated_posts: number; first_post_at: string | null; last_post_at: string | null; posting_years: number } | null;
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; listing_type: string; listing_date: string | null; created_at: string; raw_message?: string }>;
   raw_message_access: boolean;
 }
@@ -80,7 +80,7 @@ export default function DealerProfile() {
                 </div>
                 <div className="mt-2 flex flex-wrap gap-4 text-xs text-white/42">
                   <span>{listing.condition || 'Condition unspecified'}</span>
-                  <span className="flex items-center gap-1"><CalendarDays size={13} /> {(listing.listing_date || listing.created_at).split('T')[0]}</span>
+                  <span className="flex items-center gap-1"><CalendarDays size={13} /> {listing.listing_date ? listing.listing_date.split('T')[0] : 'Original date unknown'}</span>
                 </div>
                 {payload.raw_message_access && listing.raw_message && <details className="mt-4 border-l border-[#c9a96e]/35 pl-4"><summary className="cursor-pointer text-xs text-white/50">Raw source message</summary><pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-6 text-white/55">{listing.raw_message}</pre></details>}
               </div>

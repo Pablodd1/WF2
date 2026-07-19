@@ -594,7 +594,7 @@ function RegionLabel({ region }: { region: string }) {
 
 function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
-  const postedDate = formatListingDate(listing.listing_date || listing.created_at);
+  const postedDate = formatListingDate(listing.listing_date);
   const rawPriceLabel = formatRawPrice(listing);
   const usdPriceLabel = formatUsdPrice(listing.price_usd);
   const title = buildListingTitle(listing);
