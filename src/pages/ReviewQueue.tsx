@@ -34,6 +34,8 @@ const reasonFilters = [
   { value: 'BUNDLE_SPLIT_REQUIRED', label: 'Bundles' },
   { value: 'NO_CANDIDATE', label: 'No candidate' },
   { value: 'REFERENCE_CHANGED', label: 'Reference' },
+  { value: 'DIAL_CHANGED', label: 'Dial correction' },
+  { value: 'DIAL_AMBIGUOUS', label: 'Dial ambiguous' },
 ] as const;
 
 interface ShadowProgress {
@@ -57,7 +59,13 @@ interface ShadowQueueApiItem {
   decision?: {
     disposition?: ReviewItem['disposition'];
     reasons?: string[];
-    catalog?: Record<string, string | null>;
+    catalog?: {
+      reference?: string | null;
+      brand?: string | null;
+      model?: string | null;
+      collection?: string | null;
+      dialColors?: string[];
+    };
   };
 }
 
@@ -94,12 +102,12 @@ export default function ReviewQueue() {
             reference: String(candidate.reference || item.source?.reference || 'Unresolved'),
             brand: String(candidate.brand || item.source?.brand || 'Unknown'),
             model: catalog.model || catalog.collection || 'Catalog review',
-            dial: 'Unverified',
+            dial: String(candidate.dial_color || 'Unverified'),
             price: Number(candidate.price_usd || candidate.price_raw || 0),
             currency: String(candidate.currency || item.source?.currency || 'Unknown'),
             confidence: ready ? 95 : item.changeFlags?.includes('CURRENCY_AMBIGUOUS') ? 40 : 65,
             aiFields: item.changeFlags || [],
-            catalogFields: catalog.reference ? ['reference', 'brand'] : [],
+            catalogFields: catalog.reference ? ['reference', 'brand', ...(ready && candidate.dial_color ? ['dial'] : [])] : [],
             status: 'pending',
             submittedAt: item.analyzedAt,
             listingTitle: String(candidate.raw_line || 'No deterministic candidate extracted'),

@@ -75,3 +75,26 @@ test('resolves curated Patek shorthand to the canonical blue-dial configuration'
   assert.equal(match.matchedRef, '5712/1A-001');
   assert.deepEqual(match.dialColors, ['Blue']);
 });
+
+test('confirms a proposed dial only when it agrees with the exact catalog reference', () => {
+  const black = confirmCatalogCandidate({ brand: 'Rolex', reference: '116500LN', dial_color: 'Black' });
+  const white = confirmCatalogCandidate({ brand: 'Rolex', reference: '116500LN', dial_color: 'White' });
+  const purple = confirmCatalogCandidate({ brand: 'Rolex', reference: '116500LN', dial_color: 'Purple' });
+
+  assert.equal(black.dialConfirmed, true);
+  assert.equal(white.dialConfirmed, true);
+  assert.equal(purple.confirmed, true);
+  assert.equal(purple.dialConfirmed, false);
+  assert.equal(purple.dialReason, 'CATALOG_DIAL_CONFLICT');
+});
+
+test('blocks a dial correction that conflicts with the exact catalog configuration', () => {
+  const candidate = { brand: 'Rolex', reference: '116500LN', dial_color: 'Purple', prices: [] };
+  const confirmation = confirmCatalogCandidate(candidate);
+  const decision = buildPromotionDecision({
+    source_listing_type: 'WTB', candidate_count: 1, proposed_candidates: [candidate], change_flags: ['DIAL_CHANGED'],
+  }, confirmation);
+
+  assert.equal(decision.disposition, 'HUMAN_REVIEW');
+  assert.deepEqual(decision.reasons, ['CATALOG_DIAL_CONFLICT']);
+});
