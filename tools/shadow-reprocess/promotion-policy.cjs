@@ -63,6 +63,14 @@ function buildPromotionDecision(shadowRow, catalogConfirmation = null) {
         catalog: catalogConfirmation.match || null,
       };
     }
+    if (flags.has('DIAL_CHANGED') && catalogConfirmation.dialConfirmed !== true) {
+      return {
+        disposition: 'HUMAN_REVIEW',
+        reasons: [catalogConfirmation.dialReason || 'CATALOG_DIAL_UNCONFIRMED'],
+        candidate: null,
+        catalog: catalogConfirmation.match || null,
+      };
+    }
     return {
       disposition: 'READY_FOR_HUMAN_APPROVAL',
       reasons: ['CATALOG_CONFIRMED'],

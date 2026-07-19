@@ -1,9 +1,18 @@
 'use strict';
 
 const { lookupCatalog, normalizeRef } = require('../../api/_lib/catalog.js');
+const { comparisonKey, normalizeDialValue, uniqueCatalogDials } = require('../../api/_lib/dial-normalization.cjs');
 
 function normalizeBrand(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function equivalentDialKeys(value) {
+  const key = comparisonKey(value);
+  const keys = new Set([key]);
+  if (key === 'WHITE') keys.add('SILVER');
+  if (key === 'SILVER') keys.add('WHITE');
+  return keys;
 }
 
 function confirmCatalogCandidate(candidate) {
@@ -32,9 +41,23 @@ function confirmCatalogCandidate(candidate) {
     return { confirmed: false, reason: 'CATALOG_BRAND_CONFLICT', match };
   }
 
+  const proposedDial = normalizeDialValue(candidate.dial_color);
+  const catalogDials = uniqueCatalogDials(match.dialColors || []);
+  let dialConfirmed = null;
+  let dialReason = null;
+  if (proposedDial.known) {
+    const equivalent = equivalentDialKeys(proposedDial.value);
+    dialConfirmed = catalogDials.some(value => equivalent.has(comparisonKey(value)));
+    dialReason = dialConfirmed
+      ? 'CATALOG_DIAL_CONFIRMED'
+      : (catalogDials.length ? 'CATALOG_DIAL_CONFLICT' : 'CATALOG_DIAL_UNCONFIRMED');
+  }
+
   return {
     confirmed: true,
     reason: 'CATALOG_CONFIRMED',
+    dialConfirmed,
+    dialReason,
     match: {
       reference: normalizeRef(match.matchedRef || candidate.reference),
       brand: match.brand || candidate.brand,
@@ -42,6 +65,7 @@ function confirmCatalogCandidate(candidate) {
       matchType: match.matchType,
       collection: match.collection || null,
       model: match.model || null,
+      dialColors: catalogDials,
     },
   };
 }
