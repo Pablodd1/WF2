@@ -206,8 +206,8 @@ module.exports = async function handler(req, res) {
     );
     const pageError = sampledPages.find(page => page.error)?.error;
     if (pageError) throw pageError;
-    const rows = sampledPages.flatMap(page => page.data || []);
-    const totalListings = rows.length;
+    let rows = sampledPages.flatMap(page => page.data || []);
+    const baseSampleCount = rows.length;
 
     if (!rows || rows.length === 0) {
       return res.status(200).json({
@@ -228,6 +228,48 @@ module.exports = async function handler(req, res) {
     // Exclude synthetic/test sources. mysql_auction_watches is historical market
     // evidence and must not be discarded from analytics.
     const excludedSources = new Set(['bulk_test_100', 'test_run', 'mysql_market_refs']);
+    let catalogHit = lookupCatalog(targetRef, brand || null);
+    // Historical Patek listings commonly omit the catalog's terminal variant
+    // suffix (for example 5712/1A vs 5712/1A-001). An image-only enrichment
+    // record must not block the modeled canonical family used for validation.
+    if ((!catalogHit?.found || !catalogHit.model)
+      && /^\d{4}\/1A$/i.test(targetRef)
+      && String(brand || '').toUpperCase() === 'PATEK PHILIPPE') {
+      const canonicalVariant = lookupCatalog(`${targetRef}-001`, brand);
+      if (canonicalVariant?.found && canonicalVariant.model) catalogHit = canonicalVariant;
+    }
+    if (catalogHit?.found && catalogHit.dialColors != null && !Array.isArray(catalogHit.dialColors)) {
+      catalogHit = { ...catalogHit, dialColors: [catalogHit.dialColors] };
+    }
+
+    // A newest-first cap can hide a valid dial when one high-volume variant
+    // occupies all 5,000 sampled rows. Supplement only missing catalog dials
+    // with a bounded query, then de-duplicate by immutable source ID.
+    const observedDialKeys = new Set(rows.map(row => normalizeDialValue(row.dial_color))
+      .filter(dial => dial.known).map(dial => dial.value.toLowerCase()));
+    const missingCatalogDials = (catalogHit?.dialColors || [])
+      .map(value => normalizeDialValue(value))
+      .filter(dial => dial.known && !observedDialKeys.has(dial.value.toLowerCase()))
+      .map(dial => dial.value);
+    if (missingCatalogDials.length) {
+      const supplementalPages = await Promise.all(missingCatalogDials.map(dial => client
+        .from('watch_records')
+        .select(columns)
+        .eq('brand', brand)
+        .in('reference', referenceVariants)
+        .eq('verdict', 'APPROVED')
+        .eq('listing_type', 'WTS')
+        .ilike('dial_color', dial)
+        .order('created_at', { ascending: false })
+        .limit(1000)));
+      const supplementalError = supplementalPages.find(page => page.error)?.error;
+      if (supplementalError) throw supplementalError;
+      const rowsById = new Map(rows.map(row => [row.id, row]));
+      for (const row of supplementalPages.flatMap(page => page.data || [])) rowsById.set(row.id, row);
+      rows = [...rowsById.values()];
+    }
+    const totalListings = rows.length;
+
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
@@ -241,22 +283,6 @@ module.exports = async function handler(req, res) {
           price_usd: normalized.analytics_price_usd,
         };
       });
-    let catalogHit = lookupCatalog(targetRef, brand || null);
-    // Historical Patek listings commonly omit the catalog's terminal variant
-    // suffix (for example 5712/1A vs 5712/1A-001). An image-only enrichment
-    // record must not block the modeled canonical family used for validation.
-    if ((!catalogHit?.found || !catalogHit.model)
-      && /^\d{4}\/1A$/i.test(targetRef)
-      && String(brand || '').toUpperCase() === 'PATEK PHILIPPE') {
-      const canonicalVariant = lookupCatalog(`${targetRef}-001`, brand);
-      if (canonicalVariant?.found && canonicalVariant.model) catalogHit = canonicalVariant;
-    }
-    // The legacy catalog stores some single dial values as a scalar string,
-    // while the normalized catalog stores arrays. Present one stable contract
-    // to the eligibility gate regardless of source generation.
-    if (catalogHit?.found && catalogHit.dialColors != null && !Array.isArray(catalogHit.dialColors)) {
-      catalogHit = { ...catalogHit, dialColors: [catalogHit.dialColors] };
-    }
     const requiredFieldExclusions = normalizedRows
       .map(row => ({ row, reason: classifyResearchEligibility(row, catalogHit) }))
       .filter(item => item.reason)
@@ -386,7 +412,7 @@ module.exports = async function handler(req, res) {
       unique_offer_count: marketRows.length,
       repost_count: repostRows.length,
       sampledListings: rows.length,
-      sampleCapped: rows.length >= sampleLimit,
+      sampleCapped: baseSampleCount >= sampleLimit,
       count: prices.length,
       rawCount: validPriceRows.length,
       outliersRemoved: statisticalOutlierRows.length,

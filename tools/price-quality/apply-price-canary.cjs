@@ -51,6 +51,7 @@ async function main() {
           p_reason: `${row.normalization_reason}; exact preserved reference-line evidence`,
         }),
       }));
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
   console.log(JSON.stringify({ reviewed: rows.length, approved: approved.length, blocked: rows.length - approved.length, apply, applied: applied.length }, null, 2));
