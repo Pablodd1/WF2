@@ -30,7 +30,7 @@ Poster evidence consisted of 9,502 rows linked through `raw_data.company_id` and
 
 ## Posting-year coverage
 
-Posting year uses `listing_date` first and `created_at` second. It does not use the watch manufacture year.
+This table came from the original v1 audit, which used `listing_date` first and then substituted `created_at`. That substitution is now retired because `created_at` is often the database import timestamp. These year totals must not be used as original posting history.
 
 | Year | Rows |
 | --- | ---: |
@@ -40,7 +40,7 @@ Posting year uses `listing_date` first and `created_at` second. It does not use 
 | 2027-2028 | 9 |
 | Unknown | 1,576 |
 
-The nine future-dated rows and 1,576 undated rows require a bounded date-quality review. Historical dates before 2025 should be sampled against raw lineage before being presented as market-posting history.
+The v2 audit uses only `listing_date`. Production planner statistics on 2026-07-19 found approximately 23,684 dated rows and 2,607,899 undated rows out of 2,631,583 total. Missing original dates must remain unknown.
 
 ## Source-system reconciliation
 

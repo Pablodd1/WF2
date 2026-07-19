@@ -1,5 +1,13 @@
 # CTO Data Canary Report - 2026-07-19
 
+## Dealer and original-date correction
+
+- Production has 1,580 staged source-company candidates, but zero verified dealers and zero dealer-linked listings.
+- Only approximately 23,684 of 2,631,583 records have an original `listing_date`; import `created_at` must not be displayed as the original posting date.
+- Customer dealer ratings/contact remain blocked until an authenticated Rated Dealers export is reconciled and contact consent is verified.
+- The branch adds an original-date-only dealer statistics view and removes import-date fallbacks from Trading Floor and Price Research.
+- Full evidence: `docs/DEALER_AND_SOURCE_DATE_STATUS_2026-07-19.md`.
+
 ## Executive decision
 
 The customer-facing Trading Floor and Price Research APIs are available and the

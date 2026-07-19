@@ -26,6 +26,10 @@ test('posting year prefers listing date over import creation time', () => {
   assert.equal(postingYear({ listing_date: '2024-06-03T00:00:00Z', created_at: '2026-07-16T00:00:00Z' }), 2024);
 });
 
+test('posting year never substitutes the database import timestamp', () => {
+  assert.equal(postingYear({ listing_date: null, created_at: '2026-07-16T00:00:00Z' }), null);
+});
+
 test('poster pseudonyms are stable, keyed, and do not expose the source', () => {
   const first = pseudonym('85262361307', 'audit-key');
   assert.equal(first, pseudonym('85262361307', 'audit-key'));

@@ -313,7 +313,7 @@ module.exports = async function handler(req, res) {
     // Monthly aggregation
     const monthlyMap = {};
     includedRows.forEach(r => {
-      const observedAt = r.listing_date || r.created_at;
+      const observedAt = r.listing_date;
       if (!observedAt) return;
       const d = new Date(observedAt);
       if (isNaN(d.getTime())) return;
