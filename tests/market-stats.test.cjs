@@ -2,7 +2,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildComparableCohorts, buildDialGroups, classifyPrice, summarizePrices } = require('../api/_lib/market-stats.cjs');
+const {
+  buildComparableCohorts,
+  buildDialGroups,
+  classifyPrice,
+  marketPlausibilityFloor,
+  summarizePrices,
+} = require('../api/_lib/market-stats.cjs');
 
 test('uses standard 1.5 IQR fences and preserves outliers separately', () => {
   const result = summarizePrices([100, 101, 102, 103, 104, 105, 500]);
@@ -75,5 +81,10 @@ test('rejects implausible watch prices before applying IQR fences', () => {
     { included: false, reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' }
   );
   assert.deepEqual(classifyPrice(24000, stats, { minimumPrice: 1000 }), { included: true, reason: null });
+});
+
+test('uses a conservative cohort-relative luxury-watch plausibility floor', () => {
+  assert.equal(marketPlausibilityFloor([20152, 109625, 130000, 172590, 239500]), 32500);
+  assert.equal(marketPlausibilityFloor([244, 229487, 240000, 244184, 250000, 262000]), 60523);
 });
 

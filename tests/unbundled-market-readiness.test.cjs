@@ -32,7 +32,7 @@ test('critical references include terminal catalog variants', () => {
 
 test('market readiness applies the live plausibility floor before IQR', () => {
   const result = summarizeComparablePrices([244, 229487, 240000, 244184, 250000, 262000]);
-  assert.equal(result.marketPriceFloorUsd, 24418);
+  assert.equal(result.marketPriceFloorUsd, 60523);
   assert.equal(result.floorExcludedCount, 1);
   assert.equal(result.summary.analytics_ready, true);
   assert.equal(result.summary.stats.min, 229487);

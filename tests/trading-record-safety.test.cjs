@@ -86,3 +86,12 @@ test('does not confuse an alphanumeric reference numeric core with a price', () 
 test('does not quarantine an explicit converted price when raw and USD values differ', () => {
   assert.equal(isReferencePriceCollision({ reference: '16610', price_raw: 16610, price_usd: 2129 }), false);
 });
+
+test('withholds sub-thousand reference prices from the customer Trading Floor', () => {
+  const result = sanitizeTradingRecord({
+    brand: 'Rolex', reference: '11375', price_raw: 143, price_usd: 132, currency: 'EUR',
+  });
+  assert.equal(result.price_raw, null);
+  assert.equal(result.price_usd, null);
+  assert.deepEqual(result.data_quality_issues, ['PRICE_BELOW_PLAUSIBILITY_FLOOR']);
+});

@@ -7,7 +7,13 @@
 const { getClient } = require('./_lib/supabase');
 const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
 const { lookupCatalog } = require('./_lib/catalog');
-const { buildComparableCohorts, buildDialGroups, classifyPrice, summarizePrices } = require('./_lib/market-stats.cjs');
+const {
+  buildComparableCohorts,
+  buildDialGroups,
+  classifyPrice,
+  marketPlausibilityFloor,
+  summarizePrices,
+} = require('./_lib/market-stats.cjs');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
 const { classifyDemandEligibility, classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
@@ -102,8 +108,7 @@ function summarizeComparableRows(rows) {
     .map(row => Number(row.price_usd))
     .filter(value => Number.isFinite(value) && value > 0)
     .sort((a, b) => a - b);
-  const median = validPrices.length ? validPrices[Math.floor(validPrices.length / 2)] : 0;
-  const marketPriceFloorUsd = Math.max(1000, Math.round(median * 0.1));
+  const marketPriceFloorUsd = marketPlausibilityFloor(validPrices);
   const summary = summarizePrices(validPrices.filter(value => value >= marketPriceFloorUsd));
   return { marketPriceFloorUsd, summary };
 }

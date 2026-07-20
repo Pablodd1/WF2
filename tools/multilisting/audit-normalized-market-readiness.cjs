@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
 const { comparisonKey, normalizeDialValue } = require('../../api/_lib/dial-normalization.cjs');
-const { summarizePrices } = require('../../api/_lib/market-stats.cjs');
+const { marketPlausibilityFloor, summarizePrices } = require('../../api/_lib/market-stats.cjs');
 const { deduplicateReposts } = require('../../api/_lib/repost-deduplication.cjs');
 
 const CRITICAL_REFERENCES = new Map([
@@ -29,8 +29,7 @@ function summarizeComparablePrices(prices) {
   const validPrices = prices.map(Number)
     .filter(value => Number.isFinite(value) && value > 0)
     .sort((left, right) => left - right);
-  const median = validPrices.length ? validPrices[Math.floor(validPrices.length / 2)] : 0;
-  const marketPriceFloorUsd = Math.max(1000, Math.round(median * 0.1));
+  const marketPriceFloorUsd = marketPlausibilityFloor(validPrices);
   const plausiblePrices = validPrices.filter(value => value >= marketPriceFloorUsd);
   return {
     marketPriceFloorUsd,
