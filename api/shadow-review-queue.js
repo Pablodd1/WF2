@@ -2,6 +2,7 @@
 
 const { buildPromotionDecision } = require('../tools/shadow-reprocess/promotion-policy.cjs');
 const { confirmCatalogCandidate } = require('../tools/shadow-reprocess/catalog-confirmation.cjs');
+const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 
 const REVIEW_FLAGS = new Set([
   'BUNDLE_SPLIT_REQUIRED',
@@ -48,6 +49,8 @@ async function rest(baseUrl, key, path) {
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  const dealerAuth = await authorizeDealer(req, res, new Set(['reviewer', 'admin']));
+  if (dealerAuth.error) return res.status(dealerAuth.status).json({ error: dealerAuth.error });
   const baseUrl = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!baseUrl || !key) return res.status(503).json({ status: 'not_configured', items: [] });

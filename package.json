@@ -20,6 +20,8 @@
     "audit:sources": "node tools/source-activity-audit/audit-source-activity.cjs",
     "export:multilistings": "node tools/multilisting/export-multilistings.cjs",
     "audit:multilisting-lineage": "node tools/multilisting/audit-lineage-readiness.cjs",
+    "audit:unbundled-csv": "node tools/multilisting/audit-unbundled-csv.cjs",
+    "audit:unbundled-lineage": "node tools/multilisting/reconcile-unbundled-lineage.cjs",
     "validate:multilistings-export": "node tools/multilisting/validate-export.cjs",
     "persist:bundle-cohort": "node tools/multilisting/persist-bundle-cohort.cjs",
     "materialize:bundle-canary": "node tools/multilisting/materialize-bundle-children.cjs",

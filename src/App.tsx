@@ -35,7 +35,7 @@ export default function App() {
         <Route path="/analytics/legacy" element={<Navigate to="/analytics" replace />} />
         <Route path="/analytics-dashboard" element={<Navigate to="/analytics" replace />} />
         <Route path="/review" element={<Navigate to="/review-queue" replace />} />
-        <Route path="/review-queue" element={<DealerGate><ReviewQueue /></DealerGate>} />
+        <Route path="/review-queue" element={<DealerGate allowedRoles={['reviewer', 'admin']}><ReviewQueue /></DealerGate>} />
         <Route path="/clean" element={<DealerGate><CleanPage /></DealerGate>} />
         <Route path="/reprocess" element={<DealerGate><ReprocessPage /></DealerGate>} />
         <Route path="/study" element={<Navigate to="/clean" replace />} />

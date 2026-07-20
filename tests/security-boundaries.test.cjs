@@ -58,3 +58,13 @@ test('AI quota migration is service-role only and security-definer scoped', () =
   assert.match(sql, /REVOKE ALL ON FUNCTION[\s\S]*FROM PUBLIC, anon, authenticated/i);
   assert.match(sql, /GRANT EXECUTE ON FUNCTION[\s\S]*TO service_role/i);
 });
+
+test('human review evidence and AI assistance require reviewer or admin authorization', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  for (const route of ['shadow-review-queue.js', 'co-pilot.js']) {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'api', route), 'utf8');
+    assert.match(source, /authorizeDealer/);
+    assert.match(source, /new Set\(\['reviewer', 'admin'\]\)/);
+  }
+});

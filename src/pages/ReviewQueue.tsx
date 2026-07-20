@@ -4,8 +4,32 @@ import { TabNav } from '@/components/TabNav';
 import {
   CheckCircle2, AlertTriangle, Eye,
   Search, Clock, MessageSquare, Shield, Database, RefreshCw, KeyRound,
-  Loader2, XCircle
+  Loader2, Sparkles, XCircle
 } from 'lucide-react';
+
+interface CatalogEvidence {
+  reference?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  collection?: string | null;
+  dialColors?: string[];
+  source?: string | null;
+  matchType?: string | null;
+}
+
+interface CopilotResult {
+  brand: string | null;
+  reference: string | null;
+  dialColor: string | null;
+  condition: string | null;
+  year: number | null;
+  price: number | null;
+  currency: string | null;
+  confidence: number;
+  interpretations: string[];
+  ambiguities: string[];
+  reasoning: string;
+}
 
 interface ReviewItem {
   id: string;
@@ -15,9 +39,9 @@ interface ReviewItem {
   dial: string;
   price: number;
   currency: string;
-  confidence: number;
   aiFields: string[];
   catalogFields: string[];
+  catalog: CatalogEvidence | null;
   status: 'pending' | 'approved' | 'rejected';
   submittedAt: string;
   imageUrl?: string;
@@ -59,13 +83,7 @@ interface ShadowQueueApiItem {
   decision?: {
     disposition?: ReviewItem['disposition'];
     reasons?: string[];
-    catalog?: {
-      reference?: string | null;
-      brand?: string | null;
-      model?: string | null;
-      collection?: string | null;
-      dialColors?: string[];
-    };
+    catalog?: CatalogEvidence;
   };
 }
 
@@ -79,6 +97,9 @@ export default function ReviewQueue() {
   const [progress, setProgress] = useState<ShadowProgress | null>(null);
   const [decisionBusy, setDecisionBusy] = useState<string | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState<string | null>(null);
+  const [aiResults, setAiResults] = useState<Record<string, CopilotResult>>({});
+  const [aiErrors, setAiErrors] = useState<Record<string, string>>({});
 
   // Decisions are sent to the audited server transaction. The client never
   // writes market records directly.
@@ -86,7 +107,7 @@ export default function ReviewQueue() {
     let active = true;
     const params = new URLSearchParams({ limit: '100', sort: reasonFilter ? 'recent' : 'priority' });
     if (reasonFilter) params.set('reason', reasonFilter);
-    fetch(`/api/shadow-review-queue?${params.toString()}`)
+    fetch(`/api/shadow-review-queue?${params.toString()}`, { credentials: 'include' })
       .then(async response => {
         if (!response.ok) throw new Error('Review queue is unavailable');
         return response.json();
@@ -105,9 +126,9 @@ export default function ReviewQueue() {
             dial: String(candidate.dial_color || 'Unverified'),
             price: Number(candidate.price_usd || candidate.price_raw || 0),
             currency: String(candidate.currency || item.source?.currency || 'Unknown'),
-            confidence: ready ? 95 : item.changeFlags?.includes('CURRENCY_AMBIGUOUS') ? 40 : 65,
-            aiFields: item.changeFlags || [],
-            catalogFields: catalog.reference ? ['reference', 'brand', ...(ready && candidate.dial_color ? ['dial'] : [])] : [],
+             aiFields: item.changeFlags || [],
+             catalogFields: catalog.reference ? ['reference', 'brand', ...(ready && candidate.dial_color ? ['dial'] : [])] : [],
+             catalog: catalog.reference ? catalog : null,
             status: 'pending',
             submittedAt: item.analyzedAt,
             listingTitle: String(candidate.raw_line || 'No deterministic candidate extracted'),
@@ -161,16 +182,36 @@ export default function ReviewQueue() {
     return true;
   });
 
-  const getConfidenceColor = (score: number) => {
-    if (score >= 90) return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-    if (score >= 80) return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-    return 'text-red-400 bg-red-500/10 border-red-500/30';
-  };
-
-  const getConfidenceLabel = (score: number) => {
-    if (score >= 90) return 'Review';
-    if (score >= 80) return 'Check';
-    return 'Flagged';
+  const requestAiAssist = async (item: ReviewItem) => {
+    setAiBusy(item.id);
+    setAiErrors(current => ({ ...current, [item.id]: '' }));
+    try {
+      const response = await fetch('/api/co-pilot', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawMessage: item.listingTitle,
+          currentGuess: {
+            brand: item.brand,
+            reference: item.reference,
+            dialColor: item.dial,
+            price: item.price || null,
+            currency: item.currency,
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'AI assistance failed');
+      setAiResults(current => ({ ...current, [item.id]: data.copilot as CopilotResult }));
+    } catch (error) {
+      setAiErrors(current => ({
+        ...current,
+        [item.id]: error instanceof Error ? error.message : 'AI assistance failed',
+      }));
+    } finally {
+      setAiBusy(null);
+    }
   };
 
   const submitDecision = async (item: ReviewItem, decision: 'APPROVED' | 'REJECTED') => {
@@ -317,10 +358,18 @@ export default function ReviewQueue() {
               }`}
             >
               <div className="flex items-start gap-4">
-                {/* Confidence Badge */}
-                <div className={`w-16 h-16 rounded-lg flex flex-col items-center justify-center border ${getConfidenceColor(item.confidence)}`}>
-                  <span className="text-lg font-extrabold">{item.confidence}%</span>
-                  <span className="text-[9px] uppercase font-bold">{getConfidenceLabel(item.confidence)}</span>
+                {/* Publication gate */}
+                <div className={`w-16 h-16 shrink-0 rounded-lg flex flex-col items-center justify-center border ${
+                  item.disposition === 'READY_FOR_HUMAN_APPROVAL'
+                    ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                    : 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                }`}>
+                  {item.disposition === 'READY_FOR_HUMAN_APPROVAL'
+                    ? <CheckCircle2 size={20} />
+                    : <AlertTriangle size={20} />}
+                  <span className="mt-1 text-[9px] uppercase font-bold">
+                    {item.disposition === 'READY_FOR_HUMAN_APPROVAL' ? 'Catalog' : 'Blocked'}
+                  </span>
                 </div>
 
                 {/* Info */}
@@ -351,7 +400,7 @@ export default function ReviewQueue() {
                       {new Date(item.submittedAt).toLocaleTimeString()}
                     </span>
                     <span className="text-xs text-text-muted">
-                      AI Fields: <span className="text-red-400">{item.aiFields.join(', ')}</span>
+                      Change flags: <span className="text-red-400">{item.aiFields.join(', ') || 'none'}</span>
                     </span>
                     <span className="text-xs text-text-muted">
                       Catalog: <span className="text-emerald-400">{item.catalogFields.join(', ')}</span>
@@ -393,27 +442,27 @@ export default function ReviewQueue() {
               {/* Expanded Detail */}
               {selected?.id === item.id && (
                 <div className="mt-4 pt-4 border-t border-border-default">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <div>
-                      <h4 className="text-xs font-bold text-text-primary mb-2">AI Extracted Fields</h4>
+                      <h4 className="text-xs font-bold text-text-primary mb-2">Deterministic change flags</h4>
                       <div className="space-y-1">
                         {item.aiFields.map(field => (
                           <div key={field} className="flex items-center gap-2 text-xs">
                             <AlertTriangle size={10} className="text-amber-400" />
                             <span className="text-text-secondary">{field}</span>
-                            <span className="text-[10px] text-text-muted">(needs verification)</span>
+                            <span className="text-[10px] text-text-muted">(not approved)</span>
                           </div>
                         ))}
                       </div>
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-text-primary mb-2">Catalog Matched Fields</h4>
+                      <h4 className="text-xs font-bold text-text-primary mb-2">Catalog cross-reference</h4>
                       <div className="space-y-1">
                         {item.catalogFields.map(field => (
                           <div key={field} className="flex items-center gap-2 text-xs">
                             <CheckCircle2 size={10} className="text-emerald-400" />
                             <span className="text-text-secondary">{field}</span>
-                            <span className="text-[10px] text-text-muted">(verified)</span>
+                            <span className="text-[10px] text-text-muted">(exact catalog gate)</span>
                           </div>
                         ))}
                       </div>
@@ -422,6 +471,50 @@ export default function ReviewQueue() {
                   <div className="mt-4 flex items-center gap-2">
                     <MessageSquare size={12} className="text-text-muted" />
                     <span className="text-xs text-text-muted">Review reasons: {item.reviewReasons.join(', ') || 'Manual verification required'}</span>
+                  </div>
+                  {item.catalog && (
+                    <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs">
+                      <div className="font-bold text-emerald-300">Catalog evidence</div>
+                      <div className="mt-2 grid gap-2 text-text-secondary sm:grid-cols-2 lg:grid-cols-4">
+                        <span>Reference: <strong className="text-text-primary">{item.catalog.reference || 'Unresolved'}</strong></span>
+                        <span>Brand: <strong className="text-text-primary">{item.catalog.brand || 'Unresolved'}</strong></span>
+                        <span>Model: <strong className="text-text-primary">{item.catalog.model || item.catalog.collection || 'Unresolved'}</strong></span>
+                        <span>Match: <strong className="text-text-primary">{item.catalog.matchType || 'exact'}</strong></span>
+                      </div>
+                      <div className="mt-2 text-text-muted">
+                        Catalog dials: {item.catalog.dialColors?.join(', ') || 'No dial configuration in catalog'}
+                        {item.catalog.source ? ` · Source: ${item.catalog.source}` : ''}
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-4 rounded-lg border border-border-default bg-bg-elevated/40 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-bold text-text-primary">AI review assistant</div>
+                        <div className="mt-1 text-[11px] text-text-muted">Advisory only. AI cannot confirm the catalog, approve, or publish a listing.</div>
+                      </div>
+                      <button
+                        onClick={() => void requestAiAssist(item)}
+                        disabled={aiBusy === item.id}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gold-primary/40 px-3 py-2 text-xs font-bold text-gold-primary disabled:opacity-50"
+                      >
+                        {aiBusy === item.id ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                        Analyze raw evidence
+                      </button>
+                    </div>
+                    {aiErrors[item.id] && <div className="mt-3 text-xs text-red-400">{aiErrors[item.id]}</div>}
+                    {aiResults[item.id] && (
+                      <div className="mt-3 space-y-3 text-xs">
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-text-secondary">
+                          <span>Brand: <strong className="text-text-primary">{aiResults[item.id].brand || '[NULL]'}</strong></span>
+                          <span>Reference: <strong className="text-text-primary">{aiResults[item.id].reference || '[NULL]'}</strong></span>
+                          <span>Dial: <strong className="text-text-primary">{aiResults[item.id].dialColor || '[NULL]'}</strong></span>
+                          <span>Ask: <strong className="text-text-primary">{aiResults[item.id].price ?? '[NULL]'} {aiResults[item.id].currency || ''}</strong></span>
+                        </div>
+                        <div className="text-text-secondary"><strong className="text-text-primary">Raw-evidence reasoning:</strong> {aiResults[item.id].reasoning}</div>
+                        <div className="text-amber-300"><strong>Ambiguities:</strong> {aiResults[item.id].ambiguities.join('; ') || 'None reported'}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
