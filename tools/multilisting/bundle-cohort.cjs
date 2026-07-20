@@ -6,8 +6,16 @@ const { comparisonKey, normalizeDialValue } = require('../../api/_lib/dial-norma
 const VERSION = 'v4.2-line-condition';
 const ADJACENT_DIAL_TERMS = [
   'white mother of pearl', 'black mother of pearl', 'mother of pearl', 'reverse panda',
-  'tiffany blue', 'ombre green', 'ice blue', 'olive green', 'sunburst blue',
+  'tiffany blue', 'tiffany', 'ombre green', 'ice blue', 'olive green', 'sunburst blue',
   'sunburst black', 'champagne', 'meteorite', 'skeleton', 'salmon', 'chocolate',
+  'yellow mother of pearl', 'candy pink', 'pistachio', 'wimbledon', 'sundust',
+  'celebration', 'aventurine', 'eisenkiesel', 'carnelian', 'multicolour',
+  'rainbow', 'rhodium', 'ivory', 'puzzle', 'coffee', 'smoke', 'zebra', 'onyx',
+  'paved', 'pave', 'opal', 'tiffani', 'tiffini', 'tiff', 'champ', 'mete',
+  'pistschio', 'pistacho', 'pista', 'wimbeldon', 'wimb', 'wim', 'cele',
+  'celeb', 'ombr', 'omber', 'aventuine', 'eisenkissel', 'eisikinsell',
+  'ralnbow', 'sliver', 'greenn', 'greeen', 'gery', 'yml', 'blk', 'grn',
+  'wht', 'blu', 'bk', 'tb', 'pis',
   'anthracite', 'burgundy', 'lavender', 'turquoise', 'panda', 'copper', 'bronze',
   'silver', 'black', 'blue', 'white', 'grey', 'gray', 'green', 'brown', 'pink',
   'purple', 'yellow', 'orange', 'red', 'gold', 'beige', 'slate', 'diamond',
@@ -59,6 +67,12 @@ function adjacentDialClaim(rawLine, reference) {
   const tail = match[1].trim().toLowerCase();
   const term = ADJACENT_DIAL_TERMS.find(value => new RegExp(`^${value.replace(/\s+/g, '\\s+')}\\b`, 'i').test(tail));
   return term ? normalizeDialValue(term).value : null;
+}
+
+function specialDialClaim(rawLine) {
+  const source = String(rawLine || '');
+  if (/\btiffany(?:\s+blue)?\b/i.test(source)) return 'Tiffany Blue';
+  return null;
 }
 
 function reviewFlags(candidate, parentRawMessage) {
@@ -160,4 +174,5 @@ module.exports = {
   normalizedLine,
   primaryPrice,
   reviewFlags,
+  specialDialClaim,
 };

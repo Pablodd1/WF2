@@ -24,6 +24,11 @@ test('canonicalizes spelling and dealer shorthand without losing meaningful vari
   assert.equal(normalizeDialValue('salmon').value, 'Salmon');
   assert.equal(normalizeDialValue('champagne').value, 'Champagne');
   assert.equal(normalizeDialValue('reverse panda').value, 'Reverse Panda');
+  assert.equal(normalizeDialValue('blk').value, 'Black');
+  assert.equal(normalizeDialValue('pista').value, 'Pistachio');
+  assert.equal(normalizeDialValue('wim').value, 'Wimbledon');
+  assert.equal(normalizeDialValue('mete').value, 'Meteorite');
+  assert.equal(normalizeDialValue('yml').value, 'Yellow Mother of Pearl');
 });
 
 test('prefers explicit raw text over an unknown source value', () => {

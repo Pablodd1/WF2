@@ -89,3 +89,17 @@ test('Price Research shows redacted source evidence and verified seller activity
   assert.match(page, /api\/listing-contact/);
   assert.doesNotMatch(page, /title\.startsWith\('Raw source'\)/);
 });
+
+test('Trading Floor click-through shows source evidence and only verified seller analytics', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
+  assert.match(page, /api\/trading-listing/);
+  assert.match(page, /api\/listing-contact/);
+  assert.match(page, /Raw source message/);
+  assert.match(page, /dealer_stats/);
+  assert.match(page, /For sale/);
+  assert.match(page, /Looking for/);
+  assert.match(page, /common groups/);
+  assert.match(page, /reviews/);
+});
