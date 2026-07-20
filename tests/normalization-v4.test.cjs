@@ -5,11 +5,32 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
+  decodeNumericUnicode,
   extractPriceObservations,
+  hasUnresolvedEmojiPrice,
   inferBrandFromReference,
   parseNumber,
   segmentDealerMessage,
 } = require('../api/_lib/normalization-v4.cjs');
+
+test('decodes standard keycap and full-width digits without changing other emoji', () => {
+  assert.equal(decodeNumericUnicode('HKD 1\uFE0F\u20E32\uFE0F\u20E35\uFE0F\u20E3K \u{1F525}'), 'HKD 125K \u{1F525}');
+  assert.equal(decodeNumericUnicode('HKD \uFF11\uFF12\uFF15K'), 'HKD 125K');
+});
+
+test('parses keycap prices but preserves the exact raw price evidence', () => {
+  const prices = extractPriceObservations('126500 White HKD 1\uFE0F\u20E32\uFE0F\u20E35\uFE0F\u20E3K');
+  assert.equal(prices.length, 1);
+  assert.equal(prices[0].amount_original, 125_000);
+  assert.equal(prices[0].currency_original, 'HKD');
+  assert.equal(prices[0].raw_price_text, 'HKD 1\uFE0F\u20E32\uFE0F\u20E35\uFE0F\u20E3K');
+});
+
+test('routes private emoji price codes to review instead of guessing a value', () => {
+  assert.equal(hasUnresolvedEmojiPrice('126500 White HKD \u{1F525}\u{1F4B0}'), true);
+  assert.equal(hasUnresolvedEmojiPrice('126500 White \u{1F525} HKD 125K'), false);
+  assert.equal(hasUnresolvedEmojiPrice('126500 White \u{1F525}'), false);
+});
 
 test('inherits HKD for bare dollar prices under an HKD section', () => {
   const candidates = segmentDealerMessage(`

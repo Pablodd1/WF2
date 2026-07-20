@@ -42,6 +42,47 @@ const BRAND_HEADERS = [
   [/\btudor\b/i, 'Tudor'],
 ];
 
+function buildNumericParsingView(value) {
+  const original = String(value || '');
+  let text = '';
+  const spans = [];
+
+  for (let index = 0; index < original.length;) {
+    const keycap = original.slice(index).match(/^([0-9])\uFE0F?\u20E3/u);
+    if (keycap) {
+      text += keycap[1];
+      spans.push({ start: index, end: index + keycap[0].length });
+      index += keycap[0].length;
+      continue;
+    }
+
+    const codePoint = original.codePointAt(index);
+    const character = String.fromCodePoint(codePoint);
+    const decoded = codePoint >= 0xFF10 && codePoint <= 0xFF19
+      ? String(codePoint - 0xFF10)
+      : character;
+    text += decoded;
+    for (let unit = 0; unit < decoded.length; unit += 1) {
+      spans.push({ start: index, end: index + character.length });
+    }
+    index += character.length;
+  }
+
+  return {
+    text,
+    originalSlice(start, end) {
+      if (!spans.length || start >= spans.length || end <= 0) return '';
+      const first = spans[Math.max(0, start)];
+      const last = spans[Math.min(spans.length, end) - 1];
+      return original.slice(first.start, last.end);
+    },
+  };
+}
+
+function decodeNumericUnicode(value) {
+  return buildNumericParsingView(value).text;
+}
+
 function normalizeCurrencyToken(token) {
   const clean = String(token || '').toUpperCase().replace(/\s/g, '');
   if (/^(HKD|HDK|HK|HK\$|H\.?K\.?D\.?)$/.test(clean) || /港币|港幣/.test(token)) return 'HKD';
@@ -56,7 +97,7 @@ function normalizeCurrencyToken(token) {
 }
 
 function parseNumber(rawNumber, rawMultiplier = '') {
-  let token = String(rawNumber || '').trim().replace(/\s/g, '');
+  let token = decodeNumericUnicode(rawNumber).trim().replace(/\s/g, '');
   if (!token) return null;
 
   // Dealer typo: 2.070,000 or 2,070.000 means 2,070,000.
@@ -95,7 +136,8 @@ function extractRetailPrice(text, discountPercent) {
 function extractPriceObservations(text, context = {}) {
   const observations = [];
   const seen = new Set();
-  const line = String(text || '');
+  const parsingView = buildNumericParsingView(text);
+  const line = parsingView.text;
 
   const add = (raw, rawNumber, multiplier, rawCurrency, index, evidence, direction = 'other') => {
     const amount = parseNumber(rawNumber, multiplier);
@@ -110,7 +152,7 @@ function extractPriceObservations(text, context = {}) {
       currency_original: currency,
       amount_usd: Math.round(amount * (USD_PER_UNIT[currency] || 1)),
       is_primary: observations.length === 0,
-      raw_price_text: raw.trim(),
+      raw_price_text: parsingView.originalSlice(index, index + raw.length).trim(),
       confidence: 98,
       currency_evidence: evidence,
       index,
@@ -217,6 +259,18 @@ function extractPriceObservations(text, context = {}) {
   }
 
   return accepted;
+}
+
+function hasUnresolvedEmojiPrice(text, context = {}) {
+  const raw = String(text || '');
+  const withoutKeycaps = raw.replace(/[0-9]\uFE0F?\u20E3/gu, '');
+  const hasPictograph = /\p{Extended_Pictographic}/u.test(withoutKeycaps);
+  if (!hasPictograph) return false;
+
+  const hasPriceCue = Boolean(context.currency_context)
+    || new RegExp(`(?:${CURRENCY_TOKEN})`, 'i').test(raw)
+    || /(?:\$|price|ask(?:ing)?|\u{1F4B0}|\u{1F4B5}|\u{1F4B2})/iu.test(raw);
+  return hasPriceCue && extractPriceObservations(raw, context).length === 0;
 }
 
 function detectBrandHeader(line) {
@@ -345,16 +399,19 @@ function segmentDealerMessage(rawMessage) {
 
     const inferredBrand = inferBrandFromReference(reference);
     const explicitBrand = detectBrandHeader(line);
+    const candidateContext = {
+      ...context,
+      brand_context: inferredBrand || explicitBrand || context.brand_context || null,
+      intent_context: inferIntent(line, context.intent_context),
+      condition_context: inferCondition(line, context.condition_context),
+    };
+    const prices = extractPriceObservations(line, context);
     candidates.push({
       rawLine: line,
       reference,
-      context: {
-        ...context,
-        brand_context: inferredBrand || explicitBrand || context.brand_context || null,
-        intent_context: inferIntent(line, context.intent_context),
-        condition_context: inferCondition(line, context.condition_context),
-      },
-      prices: extractPriceObservations(line, context),
+      context: candidateContext,
+      prices,
+      emoji_price_ambiguous: !prices.length && hasUnresolvedEmojiPrice(line, context),
     });
   }
 
@@ -362,8 +419,10 @@ function segmentDealerMessage(rawMessage) {
 }
 
 module.exports = {
+  decodeNumericUnicode,
   extractPriceObservations,
   extractReference,
+  hasUnresolvedEmojiPrice,
   inferBrandFromReference,
   parseNumber,
   segmentDealerMessage,

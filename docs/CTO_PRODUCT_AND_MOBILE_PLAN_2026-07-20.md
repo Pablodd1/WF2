@@ -135,6 +135,8 @@ Arbitrary dealer codes where an emoji privately means a digit, multiplier, price
 5. Build optional reviewed codebooks by dealer/group with effective dates and audit history.
 6. Add regression fixtures before shadow reprocessing.
 
+Implementation status (2026-07-20): standard Unicode keycap digits and full-width digits now decode deterministically in normalization v4 while preserving the exact matched raw price text. A WTS line with a price/currency cue and an unresolved pictographic code receives `EMOJI_PRICE_AMBIGUOUS`, is prioritized in the review queue, and is blocked from automatic promotion. Dealer-private symbol meanings remain intentionally unsupported until a reviewed codebook and raw examples exist.
+
 ## 4. Discovery, filters, and result loading
 
 ### Top-level pages

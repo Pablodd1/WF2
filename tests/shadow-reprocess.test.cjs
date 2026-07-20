@@ -99,6 +99,21 @@ test('retains an existing structured source price when a marketplace title has n
   assert.equal(result.review_status, 'NO_CHANGE');
 });
 
+test('blocks unresolved dealer emoji price codes from automatic promotion', () => {
+  const result = analyzeRecord({
+    id: 'emoji-price-1',
+    raw_message: '126500LN White HKD \u{1F525}\u{1F4B0}',
+    brand: 'Rolex',
+    reference: '126500LN',
+    currency: null,
+    price_raw: null,
+    listing_type: 'WTS',
+  });
+  assert.ok(result.change_flags.includes('EMOJI_PRICE_AMBIGUOUS'));
+  assert.equal(result.proposed_candidates[0].price_raw, null);
+  assert.equal(result.review_status, 'PENDING');
+});
+
 test('does not copy a collapsed parent price into bundle children without line prices', () => {
   const result = analyzeRecord({
     id: 'bundle-parent-price',
