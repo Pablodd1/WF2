@@ -15,6 +15,25 @@ For batch 002, prior read-only profiling found 5,541 unique phone matches using 
 
 The production implementation was then run against all 50,000 batch-002 parents and all 1,293,376 seller rows. Its stricter exact-raw-SHA-1 gate produced 5,350 `MATCH_READY`, 98 `REVIEW_REQUIRED`, and 44,552 unmatched parents. All 5,448 exact matches carried a front-image filename; 146 had a valid phone but no observed seller name. A 100-row dry run passed with zero database writes. The lower total than the normalized-text profile is intentional: 93 near-text matches were not silently promoted.
 
+## Intent-conflict review
+
+The 98 `REVIEW_REQUIRED` rows were rechecked against their exact parent raw
+messages on July 20. Identity evidence is intact for every row, but intent is
+not safe to inherit at parent level:
+
+- 94 source `WTB` rows currently normalize as parent `WTS`.
+- 4 source `WTS` rows currently normalize as parent `WTB`.
+- 79 of the 98 raw messages contain an explicit English buyer marker such as
+  `WTB`, `looking for`, or `need`.
+- 15 of those also contain sale/stock language, confirming mixed-intent source
+  messages rather than a single dealer intent.
+- All 98 have an image filename; 96 have an observed seller name and 2 retain
+  only the verified phone identity.
+
+Decision: keep all 98 blocked until listing-line segmentation produces separate
+children. Do not use the parent intent for dealer WTS/WTB counts and do not
+publish the image against a single child before lineage is proven.
+
 ## Automatic staging gate
 
 A row may enter private `seller_listing_lineage_staging` as `MATCH_READY` only when all are true:

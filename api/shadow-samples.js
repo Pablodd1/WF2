@@ -10,6 +10,7 @@ const FLAGS = new Set([
   'CURRENCY_CHANGED',
   'CURRENCY_AMBIGUOUS',
   'PRICE_PARSE_FAILED',
+  'EMOJI_PRICE_AMBIGUOUS',
 ]);
 
 async function rest(baseUrl, key, path) {

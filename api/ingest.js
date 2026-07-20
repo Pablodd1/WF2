@@ -19,6 +19,7 @@ const {
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 const { sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
+const { decodeTradingCursor, encodeTradingCursor, tradingCursorFilter } = require('./_lib/trading-cursor.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -761,11 +762,18 @@ module.exports = async function handler(req, res) {
       const itemType = String(req.query?.item || '').toLowerCase();
       const search = String(req.query?.q || '').trim().slice(0, 100);
       const quality = String(req.query?.quality || 'market').toLowerCase();
+      const pagination = String(req.query?.pagination || '').toLowerCase();
+      const cursorMode = pagination === 'cursor';
+      const cursorValue = String(req.query?.cursor || '').trim();
+      const cursor = cursorValue ? decodeTradingCursor(cursorValue) : null;
+      if (cursorValue && !cursor) return res.status(400).json({ error: 'Invalid pagination cursor' });
+      const condition = String(req.query?.condition || '').trim().slice(0, 30).replace(/[(),.%*]/g, ' ');
+      const region = String(req.query?.region || '').trim().slice(0, 50).replace(/[(),.%*]/g, ' ');
       const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
       const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'OTHER']);
       const allowedItems = new Set(['all', 'watches', 'luxury']);
-      const start = (page - 1) * pageSize;
-      const end = start + pageSize - 1;
+      const start = cursorMode ? 0 : (page - 1) * pageSize;
+      const end = start + pageSize - (cursorMode ? 0 : 1);
       // Both server-key and publishable-key reads use the same customer-safe
       // database view so publication rules cannot drift by deployment mode.
       const tableName = 'trading_floor_listings';
@@ -774,7 +782,7 @@ module.exports = async function handler(req, res) {
         select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region',
         // This matches the production created_at DESC index. NULLS LAST needs a
         // dedicated index before it can be enabled safely on millions of rows.
-        order: 'created_at.desc',
+        order: cursorMode ? 'created_at.desc,id.desc' : 'created_at.desc',
       });
 
       if (listingType && !allowedTypes.has(listingType)) {
@@ -794,6 +802,8 @@ module.exports = async function handler(req, res) {
       if (!listingType && itemType === 'watches') params.set('listing_type', 'not.in.(MULTI,OTHER)');
       if (!listingType && itemType === 'all') params.set('listing_type', 'neq.MULTI');
       if (imagesOnly) params.set('has_images', 'eq.true');
+      if (condition) params.set('condition', `ilike.${condition}`);
+      if (region) params.set('region', `ilike.*${region}*`);
       // Customer-facing inventory never includes RECYCLE records. The recent
       // view avoids letting undated legacy imports dominate page one, while the
       // all-inventory view and every explicit search still include those rows.
@@ -802,6 +812,8 @@ module.exports = async function handler(req, res) {
       // Supabase preview bootstrap rows are useful for deployment checks, but
       // must never be presented as dealer inventory in a customer environment.
       params.set('id', 'not.like.preview_demo_*');
+      const cursorFilter = tradingCursorFilter(cursor);
+      if (cursorFilter) params.set('and', `(${cursorFilter})`);
       if (quality !== 'archive' && !search) {
         params.set('created_at', 'not.is.null');
       }
@@ -836,7 +848,10 @@ module.exports = async function handler(req, res) {
       );
       if (!resp.ok) throw new Error(`Supabase returned ${resp.status}`);
       const records = await resp.json();
-      const customerRecords = Array.isArray(records) ? records.map(sanitizeTradingRecord) : [];
+      const hasMore = cursorMode && Array.isArray(records) && records.length > pageSize;
+      const visibleRecords = Array.isArray(records) ? records.slice(0, pageSize) : [];
+      const customerRecords = visibleRecords.map(sanitizeTradingRecord);
+      const nextCursor = hasMore ? encodeTradingCursor(visibleRecords[visibleRecords.length - 1]) : null;
       const contentRange = resp.headers.get('content-range') || '';
       const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
       return res.status(200).json({
@@ -845,6 +860,8 @@ module.exports = async function handler(req, res) {
         page,
         pageSize,
         totalIsEstimate: true,
+        nextCursor,
+        hasMore,
         records: customerRecords,
         status: 'ok',
         accessMode: serviceKey ? 'server_key' : 'publishable_read_only',

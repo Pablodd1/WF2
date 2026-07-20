@@ -12,6 +12,15 @@
 
 **Latest verified merge:** PR #39, merge commit `74d5e0a`
 
+## July 20 product-plan continuation
+
+The latest saved product, mobile, currency, emoji-price, WTB/posting, dealer,
+account, and three-month forecasting plan is
+`docs/CTO_PRODUCT_AND_MOBILE_PLAN_2026-07-20.md`. It also records a new
+release-critical production finding: some archive cards display reference-like
+tokens as USD prices. Address that gate before enabling forecasts or broader
+customer-facing price features.
+
 ## Latest CTO update - v4.2 bundle canary
 
 The read-only 1,000-parent bundle canary is complete. It preserved all 11,287 candidates and exact raw-line lineage while reducing suspicious sub-$500 parser outputs from 1,558 to 107 (93.1%). No production data was changed. The active Railway cursor job is complete and is not applying v4.2; the next safe step is a distinct 10,000-row shadow-only v4.2 job. Full evidence and rollout conditions are in `docs/BUNDLE_CANARY_V42_2026-07-18.md`.

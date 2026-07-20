@@ -97,6 +97,7 @@ function analyzeRecord(record) {
       dial_ambiguous: dial.ambiguous,
       dial_reason: dial.reason,
       prices,
+      emoji_price_ambiguous: candidate.emoji_price_ambiguous === true,
     };
   });
 
@@ -122,6 +123,7 @@ function analyzeRecord(record) {
       flags.add('CURRENCY_AMBIGUOUS');
     }
     if (!next.price_raw && record.price_raw != null) flags.add('PRICE_PARSE_FAILED');
+    if (next.listing_type !== 'WTB' && next.emoji_price_ambiguous) flags.add('EMOJI_PRICE_AMBIGUOUS');
   }
   const changeFlags = [...flags];
 

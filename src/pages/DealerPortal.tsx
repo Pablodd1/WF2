@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BadgeCheck, LogOut, Search, ShieldCheck, Store, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BadgeCheck, LogOut, PlusCircle, Search, ShieldCheck, Store, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 const portalLinks = [
@@ -19,6 +19,18 @@ const portalLinks = [
     description: 'Review verified counterparties, ratings, market activity, and current inventory.',
     to: '/dealers',
     icon: Users,
+  },
+  {
+    title: 'Post offer or request',
+    description: 'Submit a WTS offer or WTB request for moderated review before publication.',
+    to: '/dealer/post',
+    icon: PlusCircle,
+  },
+  {
+    title: 'Account workspace',
+    description: 'Manage your profile, listings, settings, billing status, and support tickets.',
+    to: '/dealer/account/profile',
+    icon: ShieldCheck,
   },
 ];
 

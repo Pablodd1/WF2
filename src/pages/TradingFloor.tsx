@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isCustomerSafeFeaturedListing } from '../lib/featuredListings';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
+import { CurrencyConverter } from '../components/CurrencyConverter';
 import { rateMarketPrice, type MarketPriceRating } from '../lib/marketPriceRating';
 
 const GOLD = '#C9A96E';
@@ -62,6 +63,8 @@ interface TradingFloorResponse {
   records?: ListingRecord[];
   total?: number;
   totalIsEstimate?: boolean;
+  nextCursor?: string | null;
+  hasMore?: boolean;
 }
 
 interface ListingContact {
@@ -103,20 +106,34 @@ export default function TradingFloor() {
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
   const [total, setTotal] = useState(0);
   const [totalIsEstimate, setTotalIsEstimate] = useState(false);
-  const [page, setPage] = useState(1);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [conditionFilter, setConditionFilter] = useState('');
+  const [regionInput, setRegionInput] = useState('');
+  const [regionFilter, setRegionFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const pageSize = 50;
+  const pageSize = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 48;
+
+  const resetResults = useCallback(() => {
+    setCursor(null);
+    setNextCursor(null);
+    setHasMore(false);
+    setListings([]);
+    setSelectedListing(null);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setSearch(searchInput.trim());
-      setPage(1);
+      setRegionFilter(regionInput.trim());
+      resetResults();
     }, 300);
 
     return () => window.clearTimeout(timer);
-  }, [searchInput]);
+  }, [regionInput, resetResults, searchInput]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -126,12 +143,15 @@ export default function TradingFloor() {
       setError('');
 
       try {
-        const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+        const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
         params.set('quality', 'archive');
+        if (cursor) params.set('cursor', cursor);
         const selectedFilter = FILTER_OPTIONS.find(option => option.value.toLowerCase() === activeFilter.toLowerCase());
         if (selectedFilter?.group === 'Inventory') params.set('item', selectedFilter.value);
         if (selectedFilter?.group === 'Intent') params.set('type', selectedFilter.value);
         if (search) params.set('q', search);
+        if (conditionFilter) params.set('condition', conditionFilter);
+        if (regionFilter.trim()) params.set('region', regionFilter.trim());
 
         const response = await fetch(`/api/ingest?${params.toString()}`, { signal: controller.signal });
         const data = await response.json() as TradingFloorResponse;
@@ -141,13 +161,14 @@ export default function TradingFloor() {
         if (!response.ok || data.status !== 'ok') throw new Error(data.error || 'Unable to load listings');
 
         const nextListings = data.records || [];
-        setListings(nextListings);
-        setTotal(Number(data.total) || 0);
-        setTotalIsEstimate(Boolean(data.totalIsEstimate));
-        setSelectedListing(current => {
-          if (!current) return null;
-          return nextListings.find(listing => listing.id === current.id) || null;
-        });
+        setListings(current => cursor ? [...current, ...nextListings.filter(row => !current.some(existing => existing.id === row.id))] : nextListings);
+        if (!cursor) {
+          setTotal(Number(data.total) || 0);
+          setTotalIsEstimate(Boolean(data.totalIsEstimate));
+        }
+        setNextCursor(data.nextCursor || null);
+        setHasMore(Boolean(data.hasMore && data.nextCursor));
+        if (!cursor) setSelectedListing(null);
       } catch (caught) {
         if ((caught as Error).name !== 'AbortError') {
           setError((caught as Error).message || 'Failed to load listings');
@@ -159,7 +180,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [activeFilter, page, pageSize, search]);
+  }, [activeFilter, conditionFilter, cursor, pageSize, regionFilter, search]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -178,8 +199,6 @@ export default function TradingFloor() {
     void loadFeatured();
     return () => controller.abort();
   }, []);
-
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -207,7 +226,7 @@ export default function TradingFloor() {
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => { setActiveFilter(option.value); setPage(1); setSelectedListing(null); }}
+                  onClick={() => { setActiveFilter(option.value); resetResults(); }}
                   className="h-9 shrink-0 rounded-md px-4 text-sm font-medium transition"
                   style={{
                     border: `1px solid ${activeFilter.toLowerCase() === option.value.toLowerCase() ? GOLD : BORDER}`,
@@ -235,18 +254,46 @@ export default function TradingFloor() {
               </label>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Additional marketplace filters">
+            <label className="min-w-0">
+              <span className="sr-only">Condition</span>
+              <select
+                value={conditionFilter}
+                onChange={event => { setConditionFilter(event.target.value); resetResults(); }}
+                className="h-10 w-full rounded-md border px-3 text-sm outline-none"
+                style={{ borderColor: BORDER, background: PANEL, color: INK }}
+              >
+                <option value="">All conditions</option>
+                <option value="New">New</option>
+                <option value="Used">Used</option>
+                <option value="Unknown">Condition not stated</option>
+              </select>
+            </label>
+            <label className="min-w-0">
+              <span className="sr-only">Location</span>
+              <input
+                type="search"
+                value={regionInput}
+                onChange={event => setRegionInput(event.target.value)}
+                placeholder="Filter by city, country, or region"
+                className="h-10 w-full rounded-md border px-3 text-sm outline-none"
+                style={{ borderColor: BORDER, background: PANEL, color: INK }}
+              />
+            </label>
+          </div>
+          <CurrencyConverter compact />
         </div>
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-5">
-        {featuredListings.length > 0 && page === 1 && !search && ['all', 'watches', 'WTS'].includes(activeFilter) && (
+        {featuredListings.length > 0 && !cursor && !search && ['all', 'watches', 'WTS'].includes(activeFilter) && (
           <FeaturedImageRail listings={featuredListings} onSelect={setSelectedListing} />
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</span>
-          <span>Page <strong style={{ color: INK }}>{page}</strong> of <strong style={{ color: INK }}>{totalPages}</strong></span>
-          <span title="Records are fetched 50 at a time from Postgres for speed; pagination and search still query the server-side dataset.">50 per page keeps the browser fast; search runs on the database.</span>
+          <span title="Records are fetched in bounded batches from Postgres; search and filters run on the database.">{pageSize} per request keeps mobile memory bounded.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
@@ -279,25 +326,16 @@ export default function TradingFloor() {
           </div>
         )}
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-3 pt-8">
+        {hasMore && nextCursor && !selectedListing && (
+          <div className="flex items-center justify-center pt-8">
             <button
               type="button"
-              onClick={() => { setPage(current => Math.max(1, current - 1)); setSelectedListing(null); }}
-              disabled={page === 1 || loading}
-              className="h-10 rounded-md border px-4 text-sm font-medium disabled:cursor-default disabled:opacity-45"
-              style={{ borderColor: BORDER, background: PANEL, color: page === 1 ? MUTED : INK }}
+              onClick={() => setCursor(nextCursor)}
+              disabled={loading}
+              className="h-11 min-w-[160px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
+              style={{ borderColor: GOLD, background: GOLD, color: '#09090D' }}
             >
-              Previous
-            </button>
-            <button
-              type="button"
-              onClick={() => { setPage(current => Math.min(totalPages, current + 1)); setSelectedListing(null); }}
-              disabled={page >= totalPages || loading}
-              className="h-10 rounded-md border px-4 text-sm font-medium disabled:cursor-default disabled:opacity-45"
-              style={{ borderColor: BORDER, background: PANEL, color: page >= totalPages ? MUTED : INK }}
-            >
-              Next
+              {loading ? 'Loading...' : 'Load more'}
             </button>
           </div>
         )}
@@ -633,7 +671,9 @@ function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
   const rawPriceLabel = formatRawPrice(listing);
-  const usdPriceLabel = formatUsdPrice(listing.price_usd, listing.listing_type);
+  const usdPriceLabel = listing.data_quality_issues?.includes('REFERENCE_TOKEN_AS_PRICE')
+    ? 'Price under review'
+    : formatUsdPrice(listing.price_usd, listing.listing_type);
   const title = buildListingTitle(listing);
 
   return {
@@ -664,6 +704,7 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function formatRawPrice(listing: ListingRecord) {
+  if (listing.data_quality_issues?.includes('REFERENCE_TOKEN_AS_PRICE')) return 'Price under review';
   if (listing.price_raw && listing.currency) {
     return `${compactNumber(listing.price_raw)}${listing.currency}`;
   }
@@ -694,7 +735,7 @@ function formatListingDate(dateStr: string | null) {
 
 function normalizeRegion(region: string | null) {
   const value = cleanValue(region);
-  if (!value) return 'Asia';
+  if (!value) return 'Location not provided';
   if (/north.?america|usa|us|canada/i.test(value)) return 'North America';
   if (/europe|uk|germany|france|italy|swiss/i.test(value)) return 'Europe';
   if (/asia|hong|china|japan|singapore|hk/i.test(value)) return 'Asia';

@@ -17,9 +17,12 @@ const DemandSignals = lazy(() => import('@/pages/DemandSignals'));
 const InsightDetails = lazy(() => import('@/pages/InsightDetails'));
 const DealerLogin = lazy(() => import('@/pages/DealerLogin'));
 const DealerPortal = lazy(() => import('@/pages/DealerPortal'));
+const DealerSubmitListing = lazy(() => import('@/pages/DealerSubmitListing'));
+const DealerAccount = lazy(() => import('@/pages/DealerAccount'));
 const DealerDirectory = lazy(() => import('@/pages/DealerDirectory'));
 const DealerProfile = lazy(() => import('@/pages/DealerProfile'));
 const MultiListings = lazy(() => import('@/pages/MultiListings'));
+const PublicInfo = lazy(() => import('@/pages/PublicInfo'));
 
 export default function App() {
   return (
@@ -28,6 +31,8 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/dealer-login" element={<DealerLogin />} />
         <Route path="/dealer" element={<DealerGate allowBetaSkip><DealerPortal /></DealerGate>} />
+        <Route path="/dealer/post" element={<DealerGate><DealerSubmitListing /></DealerGate>} />
+        <Route path="/dealer/account/:section" element={<DealerGate><DealerAccount /></DealerGate>} />
         <Route path="/dashboard" element={<DealerGate allowedRoles={['admin']}><OperationsDashboard /></DealerGate>} />
         <Route path="/dashboard/legacy" element={<Navigate to="/dashboard" replace />} />
         <Route path="/trading" element={<TradingFloor />} />
@@ -48,6 +53,7 @@ export default function App() {
         <Route path="/price-research" element={<DealerGate allowBetaSkip><PriceResearch /></DealerGate>} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
+        <Route path="/info/:page" element={<PublicInfo />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
