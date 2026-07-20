@@ -50,8 +50,7 @@
    migration secrets before enabling automatic production migrations.
 6. Schedule analytics refresh and database maintenance away from customer traffic.
 
-## Required environment variable
+## Environment status
 
-Set a random server-only `AI_RATE_LIMIT_SECRET` in Vercel production and preview.
-Until it is set, the server uses the Supabase service-role secret as the HMAC key;
-the client address itself is never stored.
+A random server-only `AI_RATE_LIMIT_SECRET` is configured in Vercel Production
+and Preview. The client address itself is never stored.
