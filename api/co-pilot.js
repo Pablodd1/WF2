@@ -14,6 +14,7 @@
  */
 
 const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
+const { consumeAiQuota, rejectForQuota } = require('./_lib/ai-quota.cjs');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -31,6 +32,9 @@ module.exports = async function handler(req, res) {
   if (!rawMessage) {
     return res.status(400).json({ error: 'rawMessage required' });
   }
+
+  const quota = await consumeAiQuota(req, { route: 'co-pilot', limit: 10 });
+  if (!quota.allowed) return rejectForQuota(res, quota);
 
   const systemPrompt = `You are a luxury watch co-pilot helping a human reviewer fix a record the parser couldn't fully understand.
 

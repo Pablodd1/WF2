@@ -25,6 +25,7 @@
 const catalogLib = require('./_lib/catalog.js');
 const { lookupCatalog } = catalogLib;
 const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
+const { consumeAiQuota, rejectForQuota } = require('./_lib/ai-quota.cjs');
 const visionLib = require('./_lib/vision.js');
 const { analyzeImage } = visionLib;
 
@@ -1397,7 +1398,6 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   // ───────── VERDICT GATE ─────────
   const identified = !!parsed.reference && parsed.brand !== 'Unknown';
   const aiAssisted = stages.some(stage => stage.stage === 'AI_TEXT' && stage.engine !== 'skipped');
-  const catalogConfirmed = stages.some(stage => stage.stage === 'CATALOG' && stage.data?.found === true);
   const completeSellEvidence = !!parsed.price && !!parsed.currency;
   let verdict, reason;
   if (imageVerdict === 'MISMATCH') {
@@ -1453,6 +1453,9 @@ module.exports = async function handler(req, res) {
   if (!text || typeof text !== 'string' || !text.trim()) {
     return res.status(400).json({ error: 'text (string) required — paste one or more watch descriptions' });
   }
+
+  const quota = await consumeAiQuota(req, { route: 'clean-analyze', limit: 6 });
+  if (!quota.allowed) return rejectForQuota(res, quota);
 
   const kimiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
   const deepseekKey = process.env.DEEPSEEK_API_KEY;

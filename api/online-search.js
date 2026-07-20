@@ -20,6 +20,7 @@
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const { consumeAiQuota, rejectForQuota } = require('./_lib/ai-quota.cjs');
 
 const SYSTEM_PROMPT = `You are a luxury watch research expert with web search knowledge. When given a watch reference number (and optionally a brand), find the canonical specifications for that watch.
 
@@ -197,6 +198,9 @@ module.exports = async function handler(req, res) {
   if (!reference || typeof reference !== 'string') {
     return res.status(400).json({ error: 'reference field required' });
   }
+
+  const quota = await consumeAiQuota(req, { route: 'online-search', limit: 10 });
+  if (!quota.allowed) return rejectForQuota(res, quota);
 
   const openaiKey = process.env.OPENAI_API_KEY;
   const openrouterKey = process.env.OPENROUTER_API_KEY;

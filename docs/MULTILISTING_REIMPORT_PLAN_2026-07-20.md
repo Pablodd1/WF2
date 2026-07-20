@@ -113,3 +113,12 @@ Do not begin the full import until a 1,000-row sample from the edited files and 
 - 100% preservation of raw child text.
 - Reported seller/date/image coverage with no guessed values.
 - Zero direct writes to production `watch_records` during validation.
+
+## Image sequencing
+
+Image enrichment is the final stage after parent/child lineage, seller identity,
+original posting date, intent, catalog identity, and duplicate decisions are
+proven. A bounded 200-record pilot was attempted on 2026-07-20 against the
+production Spaces inventory. Only six records achieved exact source identity
+and brand/reference agreement, so only those six were linked. The remaining
+194 were not guessed and require the legacy `auctions.front_image` export.
