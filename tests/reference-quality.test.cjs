@@ -53,3 +53,26 @@ test('recognizes exact Omega, JLC, IWC, Tudor, and Piaget reference formats', ()
     assert.equal(assessReferenceQuality({ brand, reference, rawLine }).proposed_reference, expected);
   }
 });
+
+test('applies exact brand-aware cleanup examples without guessing', () => {
+  const cases = [
+    ['Rolex', 'DJ41', 'Mar 2026 DJ41 Azzurro Jubilee 126334', '126334'],
+    ['Patek Philippe', 'CUBITUS', 'CUBITUS 5821/1AR', '5821/1AR'],
+    ['Richard Mille', '11-03', 'Richard Mille 11-03', 'RM11-03'],
+    ['Panerai', 'Panerai', 'Panerai Pam 422', 'PAM00422'],
+    ['Bell & Ross', '03-92', 'Bell & Ross BR 03-92', 'BR03-92'],
+  ];
+  for (const [brand, reference, rawLine, expected] of cases) {
+    assert.equal(assessReferenceQuality({ brand, reference, rawLine }).proposed_reference, expected);
+  }
+});
+
+test('holds a brand stock list rather than selecting its first reference', () => {
+  const result = assessReferenceQuality({
+    brand: 'Vacheron Constantin',
+    reference: '$541,000',
+    rawLine: 'VC 4500V 541000 HKD / 4200H/222J-B935 900000 HKD',
+  });
+  assert.equal(result.proposed_reference, null);
+  assert.ok(result.reasons.includes('MULTI_WATCH_STOCK_LIST'));
+});
