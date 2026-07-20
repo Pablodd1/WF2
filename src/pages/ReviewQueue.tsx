@@ -87,7 +87,27 @@ interface ShadowQueueApiItem {
   };
 }
 
+interface UnbundledQueueApiItem {
+  id: string;
+  raw_message?: string | null;
+  brand?: string | null;
+  reference?: string | null;
+  dial_color?: string | null;
+  condition?: string | null;
+  price_raw?: number | null;
+  price_usd?: number | null;
+  currency?: string | null;
+  listing_type?: string | null;
+  created_at?: string | null;
+  flags?: string[];
+  reviewBucket?: 'review-ready' | 'human-correction';
+  dealerAttributionMissing?: boolean;
+  catalogConfirmed?: boolean;
+  exactRawLineage?: boolean;
+}
+
 export default function ReviewQueue() {
+  const [lane, setLane] = useState<'shadow' | 'unbundled'>('unbundled');
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [reasonFilter, setReasonFilter] = useState('');
@@ -100,11 +120,58 @@ export default function ReviewQueue() {
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [aiResults, setAiResults] = useState<Record<string, CopilotResult>>({});
   const [aiErrors, setAiErrors] = useState<Record<string, string>>({});
+  const [unbundledBucket, setUnbundledBucket] = useState<'review-ready' | 'human-correction'>('review-ready');
+  const [unbundledPage, setUnbundledPage] = useState(1);
+  const [unbundledTotal, setUnbundledTotal] = useState(0);
+  const [duplicateReviewed, setDuplicateReviewed] = useState<Set<string>>(new Set());
 
   // Decisions are sent to the audited server transaction. The client never
   // writes market records directly.
   useEffect(() => {
     let active = true;
+    setLoadError(null);
+    if (lane === 'unbundled') {
+      const params = new URLSearchParams({ limit: '50', page: String(unbundledPage), bucket: unbundledBucket });
+      if (search.trim()) params.set('search', search.trim());
+      fetch(`/api/unbundled-review-queue?${params.toString()}`, { credentials: 'include' })
+        .then(async response => {
+          if (!response.ok) throw new Error('Unbundled review queue is unavailable');
+          return response.json();
+        })
+        .then(data => {
+          if (!active) return;
+          setUnbundledTotal(Number(data.total || 0));
+          setItems(((data.items || []) as UnbundledQueueApiItem[]).map((item): ReviewItem => {
+            const ready = item.reviewBucket === 'review-ready' && item.catalogConfirmed && item.exactRawLineage;
+            const flags = item.flags || [];
+            return {
+              id: item.id,
+              reference: item.reference || 'Unresolved',
+              brand: item.brand || 'Unknown',
+              model: 'Unbundled child',
+              dial: item.dial_color || 'Unverified',
+              price: Number(item.price_usd || item.price_raw || 0),
+              currency: item.currency || 'Unknown',
+              aiFields: flags.filter(flag => flag.startsWith('BLOCKER:')),
+              catalogFields: ready ? ['reference', 'brand', ...(item.dial_color ? ['dial'] : [])] : [],
+              catalog: ready ? { reference: item.reference, brand: item.brand, matchType: 'exact' } : null,
+              status: 'pending',
+              submittedAt: item.created_at || new Date(0).toISOString(),
+              listingTitle: item.raw_message || 'Raw child line unavailable',
+              reviewReasons: [
+                ...flags.filter(flag => flag.startsWith('REVIEW:') || flag.startsWith('BLOCKER:')),
+                ...(item.dealerAttributionMissing ? ['DEALER_ATTRIBUTION_MISSING'] : []),
+              ],
+              disposition: ready ? 'READY_FOR_HUMAN_APPROVAL' : 'HUMAN_REVIEW',
+              priority: ready ? 30 : 90,
+            };
+          }));
+        })
+        .catch(error => {
+          if (active) setLoadError(error instanceof Error ? error.message : 'Unbundled review queue is unavailable');
+        });
+      return () => { active = false; };
+    }
     const params = new URLSearchParams({ limit: '100', sort: reasonFilter ? 'recent' : 'priority' });
     if (reasonFilter) params.set('reason', reasonFilter);
     fetch(`/api/shadow-review-queue?${params.toString()}`, { credentials: 'include' })
@@ -142,7 +209,7 @@ export default function ReviewQueue() {
         if (active) setLoadError(error instanceof Error ? error.message : 'Review queue is unavailable');
       });
     return () => { active = false; };
-  }, [reasonFilter]);
+  }, [lane, reasonFilter, search, unbundledBucket, unbundledPage]);
 
   useEffect(() => {
     let active = true;
@@ -223,16 +290,13 @@ export default function ReviewQueue() {
     setDecisionBusy(item.id);
     setDecisionError(null);
     try {
-      const response = await fetch('/api/shadow-review-decision', {
+      const response = await fetch(lane === 'unbundled' ? '/api/unbundled-review-decision' : '/api/shadow-review-decision', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceRecordId: item.id,
-          decision,
-          operatorId: null,
-          reason,
-        }),
+        body: JSON.stringify(lane === 'unbundled'
+          ? { stagingId: item.id, decision, reason, duplicateReviewed: duplicateReviewed.has(item.id) }
+          : { sourceRecordId: item.id, decision, operatorId: null, reason }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Review decision failed');
@@ -274,7 +338,25 @@ export default function ReviewQueue() {
           {decisionError && <span className="w-full text-xs text-red-400">{decisionError}</span>}
         </div>
 
-        {progress && (
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => { setLane('unbundled'); setSelected(null); }}
+            className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'unbundled' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
+          >
+            Unbundled batch 002
+          </button>
+          <button
+            onClick={() => { setLane('shadow'); setSelected(null); }}
+            className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'shadow' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
+          >
+            Normalization corrections
+          </button>
+          {lane === 'unbundled' && (
+            <span className="ml-auto text-xs text-text-muted">{unbundledTotal.toLocaleString()} pending in this lane</span>
+          )}
+        </div>
+
+        {lane === 'shadow' && progress && (
           <div className="mb-6 border border-border-default bg-bg-card px-4 py-3 rounded-xl flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
             <div className="flex items-center gap-2 text-text-secondary">
               <Database size={14} className="text-gold-primary" />
@@ -313,7 +395,10 @@ export default function ReviewQueue() {
             <input
               type="text"
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => {
+                setSearch(e.target.value);
+                if (lane === 'unbundled') setUnbundledPage(1);
+              }}
               placeholder="Search reference or brand..."
               className="bg-transparent border-none outline-none text-sm text-text-primary w-64"
             />
@@ -332,12 +417,21 @@ export default function ReviewQueue() {
             ))}
           </div>
           <div className="flex items-center gap-1 overflow-x-auto bg-bg-card border border-border-default rounded-lg p-1">
-            {reasonFilters.map(reason => (
+            {(lane === 'shadow' ? reasonFilters : [
+              { value: 'review-ready', label: 'Review ready' },
+              { value: 'human-correction', label: 'Needs correction' },
+            ]).map(reason => (
               <button
                 key={reason.value || 'priority'}
-                onClick={() => setReasonFilter(reason.value)}
+                onClick={() => {
+                  if (lane === 'shadow') setReasonFilter(reason.value);
+                  else {
+                    setUnbundledBucket(reason.value as 'review-ready' | 'human-correction');
+                    setUnbundledPage(1);
+                  }
+                }}
                 className={`whitespace-nowrap px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${
-                  reasonFilter === reason.value ? 'bg-bg-elevated text-gold-primary' : 'text-text-muted hover:text-text-primary'
+                  (lane === 'shadow' ? reasonFilter === reason.value : unbundledBucket === reason.value) ? 'bg-bg-elevated text-gold-primary' : 'text-text-muted hover:text-text-primary'
                 }`}
               >
                 {reason.label}
@@ -419,7 +513,7 @@ export default function ReviewQueue() {
                   {item.status === 'pending' && item.disposition === 'READY_FOR_HUMAN_APPROVAL' && (
                     <button
                       onClick={() => void submitDecision(item, 'APPROVED')}
-                      disabled={decisionBusy === item.id}
+                      disabled={decisionBusy === item.id || (lane === 'unbundled' && !duplicateReviewed.has(item.id))}
                       className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-emerald-500 text-black text-xs font-bold disabled:opacity-50"
                     >
                       {decisionBusy === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
@@ -487,6 +581,23 @@ export default function ReviewQueue() {
                       </div>
                     </div>
                   )}
+                  {lane === 'unbundled' && item.disposition === 'READY_FOR_HUMAN_APPROVAL' && (
+                    <label className="mt-4 flex items-start gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-text-secondary">
+                      <input
+                        type="checkbox"
+                        checked={duplicateReviewed.has(item.id)}
+                        onChange={event => setDuplicateReviewed(current => {
+                          const next = new Set(current);
+                          if (event.target.checked) next.add(item.id); else next.delete(item.id);
+                          return next;
+                        })}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <strong className="text-amber-300">Duplicate review completed.</strong> I checked the preserved raw line and context and confirm this is a distinct listing observation. Approval remains disabled until this is acknowledged.
+                      </span>
+                    </label>
+                  )}
                   <div className="mt-4 rounded-lg border border-border-default bg-bg-elevated/40 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -521,6 +632,25 @@ export default function ReviewQueue() {
             </div>
           ))}
         </div>
+        {lane === 'unbundled' && unbundledTotal > 50 && (
+          <div className="mt-6 flex items-center justify-between border-t border-border-default pt-4 text-xs text-text-muted">
+            <button
+              disabled={unbundledPage === 1}
+              onClick={() => setUnbundledPage(page => Math.max(1, page - 1))}
+              className="rounded-lg border border-border-default px-3 py-2 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span>Page {unbundledPage} of {Math.ceil(unbundledTotal / 50).toLocaleString()}</span>
+            <button
+              disabled={unbundledPage >= Math.ceil(unbundledTotal / 50)}
+              onClick={() => setUnbundledPage(page => page + 1)}
+              className="rounded-lg border border-border-default px-3 py-2 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </Layout>
   );

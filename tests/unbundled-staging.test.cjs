@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { stagingRow } = require('../tools/multilisting/prepare-unbundled-staging.cjs');
 
 test('creates a stable pending staging UUID while preserving the child audit key', () => {
@@ -34,4 +36,16 @@ test('marks absent dealer attribution instead of inventing contact data', () => 
   assert.ok(row.flags.includes('DEALER_ATTRIBUTION_MISSING'));
   assert.equal(row.field_confidence.seller_phone, null);
   assert.equal(row.field_confidence.dealer_id, null);
+});
+
+test('unbundled approval migration keeps correction rows blocked and caps approval at 100', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260720190000_unbundled_staging_review.sql'), 'utf8');
+  assert.match(sql, /v_review_bucket\s*<>\s*'review-ready'/);
+  assert.match(sql, /confidence,\s*verdict[\s\S]*100,\s*'APPROVED'/);
+  assert.match(sql, /CASE WHEN p_decision = 'APPROVED' THEN 100 ELSE 0 END/);
+  assert.match(sql, /exact_raw_lineage/);
+  assert.match(sql, /catalog_confirmed/);
+  assert.match(sql, /p_duplicate_reviewed IS NOT TRUE/);
+  assert.match(sql, /duplicate_reviewed/);
+  assert.doesNotMatch(sql, /confidence\s*=\s*1000/);
 });
