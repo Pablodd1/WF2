@@ -107,6 +107,8 @@ Backtest the system on the known John references (`5712/1A`, `5712/1R`, `3712/1A
 
 Conversion is a display tool. It never overwrites the immutable original price, original currency, normalization evidence, or the historical FX rate used by Price Research. Store/cache the rate, base, quote, source, and effective timestamp. ECB can provide an auditable official reference-rate source for covered currencies, but its rates are informational and cross-rates may be required through EUR.
 
+Implementation status (2026-07-20): the converter is available on Trading Floor and Price Research for USD, HKD, EUR, GBP, CHF, CNY, JPY, and SGD. The server reads official ECB reference-rate data, derives a USD display base, returns the observation date, and caches the response for six hours. It has no permission to update `watch_records`, normalization fields, or Price Research comparables.
+
 ### Mobile acceptance
 
 - Numeric keypad opens automatically.

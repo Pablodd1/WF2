@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
+import { CurrencyConverter } from '../components/CurrencyConverter';
 import { rateMarketPrice, type MarketPriceRating } from '../lib/marketPriceRating';
 
 const GOLD = '#C9A96E';
@@ -281,6 +282,7 @@ export default function TradingFloor() {
               />
             </label>
           </div>
+          <CurrencyConverter compact />
         </div>
       </div>
 

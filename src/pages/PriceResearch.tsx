@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Eye, ImageOff, Loader2, M
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
+import { CurrencyConverter } from '../components/CurrencyConverter';
 import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -417,6 +418,7 @@ export default function PriceResearch() {
     <div style={{ backgroundColor: WHITE, color: TEXT, fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh' }}>
       <MarketNav />
       <LuxFiBanner />
+      <div style={{ paddingTop: 12 }}><CurrencyConverter /></div>
 
       <div style={{ backgroundColor: '#09090d', color: TEXT, padding: '32px 0' }}>
         <div className="max-w-6xl mx-auto px-4">
