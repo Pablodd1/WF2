@@ -9,6 +9,8 @@ node_modules/
 dist/
 .playwright-cli/
 audit-output/
+.audit*.json
+.eslint-report.json
 
 # Environment files — ALL .env* files must never be committed
 .env

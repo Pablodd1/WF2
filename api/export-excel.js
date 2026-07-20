@@ -10,6 +10,8 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { inferBrand } = require('./_lib/resolve');
+const { redactPublicSource } = require('./_lib/source-redaction.cjs');
+const { csvCell } = require('./_lib/csv-cell.cjs');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -63,10 +65,15 @@ module.exports = async function handler(req, res) {
 
     // Build CSV (server-friendly, 10x smaller than XLSX for same data)
     const header = 'price_usd,created_at,dial_color,condition,year,source,raw_message';
-    const csvRows = clean.map(r =>
-      [r.price_usd, r.created_at, (r.dial_color || '').replace(/,/g, ' '), (r.condition || '').replace(/,/g, ' '), r.year || '', r.source, '"' + (r.raw_message || '').replace(/"/g, '""') + '"']
-        .join(',')
-    );
+    const csvRows = clean.map(r => [
+      r.price_usd,
+      r.created_at,
+      r.dial_color,
+      r.condition,
+      r.year,
+      r.source,
+      redactPublicSource(r.raw_message),
+    ].map(csvCell).join(','));
     const csv = header + '\n' + csvRows.join('\n');
     const filename = `price-research_${targetRef}_${brand.replace(/\s+/g, '_')}.csv`;
 

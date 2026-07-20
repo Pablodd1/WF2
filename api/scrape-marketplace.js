@@ -141,7 +141,8 @@ async function supabaseUpsert(record, supabaseUrl, serviceKey) {
     price_usd: record.price || null,
     currency: record.currency || null,
     confidence: record.confidence,
-    verdict: record.confidence >= 70 ? 'APPROVED' : 'HUMAN',
+    // External extraction is evidence for review, never approval by itself.
+    verdict: 'PENDING',
     source: record.source,
     channel_id: record.source,
     llm_used: false,

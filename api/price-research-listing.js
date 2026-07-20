@@ -5,6 +5,7 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
+const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 
 function collectUrls(value, found = []) {
   if (Array.isArray(value)) {
@@ -93,7 +94,7 @@ module.exports = async function handler(req, res) {
         stored_price_usd: data.price_usd,
         price_normalization: normalized.price_normalization,
         currency: data.currency,
-        raw_message: rawSource.text,
+        raw_message: redactPublicSource(rawSource.text),
         raw_message_scope: rawSource.scope,
         raw_message_lineage_id: rawSource.lineage_id,
         created_at: data.created_at,
