@@ -23,6 +23,7 @@ The streaming audits are available through:
 ```text
 npm run audit:unbundled-csv
 npm run audit:unbundled-lineage
+npm run stage:unbundled-canary
 ```
 
 ## Full-file intake results
@@ -96,7 +97,7 @@ contradictory intent. Ninety-seven children have a parent intent labeled
 
 - `/review-queue` is restricted to authenticated `reviewer` and `admin` roles.
 - The queue API now enforces the same roles before returning raw evidence.
-- The Admin shortcut now opens `/review-queue` instead of the obsolete hash URL.
+- The Admin shortcut opens the HashRouter-compatible `/#/review-queue` URL.
 - Every expanded review item displays exact catalog reference, brand, model,
   match type, catalog source, and allowed dial values.
 - The Approve action remains available only for server-computed
@@ -108,6 +109,25 @@ contradictory intent. Ninety-seven children have a parent intent labeled
   as if they were approval evidence.
 
 ## Next safe canary
+
+The local-only 1,000-row canary builder is now available through
+`npm run stage:unbundled-canary`. It writes `rows.jsonl`, `review-ready.jsonl`,
+`held.jsonl`, and `report.json` under
+`audit-output/unbundled/batch-001-canary`; it has no database client and cannot
+write to production.
+
+The first corrected canary produced:
+
+| Review disposition | Rows |
+| --- | ---: |
+| Ready for Human Review | 180 |
+| Requires Human Correction | 7 |
+| Blocked by Catalog | 758 |
+| Blocked by Lineage/Context | 55 |
+
+The principal blockers were 531 partial catalog matches, 148 catalog misses,
+107 catalog dial conflicts, and 55 unusable parent intents. Eighteen child
+intents were corrected from parent context. All rows remain unapproved.
 
 1. Build a corrected 1,000-row staging cohort from batch 001 and its parent
    file; preserve the stable listing ID and raw child line.
