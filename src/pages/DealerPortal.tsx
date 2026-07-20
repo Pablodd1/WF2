@@ -26,6 +26,12 @@ const portalLinks = [
     to: '/dealer/post',
     icon: PlusCircle,
   },
+  {
+    title: 'Account workspace',
+    description: 'Manage your profile, listings, settings, billing status, and support tickets.',
+    to: '/dealer/account/profile',
+    icon: ShieldCheck,
+  },
 ];
 
 export default function DealerPortal() {
