@@ -67,6 +67,7 @@ module.exports = async function handler(req, res) {
       .eq('id', id)
       .eq('verdict', 'APPROVED')
       .eq('listing_type', 'WTS')
+      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
       .maybeSingle();
 
     if (error) throw error;

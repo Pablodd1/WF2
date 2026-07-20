@@ -26,11 +26,9 @@ const RED = '#EF4444';
 const FILTER_OPTIONS = [
   { label: 'Watches', value: 'watches', group: 'Inventory' },
   { label: 'Other luxury (unnormalized)', value: 'luxury', group: 'Inventory' },
-  { label: 'Bulk listings', value: 'multi', group: 'Inventory' },
   { label: 'All inventory', value: 'all', group: 'Inventory' },
   { label: 'For sale', value: 'WTS', group: 'Intent' },
   { label: 'Want to buy / Looking for', value: 'WTB', group: 'Intent' },
-  { label: 'Trade', value: 'TRADE', group: 'Intent' },
 ] as const;
 
 interface ListingRecord {
@@ -70,11 +68,16 @@ interface ListingContact {
   contact_available: boolean;
   dealer_id?: string;
   dealer_name?: string;
+  dealer_company?: string | null;
+  dealer_country?: string | null;
+  dealer_city?: string | null;
+  dealer_avatar_url?: string | null;
+  dealer_profile_summary?: string | null;
   dealer_profile_url?: string;
   dealer_rating?: number | null;
   dealer_review_count?: number;
   dealer_group_count?: number;
-  dealer_stats?: { active_listings: number; wts_posts: number; wtb_posts: number } | null;
+  dealer_stats?: { total_posts: number; active_listings: number; wts_posts: number; wtb_posts: number; first_post_at: string | null; last_post_at: string | null; posting_years: number } | null;
   whatsapp_url?: string;
   reason?: string;
 }
@@ -236,7 +239,7 @@ export default function TradingFloor() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-5">
-        {featuredListings.length > 0 && page === 1 && !search && (
+        {featuredListings.length > 0 && page === 1 && !search && ['all', 'watches', 'WTS'].includes(activeFilter) && (
           <FeaturedImageRail listings={featuredListings} onSelect={setSelectedListing} />
         )}
 
@@ -395,7 +398,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
       <div className="mt-auto pt-4">
         <ActionButton
-          label="CHECK AVAILABILITY"
+          label={isBuyerIntent(listing.listing_type) ? 'VIEW BUYER REQUEST' : 'CHECK AVAILABILITY'}
           onClick={onSelect}
         />
       </div>
@@ -489,17 +492,38 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Check availability</h2>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(listing.listing_type) ? 'Buyer request contact' : 'Check availability'}</h2>
+          {contact?.dealer_name && (
+            <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
+              <div className="text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>
+              {contact.dealer_company && <div className="mt-1 text-sm" style={{ color: MUTED }}>{contact.dealer_company}</div>}
+              <div className="mt-2 text-sm" style={{ color: MUTED }}>
+                {[contact.dealer_city, contact.dealer_country].filter(Boolean).join(', ') || 'Location not published'}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs" style={{ color: MUTED }}>
+                <span>{contact.dealer_rating == null ? 'Unrated' : `${Number(contact.dealer_rating).toFixed(2)} rating`}</span>
+                <span>{Number(contact.dealer_review_count || 0).toLocaleString()} reviews</span>
+                <span>{Number(contact.dealer_group_count || 0).toLocaleString()} common groups</span>
+              </div>
+              {contact.dealer_stats && (
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <ContactMetric label="For sale" value={contact.dealer_stats.wts_posts} />
+                  <ContactMetric label="Looking for" value={contact.dealer_stats.wtb_posts} />
+                  <ContactMetric label="Active" value={contact.dealer_stats.active_listings} />
+                </div>
+              )}
+            </div>
+          )}
           {contact?.dealer_profile_url && (
-            <Link to={contact.dealer_profile_url} className="mt-4 block border-y py-3 text-sm" style={{ borderColor: BORDER, color: GOLD_BRIGHT }}>
-              View dealer profile{contact.dealer_rating != null ? ` · ${Number(contact.dealer_rating).toFixed(2)} rating` : ''}{contact.dealer_stats ? ` · ${Number(contact.dealer_stats.active_listings).toLocaleString()} active listings` : ''}
+            <Link to={contact.dealer_profile_url} className="mt-4 block text-sm" style={{ color: GOLD_BRIGHT }}>
+              View full dealer profile
             </Link>
           )}
           {contact?.contact_available && contact.whatsapp_url ? (
             <>
-              <p className="mt-3 text-sm" style={{ color: MUTED }}>Contact {contact.dealer_name || 'the verified dealer'} directly about this item.</p>
+              <p className="mt-3 text-sm" style={{ color: MUTED }}>{isBuyerIntent(listing.listing_type) ? `Contact ${contact.dealer_name || 'the verified buyer'} about this request.` : `Contact ${contact.dealer_name || 'the verified dealer'} directly about this item.`}</p>
               <a href={contact.whatsapp_url} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
-                <MessageCircle size={18} /> Continue on WhatsApp
+                <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
               </a>
             </>
           ) : (
@@ -512,7 +536,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           {rawMessage ? (
             <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{rawMessage}</pre>
           ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Sign in with a credentialed dealer or administrator account to inspect preserved source evidence.</p>
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Source evidence is unavailable for this record.</p>
           )}
         </div>
 
@@ -541,6 +565,10 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
 function MarketStat({ label, value }: { label: string; value: number }) {
   return <div><div className="text-[11px] uppercase" style={{ color: MUTED }}>{label}</div><div className="mt-1 text-sm font-semibold" style={{ color: INK }}>${Math.round(value).toLocaleString()}</div></div>;
+}
+
+function ContactMetric({ label, value }: { label: string; value: number }) {
+  return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{Number(value || 0).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
 }
 
 function ListingImage({ listing, className, large = false }: { listing: ListingRecord; className: string; large?: boolean }) {
@@ -605,7 +633,7 @@ function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
   const rawPriceLabel = formatRawPrice(listing);
-  const usdPriceLabel = formatUsdPrice(listing.price_usd);
+  const usdPriceLabel = formatUsdPrice(listing.price_usd, listing.listing_type);
   const title = buildListingTitle(listing);
 
   return {
@@ -640,11 +668,11 @@ function formatRawPrice(listing: ListingRecord) {
     return `${compactNumber(listing.price_raw)}${listing.currency}`;
   }
   if (listing.price_usd) return `${compactNumber(listing.price_usd)}USD`;
-  return 'Price on request';
+  return isBuyerIntent(listing.listing_type) ? 'Buyer budget not stated' : 'Price on request';
 }
 
-function formatUsdPrice(value: number | null) {
-  if (value == null || value <= 0) return 'Ask';
+function formatUsdPrice(value: number | null, listingType: string) {
+  if (value == null || value <= 0) return isBuyerIntent(listingType) ? 'Buyer budget not stated' : 'Price on request';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -690,4 +718,8 @@ function customerIntentLabel(value: string) {
   if (value === 'WTB' || value === 'NTQ') return 'Want to buy';
   if (value === 'TRADE') return 'Trade';
   return cleanValue(value) || 'Listing';
+}
+
+function isBuyerIntent(value: string) {
+  return value === 'WTB' || value === 'NTQ';
 }

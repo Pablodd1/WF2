@@ -253,6 +253,14 @@ function extractReference(line) {
   const text = String(line);
   const patterns = [
     /\b(RM\s*\d{2,3}(?:-\d{2})?(?:\s*[A-Z0-9]+)?)\b/i,
+    /\b(IW\d{6})\b/i,
+    /\b(Q\d{7})\b/i,
+    /\b(M\d{4}[A-Z0-9]+-\d{4})\b/i,
+    /\b(G0A\d{5})\b/i,
+    /\b(W[A-Z]{3}\d{4})\b/i,
+    /\b(\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3})\b/i,
+    /\b(L\d\.\d{3}\.\d\.\d{2}\.\d)\b/i,
+    /\b(BR[A-Z0-9][A-Z0-9/-]{5,})\b/i,
     /\b((?:15|26|67|77)\d{3}[A-Z]{2}(?:\.[A-Z0-9.]+)?)\b/i,
     /\b([245678]\d{3}[VH]\/[A-Z0-9-]+)\b/i,
     /\b(WSSA\d{4})\b/i,

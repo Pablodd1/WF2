@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Eye, ImageOff, Loader2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Eye, ImageOff, Loader2, MessageCircle, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
@@ -61,6 +61,29 @@ interface ListingDetailData {
   confidence: number | null;
 }
 
+interface ListingSellerData {
+  contact_available: boolean;
+  dealer_name?: string;
+  dealer_company?: string | null;
+  dealer_country?: string | null;
+  dealer_city?: string | null;
+  dealer_profile_url?: string;
+  dealer_rating?: number | null;
+  dealer_review_count?: number;
+  dealer_group_count?: number;
+  dealer_stats?: {
+    total_posts: number;
+    active_listings: number;
+    wts_posts: number;
+    wtb_posts: number;
+    first_post_at: string | null;
+    last_post_at: string | null;
+    posting_years: number;
+  } | null;
+  whatsapp_url?: string;
+  reason?: string;
+}
+
 interface CohortPoint {
   condition: string;
   dial_color: string;
@@ -117,6 +140,10 @@ interface PriceData {
     corrected_count: number;
     status: 'corrected_for_analytics' | 'as_stored';
   };
+  bundle_data_quality?: {
+    unsplit_parent_excluded_count: number;
+    status: 'excluded_from_analytics' | 'clean';
+  };
   totalListings: number;
   eligible_observation_count?: number;
   unique_offer_count?: number;
@@ -156,6 +183,7 @@ interface PriceData {
     plausibility_floor_usd?: number; plausibility_excluded_count?: number; required_field_excluded_count?: number;
     statistical_outlier_count?: number;
     repost_excluded_count?: number;
+    unsplit_bundle_excluded_count?: number;
     lower_fence?: number | null; upper_fence?: number | null;
   };
 }
@@ -214,6 +242,7 @@ export default function PriceResearch() {
   const [error, setError] = useState('');
   const [selectedRow, setSelectedRow] = useState<RowData | null>(null);
   const [listingDetail, setListingDetail] = useState<ListingDetailData | null>(null);
+  const [listingSeller, setListingSeller] = useState<ListingSellerData | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
 
@@ -263,6 +292,7 @@ export default function PriceResearch() {
     setData(null);
     setSelectedRow(null);
     setListingDetail(null);
+    setListingSeller(null);
     try {
       const params = new URLSearchParams({ reference: normalizedReference });
       if (brand) params.set('brand', brand);
@@ -294,13 +324,18 @@ export default function PriceResearch() {
   const openListing = useCallback(async (row: RowData) => {
     setSelectedRow(row);
     setListingDetail(null);
+    setListingSeller(null);
     setDetailError('');
     setDetailLoading(true);
     try {
-      const response = await fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`);
-      const payload = await response.json();
+      const [response, contactResponse] = await Promise.all([
+        fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`),
+        fetch(`/api/listing-contact?id=${encodeURIComponent(row.id)}`),
+      ]);
+      const [payload, contactPayload] = await Promise.all([response.json(), contactResponse.json()]);
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Listing detail is unavailable');
       setListingDetail(payload.listing);
+      if (contactResponse.ok && contactPayload.success) setListingSeller(contactPayload);
     } catch (requestError) {
       setDetailError(requestError instanceof Error ? requestError.message : 'Listing detail is unavailable');
     } finally {
@@ -311,6 +346,7 @@ export default function PriceResearch() {
   const closeListing = useCallback(() => {
     setSelectedRow(null);
     setListingDetail(null);
+    setListingSeller(null);
     setDetailError('');
   }, []);
 
@@ -853,6 +889,7 @@ export default function PriceResearch() {
                       ['Statistical outliers', data.methodology.statistical_outlier_count ?? data.outliersRemoved],
                       ['Required-field failures', data.methodology.required_field_excluded_count ?? 0],
                       ['Reposts counted once', data.methodology.repost_excluded_count ?? 0],
+                      ['Unsplit parents excluded', data.methodology.unsplit_bundle_excluded_count ?? 0],
                       ['Plausibility floor', data.methodology.plausibility_floor_usd ? `$${data.methodology.plausibility_floor_usd.toLocaleString()}` : 'N/A'],
                       ['IQR', data.stats ? `$${data.stats.iqr.toLocaleString()}` : 'N/A'],
                       ['Q1', data.stats ? `$${data.stats.q1.toLocaleString()}` : 'N/A'],
@@ -995,6 +1032,7 @@ export default function PriceResearch() {
         <ListingDetailModal
           summary={selectedRow}
           detail={listingDetail}
+          seller={listingSeller}
           loading={detailLoading}
           error={detailError}
           onClose={closeListing}
@@ -1033,9 +1071,10 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
   );
 }
 
-function ListingDetailModal({ summary, detail, loading, error, onClose, outlierLabel, benchmark, comparableCount }: {
+function ListingDetailModal({ summary, detail, seller, loading, error, onClose, outlierLabel, benchmark, comparableCount }: {
   summary: RowData;
   detail: ListingDetailData | null;
+  seller: ListingSellerData | null;
   loading: boolean;
   error: string;
   onClose: () => void;
@@ -1124,14 +1163,38 @@ function ListingDetailModal({ summary, detail, loading, error, onClose, outlierL
                 </div>}
               </DetailCard>
 
-              <DetailCard title="Raw source message — unchanged" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy raw message'}</button> : undefined}>
+              <DetailCard title="Seller and market activity">
+                {seller?.dealer_name ? (
+                  <>
+                    <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>{seller.dealer_name}</div>
+                    {seller.dealer_company && <div style={{ color: MUTED, fontSize: 13, marginTop: 3 }}>{seller.dealer_company}</div>}
+                    <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>
+                      {[seller.dealer_city, seller.dealer_country].filter(Boolean).join(', ') || 'Location not published'}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }}>
+                      <Metric label="For sale" value={Number(seller.dealer_stats?.wts_posts || 0).toLocaleString()} />
+                      <Metric label="Looking for" value={Number(seller.dealer_stats?.wtb_posts || 0).toLocaleString()} />
+                      <Metric label="Reviews" value={Number(seller.dealer_review_count || 0).toLocaleString()} />
+                      <Metric label="Common groups" value={Number(seller.dealer_group_count || 0).toLocaleString()} />
+                    </div>
+                    <div className="flex flex-wrap gap-3" style={{ marginTop: 18 }}>
+                      {seller.dealer_profile_url && <Link to={seller.dealer_profile_url} style={{ color: NAVY, border: `1px solid ${BORDER}`, padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>View profile</Link>}
+                      {seller.contact_available && seller.whatsapp_url && <a href={seller.whatsapp_url} target="_blank" rel="noreferrer" className="flex items-center gap-2" style={{ color: '#07140b', background: '#25D366', padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 800 }}><MessageCircle size={15} /> Contact on WhatsApp</a>}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ color: MUTED, fontSize: 13 }}>The historical poster has not yet been matched to a verified dealer profile. No identity or contact data is inferred.</div>
+                )}
+              </DetailCard>
+
+              <DetailCard title="Preserved source message" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy source message'}</button> : undefined}>
                 <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
-                  <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>NO NORMALIZATION APPLIED</span>
+                  <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>SOURCE TEXT / CONTACT REDACTED</span>
                   <span style={{ color: MUTED, fontSize: 12 }}>
                     {detail.raw_message_scope === 'original_post'
-                      ? 'Complete immutable post recovered from ingestion lineage.'
+                      ? 'Complete post recovered from immutable ingestion lineage; direct contact tokens are redacted in this public view.'
                       : detail.raw_message_scope === 'stored_source_message'
-                        ? 'Exact source text stored with this historical listing; full-post lineage is not available.'
+                        ? 'Stored source text for this historical listing; direct contact tokens are redacted and full-post lineage is unavailable.'
                         : 'No source text is stored for this listing.'}
                   </span>
                 </div>
@@ -1170,7 +1233,6 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function DetailCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  if (title.startsWith('Raw source') || title.startsWith('Normalized record')) return null;
   return <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 20, marginBottom: 20 }}><div className="flex items-center justify-between gap-3" style={{ marginBottom: 18 }}><h2 style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{title}</h2>{action}</div>{children}</div>;
 }
 

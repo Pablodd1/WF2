@@ -6,6 +6,7 @@ const csv = require('csv-parser');
 const { adjacentDialClaim, exactLineage } = require('./bundle-cohort.cjs');
 const { confirmCatalogCandidate } = require('../shadow-reprocess/catalog-confirmation.cjs');
 const { comparisonKey } = require('../../api/_lib/dial-normalization.cjs');
+const { assessReferenceQuality } = require('../../api/_lib/reference-quality.cjs');
 
 const DEFAULT_LIMIT = 1000;
 const VERSION = 'manual-unbundle-canary-v1';
@@ -58,7 +59,14 @@ function buildCanaryRow(row, parent) {
   if (intent.blocker) blockers.push(intent.blocker);
   if (intent.value && intent.value !== upper(row.listing_type)) reviewReasons.push('INTENT_CORRECTED_FROM_PARENT_CONTEXT');
 
-  const explicitDial = adjacentDialClaim(row.raw_line, row.reference);
+  const referenceQuality = assessReferenceQuality({ brand: row.brand, reference: row.reference, rawLine: row.raw_line });
+  const selectedReference = referenceQuality.proposed_reference || text(row.reference) || null;
+  for (const reason of referenceQuality.reasons) {
+    if (reason === 'REFERENCE_CORRECTION_AVAILABLE') reviewReasons.push(reason);
+    else blockers.push(reason);
+  }
+
+  const explicitDial = adjacentDialClaim(row.raw_line, selectedReference);
   const exportedDial = text(row.dial_color) || null;
   const selectedDial = explicitDial || exportedDial;
   if (explicitDial && exportedDial && comparisonKey(explicitDial) !== comparisonKey(exportedDial)) {
@@ -67,7 +75,7 @@ function buildCanaryRow(row, parent) {
 
   const catalog = confirmCatalogCandidate({
     brand: text(row.brand) || null,
-    reference: text(row.reference) || null,
+    reference: selectedReference,
     dial_color: selectedDial,
   });
   if (!catalog.confirmed) blockers.push(catalog.reason || 'CATALOG_NOT_CONFIRMED');
@@ -78,6 +86,8 @@ function buildCanaryRow(row, parent) {
   let reviewStatus = 'READY_FOR_HUMAN_REVIEW';
   if (blockers.some(flag => flag === 'PARENT_NOT_FOUND' || flag === 'RAW_LINEAGE_MISSING' || flag.includes('INTENT'))) {
     reviewStatus = 'BLOCKED_LINEAGE_CONTEXT';
+  } else if (blockers.some(flag => ['ACCESSORY_NOT_WATCH', 'NON_WATCH_OR_WRONG_CATEGORY'].includes(flag))) {
+    reviewStatus = 'BLOCKED_NOT_WATCH';
   } else if (blockers.length) {
     reviewStatus = 'BLOCKED_CATALOG';
   } else if (reviewReasons.length) {
@@ -91,7 +101,9 @@ function buildCanaryRow(row, parent) {
     raw_line: text(row.raw_line),
     source_created_at: text(row.source_created_at) || text(parent?.created_at) || null,
     brand: text(row.brand) || null,
-    reference: text(row.reference) || null,
+    reference: selectedReference,
+    reference_exported: text(row.reference) || null,
+    reference_evidence: referenceQuality.proposed_reference ? 'exact_raw_line' : 'manual_export',
     model: text(row.model) || catalog.match?.model || null,
     listing_type: intent.value,
     listing_type_exported: upper(row.listing_type) || null,

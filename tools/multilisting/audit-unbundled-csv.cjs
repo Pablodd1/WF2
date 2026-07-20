@@ -7,6 +7,7 @@ const { analyzeRecord } = require('../shadow-reprocess/shadow-reprocess.cjs');
 const { confirmCatalogCandidate } = require('../shadow-reprocess/catalog-confirmation.cjs');
 const { adjacentDialClaim } = require('./bundle-cohort.cjs');
 const { comparisonKey } = require('../../api/_lib/dial-normalization.cjs');
+const { assessReferenceQuality } = require('../../api/_lib/reference-quality.cjs');
 
 const REQUIRED_HEADERS = [
   'listing_id', 'source_record_id', 'candidate_index', 'brand', 'reference',
@@ -69,6 +70,17 @@ function auditDetailedRow(row, report) {
     parser_version: 'manual-unbundle-csv',
   };
   const analysis = analyzeRecord(exported);
+  const referenceQuality = assessReferenceQuality({
+    brand: exported.brand,
+    reference: exported.reference,
+    rawLine: exported.raw_message,
+  });
+  for (const reason of referenceQuality.reasons) {
+    flag(report, `reference_${reason.toLowerCase()}`, row, {
+      exported: exported.reference,
+      proposed: referenceQuality.proposed_reference,
+    });
+  }
   const parsed = analysis.candidate_count === 1 ? analysis.proposed_candidates[0] : null;
 
   if (!parsed) {

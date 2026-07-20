@@ -9,11 +9,11 @@ const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
 const { lookupCatalog } = require('./_lib/catalog');
 const { buildComparableCohorts, buildDialGroups, classifyPrice, summarizePrices } = require('./_lib/market-stats.cjs');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
-const { segmentDealerMessage } = require('./_lib/normalization-v4.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
 const { classifyDemandEligibility, classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
+const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -59,15 +59,19 @@ async function lookupLiquidity(client, reference, listingCount, demand) {
 async function lookupDemand(client, brand, referenceVariants, catalog) {
   const { data, error } = await client
     .from('watch_records')
-    .select('id,brand,reference,dial_color,listing_type,verdict')
+    .select('id,brand,reference,dial_color,listing_type,verdict,raw_message,flags')
     .eq('brand', brand)
     .in('reference', referenceVariants)
     .in('listing_type', ['WTB', 'NTQ'])
     .in('verdict', ['APPROVED', 'HUMAN'])
+    .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
     .limit(5000);
   if (error) return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
 
-  const eligible = (data || []).filter(row => !classifyDemandEligibility(row, catalog));
+  const shadowBundleIds = await loadShadowBundleParentIds(client, data || []);
+  const eligible = (data || [])
+    .map(row => ({ ...row, bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds) }))
+    .filter(row => !classifyDemandEligibility(row, catalog));
   const grouped = new Map();
   for (const row of eligible) {
     const normalizedDial = normalizeDialValue(row.dial_color);
@@ -185,7 +189,7 @@ module.exports = async function handler(req, res) {
     // reference does not produce a chart made only from its newest day.
     const pageSize = 1000;
     const sampleLimit = 5000;
-    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,created_at,listing_date,condition,source,dial_color,year,listing_type';
+    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type';
     const buildRowsQuery = (from, to) => client
       .from('watch_records')
       .select(columns)
@@ -193,6 +197,7 @@ module.exports = async function handler(req, res) {
       .in('reference', referenceVariants)
       .eq('verdict', 'APPROVED')
       .eq('listing_type', 'WTS')
+      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
       .order('created_at', { ascending: false })
       .range(from, to);
 
@@ -259,6 +264,7 @@ module.exports = async function handler(req, res) {
         .in('reference', referenceVariants)
         .eq('verdict', 'APPROVED')
         .eq('listing_type', 'WTS')
+        .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
         .ilike('dial_color', dial)
         .order('created_at', { ascending: false })
         .limit(1000)));
@@ -268,7 +274,7 @@ module.exports = async function handler(req, res) {
       for (const row of supplementalPages.flatMap(page => page.data || [])) rowsById.set(row.id, row);
       rows = [...rowsById.values()];
     }
-    const totalListings = rows.length;
+    const shadowBundleIds = await loadShadowBundleParentIds(client, rows);
 
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
@@ -277,12 +283,14 @@ module.exports = async function handler(req, res) {
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {
           ...normalized,
-          bundle_candidate_count: segmentDealerMessage(row.raw_message || '').length,
+          bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds),
           dial_color: normalizedDial.known ? normalizedDial.value : normalized.dial_color,
           stored_price_usd: row.price_usd,
           price_usd: normalized.analytics_price_usd,
         };
       });
+    const bundleParentExcludedCount = normalizedRows.filter(row => row.bundle_candidate_count > 1).length;
+    const totalListings = normalizedRows.length - bundleParentExcludedCount;
     const requiredFieldExclusions = normalizedRows
       .map(row => ({ row, reason: classifyResearchEligibility(row, catalogHit) }))
       .filter(item => item.reason)
@@ -406,6 +414,10 @@ module.exports = async function handler(req, res) {
         corrected_count: currencyCorrections,
         status: currencyCorrections ? 'corrected_for_analytics' : 'as_stored',
       },
+      bundle_data_quality: {
+        unsplit_parent_excluded_count: bundleParentExcludedCount,
+        status: bundleParentExcludedCount ? 'excluded_from_analytics' : 'clean',
+      },
       totalListings,
       listing_count: marketRows.length,
       eligible_observation_count: eligibleMarketRows.length,
@@ -463,6 +475,7 @@ module.exports = async function handler(req, res) {
         statistical_outlier_count: statisticalOutlierRows.length,
         required_field_excluded_count: requiredFieldExclusions.length,
         repost_excluded_count: repostRows.length,
+        unsplit_bundle_excluded_count: bundleParentExcludedCount,
         plausibility_floor_usd: marketPriceFloorUsd,
         plausibility_excluded_count: outlierRows.filter(row => row.outlier_reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR').length,
         lower_fence: summary.stats?.lower_fence ?? null,

@@ -762,11 +762,13 @@ module.exports = async function handler(req, res) {
       const search = String(req.query?.q || '').trim().slice(0, 100);
       const quality = String(req.query?.quality || 'market').toLowerCase();
       const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
-      const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'OTHER']);
-      const allowedItems = new Set(['all', 'watches', 'luxury', 'multi']);
+      const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'OTHER']);
+      const allowedItems = new Set(['all', 'watches', 'luxury']);
       const start = (page - 1) * pageSize;
       const end = start + pageSize - 1;
-      const tableName = serviceKey ? 'watch_records' : 'trading_floor_listings';
+      // Both server-key and publishable-key reads use the same customer-safe
+      // database view so publication rules cannot drift by deployment mode.
+      const tableName = 'trading_floor_listings';
       const params = new URLSearchParams({
         // Keep this response marketplace-safe even when a server key is used.
         select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region',
@@ -775,6 +777,13 @@ module.exports = async function handler(req, res) {
         order: 'created_at.desc',
       });
 
+      if (listingType && !allowedTypes.has(listingType)) {
+        return res.status(400).json({ error: 'Unsupported public listing type' });
+      }
+      if (itemType && !allowedItems.has(itemType)) {
+        return res.status(400).json({ error: 'Unsupported public inventory filter' });
+      }
+
       // NTQ is historical buyer-intent shorthand. Customer-facing WTB must
       // include both values so every "looking for / want to buy" request is
       // found in one demand view while the stored source classification stays
@@ -782,7 +791,6 @@ module.exports = async function handler(req, res) {
       if (listingType === 'WTB') params.set('listing_type', 'in.(WTB,NTQ)');
       else if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
       if (!listingType && itemType === 'luxury') params.set('listing_type', 'eq.OTHER');
-      if (!listingType && itemType === 'multi') params.set('listing_type', 'eq.MULTI');
       if (!listingType && itemType === 'watches') params.set('listing_type', 'not.in.(MULTI,OTHER)');
       if (!listingType && itemType === 'all') params.set('listing_type', 'neq.MULTI');
       if (imagesOnly) params.set('has_images', 'eq.true');
