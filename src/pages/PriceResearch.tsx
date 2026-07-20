@@ -448,7 +448,7 @@ export default function PriceResearch() {
 
       <div style={{ backgroundColor: '#09090d', color: TEXT, padding: '32px 0' }}>
         <div className="max-w-6xl mx-auto px-4">
-          <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
+          <h1 className="text-2xl font-bold mb-1" style={{ color: WHITE, fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
             Live market pricing from dealer database — enter a reference to see current offers, historical trends, and volume.
           </p>
