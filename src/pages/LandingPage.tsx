@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ArrowDown, ArrowRight, BarChart3, Boxes, Building2, Gem, Search, ShieldCheck, Store } from 'lucide-react';
+import { ArrowDown, ArrowRight, BarChart3, Boxes, Gem, Search, ShieldCheck, Store } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SocialShareRail } from '@/components/SocialShareRail';
 import { MarketHeader } from '@/components/MarketHeader';
@@ -283,7 +283,9 @@ export default function LandingPage() {
 
       <footer className="flex flex-col gap-3 border-t border-white/10 px-5 py-6 text-[11px] uppercase tracking-[0.1em] text-white/45 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
         <img src="/images/curated-luxury-logo-dark.png" alt="Curated Luxury" className="h-16 w-auto max-w-[260px] object-contain" />
-        <span className="flex items-center gap-2"><Building2 size={13} /> Exceptional objects, thoughtfully considered</span>
+        <nav aria-label="Company links" className="flex flex-wrap gap-x-4 gap-y-2">
+          {['tools', 'apps', 'community', 'company'].map(page => <Link key={page} to={`/info/${page}`} className="text-white/60 transition-colors hover:text-white">{page}</Link>)}
+        </nav>
         <Link to="/dealer-login" className="text-white/70 transition-colors hover:text-white">Private access</Link>
       </footer>
       <SocialShareRail />

@@ -22,6 +22,7 @@ const DealerAccount = lazy(() => import('@/pages/DealerAccount'));
 const DealerDirectory = lazy(() => import('@/pages/DealerDirectory'));
 const DealerProfile = lazy(() => import('@/pages/DealerProfile'));
 const MultiListings = lazy(() => import('@/pages/MultiListings'));
+const PublicInfo = lazy(() => import('@/pages/PublicInfo'));
 
 export default function App() {
   return (
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/price-research" element={<DealerGate allowBetaSkip><PriceResearch /></DealerGate>} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
+        <Route path="/info/:page" element={<PublicInfo />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
