@@ -54,3 +54,85 @@
 
 A random server-only `AI_RATE_LIMIT_SECRET` is configured in Vercel Production
 and Preview. The client address itself is never stored.
+
+## Follow-up branch ready for review
+
+Branch: `codex/batch-002-full-normalization`
+
+The branch was rebased onto current `main` on 2026-07-20. It contains the
+post-PR-53 client-facing safeguards and workflows below. No production data was
+modified by these commits.
+
+1. Numeric watch references remain searchable; an exact numeric
+   reference/price collision is withheld as `REFERENCE_TOKEN_AS_PRICE`.
+2. Trading Floor uses cursor pagination: 24 records per mobile request and 48
+   per desktop request, with bounded in-browser accumulation and an explicit
+   `Load more` action.
+3. Trading Floor discovery separates category, WTS/WTB intent, condition, and
+   location. WTB does not require an asking price and is excluded from price
+   averages.
+4. The currency converter is display-only and uses dated ECB exchange-rate
+   evidence. It cannot mutate normalized source or USD prices.
+5. Standard numeric keycap/full-width emoji prices are parsed
+   deterministically. Private pictographic price codes are never guessed and
+   receive `EMOJI_PRICE_AMBIGUOUS` for human review.
+6. Authenticated dealers can submit WTS and WTB records into a moderated
+   `PENDING_REVIEW` queue. Submissions never write directly to public listings.
+7. Three-month forecasts are generated only for exact reference + dial +
+   condition cohorts meeting sample, recency, dealer-diversity, and rolling
+   backtest gates. Public values remain disabled unless
+   `ENABLE_PRICE_FORECASTS=true` is deliberately set after owner QA.
+8. The authenticated account workspace includes profile, verified activity,
+   moderated submissions, display settings, billing status, and support
+   tickets. Billing is explicitly inactive during beta.
+9. Lightweight Tools, Apps, Community, and Company pages now provide public
+   navigation without claiming unreleased apps or commercial plans.
+
+## Verification completed
+
+- Production build passes after rebase.
+- 127 normalization tests pass.
+- 20 security tests pass.
+- Touched frontend files pass ESLint.
+- Phone QA at 390 x 844 found no document-level horizontal overflow on Trading
+  Floor or Price Research. The Price Research heading contrast issue found in
+  screenshot review was corrected on the branch.
+- Bundle rows, ambiguous currency/emoji prices, and reference-shaped prices
+  remain excluded from automatic publication or price analytics.
+
+## Current deployment gate
+
+The former Supabase Preview branch for the already-merged PR was removed. The
+Vercel branch preview therefore loads the new UI but reports that the Trading
+Floor database is not configured and returns zero records. That zero is an
+environment state, not a validated marketplace total.
+
+Before merge:
+
+1. Open a fresh pull request from `codex/batch-002-full-normalization` to
+   `main`; the installed GitHub integration can read checks but returned `403`
+   when asked to create the PR.
+2. Confirm that Supabase creates a fresh Preview branch and applies
+   `20260721000000_dealer_listing_submissions.sql` and
+   `20260721020000_dealer_workspace.sql` successfully.
+3. Confirm both Vercel preview checks are Ready on the current head.
+4. Test cursor page 1/page 2 for WTS and WTB against Preview Supabase, checking
+   no overlap and stable descending source-date order.
+5. Verify a linked dealer can edit only its own profile, see its own listings,
+   and create a support ticket. Beta skip must not permit these writes.
+6. Keep forecasts disabled until the five John references and a stratified
+   50-reference backtest report are approved.
+
+## Deliberately deferred
+
+- The repository-wide ESLint baseline still contains 155 pre-existing issues
+  in legacy components. The new/touched files pass targeted lint; broad cleanup
+  remains a separate performance/debt task.
+- Seller attribution for batch 002 remains blocked by missing source envelope
+  fields for most parent rows. No seller name, phone, dealer identity, or region
+  may be inferred.
+- Image linkage remains after exact listing/source/dealer lineage. Six exact
+  pilot links are proven; lower-confidence media must not be published.
+- The 54,170 staged unbundled children remain pending review. Review-ready does
+  not mean customer-approved, and bundle parents must not be suppressed until
+  their child sets reconcile.
