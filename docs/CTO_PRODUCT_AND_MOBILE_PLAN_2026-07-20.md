@@ -93,6 +93,8 @@ Add WTS supply velocity, WTB demand velocity, unique sellers/buyers, repost pers
 
 Backtest the system on the known John references (`5712/1A`, `5712/1R`, `3712/1A`, `116500LN`, `52506`) and a stratified set of at least 50 references. John reviews the output before any public forecast is enabled.
 
+Implementation status (2026-07-20): Price Research now computes a three-month candidate forecast only for an explicitly selected reference, dial, and condition cohort. It requires at least 30 clean offers, 12 monthly periods, five linked verified dealer identities, recent evidence, and four rolling test periods. The monthly-median linear trend must beat a last-known-price baseline by at least 5%. Failed cohorts return a visible withholding reason; passing cohorts show a dashed estimate with an error-derived uncertainty band. This is an analytical projection, never a listing price or guarantee. Production release still requires the John-reference and 50-reference validation above, and remains disabled unless `ENABLE_PRICE_FORECASTS=true` is set deliberately after approval.
+
 ## 2. Currency converter
 
 ### Product behavior

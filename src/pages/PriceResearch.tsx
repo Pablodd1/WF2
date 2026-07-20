@@ -30,6 +30,19 @@ interface MonthlyPoint {
   month: string; count: number; avg_price: number; min_price: number; max_price: number;
 }
 
+interface ForecastData {
+  ready: boolean;
+  reasons: string[];
+  offer_count?: number;
+  verified_dealer_count?: number;
+  method?: string;
+  horizon_months?: number;
+  points?: Array<{ month: string; expected_price: number; lower: number; upper: number }>;
+  backtest?: { points: number; model_mae: number; naive_mae: number };
+  uncertainty_method?: string;
+  release_candidate?: boolean;
+}
+
 interface DialPoint {
   dial_color: string; count: number; avg_price: number; min_price: number; max_price: number;
 }
@@ -166,6 +179,7 @@ interface PriceData {
   } | null;
   liquidity: LiquidityData | null;
   monthly: MonthlyPoint[];
+  forecast?: ForecastData;
   prices: number[];
   rows: RowData[];
   outlier_rows: RowData[];
@@ -383,14 +397,26 @@ export default function PriceResearch() {
       }
     : null;
 
-  // Chart data: combine monthly + forecast placeholder
-  const chartData = (data?.monthly || []).map(m => ({
+  const chartData: Array<Record<string, number | string | null>> = (data?.monthly || []).map(m => ({
     month: m.month,
     min: m.min_price,
     avg: m.avg_price,
     max: m.max_price,
     count: m.count,
+    forecast: null,
+    forecastLower: null,
+    forecastUpper: null,
   }));
+  if (data?.forecast?.ready && data.forecast.points?.length) {
+    const lastHistory = chartData.at(-1);
+    if (lastHistory) lastHistory.forecast = Number(lastHistory.avg);
+    for (const point of data.forecast.points) {
+      chartData.push({
+        month: point.month, min: null, avg: null, max: null, count: 0,
+        forecast: point.expected_price, forecastLower: point.lower, forecastUpper: point.upper,
+      });
+    }
+  }
 
   const displayRef = data?.resolvedRef || data?.reference || query;
 
@@ -840,9 +866,12 @@ export default function PriceResearch() {
                       />
                       <Area type="monotone" dataKey="max" stroke="none" fill={RED} fillOpacity={0.05} />
                       <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
+                      <Area type="monotone" dataKey="forecastUpper" stroke="none" fill={GOLD} fillOpacity={0.10} connectNulls={false} />
+                      <Area type="monotone" dataKey="forecastLower" stroke="none" fill={WHITE} fillOpacity={1} connectNulls={false} />
                       <Line type="monotone" dataKey="max" stroke={RED} strokeWidth={1} dot={false} />
                       <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: WHITE, strokeWidth: 2 }} />
                       <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} />
+                      <Line type="monotone" dataKey="forecast" name="Three-month projection" stroke={GOLD} strokeWidth={2} strokeDasharray="6 5" dot={{ r: 4, fill: GOLD, stroke: WHITE, strokeWidth: 2 }} connectNulls />
                     </ComposedChart>
                   </ResponsiveContainer>
 
@@ -862,8 +891,17 @@ export default function PriceResearch() {
                   </div>
 
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
-                    Based on {data.count} comparable WTS listings · standard 1.5× IQR fences applied.
+                    Based on {data.count} comparable WTS listings | standard 1.5 x IQR fences applied.
                   </div>
+                  {data.forecast?.ready ? (
+                    <div className="mt-4 border-l-2 border-[#c9a03a] bg-[#c9a03a]/10 px-4 py-3 text-xs leading-6" style={{ color: NAVY }}>
+                      Three-month projection passed {data.forecast.backtest?.points || 0} rolling backtests. Model MAE ${data.forecast.backtest?.model_mae.toLocaleString()} versus naive MAE ${data.forecast.backtest?.naive_mae.toLocaleString()}. Dashed values are estimates, not offers or guarantees.
+                    </div>
+                  ) : (
+                    <div className="mt-4 border-l-2 border-[#adb5bd] bg-white px-4 py-3 text-xs leading-6" style={{ color: MUTED }}>
+                      Three-month projection withheld: {forecastReason(data.forecast?.reasons?.[0])}. Historical observations remain available above.
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -1237,6 +1275,21 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function DetailCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 20, marginBottom: 20 }}><div className="flex items-center justify-between gap-3" style={{ marginBottom: 18 }}><h2 style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{title}</h2>{action}</div>{children}</div>;
+}
+
+function forecastReason(reason?: string) {
+  const messages: Record<string, string> = {
+    CONDITION_REQUIRED: 'select a specific condition so New, Used, and unstated inventory are not mixed',
+    MINIMUM_OFFERS_NOT_MET: 'fewer than 30 clean comparable offers are available',
+    MINIMUM_MONTHS_NOT_MET: 'fewer than 12 monthly periods are available',
+    MINIMUM_VERIFIED_DEALERS_NOT_MET: 'fewer than five verified dealer identities are linked',
+    RECENT_DATA_NOT_MET: 'the latest qualified observation is more than three months old',
+    BACKTEST_HISTORY_NOT_MET: 'there are too few rolling test periods',
+    MODEL_DID_NOT_BEAT_NAIVE_BASELINE: 'the trend model did not outperform the last-known-price baseline',
+    NO_ELIGIBLE_OBSERVATIONS: 'no eligible observations are available',
+    FEATURE_NOT_RELEASED: 'validation is complete for this cohort, but public forecasts are awaiting the controlled release approval',
+  };
+  return messages[reason || ''] || 'the forecast release gate was not satisfied';
 }
 
 function DetailField({ label, value, mono = false }: { label: string; value: string | number | null | undefined; mono?: boolean }) {

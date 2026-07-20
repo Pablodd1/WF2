@@ -14,6 +14,7 @@ const { classifyDemandEligibility, classifyResearchEligibility } = require('./_l
 const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
+const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -189,7 +190,7 @@ module.exports = async function handler(req, res) {
     // reference does not produce a chart made only from its newest day.
     const pageSize = 1000;
     const sampleLimit = 5000;
-    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type';
+    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id';
     const buildRowsQuery = (from, to) => client
       .from('watch_records')
       .select(columns)
@@ -226,7 +227,8 @@ module.exports = async function handler(req, res) {
         selected_cohort: { condition: 'Unspecified', dial_color: 'Unspecified', count: 0 },
         cohorts: [], outliers: [], outlier_rows: [], outliersRemoved: 0, excludedEvidenceCount: 0, rawCount: 0,
         methodology: { method: 'IQR_1_5', minimum_sample: 5, included_count: 0, excluded_count: 0 },
-        stats: null, liquidity: null, monthly: [], prices: [], rows: []
+        stats: null, liquidity: null, monthly: [], prices: [], rows: [],
+        forecast: { ready: false, reasons: ['NO_ELIGIBLE_OBSERVATIONS'] }
       });
     }
 
@@ -363,6 +365,29 @@ module.exports = async function handler(req, res) {
       .map(m => ({ month: m.month, count: m.count, avg_price: Math.round(m.sum / m.count), min_price: m.min, max_price: m.max }))
       .sort((a, b) => a.month.localeCompare(b.month));
 
+    // Forecasts are more restrictive than descriptive analytics. A condition
+    // must be selected so New, Used, and unstated inventory never share a
+    // trend line. The helper also enforces sample, identity, recency, and
+    // rolling-backtest gates before returning any future values.
+    const forecastCandidate = requestedCondition && requestedCondition !== 'all'
+      ? buildMarketForecast(includedRows)
+      : {
+          ready: false,
+          reasons: ['CONDITION_REQUIRED'],
+          offer_count: includedRows.length,
+          verified_dealer_count: new Set(includedRows.map(row => row.dealer_id).filter(Boolean)).size,
+        };
+    const forecast = forecastCandidate.ready && process.env.ENABLE_PRICE_FORECASTS !== 'true'
+      ? {
+          ready: false,
+          reasons: ['FEATURE_NOT_RELEASED'],
+          offer_count: forecastCandidate.offer_count,
+          verified_dealer_count: forecastCandidate.verified_dealer_count,
+          backtest: forecastCandidate.backtest,
+          release_candidate: true,
+        }
+      : forecastCandidate;
+
     // ── Dial analysis: EVERY dial color found in real listings (rule: all must show) ──
     const dialMap = {};
     marketRows.forEach(r => {
@@ -492,7 +517,7 @@ module.exports = async function handler(req, res) {
         truncated: includedRows.length > evidencePageSize || outlierRows.length > outlierEvidenceLimit,
       },
       liquidity,
-      monthly, prices,
+      monthly, prices, forecast,
       rows: serializedComparables.map(r => ({
         id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
