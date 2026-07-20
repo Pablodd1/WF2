@@ -7,6 +7,7 @@ const {
   buildStagingChildren,
   comparePersisted,
   deterministicUuid,
+  specialDialClaim,
 } = require('../tools/multilisting/bundle-cohort.cjs');
 
 test('uses a dial immediately following the reference and flags inherited conflicts', () => {
@@ -31,6 +32,12 @@ test('uses a dial immediately following the reference and flags inherited confli
   assert.equal(rows[0].dial_color, 'Salmon');
   assert.equal(rows[0].field_confidence.dial_evidence, 'exact_raw_adjacent_to_reference');
   assert.ok(rows[0].flags.includes('DIAL_RAW_SOURCE_CONFLICT'));
+});
+
+test('preserves Tiffany shorthand as a market-significant dial claim', () => {
+  assert.equal(adjacentDialClaim('5712/1A Tiffany 2021 full set 1.88m hkd', '5712/1A'), 'Tiffany Blue');
+  assert.equal(specialDialClaim('126000-0006 Tiffany naked HKD82k'), 'Tiffany Blue');
+  assert.equal(specialDialClaim('126000 blue dial HKD82k'), null);
 });
 
 const source = {

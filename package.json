@@ -29,6 +29,8 @@
     "prepare:unbundled-staging": "node tools/multilisting/prepare-unbundled-staging.cjs",
     "stage:unbundled-manifest": "node tools/multilisting/stage-unbundled-manifest.cjs",
     "audit:unbundled-duplicates": "node tools/multilisting/audit-staged-duplicates.cjs",
+    "reconcile:unbundled-staging": "node tools/multilisting/reconcile-unbundled-staging.cjs",
+    "remediate:staged-special-dials": "node tools/multilisting/remediate-staged-special-dials.cjs",
     "validate:multilistings-export": "node tools/multilisting/validate-export.cjs",
     "persist:bundle-cohort": "node tools/multilisting/persist-bundle-cohort.cjs",
     "materialize:bundle-canary": "node tools/multilisting/materialize-bundle-children.cjs",

@@ -3,9 +3,10 @@
 ## Release state
 
 - Batch ID: `f94506b0-17a9-4656-9b51-9e81ed052ab8`
-- Staged children: 58,021
-- Review-ready: 37,344
-- Human correction required: 20,677
+- Pending staged children after v6 reconciliation: 57,569
+- Review-ready: 36,861
+- Human correction required: 20,708
+- Superseded v5 rows retained as blocked audit evidence: 453
 - Published by this staging run: 0
 - Dealer or seller attribution recovered: 0
 
@@ -46,6 +47,16 @@ Exact repeats in one parent may mean repeated formatting, quantity, or duplicate
 inventory and require human review. Cross-parent matches are only repost
 candidates. They must not be deleted without seller identity and source-date
 lineage.
+
+## Special-dial remediation
+
+The owner-reference audit found that standalone `Tiffany` shorthand could be
+lost when a suffixed reference was canonicalized before dial extraction. The
+raw-evidence parser now preserves that shorthand as `Tiffany Blue` globally.
+All 207 pending batch rows containing exact Tiffany evidence were moved to the
+human-correction lane with catalog-dial confirmation set to false. None were
+published. A public Trading Floor lookup for a remediated staging ID returned
+`404` after reconciliation.
 
 ## Critical references in batch 002
 

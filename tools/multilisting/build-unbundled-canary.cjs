@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const csv = require('csv-parser');
-const { adjacentDialClaim, exactLineage } = require('./bundle-cohort.cjs');
+const { adjacentDialClaim, exactLineage, specialDialClaim } = require('./bundle-cohort.cjs');
 const { confirmCatalogCandidate } = require('../shadow-reprocess/catalog-confirmation.cjs');
 const { segmentDealerMessage } = require('../../api/_lib/normalization-v4.cjs');
 const { comparisonKey } = require('../../api/_lib/dial-normalization.cjs');
@@ -107,7 +107,7 @@ function buildCanaryRow(row, parent) {
     else blockers.push(reason);
   }
 
-  const explicitDial = adjacentDialClaim(row.raw_line, selectedReference);
+  const explicitDial = adjacentDialClaim(row.raw_line, selectedReference) || specialDialClaim(row.raw_line);
   const exportedDial = text(row.dial_color) || null;
   const selectedDial = explicitDial || exportedDial;
   if (explicitDial && exportedDial && comparisonKey(explicitDial) !== comparisonKey(exportedDial)) {
