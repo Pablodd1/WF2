@@ -633,7 +633,9 @@ function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
   const rawPriceLabel = formatRawPrice(listing);
-  const usdPriceLabel = formatUsdPrice(listing.price_usd, listing.listing_type);
+  const usdPriceLabel = listing.data_quality_issues?.includes('REFERENCE_TOKEN_AS_PRICE')
+    ? 'Price under review'
+    : formatUsdPrice(listing.price_usd, listing.listing_type);
   const title = buildListingTitle(listing);
 
   return {
@@ -664,6 +666,7 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function formatRawPrice(listing: ListingRecord) {
+  if (listing.data_quality_issues?.includes('REFERENCE_TOKEN_AS_PRICE')) return 'Price under review';
   if (listing.price_raw && listing.currency) {
     return `${compactNumber(listing.price_raw)}${listing.currency}`;
   }
@@ -694,7 +697,7 @@ function formatListingDate(dateStr: string | null) {
 
 function normalizeRegion(region: string | null) {
   const value = cleanValue(region);
-  if (!value) return 'Asia';
+  if (!value) return 'Location not provided';
   if (/north.?america|usa|us|canada/i.test(value)) return 'North America';
   if (/europe|uk|germany|france|italy|swiss/i.test(value)) return 'Europe';
   if (/asia|hong|china|japan|singapore|hk/i.test(value)) return 'Asia';

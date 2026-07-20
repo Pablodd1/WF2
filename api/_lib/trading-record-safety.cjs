@@ -13,6 +13,24 @@ function isPriceLike(value) {
     || /^(?:usd|usdt|hkd|hk\$|eur|gbp|chf|rmb|cny|jpy)\s*[\d,.]+/i.test(text);
 }
 
+function numericReference(value) {
+  const text = cleanText(value);
+  if (!text) return null;
+  const compact = text.replace(/[\s.-]/g, '');
+  return /^\d{4,8}$/.test(compact) ? Number(compact) : null;
+}
+
+function isReferencePriceCollision(record) {
+  const reference = numericReference(record?.reference);
+  if (!reference) return false;
+  const prices = [record?.price_raw, record?.price_usd].map(Number).filter(value => Number.isFinite(value) && value > 0);
+  if (!prices.length) return false;
+  return prices.every(value => {
+    const price = Number(value);
+    return Math.round(price) === reference;
+  });
+}
+
 function sanitizeTradingRecord(record) {
   const issues = [];
   const sanitized = { ...record };
@@ -24,7 +42,7 @@ function sanitizeTradingRecord(record) {
   if (reference && brand && reference.localeCompare(brand, undefined, { sensitivity: 'accent' }) === 0) {
     sanitized.reference = null;
     issues.push('REFERENCE_EQUALS_BRAND');
-  } else if (isPriceLike(reference)) {
+  } else if (reference && /(?:[$Â£â‚¬Â¥]|\b(?:USD|USDT|HKD|HK\$|EUR|GBP|CHF|RMB|CNY|JPY)\b)/i.test(reference)) {
     sanitized.reference = null;
     issues.push('REFERENCE_PRICE_CONTAMINATION');
   }
@@ -51,6 +69,15 @@ function sanitizeTradingRecord(record) {
     issues.push('PRICE_INVALID');
   }
 
+  // A frequent legacy parser failure copies a numeric reference into both
+  // price fields. Keep the source record immutable, but never publish or use
+  // that collision as market evidence until a reviewer confirms it.
+  if (isReferencePriceCollision(record)) {
+    sanitized.price_usd = null;
+    sanitized.price_raw = null;
+    issues.push('REFERENCE_TOKEN_AS_PRICE');
+  }
+
   return {
     ...sanitized,
     data_quality_issues: issues,
@@ -58,4 +85,4 @@ function sanitizeTradingRecord(record) {
   };
 }
 
-module.exports = { isPriceLike, sanitizeTradingRecord };
+module.exports = { isPriceLike, isReferencePriceCollision, sanitizeTradingRecord };

@@ -22,7 +22,7 @@ interface RowData {
   outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' |
     'MISSING_BRAND' | 'MISSING_REFERENCE' | 'CATALOG_MODEL_UNCONFIRMED' | 'MISSING_PRICE' |
     'MISSING_DIAL' | 'CATALOG_DIAL_UNCONFIRMED' | 'CATALOG_DIAL_MISMATCH' |
-    'REPOST_DUPLICATE' | 'BUNDLE_SOURCE_UNSPLIT' | null;
+    'REPOST_DUPLICATE' | 'BUNDLE_SOURCE_UNSPLIT' | 'REFERENCE_TOKEN_AS_PRICE' | null;
 }
 
 interface MonthlyPoint {
@@ -409,6 +409,7 @@ export default function PriceResearch() {
     if (reason === 'CATALOG_DIAL_MISMATCH') return 'Dial is not valid for this catalog reference';
     if (reason === 'REPOST_DUPLICATE') return 'Dealer repost already counted once';
     if (reason === 'BUNDLE_SOURCE_UNSPLIT') return 'Unsplit multi-listing source';
+    if (reason === 'REFERENCE_TOKEN_AS_PRICE') return 'Reference token copied as price';
     return 'Invalid price';
   };
 

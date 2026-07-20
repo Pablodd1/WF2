@@ -1,6 +1,7 @@
 'use strict';
 
 const { comparisonKey, normalizeDialValue, uniqueCatalogDials } = require('./dial-normalization.cjs');
+const { isReferencePriceCollision } = require('./trading-record-safety.cjs');
 
 function classifyResearchEligibility(row, catalog) {
   const price = Number(row?.price_usd);
@@ -9,6 +10,7 @@ function classifyResearchEligibility(row, catalog) {
   if (!row?.reference) return 'MISSING_REFERENCE';
   if (!catalog?.found || !catalog.model) return 'CATALOG_MODEL_UNCONFIRMED';
   if (!Number.isFinite(price) || price <= 0) return 'MISSING_PRICE';
+  if (isReferencePriceCollision(row)) return 'REFERENCE_TOKEN_AS_PRICE';
 
   const dial = normalizeDialValue(row?.dial_color);
   if (!dial.known) return 'MISSING_DIAL';
@@ -28,7 +30,7 @@ function classifyResearchEligibility(row, catalog) {
 }
 
 function classifyDemandEligibility(row, catalog) {
-  return classifyResearchEligibility({ ...row, price_usd: 1 }, catalog);
+  return classifyResearchEligibility({ ...row, price_raw: null, price_usd: 1 }, catalog);
 }
 
 module.exports = { classifyDemandEligibility, classifyResearchEligibility };

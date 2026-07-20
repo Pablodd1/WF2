@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isPriceLike, sanitizeTradingRecord } = require('../api/_lib/trading-record-safety.cjs');
+const { isPriceLike, isReferencePriceCollision, sanitizeTradingRecord } = require('../api/_lib/trading-record-safety.cjs');
 
 test('recognizes numeric and currency amounts as price-like values', () => {
   assert.equal(isPriceLike('9000.00'), true);
@@ -45,4 +45,44 @@ test('keeps plausible normalized watch data unchanged', () => {
   assert.equal(result.dial_color, 'Blue');
   assert.equal(result.data_quality_review_required, false);
   assert.deepEqual(result.data_quality_issues, []);
+});
+
+test('preserves a numeric watch reference', () => {
+  const result = sanitizeTradingRecord({
+    brand: 'Rolex',
+    reference: '126334',
+    dial_color: 'Blue',
+    condition: 'New',
+    price_raw: 14200,
+    price_usd: 14200,
+  });
+
+  assert.equal(result.reference, '126334');
+  assert.equal(result.price_usd, 14200);
+  assert.deepEqual(result.data_quality_issues, []);
+});
+
+test('withholds a price copied from a numeric reference without erasing the reference', () => {
+  const record = {
+    brand: 'Rolex',
+    reference: '16610',
+    price_raw: 16610,
+    price_usd: 16610,
+    currency: 'USD',
+  };
+  const result = sanitizeTradingRecord(record);
+
+  assert.equal(isReferencePriceCollision(record), true);
+  assert.equal(result.reference, '16610');
+  assert.equal(result.price_raw, null);
+  assert.equal(result.price_usd, null);
+  assert.deepEqual(result.data_quality_issues, ['REFERENCE_TOKEN_AS_PRICE']);
+});
+
+test('does not confuse an alphanumeric reference numeric core with a price', () => {
+  assert.equal(isReferencePriceCollision({ reference: '116500LN', price_usd: 116500 }), false);
+});
+
+test('does not quarantine an explicit converted price when raw and USD values differ', () => {
+  assert.equal(isReferencePriceCollision({ reference: '16610', price_raw: 16610, price_usd: 2129 }), false);
 });
