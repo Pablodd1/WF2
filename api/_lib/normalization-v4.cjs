@@ -232,6 +232,7 @@ function inferBrandFromReference(reference) {
   if (/^WSSA\d{4}$/.test(ref)) return 'Cartier';
   if (/^\d{3}\.[A-Z]{2}\.\d{4}\.[A-Z]{2}\.\d{4}$/.test(ref)) return 'Hublot';
   if (/^PAM\d/.test(ref)) return 'Panerai';
+  if (/^52\d{3}$/.test(ref)) return 'Rolex';
   if (/^\d{6}[A-Z]{0,5}$/.test(ref)) return 'Rolex';
   if (/^[34567]\d{3}[A-Z]?(?:\/\d[A-Z0-9]*)?(?:-\d{3})?$/.test(ref)) return 'Patek Philippe';
   return null;

@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { stagingRow } = require('../tools/multilisting/prepare-unbundled-staging.cjs');
+const { partitionWritableRows } = require('../tools/multilisting/stage-unbundled-manifest.cjs');
 
 test('creates a stable pending staging UUID while preserving the child audit key', () => {
   const source = {
@@ -48,4 +49,19 @@ test('unbundled approval migration keeps correction rows blocked and caps approv
   assert.match(sql, /p_duplicate_reviewed IS NOT TRUE/);
   assert.match(sql, /duplicate_reviewed/);
   assert.doesNotMatch(sql, /confidence\s*=\s*1000/);
+});
+
+test('staging refresh never overwrites completed human decisions', () => {
+  const rows = [{ id: 'pending' }, { id: 'approved' }, { id: 'rejected' }, { id: 'new' }];
+  const decisions = new Map([
+    ['pending', 'PENDING'],
+    ['approved', 'APPROVED'],
+    ['rejected', 'REJECTED'],
+  ]);
+  const result = partitionWritableRows(rows, decisions);
+  assert.deepEqual(result.writable.map(row => row.id), ['pending', 'new']);
+  assert.deepEqual(result.protectedRows, [
+    { id: 'approved', verdict: 'APPROVED' },
+    { id: 'rejected', verdict: 'REJECTED' },
+  ]);
 });

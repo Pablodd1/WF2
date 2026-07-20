@@ -100,7 +100,15 @@ function buildCanaryRow(row, parent) {
   if (intent.blocker) blockers.push(intent.blocker);
   if (intent.value && intent.value !== upper(row.listing_type)) reviewReasons.push('INTENT_CORRECTED_FROM_PARENT_CONTEXT');
 
-  const referenceQuality = assessReferenceQuality({ brand: row.brand, reference: row.reference, rawLine: row.raw_line });
+  const childSegments = segmentDealerMessage(text(row.raw_line));
+  const parsedCandidate = parsedChildCandidate(row, parent);
+  const parsedPrice = primaryParsedPrice(parsedCandidate);
+  const referenceQuality = assessReferenceQuality({
+    brand: row.brand,
+    reference: row.reference,
+    rawLine: row.raw_line,
+    priceRaw: numeric(row.price_raw) || numeric(parsedPrice?.amount_original),
+  });
   const selectedReference = referenceQuality.proposed_reference || text(row.reference) || null;
   for (const reason of referenceQuality.reasons) {
     if (reason === 'REFERENCE_CORRECTION_AVAILABLE') reviewReasons.push(reason);
@@ -127,13 +135,10 @@ function buildCanaryRow(row, parent) {
   const exportedPriceRaw = numeric(row.price_raw);
   const exportedPriceUsd = numeric(row.price_usd);
   const exportedCurrency = upper(row.price_currency) || null;
-  const childSegments = segmentDealerMessage(text(row.raw_line));
-  const parsedCandidate = parsedChildCandidate(row, parent);
   if (!parsedCandidate) {
     blockers.push(childSegments.length > 1 ? 'PARSER_MULTIPLE_CANDIDATES' : 'PARSER_NO_CANDIDATE');
   }
 
-  const parsedPrice = primaryParsedPrice(parsedCandidate);
   const parsedPriceRaw = numeric(parsedPrice?.amount_original);
   const parsedPriceUsd = numeric(parsedPrice?.amount_usd);
   const parsedCurrency = upper(parsedPrice?.currency_original) || null;

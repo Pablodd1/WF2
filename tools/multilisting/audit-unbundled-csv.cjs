@@ -74,6 +74,7 @@ function auditDetailedRow(row, report) {
     brand: exported.brand,
     reference: exported.reference,
     rawLine: exported.raw_message,
+    priceRaw: exported.price_raw,
   });
   for (const reason of referenceQuality.reasons) {
     flag(report, `reference_${reason.toLowerCase()}`, row, {

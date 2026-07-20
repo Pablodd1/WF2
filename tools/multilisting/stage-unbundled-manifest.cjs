@@ -44,26 +44,69 @@ async function stagedCount(baseUrl, key, batchId) {
   return Number.isFinite(total) ? total : null;
 }
 
+async function existingDecisions(baseUrl, key, ids) {
+  if (!ids.length) return new Map();
+  const params = new URLSearchParams({
+    select: 'id,verdict',
+    id: `in.(${ids.join(',')})`,
+  });
+  const rows = await rest(baseUrl, key, `watch_staging?${params}`);
+  return new Map(rows.map(row => [row.id, row.verdict]));
+}
+
+function partitionWritableRows(rows, decisions) {
+  const writable = [];
+  const protectedRows = [];
+  for (const row of rows) {
+    const verdict = decisions.get(row.id);
+    if (verdict && verdict !== 'PENDING') {
+      protectedRows.push({ id: row.id, verdict });
+    } else {
+      writable.push(row);
+    }
+  }
+  return { writable, protectedRows };
+}
+
 async function stage({ manifestPath, checkpointPath, write, maxRows }) {
   const baseUrl = required('SUPABASE_URL');
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
   const checkpoint = fs.existsSync(checkpointPath)
     ? JSON.parse(fs.readFileSync(checkpointPath, 'utf8'))
-    : { processed: 0, persisted: 0 };
+    : { processed: 0, persisted: 0, protected: 0 };
+  checkpoint.protected ||= 0;
   let seen = 0;
   let batch = [];
   let batchId = null;
 
   async function flush() {
     if (!batch.length) return;
+    let writable = batch;
     if (write) {
+      const decisions = await existingDecisions(baseUrl, key, batch.map(row => row.id));
+      const partition = partitionWritableRows(batch, decisions);
+      writable = partition.writable;
+      checkpoint.protected += partition.protectedRows.length;
+      if (partition.protectedRows.length) {
+        const verdictCounts = partition.protectedRows.reduce((counts, row) => {
+          counts[row.verdict] = (counts[row.verdict] || 0) + 1;
+          return counts;
+        }, {});
+        process.stdout.write(`${JSON.stringify({
+          event: 'unbundled_stage_protected_decisions',
+          count: partition.protectedRows.length,
+          verdictCounts,
+        })}\n`);
+      }
+    }
+    if (write && writable.length) {
       await rest(baseUrl, key, 'watch_staging?on_conflict=id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify(batch),
+        body: JSON.stringify(writable),
       });
-      checkpoint.persisted += batch.length;
+      checkpoint.persisted += writable.length;
     }
     checkpoint.processed += batch.length;
     checkpoint.updatedAt = new Date().toISOString();
@@ -107,4 +150,4 @@ if (require.main === module) main().catch(error => {
   process.exitCode = 1;
 });
 
-module.exports = { stage };
+module.exports = { stage, partitionWritableRows };

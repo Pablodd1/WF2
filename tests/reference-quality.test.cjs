@@ -76,3 +76,93 @@ test('holds a brand stock list rather than selecting its first reference', () =>
   assert.equal(result.proposed_reference, null);
   assert.ok(result.reasons.includes('MULTI_WATCH_STOCK_LIST'));
 });
+
+test('covers the supplied brand cleanup examples conservatively', () => {
+  const cases = [
+    ['Audemars Piguet', '20300USD', 'Audemars Piguet 26470st 20300USD', '26470ST'],
+    ['Breitling', '123500HKD', 'Breitling RB0136E31Q1R1 123500HKD', 'RB0136E31Q1R1'],
+    ['Bvlgari', 'Used Bvlgari 102532 black', 'Used Bvlgari 102532 black 2019 card and watch', '102532'],
+    ['TAG Heuer', '12968', 'TAG Heuer - CAL5113', 'CAL5113'],
+    ['Chopard', '298600-3001 N10', 'Chopard 298600-3001 N10', '298600-3001'],
+    ['Zenith', 'DEFY', 'Zenith 03.2040.4061/69.C496 Defy', '03.2040.4061/69.C496'],
+    ['Blancpain', '19900USD', 'Blancpain AC02-12B53-63A 19900USD', 'AC02-12B53-63A'],
+    ['Girard-Perregaux', 'Girard', 'Girard Perregaux 81060-21-2010-FH7A', '81060-21-2010-FH7A'],
+    ['Grand Seiko', '6556', 'Grand Seiko SBGC221', 'SBGC221'],
+    ['Glashutte Original', 'Glashutte', 'Glashutte Original 2-39-47-12-12-14', '2-39-47-12-12-14'],
+  ];
+  for (const [brand, reference, rawLine, expected] of cases) {
+    assert.equal(assessReferenceQuality({ brand, reference, rawLine }).proposed_reference, expected, brand);
+  }
+});
+
+test('does not misclassify valid numeric Bvlgari references as Rolex', () => {
+  const result = assessReferenceQuality({
+    brand: 'Bvlgari', reference: '102532', rawLine: 'Used Bvlgari 102532 black 2019 card and watch',
+  });
+  assert.ok(!result.reasons.includes('WRONG_BRAND_SUSPECT'));
+});
+
+test('holds supplied accessory examples instead of publishing them as watches', () => {
+  const cases = [
+    ['Patek Philippe', 'D31', 'Aquanaut Strap D31'],
+    ['Richard Mille', '67-01', 'Richard Mille 67-01 Strap'],
+    ['Hublot', 'HUBLOT', 'Hublot wooden box'],
+  ];
+  for (const [brand, reference, rawLine] of cases) {
+    const result = assessReferenceQuality({ brand, reference, rawLine });
+    assert.ok(result.reasons.includes('ACCESSORY_NOT_WATCH'), brand);
+  }
+});
+
+test('does not treat the separately parsed bare price as a second Rolex reference', () => {
+  const result = assessReferenceQuality({
+    brand: 'Rolex',
+    reference: '124300',
+    rawLine: '124300 Celebration 03/2024 153000',
+    priceRaw: 153000,
+  });
+  assert.ok(!result.reasons.includes('MULTI_WATCH_STOCK_LIST'));
+});
+
+test('holds a mixed-brand child line even when one brand-specific reference is valid', () => {
+  const result = assessReferenceQuality({
+    brand: 'Rolex',
+    reference: '52508',
+    rawLine: '52508 black n8 184000hkd both tags 127334 white n11 212000hkd both tags',
+    priceRaw: 184000,
+  });
+  assert.equal(result.proposed_reference, null);
+  assert.ok(result.reasons.includes('MULTI_WATCH_STOCK_LIST'));
+});
+
+test('does not extract a Patek reference from inside another dotted reference', () => {
+  const result = assessReferenceQuality({
+    brand: 'Patek Philippe',
+    reference: '3652/21',
+    rawLine: '49.4000.3652/21.I001',
+  });
+  assert.notEqual(result.proposed_reference, '3652/21');
+});
+
+test('uses dated or configured line shape to distinguish a trailing bare price', () => {
+  for (const rawLine of [
+    '126334 green oys n11 106500',
+    '126503 champ 06/2025 184000',
+  ]) {
+    const result = assessReferenceQuality({ brand: 'Rolex', reference: rawLine.slice(0, 6), rawLine });
+    assert.ok(!result.reasons.includes('MULTI_WATCH_STOCK_LIST'), rawLine);
+  }
+  const trueSecondReference = assessReferenceQuality({
+    brand: 'Rolex', reference: '116509', rawLine: '116509 upgrade 116599',
+  });
+  assert.ok(trueSecondReference.reasons.includes('MULTI_WATCH_STOCK_LIST'));
+});
+
+test('keeps material and adjacent prefixed price out of the reference', () => {
+  assert.equal(assessReferenceQuality({
+    brand: 'Richard Mille', reference: 'RM65-01', rawLine: 'RM65-01 Ti 11/2025 HKD2.25m',
+  }).proposed_reference, null);
+  assert.equal(assessReferenceQuality({
+    brand: 'Tudor', reference: 'M79000N-0001', rawLine: '79000n-0001 hkd23000', priceRaw: 23000,
+  }).proposed_reference, null);
+});
