@@ -34,6 +34,20 @@ test('uses a dial immediately following the reference and flags inherited confli
   assert.ok(rows[0].flags.includes('DIAL_RAW_SOURCE_CONFLICT'));
 });
 
+test('recognizes defensible dealer dial shorthand adjacent to a reference', () => {
+  const cases = [
+    ['124200 Pistachio N9/2025y 62k hkd', '124200', 'Pistachio'],
+    ['126300 Wim jub 2025 hkd 80k', '126300', 'Wimbledon'],
+    ['116500LN Blk 2022 230k hkd', '116500LN', 'Black'],
+    ['5712/1A Tiff 2021 1.8m hkd', '5712/1A', 'Tiffany Blue'],
+    ['228238 Mete 2024 500k hkd', '228238', 'Meteorite'],
+    ['279171G YML 2025 130k hkd', '279171G', 'Yellow Mother of Pearl'],
+  ];
+  for (const [raw, reference, expected] of cases) {
+    assert.equal(adjacentDialClaim(raw, reference), expected, raw);
+  }
+});
+
 test('preserves Tiffany shorthand as a market-significant dial claim', () => {
   assert.equal(adjacentDialClaim('5712/1A Tiffany 2021 full set 1.88m hkd', '5712/1A'), 'Tiffany Blue');
   assert.equal(specialDialClaim('126000-0006 Tiffany naked HKD82k'), 'Tiffany Blue');

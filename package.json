@@ -29,6 +29,7 @@
     "prepare:unbundled-staging": "node tools/multilisting/prepare-unbundled-staging.cjs",
     "stage:unbundled-manifest": "node tools/multilisting/stage-unbundled-manifest.cjs",
     "audit:unbundled-staging": "node tools/multilisting/audit-unbundled-staging.cjs",
+    "audit:unbundled-market": "node tools/multilisting/audit-normalized-market-readiness.cjs",
     "audit:unbundled-duplicates": "node tools/multilisting/audit-staged-duplicates.cjs",
     "reconcile:unbundled-staging": "node tools/multilisting/reconcile-unbundled-staging.cjs",
     "remediate:staged-special-dials": "node tools/multilisting/remediate-staged-special-dials.cjs",
