@@ -4,6 +4,12 @@
 **Status:** Discussion plan; no production-data changes are authorized by this document  
 **Audience:** John, Alex, product, engineering, and data review
 
+**Operational update:** The first mobile marketplace slice is live. Production
+WTB deep links now load bounded rows without a filter toggle, the completed
+Railway cursor exits cleanly, and the ECB currency endpoint is healthy. Seller
+lineage and public forecasts remain gated as recorded in
+`docs/CTO_ROLLOUT_STATUS_2026-07-21.md`.
+
 ## Executive decisions
 
 1. Curated Luxury should use separate pages for separate jobs: Discover, Want to Buy, Price Research, Post, and Account. Large listing results should use database cursor pagination with an explicit `Load more` action. Do not use opaque infinite scroll or tens of thousands of numbered pages.
