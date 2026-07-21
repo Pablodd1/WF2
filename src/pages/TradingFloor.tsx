@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { isCustomerSafeFeaturedListing } from '../lib/featuredListings';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
+  ArrowLeft,
   Check,
   Filter,
   Globe2,
@@ -108,20 +109,20 @@ type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 
 export default function TradingFloor() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const requestedCategory = searchParams.get('item');
   const requestedIntent = searchParams.get('type')?.toUpperCase();
-  const initialCategory = CATEGORY_OPTIONS.some(option => option.value === requestedCategory)
+  const categoryFilter = CATEGORY_OPTIONS.some(option => option.value === requestedCategory)
     ? requestedCategory as CategoryFilter
     : 'all';
-  const initialIntent = ['all', 'watches'].includes(initialCategory) && INTENT_OPTIONS.some(option => option.value === requestedIntent)
+  const intentFilter = ['all', 'watches'].includes(categoryFilter) && INTENT_OPTIONS.some(option => option.value === requestedIntent)
     ? requestedIntent as IntentFilter
     : '';
-  const initialSearch = searchParams.get('q') || '';
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>(initialCategory);
-  const [intentFilter, setIntentFilter] = useState<IntentFilter>(initialIntent);
-  const [searchInput, setSearchInput] = useState(initialSearch);
-  const [search, setSearch] = useState(initialSearch);
+  const search = searchParams.get('q') || '';
+  const conditionFilter = searchParams.get('condition') || '';
+  const regionFilter = searchParams.get('region') || '';
+  const inventoryScope: InventoryScope = searchParams.get('scope') === 'archive' ? 'archive' : 'market';
+  const [searchInput, setSearchInput] = useState(search);
   const [listings, setListings] = useState<ListingRecord[]>([]);
   const [featuredListings, setFeaturedListings] = useState<ListingRecord[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
@@ -130,15 +131,16 @@ export default function TradingFloor() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const [conditionFilter, setConditionFilter] = useState('');
-  const [regionInput, setRegionInput] = useState('');
-  const [regionFilter, setRegionFilter] = useState('');
+  const [regionInput, setRegionInput] = useState(regionFilter);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [inventoryScope, setInventoryScope] = useState<InventoryScope>('market');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 48);
+  const resultsTopRef = useRef<HTMLDivElement | null>(null);
+  const listScrollPositionRef = useRef<number | null>(null);
+  const viewKey = [categoryFilter, intentFilter, search, conditionFilter, regionFilter, inventoryScope].join('\u001f');
+  const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     categoryFilter !== 'all',
     Boolean(intentFilter),
@@ -153,6 +155,38 @@ export default function TradingFloor() {
     setHasMore(false);
     setListings([]);
     setSelectedListing(null);
+    listScrollPositionRef.current = null;
+  }, []);
+
+  const updateViewParams = useCallback((updates: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(updates)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const openListing = useCallback((listing: ListingRecord) => {
+    listScrollPositionRef.current = window.scrollY;
+    setSelectedListing(listing);
+    window.requestAnimationFrame(() => {
+      const top = resultsTopRef.current?.getBoundingClientRect().top;
+      if (typeof top === 'number') {
+        window.scrollTo({ top: Math.max(0, window.scrollY + top - 16), behavior: 'auto' });
+      }
+    });
+  }, []);
+
+  const closeListing = useCallback(() => {
+    const restoreTo = listScrollPositionRef.current;
+    setSelectedListing(null);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (restoreTo !== null) window.scrollTo({ top: restoreTo, behavior: 'auto' });
+        listScrollPositionRef.current = null;
+      });
+    });
   }, []);
 
   useEffect(() => {
@@ -171,14 +205,24 @@ export default function TradingFloor() {
       const nextSearch = searchInput.trim();
       const nextRegion = regionInput.trim();
       if (nextSearch !== search || nextRegion !== regionFilter) {
-        setSearch(nextSearch);
-        setRegionFilter(nextRegion);
         resetResults();
+        updateViewParams({ q: nextSearch || null, region: nextRegion || null });
       }
     }, 300);
 
     return () => window.clearTimeout(timer);
-  }, [regionFilter, regionInput, resetResults, search, searchInput]);
+  }, [regionFilter, regionInput, resetResults, search, searchInput, updateViewParams]);
+
+  useEffect(() => {
+    setSearchInput(search);
+    setRegionInput(regionFilter);
+  }, [regionFilter, search]);
+
+  useEffect(() => {
+    if (previousViewKeyRef.current === viewKey) return;
+    previousViewKeyRef.current = viewKey;
+    resetResults();
+  }, [resetResults, viewKey]);
 
   useEffect(() => {
     if (!filtersOpen) return;
@@ -307,25 +351,27 @@ export default function TradingFloor() {
             <FilterGroup label="Category">
               {CATEGORY_OPTIONS.map(option => (
                 <FilterChoice key={option.value} active={categoryFilter === option.value} label={option.label} onClick={() => {
-                  setCategoryFilter(option.value);
-                  if (!['all', 'watches'].includes(option.value)) setIntentFilter('');
                   resetResults();
+                  updateViewParams({
+                    item: option.value === 'all' ? null : option.value,
+                    type: !['all', 'watches'].includes(option.value) ? null : intentFilter || null,
+                  });
                 }} />
               ))}
             </FilterGroup>
             <FilterGroup label="Intent">
               {INTENT_OPTIONS.map(option => (
                 <FilterChoice key={option.value || 'all'} active={intentFilter === option.value} label={option.label} disabled={!['all', 'watches'].includes(categoryFilter) && Boolean(option.value)} onClick={() => {
-                  setIntentFilter(option.value);
                   resetResults();
+                  updateViewParams({ type: option.value || null });
                 }} />
               ))}
             </FilterGroup>
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-              <ConditionSelect value={conditionFilter} onChange={value => { setConditionFilter(value); resetResults(); }} />
+              <ConditionSelect value={conditionFilter} onChange={value => { resetResults(); updateViewParams({ condition: value || null }); }} />
               <LocationInput value={regionInput} onChange={setRegionInput} />
             </div>
-            <InventoryScopeControl value={inventoryScope} onChange={value => { setInventoryScope(value); resetResults(); }} />
+            <InventoryScopeControl value={inventoryScope} onChange={value => { resetResults(); updateViewParams({ scope: value === 'archive' ? 'archive' : null }); }} />
           </div>
 
           <CurrencyConverter compact />
@@ -340,21 +386,24 @@ export default function TradingFloor() {
           region={regionInput}
           inventoryScope={inventoryScope}
           onApply={next => {
-            setCategoryFilter(next.category);
-            setIntentFilter(next.intent);
-            setConditionFilter(next.condition);
             setRegionInput(next.region);
-            setInventoryScope(next.inventoryScope);
             setFiltersOpen(false);
             resetResults();
+            updateViewParams({
+              item: next.category === 'all' ? null : next.category,
+              type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
+              condition: next.condition || null,
+              region: next.region.trim() || null,
+              scope: next.inventoryScope === 'archive' ? 'archive' : null,
+            });
           }}
           onClose={() => setFiltersOpen(false)}
         />
       )}
 
-      <div className="mx-auto max-w-7xl px-4 py-5">
+      <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-5">
         {featuredListings.length > 0 && !selectedListing && !cursor && !search && ['all', 'watches'].includes(categoryFilter) && ['', 'WTS'].includes(intentFilter) && (
-          <FeaturedImageRail listings={featuredListings} onSelect={setSelectedListing} />
+          <FeaturedImageRail listings={featuredListings} onSelect={openListing} />
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
@@ -364,7 +413,7 @@ export default function TradingFloor() {
         </div>
 
         {selectedListing ? (
-          <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={() => setSelectedListing(null)} />
+          <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={closeListing} />
         ) : loading && listings.length === 0 ? (
           <div className="flex justify-center py-16">
             <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
@@ -386,7 +435,7 @@ export default function TradingFloor() {
                 key={listing.id}
                 listing={listing}
                 selected={false}
-                onSelect={() => setSelectedListing(listing)}
+                onSelect={() => openListing(listing)}
               />
             ))}
           </div>
@@ -705,6 +754,15 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
   return (
     <section className="mb-8 grid gap-8 lg:grid-cols-[minmax(320px,504px)_1fr]" aria-label="Selected listing">
+      <button
+        type="button"
+        onClick={onClose}
+        className="col-span-full inline-flex min-h-11 w-fit items-center gap-2 rounded-md border px-4 text-sm font-medium"
+        style={{ borderColor: BORDER, color: INK, background: SURFACE }}
+      >
+        <ArrowLeft size={17} /> Back to results
+      </button>
+
       <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
         <ListingImage listing={listing} className="h-[648px] w-full" large />
       </div>
