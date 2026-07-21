@@ -159,19 +159,30 @@ function extractDialFromText(rawText, catalogDials = []) {
   return null;
 }
 
+function alignDealerDialAliasToCatalog(value, catalogDials = []) {
+  const key = comparisonKey(value);
+  const catalog = uniqueCatalogDials(catalogDials);
+  const catalogKeys = new Set(catalog.map(comparisonKey));
+  if (key === 'PANDA' && (catalogKeys.has('WHITE') || catalogKeys.has('SILVER')) && !catalogKeys.has('PANDA')) {
+    return { value: 'White', reason: 'raw_alias_panda_to_white' };
+  }
+  return { value, reason: null };
+}
+
 function resolveDial({ sourceDial, rawText, catalogDials = [] }) {
   const source = normalizeDialValue(sourceDial);
   const catalog = uniqueCatalogDials(catalogDials);
   const fromText = extractDialFromText(rawText, catalog);
 
   if (fromText) {
-    const conflictsWithSource = source.known && comparisonKey(source.value) !== comparisonKey(fromText);
+    const aligned = alignDealerDialAliasToCatalog(fromText, catalog);
+    const conflictsWithSource = source.known && comparisonKey(source.value) !== comparisonKey(aligned.value);
     return {
-      value: fromText,
+      value: aligned.value,
       evidence: 'explicit_raw_text',
       confidence: 95,
       ambiguous: conflictsWithSource,
-      reason: conflictsWithSource ? 'source_text_conflict' : null,
+      reason: conflictsWithSource ? 'source_text_conflict' : aligned.reason,
     };
   }
   if (source.known) {
@@ -189,6 +200,7 @@ function resolveDial({ sourceDial, rawText, catalogDials = [] }) {
 module.exports = {
   comparisonKey,
   extractDialFromText,
+  alignDealerDialAliasToCatalog,
   normalizeDialValue,
   resolveDial,
   uniqueCatalogDials,
