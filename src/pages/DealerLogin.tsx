@@ -7,6 +7,7 @@ export default function DealerLogin() {
   const location = useLocation();
   const destination = (location.state as { from?: string } | null)?.from || '/dealer';
   const betaDestinations = new Set(['/dealer', '/trading', '/price-research']);
+  const protectedDestination = !betaDestinations.has(destination);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,6 +49,11 @@ export default function DealerLogin() {
         <div className="flex flex-1 items-center justify-center py-10">
           <section className="w-full max-w-[420px] border border-white/12 bg-[#111118] p-6 sm:p-8">
             <div className="mb-6 flex items-center gap-3"><LockKeyhole size={20} className="text-[#c9a96e]" /><h2 className="text-lg font-semibold">Dealer login</h2></div>
+            {protectedDestination && (
+              <div className="mb-5 border-l-2 border-[#c9a96e] bg-[#c9a96e]/10 px-3 py-2 text-xs leading-5 text-[#ead7ae]">
+                Administrator sign-in is required for Mission Control and Human Review. Demo skip cannot open this protected workspace.
+              </div>
+            )}
             <form onSubmit={login} className="space-y-4">
               <label className="block text-xs font-medium text-white/65">Email
                 <input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} className="mt-2 h-11 w-full border border-white/15 bg-[#09090d] px-3 text-sm text-white outline-none focus:border-[#c9a96e]" />
@@ -60,7 +66,7 @@ export default function DealerLogin() {
             </form>
             {betaSkipEnabled && (
               <div className="mt-5 border-t border-white/10 pt-5">
-                <button type="button" onClick={skipForBeta} className="h-10 w-full border border-white/20 text-xs font-semibold text-white/75 transition-colors hover:border-white/45 hover:text-white">Skip sign in and explore demo</button>
+                <button type="button" onClick={skipForBeta} className="h-10 w-full border border-white/20 text-xs font-semibold text-white/75 transition-colors hover:border-white/45 hover:text-white">Skip admin sign-in and browse marketplace</button>
                 <p className="mt-2 text-center text-[11px] leading-5 text-amber-200/65">No password needed for the marketplace demo. Dealer actions still require an authenticated account.</p>
               </div>
             )}

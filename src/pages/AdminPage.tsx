@@ -8,6 +8,7 @@ import {
   Loader2, ArrowRight, Eye, Sparkles,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -103,6 +104,7 @@ function BulkActionCard({ title, desc, icon: Icon, color, onClick, loading }: {
 /* ------------------------------------------------------------------ */
 
 export default function AdminPage() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<StatsData | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -177,7 +179,7 @@ export default function AdminPage() {
               desc="Open the normalization review queue; promotion writes only selected source record IDs"
               icon={RefreshCw}
               color="text-cyan-400"
-              onClick={() => { window.location.href = '/review-queue'; }}
+              onClick={() => navigate('/review-queue')}
               loading={false}
             />
             <BulkActionCard
@@ -185,7 +187,7 @@ export default function AdminPage() {
               desc="Inspect watches, WTB, luxury items, and multi-listings from production"
               icon={Package}
               color="text-emerald-400"
-              onClick={() => { window.location.href = '/trading'; }}
+              onClick={() => navigate('/trading')}
               loading={false}
             />
             <BulkActionCard
@@ -193,7 +195,7 @@ export default function AdminPage() {
               desc="Browse every cataloged brand/model or search any approved reference directly"
               icon={Search}
               color="text-blue-400"
-              onClick={() => { window.location.href = '/price-research'; }}
+              onClick={() => navigate('/price-research')}
               loading={false}
             />
             <BulkActionCard
@@ -201,7 +203,7 @@ export default function AdminPage() {
               desc="Review raw bundle messages and their proposed child listings before duplicate suppression"
               icon={Package}
               color="text-amber-400"
-              onClick={() => { window.location.href = '/multi-listings'; }}
+              onClick={() => navigate('/multi-listings')}
               loading={false}
             />
 
