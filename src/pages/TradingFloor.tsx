@@ -29,7 +29,10 @@ const RED = '#EF4444';
 const CATEGORY_OPTIONS = [
   { label: 'All inventory', value: 'all' },
   { label: 'Watches', value: 'watches' },
-  { label: 'Other luxury', value: 'luxury' },
+  { label: 'Handbags', value: 'handbags' },
+  { label: 'Jewelry', value: 'jewelry' },
+  { label: 'Accessories', value: 'accessories' },
+  { label: 'Other luxury', value: 'other' },
 ] as const;
 
 const INTENT_OPTIONS = [
@@ -52,6 +55,7 @@ interface ListingRecord {
   verdict: string | null;
   source: string;
   source_type: string | null;
+  item_category: 'WATCH' | 'HANDBAG' | 'JEWELRY' | 'ACCESSORY' | 'OTHER';
   listing_date: string | null;
   listing_status: string | null;
   created_at: string | null;
@@ -110,7 +114,7 @@ export default function TradingFloor() {
   const initialCategory = CATEGORY_OPTIONS.some(option => option.value === requestedCategory)
     ? requestedCategory as CategoryFilter
     : 'all';
-  const initialIntent = initialCategory !== 'luxury' && INTENT_OPTIONS.some(option => option.value === requestedIntent)
+  const initialIntent = ['all', 'watches'].includes(initialCategory) && INTENT_OPTIONS.some(option => option.value === requestedIntent)
     ? requestedIntent as IntentFilter
     : '';
   const initialSearch = searchParams.get('q') || '';
@@ -304,14 +308,14 @@ export default function TradingFloor() {
               {CATEGORY_OPTIONS.map(option => (
                 <FilterChoice key={option.value} active={categoryFilter === option.value} label={option.label} onClick={() => {
                   setCategoryFilter(option.value);
-                  if (option.value === 'luxury') setIntentFilter('');
+                  if (!['all', 'watches'].includes(option.value)) setIntentFilter('');
                   resetResults();
                 }} />
               ))}
             </FilterGroup>
             <FilterGroup label="Intent">
               {INTENT_OPTIONS.map(option => (
-                <FilterChoice key={option.value || 'all'} active={intentFilter === option.value} label={option.label} disabled={categoryFilter === 'luxury' && Boolean(option.value)} onClick={() => {
+                <FilterChoice key={option.value || 'all'} active={intentFilter === option.value} label={option.label} disabled={!['all', 'watches'].includes(categoryFilter) && Boolean(option.value)} onClick={() => {
                   setIntentFilter(option.value);
                   resetResults();
                 }} />
@@ -349,7 +353,7 @@ export default function TradingFloor() {
       )}
 
       <div className="mx-auto max-w-7xl px-4 py-5">
-        {featuredListings.length > 0 && !cursor && !search && ['all', 'watches'].includes(categoryFilter) && ['', 'WTS'].includes(intentFilter) && (
+        {featuredListings.length > 0 && !selectedListing && !cursor && !search && ['all', 'watches'].includes(categoryFilter) && ['', 'WTS'].includes(intentFilter) && (
           <FeaturedImageRail listings={featuredListings} onSelect={setSelectedListing} />
         )}
 
@@ -526,17 +530,17 @@ function MobileFilterSheet({
             {CATEGORY_OPTIONS.map(option => (
               <FilterChoice key={option.value} active={draftCategory === option.value} label={option.label} onClick={() => {
                 setDraftCategory(option.value);
-                if (option.value === 'luxury') setDraftIntent('');
+                if (!['all', 'watches'].includes(option.value)) setDraftIntent('');
               }} />
             ))}
           </FilterGroup>
           <FilterGroup label="Intent">
             {INTENT_OPTIONS.map(option => (
-              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={draftCategory === 'luxury' && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
+              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
             ))}
           </FilterGroup>
-          {draftCategory === 'luxury' && (
-            <p className="text-xs leading-5" style={{ color: MUTED }}>Non-watch records remain in one unnormalized review category until their seller or buyer intent is supported by source evidence.</p>
+          {!['all', 'watches'].includes(draftCategory) && (
+            <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
           )}
           <ConditionSelect value={draftCondition} onChange={setDraftCondition} />
           <LocationInput value={draftRegion} onChange={setDraftRegion} />
@@ -913,7 +917,10 @@ function buildListingTitle(listing: ListingRecord) {
 
 function listingKindLabel(listing: ListingRecord) {
   if (listing.listing_type === 'MULTI') return 'Multi-listing';
-  if (listing.listing_type === 'OTHER') return 'Unnormalized luxury item';
+  if (listing.item_category === 'JEWELRY') return 'Jewelry';
+  if (listing.item_category === 'HANDBAG') return 'Handbag';
+  if (listing.item_category === 'ACCESSORY') return 'Accessory';
+  if (listing.item_category === 'OTHER') return 'Other luxury item';
   return 'Watch';
 }
 

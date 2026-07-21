@@ -49,6 +49,16 @@ function isLikelyYearAsPrice(record) {
     && cleanText(record?.condition) == null;
 }
 
+function deriveItemCategory(record) {
+  const listingType = String(record?.listing_type || '').toUpperCase();
+  const sourceType = String(record?.source_type || '').toLowerCase();
+  if (sourceType === 'jewelry_archive') return 'JEWELRY';
+  if (['handbag_archive', 'handbags_archive', 'bag_archive'].includes(sourceType)) return 'HANDBAG';
+  if (['accessory_archive', 'accessories_archive'].includes(sourceType)) return 'ACCESSORY';
+  if (['WTS', 'WTB', 'NTQ'].includes(listingType)) return 'WATCH';
+  return 'OTHER';
+}
+
 function sanitizeTradingRecord(record) {
   const issues = [];
   const sanitized = { ...record };
@@ -119,9 +129,10 @@ function sanitizeTradingRecord(record) {
 
   return {
     ...sanitized,
+    item_category: deriveItemCategory(record),
     data_quality_issues: issues,
     data_quality_review_required: issues.length > 0,
   };
 }
 
-module.exports = { isLikelyYearAsPrice, isPriceLike, isReferencePriceCollision, sanitizeTradingRecord };
+module.exports = { deriveItemCategory, isLikelyYearAsPrice, isPriceLike, isReferencePriceCollision, sanitizeTradingRecord };

@@ -2,7 +2,15 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isLikelyYearAsPrice, isPriceLike, isReferencePriceCollision, sanitizeTradingRecord } = require('../api/_lib/trading-record-safety.cjs');
+const { deriveItemCategory, isLikelyYearAsPrice, isPriceLike, isReferencePriceCollision, sanitizeTradingRecord } = require('../api/_lib/trading-record-safety.cjs');
+
+test('derives luxury category only from source-backed record evidence', () => {
+  assert.equal(deriveItemCategory({ listing_type: 'WTS', source_type: 'jewelry_archive' }), 'JEWELRY');
+  assert.equal(deriveItemCategory({ listing_type: 'OTHER', source_type: 'jewelry_archive' }), 'JEWELRY');
+  assert.equal(deriveItemCategory({ listing_type: 'OTHER', source_type: 'handbag_archive' }), 'HANDBAG');
+  assert.equal(deriveItemCategory({ listing_type: 'OTHER', source_type: 'accessory_archive' }), 'ACCESSORY');
+  assert.equal(deriveItemCategory({ listing_type: 'OTHER', source_type: 'unknown_archive' }), 'OTHER');
+});
 
 test('recognizes numeric and currency amounts as price-like values', () => {
   assert.equal(isPriceLike('9000.00'), true);

@@ -94,6 +94,22 @@ test('unnormalized luxury records reject unsupported intent combinations', async
   }
 });
 
+test('non-watch categories use source evidence and remain separate from intent', async () => {
+  const jewelry = await runQuery({ quality: 'market', item: 'jewelry' });
+  assert.equal(jewelry.searchParams.get('listing_type'), 'eq.OTHER');
+  assert.equal(jewelry.searchParams.get('source_type'), 'eq.jewelry_archive');
+
+  const handbags = await runQuery({ quality: 'market', item: 'handbags' });
+  assert.equal(handbags.searchParams.get('source_type'), 'in.(handbag_archive,handbags_archive,bag_archive)');
+
+  const accessories = await runQuery({ quality: 'market', item: 'accessories' });
+  assert.equal(accessories.searchParams.get('source_type'), 'in.(accessory_archive,accessories_archive)');
+
+  const other = await runQuery({ quality: 'market', item: 'other' });
+  assert.equal(other.searchParams.get('listing_type'), 'eq.OTHER');
+  assert.equal(other.searchParams.get('source_type'), 'not.in.(jewelry_archive,handbag_archive,handbags_archive,bag_archive,accessory_archive,accessories_archive)');
+});
+
 test('bulk and trade are not public filters', async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => { throw new Error('Unsupported filters should not query Supabase'); };

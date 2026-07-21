@@ -178,10 +178,15 @@ coverage. It does not yet expose the complete category taxonomy, price range,
 brand/model facets, image/verified-dealer toggles, or sorting.
 
 Legacy non-watch rows still use one `OTHER` listing type and therefore do not
-contain a trustworthy independent WTS/WTB dimension. The UI disables those
-intent controls for `Other luxury`, and the API rejects handcrafted combinations
-instead of returning misleading watch results. Category and intent must be
-normalized independently before those filters can be enabled.
+contain a trustworthy independent WTS/WTB dimension. The source-backed category
+slice now recognizes `jewelry_archive` as Jewelry and exposes separate Handbags,
+Jewelry, Accessories, and Other controls. The live audit found eight Jewelry
+archive records and no evidenced Handbag or Accessory source cohorts. Empty
+categories stay empty; the application does not relabel watch rows to fill them.
+The UI disables non-watch intent controls, and the API rejects handcrafted
+category + intent combinations instead of returning misleading watch results.
+Category and intent must be normalized independently before non-watch WTS/WTB
+filters can be enabled.
 
 All search/filter execution must remain server-side.
 
@@ -303,7 +308,7 @@ authorize production-data changes or enable forecasting.
 | 3 | Mobile-first experience | Responsive checks passed at 360 x 800 and 390 x 844. The branch now includes a sticky Search / Filter row, full-height filter sheet, 44 px controls, and 24-row mobile requests. Emulation is not a substitute for iPhone Safari. | Add Sort, test 412 x 915 and tablet, run 20-page loading, and certify on a real iPhone Safari. | Branch implementation complete; real-device and long-run acceptance remain. |
 | 4 | Friendly currency converter | Display-only converter exists for eight currencies with dated ECB evidence. | Keep conversion separate from normalized source values. Add a mobile sheet, stale/offline label, remembered display currency, and confirm whether AED is required. | Implemented foundation; mobile/offline QA remains. |
 | 5 | Emoji prices | Keycap and full-width numeric forms are deterministic; unknown pictographic codes are blocked. | Add copied raw examples as regression fixtures. Maintain a reviewed dealer/group codebook; never let AI guess or approve an unknown emoji price. | Safe baseline implemented; examples required. |
-| 6 | Filters and Accessories | Category and intent are now independent. Desktop has grouped controls; mobile has a filter sheet. Legacy non-watch records cannot yet be split truthfully by intent. | Normalize Category and Intent into independent fields, then add Watches, Handbags, Jewelry, Accessories, and Other followed by identity, price, image, dealer, and sort controls. | Safe first slice implemented on branch; taxonomy/data migration remains. |
+| 6 | Filters and Accessories | Category and intent are independent. Desktop has grouped controls; mobile has a filter sheet. Eight source-backed Jewelry archive rows exist; no evidenced Handbag or Accessory rows exist, and legacy non-watch records cannot yet be split truthfully by intent. | Preserve the source-backed empty categories, normalize Category and Intent into independent stored fields, then add identity, price, image, dealer, and sort controls. | Safe source-backed taxonomy implemented on branch; Preview count verification and data migration remain. |
 | 7 | Want to Buy and posting | Moderated WTS/WTB submission contracts exist; submissions enter review. | Keep Want to Buy as a dedicated page. Show optional `Current WTS market context` behind an expandable section, never mixing WTB budgets into WTS analytics. Permit posting only for authenticated beta roles and require moderation. | Foundation implemented; product policy and acceptance testing remain. |
 | 8 | Dealer directory and profiles | Routes and UI exist; verified public identity depends on exact source lineage and consent. | Keep the directory hidden during beta if desired, but show verified dealer summaries in listing detail. Never publish an observed phone/name as a verified dealer without reviewed linkage and contact consent. | Blocked by lineage review. |
 | 9 | Settings, billing, pricing, listings, profile, help | Account workspace and support-ticket contracts exist; billing is a placeholder. | Release Profile, My Listings, Settings, and Help only after authorization tests. Keep Billing/Pricing hidden until plans, entitlements, taxes, refunds, and a payment provider are approved. Replace placeholder profile art only after real dealer media consent. | Shell exists; security and commercial decisions remain. |
@@ -335,6 +340,19 @@ navigation actions, Search / Filter row, full-height filter sheet, active-filter
 badge, and 24-row request size. A fresh 1440 x 900 pass confirmed grouped desktop
 filters and the 48-row request size. These checks are browser emulation, not a
 real-iPhone Safari certification.
+
+A fresh production Playwright pass on July 21 repeated the 390 x 844 checks.
+Demo skip reached Price Research, the Trading Floor filter sheet opened with
+Category, Intent, Condition, Location, and Coverage controls, and both documents
+reported no horizontal overflow. The direct anonymous Price Research URL still
+redirected to Dealer Login; whether Price Research should be public read-only is
+a product/access-policy decision, not a responsive-layout defect.
+
+The production WTS cursor was also exercised for 20 consecutive mobile-size
+pages: 480 unique rows, 24 rows per page, zero repeated IDs, and a valid next
+cursor on every page. The full read took about 24 seconds over the network. This
+passes the bounded-pagination correctness gate; device memory profiling still
+requires a real phone session.
 
 ### Recommended WTB market-research decision
 
