@@ -8,6 +8,22 @@ function defaultDestination(role?: string) {
   return role === 'admin' || role === 'reviewer' ? '/review-queue' : '/dealer';
 }
 
+function requiredRolesFor(path?: string): DealerRole[] | null {
+  const route = String(path || '').split('?')[0];
+  if (route === '/dashboard' || route === '/admin' || route === '/multi-listings') return ['admin'];
+  if (route === '/review' || route === '/review-queue') return ['reviewer', 'admin'];
+  if (route.startsWith('/dealer') || route === '/analytics' || route === '/clean' || route === '/reprocess' || route === '/dealers') {
+    return ['dealer', 'reviewer', 'admin'];
+  }
+  return null;
+}
+
+function canOpenRequestedDestination(role?: string, path?: string) {
+  const required = requiredRolesFor(path);
+  if (!required) return true;
+  return required.includes(role as DealerRole);
+}
+
 export default function DealerLogin() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -20,6 +36,7 @@ export default function DealerLogin() {
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState('');
+  const [currentRole, setCurrentRole] = useState<string | null>(null);
   // Demo access is deliberately limited by DealerGate to browse-only routes.
   // Keep the entry point visible regardless of stale deployment variables.
   const betaSkipEnabled = true;
@@ -35,6 +52,11 @@ export default function DealerLogin() {
         if (!response.ok || result?.authenticated !== true) return;
         sessionStorage.removeItem('wf_beta_skip');
         const role = result?.user?.role as DealerRole | undefined;
+        setCurrentRole(role || null);
+        if (requestedDestination && !canOpenRequestedDestination(role, requestedDestination)) {
+          setError(`Signed in as ${role || 'unprovisioned user'}; ${requestedDestination} requires ${requiredRolesFor(requestedDestination)?.join(' or ')} access.`);
+          return;
+        }
         navigate(requestedDestination || defaultDestination(role), { replace: true });
       })
       .catch(sessionError => {
@@ -61,7 +83,13 @@ export default function DealerLogin() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to sign in.');
       sessionStorage.removeItem('wf_beta_skip');
-      navigate(requestedDestination || defaultDestination(result?.user?.role), { replace: true });
+      const role = result?.user?.role as DealerRole | undefined;
+      setCurrentRole(role || null);
+      if (requestedDestination && !canOpenRequestedDestination(role, requestedDestination)) {
+        setError(`Signed in as ${role || 'unprovisioned user'}; ${requestedDestination} requires ${requiredRolesFor(requestedDestination)?.join(' or ')} access.`);
+        return;
+      }
+      navigate(requestedDestination || defaultDestination(role), { replace: true });
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Unable to sign in.');
     } finally { setLoading(false); }
@@ -92,6 +120,11 @@ export default function DealerLogin() {
                 <input type="password" autoComplete="current-password" required minLength={8} value={password} onChange={event => setPassword(event.target.value)} className="mt-2 h-11 w-full border border-white/15 bg-[#09090d] px-3 text-sm text-white outline-none focus:border-[#c9a96e]" />
               </label>
               {error && <div role="alert" className="border-l-2 border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div>}
+              {currentRole && protectedDestination && (
+                <div className="border-l-2 border-white/20 bg-white/5 px-3 py-2 text-xs leading-5 text-white/65">
+                  Current role: <strong className="text-white">{currentRole}</strong>. Review Queue accepts reviewer or admin. Mission Control accepts admin.
+                </div>
+              )}
               <button type="submit" disabled={loading || checkingSession} className="h-11 w-full bg-[#c9a96e] text-sm font-semibold text-[#09090d] transition-colors hover:bg-[#d4b87a] disabled:opacity-60">{checkingSession ? 'Checking existing access...' : loading ? 'Signing in...' : 'Sign in securely'}</button>
             </form>
             {betaSkipEnabled && (
