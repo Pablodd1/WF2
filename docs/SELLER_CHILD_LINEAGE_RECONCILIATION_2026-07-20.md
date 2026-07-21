@@ -25,6 +25,13 @@ npm run reconcile:seller-child-lineage
 The output directory is ignored by Git because it contains private observed
 seller evidence and production record identifiers.
 
+The run also creates two reviewer-friendly CSV files with blank decision and
+notes columns. They contain only the seller pseudonym, listing fingerprints,
+source dates, and private record IDs; raw phone numbers are never exported:
+
+- `seller-aware-repost-review.csv`
+- `seller-configuration-history-review.csv`
+
 ## Full-scan evidence
 
 | Metric | Result |
@@ -112,9 +119,15 @@ expected coverage loss from catalog/price/reference holds, not a failed join.
 6. Do not attach the 2,781 parent image filenames to individual children until
    message-to-child image lineage is proven.
 
+The additive migration `20260721120000_seller_child_lineage_staging.sql` now
+defines that private staging boundary. It denies `anon` and `authenticated`,
+requires the exact parent lineage foreign key, and cannot publish contact or
+images. `npm run stage:seller-child-lineage` is dry-run by default; a write
+requires `APPLY_CHILD_LINEAGE_STAGING=true` plus a service-role credential.
+
 ## Verification
 
-- 12 focused seller-lineage tests pass.
+- 11 focused seller-child-lineage tests pass.
 - ESLint passes for the new tool and tests.
 - The 1,000-child canary produced 80 matched children with no publication,
   dealer, contact, or image eligibility changes.

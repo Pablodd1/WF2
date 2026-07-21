@@ -5,11 +5,15 @@ const assert = require('node:assert/strict');
 const {
   buildChildLineageRow,
   childIntent,
+  clusterReviewCsv,
   exactLineageReady,
   sellerConfigurationKey,
   sellerRepostKey,
   summarizeRepostClusters,
 } = require('../tools/dealer-lineage/reconcile-child-lineage.cjs');
+const { stagingRow } = require('../tools/dealer-lineage/stage-child-lineage-manifest.cjs');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const child = {
   id: 'child-1',
@@ -100,6 +104,23 @@ test('seller-aware repost groups require the same observed seller and multiple p
   assert.equal(result[0].policy, 'HUMAN_REPOST_REVIEW_REQUIRED');
 });
 
+test('exports a pseudonymous reviewer CSV without raw seller contact', () => {
+  const privateRow = buildChildLineageRow(child, lineage);
+  const csv = clusterReviewCsv([{
+    seller_identity_pseudonym: privateRow.observed_seller.identity_pseudonym,
+    listing_fingerprint: privateRow.listing_fingerprint,
+    count: 2,
+    parent_count: 2,
+    parent_ids: ['parent-1', 'parent-2'],
+    child_ids: ['child-1', 'child-2'],
+    source_dates: ['2025-01-08T18:28:49.000Z', '2025-02-08T18:28:49.000Z'],
+    policy: 'HUMAN_REPOST_REVIEW_REQUIRED',
+  }]);
+  assert.match(csv, /review_decision,review_notes/);
+  assert.match(csv, new RegExp(privateRow.observed_seller.identity_pseudonym));
+  assert.doesNotMatch(csv, /85260161840/);
+});
+
 test('configuration review groups ignore condition and price but retain seller and dial', () => {
   const privateRow = buildChildLineageRow(child, lineage);
   const changedConditionAndPrice = { ...child, condition: 'New', price_usd: 110000 };
@@ -108,4 +129,32 @@ test('configuration review groups ignore condition and price but retain seller a
     sellerConfigurationKey(child, privateRow),
     sellerConfigurationKey({ ...child, dial_color: 'Black' }, privateRow),
   );
+});
+
+test('stages child lineage without public contact, image, dealer, or publication authority', () => {
+  const result = stagingRow(buildChildLineageRow(child, lineage));
+  assert.equal(result.child_id, 'child-1');
+  assert.equal(result.seller_identity_pseudonym.length, 20);
+  assert.equal(result.dealer_id, null);
+  assert.equal(result.public_contact_eligible, false);
+  assert.equal(result.child_image_publication_eligible, false);
+  assert.equal(result.review_status, 'PENDING');
+});
+
+test('rejects a child manifest that attempts public release', () => {
+  const privateRow = buildChildLineageRow(child, lineage);
+  assert.throws(() => stagingRow({ ...privateRow, public_contact_eligible: true }), /Public release gate failed/);
+});
+
+test('child lineage migration is private and review-only', () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, '..', 'supabase', 'migrations', '20260721120000_seller_child_lineage_staging.sql'),
+    'utf8',
+  );
+  assert.match(sql, /REVOKE ALL ON public\.seller_child_lineage_staging FROM anon, authenticated/i);
+  assert.match(sql, /CHECK \(public_contact_eligible IS false\)/i);
+  assert.match(sql, /CHECK \(child_image_publication_eligible IS false\)/i);
+  assert.match(sql, /REFERENCES public\.seller_listing_lineage_staging/i);
+  assert.doesNotMatch(sql, /INSERT INTO public\.watch_records/i);
+  assert.doesNotMatch(sql, /GRANT (?:SELECT|INSERT|UPDATE|ALL)[^;]* TO authenticated/i);
 });

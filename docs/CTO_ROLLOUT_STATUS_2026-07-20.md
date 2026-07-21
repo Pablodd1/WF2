@@ -159,3 +159,29 @@ review candidates rather than automatic deletions. No production writes, dealer
 assignments, contact publication, image publication, approval, or parent
 suppression occurred. See
 `docs/SELLER_CHILD_LINEAGE_RECONCILIATION_2026-07-20.md`.
+
+## Seller-child staging gate prepared
+
+The branch now includes additive migration
+`20260721120000_seller_child_lineage_staging.sql` and a dry-run-first staging
+tool. The table is private to `service_role`, has no public read/write policy,
+requires an exact parent-lineage foreign key, and uses database checks to block
+public contact and unverified child-image publication. It does not update
+`watch_records`, approve children, or suppress parent listings.
+
+A fresh deterministic run reproduced the earlier reconciliation exactly and
+generated two local reviewer CSV files. Both contain 345 clusters, blank human
+decision fields, pseudonymous seller identities, and no raw phone values. The
+100-row child staging canary completed with `write=false`, `persisted=0`, and
+zero public or production mutations.
+
+Current verification is 131 normalization tests, 20 security tests, 11 focused
+seller-child tests, targeted ESLint, and a successful production build.
+
+The current Vercel branch Preview is deployed but protected by Vercel
+Authentication. Direct terminal requests to Price Research and Trading Floor
+redirect to `vercel.com/login`, so runtime data behavior must be checked in an
+authenticated Preview browser. This is not evidence of an API failure. Do not
+apply the child manifest to production until the Supabase Preview migration is
+green and an authenticated read-only regression confirms existing WTS, WTB,
+Price Research, and dealer-workspace behavior.

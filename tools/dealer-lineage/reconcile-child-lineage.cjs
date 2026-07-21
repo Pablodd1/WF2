@@ -156,6 +156,38 @@ function atomicWrite(filePath, contents) {
   fs.renameSync(temporary, filePath);
 }
 
+function csvCell(value) {
+  const text = Array.isArray(value) ? value.join('|') : String(value ?? '');
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function clusterReviewCsv(clusters) {
+  const headings = [
+    'seller_identity_pseudonym', 'listing_fingerprint', 'row_count', 'parent_count',
+    'first_source_date', 'last_source_date', 'source_dates', 'parent_ids', 'child_ids',
+    'review_decision', 'review_notes', 'policy',
+  ];
+  const lines = [headings.join(',')];
+  for (const cluster of clusters) {
+    const dates = [...cluster.source_dates].sort();
+    lines.push([
+      cluster.seller_identity_pseudonym,
+      cluster.listing_fingerprint,
+      cluster.count,
+      cluster.parent_count,
+      dates[0] || '',
+      dates.at(-1) || '',
+      dates,
+      cluster.parent_ids,
+      cluster.child_ids,
+      '',
+      '',
+      cluster.policy,
+    ].map(csvCell).join(','));
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 async function reconcile({ stagingPath, lineagePath, outputDir, maxChildren = Infinity }) {
   const { rows: lineageByParent, unsafeRows } = await loadLineageMap(lineagePath);
   fs.mkdirSync(outputDir, { recursive: true });
@@ -279,7 +311,9 @@ async function reconcile({ stagingPath, lineagePath, outputDir, maxChildren = In
     publicRowsMutated: 0,
   };
   atomicWrite(path.join(outputDir, 'seller-aware-repost-candidates.json'), `${JSON.stringify(repostClusters, null, 2)}\n`);
+  atomicWrite(path.join(outputDir, 'seller-aware-repost-review.csv'), clusterReviewCsv(repostClusters));
   atomicWrite(path.join(outputDir, 'seller-configuration-history-candidates.json'), `${JSON.stringify(configurationClusters, null, 2)}\n`);
+  atomicWrite(path.join(outputDir, 'seller-configuration-history-review.csv'), clusterReviewCsv(configurationClusters));
   atomicWrite(path.join(outputDir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
   return report;
 }
@@ -305,6 +339,7 @@ if (require.main === module) main().catch(error => {
 module.exports = {
   buildChildLineageRow,
   childIntent,
+  clusterReviewCsv,
   exactLineageReady,
   listingFingerprint,
   reconcile,
