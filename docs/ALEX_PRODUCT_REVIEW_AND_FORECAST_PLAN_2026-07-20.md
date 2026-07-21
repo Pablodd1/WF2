@@ -341,6 +341,13 @@ badge, and 24-row request size. A fresh 1440 x 900 pass confirmed grouped deskto
 filters and the 48-row request size. These checks are browser emulation, not a
 real-iPhone Safari certification.
 
+A fresh production Playwright pass on July 21 repeated the 390 x 844 checks.
+Demo skip reached Price Research, the Trading Floor filter sheet opened with
+Category, Intent, Condition, Location, and Coverage controls, and both documents
+reported no horizontal overflow. The direct anonymous Price Research URL still
+redirected to Dealer Login; whether Price Research should be public read-only is
+a product/access-policy decision, not a responsive-layout defect.
+
 ### Recommended WTB market-research decision
 
 Show a collapsed `Current for-sale market context` panel on a WTB detail page
