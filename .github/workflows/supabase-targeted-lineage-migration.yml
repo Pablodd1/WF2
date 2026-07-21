@@ -68,17 +68,35 @@ jobs:
             --set=ON_ERROR_STOP=1 \
             --file=/tmp/private-lineage-schema.sql
 
-      - name: Verify private tables and privileges
+      - name: Verify private tables, RLS, and privileges
         shell: bash
         run: |
           set -euo pipefail
-          result="$(psql \
-            "host=db.${SUPABASE_PROJECT_REF}.supabase.co port=5432 dbname=postgres user=postgres sslmode=require" \
+          db_url="host=db.${SUPABASE_PROJECT_REF}.supabase.co port=5432 dbname=postgres user=postgres sslmode=require"
+          result="$(psql "$db_url" \
             --set=ON_ERROR_STOP=1 \
             --tuples-only --no-align \
             --command="SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging');")"
           test "$result" = "2"
-          psql \
-            "host=db.${SUPABASE_PROJECT_REF}.supabase.co port=5432 dbname=postgres user=postgres sslmode=require" \
+
+          public_access="$(psql "$db_url" \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only --no-align \
+            --command="WITH tables(table_name) AS (VALUES ('seller_listing_lineage_staging'::text), ('seller_child_lineage_staging'::text)) SELECT count(*) FROM tables WHERE has_table_privilege('anon', format('public.%s', table_name), 'SELECT') OR has_table_privilege('authenticated', format('public.%s', table_name), 'SELECT');")"
+          test "$public_access" = "0"
+
+          rls_disabled="$(psql "$db_url" \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only --no-align \
+            --command="SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging') AND c.relrowsecurity IS NOT TRUE;")"
+          test "$rls_disabled" = "0"
+
+          service_role_select="$(psql "$db_url" \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only --no-align \
+            --command="WITH tables(table_name) AS (VALUES ('seller_listing_lineage_staging'::text), ('seller_child_lineage_staging'::text)) SELECT count(*) FROM tables WHERE has_table_privilege('service_role', format('public.%s', table_name), 'SELECT');")"
+          test "$service_role_select" = "2"
+
+          psql "$db_url" \
             --set=ON_ERROR_STOP=1 \
             --command="SELECT table_name, grantee, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging') ORDER BY table_name, grantee, privilege_type;"
