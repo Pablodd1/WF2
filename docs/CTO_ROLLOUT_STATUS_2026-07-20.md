@@ -221,3 +221,13 @@ authenticated Preview browser. This is not evidence of an API failure. Do not
 apply the child manifest to production until the Supabase Preview migration is
 green and an authenticated read-only regression confirms existing WTS, WTB,
 Price Research, and dealer-workspace behavior.
+
+## Forecast readiness audited live
+
+The five John cohorts and a 50-reference stratified cohort were audited through
+the live Price Research read API. None qualified for release: all 47 successful
+stratified/owner responses lacked the required monthly history, verified dealer
+diversity, and recent dated evidence; 44 also lacked 30 clean offers. Eight
+requests produced operational holds (five database statement timeouts, one
+client timeout, and two cohorts without a New/Used condition). Forecasts remain
+disabled. See `docs/FORECAST_READINESS_AUDIT_2026-07-20.md`.
