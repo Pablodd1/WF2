@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Eye, ImageOff, Loader2, MessageCircle, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, ImageOff, Loader2, MessageCircle, Search, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
@@ -213,7 +213,8 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
-const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC'];
+const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Cartier', 'Omega'];
+const DEFAULT_BRANDS = [...POPULAR_BRANDS, 'Richard Mille', 'Vacheron Constantin', 'Tudor', 'IWC'];
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
@@ -237,7 +238,10 @@ function dialSwatch(color: string) {
 }
 
 function conditionLabel(condition: string) {
-  return condition === 'Unknown' || condition === 'Unspecified' ? 'Condition unspecified' : condition;
+  const normalized = String(condition || '').trim().toLowerCase();
+  if (!normalized || normalized === 'unknown' || normalized === 'unspecified') return 'Unspecified';
+  if (normalized === 'all' || normalized === 'all conditions') return 'All';
+  return condition;
 }
 
 function dialChartColor(color: string) {
@@ -260,6 +264,8 @@ export default function PriceResearch() {
   const [listingSeller, setListingSeller] = useState<ListingSellerData | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [showAllBrands, setShowAllBrands] = useState(false);
+  const [viewerRole, setViewerRole] = useState('public');
 
   // ── Drill-down picker state (brand → model → reference) ──
   const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number }[]>(
@@ -333,6 +339,15 @@ export default function PriceResearch() {
         if (payload.success && Array.isArray(payload.brands) && payload.brands.length) setPBrands(payload.brands);
       })
       .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load catalog brands:', error); });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/dealer-auth', { credentials: 'include', signal: controller.signal })
+      .then(response => response.ok ? response.json() : null)
+      .then(payload => setViewerRole(payload?.authenticated ? String(payload?.user?.role || 'dealer') : 'public'))
+      .catch(error => { if (error?.name !== 'AbortError') setViewerRole('public'); });
     return () => controller.abort();
   }, []);
 
@@ -422,6 +437,10 @@ export default function PriceResearch() {
 
   const listings = (data?.rows || []).filter(r => !r.is_outlier);
   const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
+  const visibleBrands = showAllBrands
+    ? pBrands
+    : POPULAR_BRANDS.map(brand => pBrands.find(item => item.brand === brand) || { brand });
+  const canReviewExcludedEvidence = viewerRole === 'admin' || viewerRole === 'reviewer';
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
     if (reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR') return 'Below market plausibility floor';
@@ -446,49 +465,85 @@ export default function PriceResearch() {
       <LuxFiBanner />
       <div style={{ paddingTop: 12 }}><CurrencyConverter /></div>
 
-      <div style={{ backgroundColor: '#09090d', color: TEXT, padding: '32px 0' }}>
-        <div className="max-w-6xl mx-auto px-4">
-          <h1 className="text-2xl font-bold mb-1" style={{ color: WHITE, fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
-            Live market pricing from dealer database — enter a reference to see current offers, historical trends, and volume.
-          </p>
+      <header style={{ backgroundColor: '#09090d', color: WHITE, padding: '22px 0 24px' }}>
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,0.75fr)_minmax(360px,1.25fr)] md:items-end">
+            <div>
+              <h1 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
+              <p className="mt-1 max-w-xl text-sm text-white/60">Search catalog-backed market evidence by watch reference.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <label className="relative block">
+                <span className="sr-only">Watch reference</span>
+                <Search aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45" />
+                <input
+                  data-testid="price-reference-input"
+                  aria-label="Watch reference"
+                  type="text"
+                  value={query}
+                  onChange={event => { setQuery(event.target.value); setQueryBrand(''); }}
+                  onKeyDown={event => { if (event.key === 'Enter' && !loading) void fetchData(query, '', '', queryBrand); }}
+                  placeholder="Enter a watch reference"
+                  className="h-11 w-full rounded-md border border-white/20 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#c9a03a]"
+                />
+              </label>
+              <button type="button" onClick={() => void fetchData(query, '', '', queryBrand)} disabled={loading} className="h-11 min-w-28 rounded-md bg-[#c9a03a] px-5 text-sm font-semibold text-[#09090d] disabled:cursor-wait disabled:opacity-70">
+                {loading ? 'Searching...' : 'Search'}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:py-8">
         {/* ── Drill-down: Browse by Model (real listings only) ─────── */}
-        <div className="mb-6" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 20 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Browse by Model</h3>
+        <div className="mb-6 border-y py-5" style={{ borderColor: BORDER, display: data ? 'none' : undefined }}>
+          {(pBrand || pModel) && (
+            <nav aria-label="Catalog selection" className="mb-4 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
+              <button type="button" onClick={() => { setPBrand(''); setPModel(''); setPModels([]); setPRefs([]); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Brands</button>
+              {pBrand && <span aria-hidden="true">/</span>}
+              {pBrand && <button type="button" onClick={() => { setPModel(''); setPRefs([]); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{pBrand}</button>}
+              {pModel && <span aria-hidden="true">/</span>}
+              {pModel && <span>{pModel}</span>}
+            </nav>
+          )}
+          <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${pBrand} model` : 'Choose a brand'}</h3>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
             Search every cataloged brand and model. References appear only when backed by real listing evidence; any approved reference can also be searched directly below.
           </div>
 
           {/* Brand chips */}
-          <div className="flex gap-2 flex-wrap mb-3">
-            {pBrands.map(item => (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 mb-3" style={{ display: pBrand ? 'none' : undefined }}>
+            {visibleBrands.map(item => (
               <button key={item.brand} onClick={() => loadModels(item.brand)} title={item.model_count ? `${item.model_count} models · ${item.reference_count} references` : undefined}
                 style={{
-                  padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: 'none',
-                  backgroundColor: pBrand === item.brand ? NAVY : WHITE,
-                  color: pBrand === item.brand ? WHITE : MUTED,
-                  fontWeight: pBrand === item.brand ? 600 : 400,
+                  minHeight: 54, padding: '8px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer', border: `1px solid ${BORDER}`,
+                  backgroundColor: WHITE, color: TEXT, fontWeight: 600, textAlign: 'left',
                 }}>
                 {item.brand}
               </button>
             ))}
           </div>
+          {!pBrand && pBrands.length > POPULAR_BRANDS.length && (
+            <button type="button" onClick={() => setShowAllBrands(value => !value)} className="mb-3 min-h-11 text-sm font-semibold underline underline-offset-4" style={{ color: NAVY, textDecorationColor: GOLD }}>
+              {showAllBrands ? 'Show popular brands' : 'View all brands'}
+            </button>
+          )}
 
           {pLoading === 'models' && <div style={{ fontSize: 13, color: MUTED }}>Loading models…</div>}
+          {pBrand && !pModel && pLoading !== 'models' && pModels.length === 0 && (
+            <div style={{ fontSize: 13, color: MUTED }}>No cataloged models were returned. Search a known reference above.</div>
+          )}
 
           {/* Model cards */}
-          {pModels.length > 0 && (
+          {pBrand && !pModel && pModels.length > 0 && (
             <>
               <label style={{ display: 'block', marginBottom: 10 }}>
                 <span className="sr-only">Search models for {pBrand}</span>
                 <input type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} placeholder={`Search all ${pModels.length} ${pBrand} models`} style={{ width: 'min(100%, 420px)', height: 38, border: `1px solid ${BORDER}`, borderRadius: 7, background: WHITE, color: TEXT, padding: '0 12px', fontSize: 13 }} />
               </label>
               <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>{visibleModels.length} of {pModels.length} models</div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
               {visibleModels.map(m => (
                 <button key={m.model} onClick={() => loadRefs(pBrand, m.model)}
                   style={{
@@ -506,10 +561,13 @@ export default function PriceResearch() {
           )}
 
           {pLoading === 'refs' && <div style={{ fontSize: 13, color: MUTED }}>Loading references…</div>}
+          {pBrand && pModel && pLoading !== 'refs' && pRefs.length === 0 && (
+            <div style={{ fontSize: 13, color: MUTED }}>No listing-backed references were returned for this model.</div>
+          )}
 
           {/* Reference cards */}
-          {pRefs.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {pBrand && pModel && pRefs.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {pRefs.map(r => (
                 <button key={r.reference} onClick={() => { setQuery(r.reference); setQueryBrand(pBrand); void fetchData(r.reference, '', '', pBrand); }}
                   style={{
@@ -524,27 +582,6 @@ export default function PriceResearch() {
           )}
         </div>
 
-        {/* ── Search ─────────────────────────────────────────── */}
-        <div className="mb-8">
-          <div className="flex gap-2 mb-3">
-            <div className="flex-1 relative">
-              <input
-                data-testid="price-reference-input"
-                aria-label="Watch reference"
-                type="text" value={query}
-                onChange={e => { setQuery(e.target.value); setQueryBrand(''); }}
-                onKeyDown={e => { if (e.key === 'Enter' && !loading) void fetchData(query, '', '', queryBrand); }}
-                placeholder="Enter a watch reference"
-                style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, background: LIGHT_GRAY, color: TEXT, fontSize: 14, outline: 'none', position: 'relative', zIndex: 1 }}
-              />
-            </div>
-            <button onClick={() => void fetchData(query, '', '', queryBrand)} disabled={loading}
-              style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: '#09090d', border: 'none', fontWeight: 600, fontSize: 14, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}>
-              {loading ? 'Searching…' : 'Search'}
-            </button>
-          </div>
-        </div>
-
         {error && (
           <div style={{ padding: 16, borderRadius: 8, marginBottom: 24, backgroundColor: '#fff5f5', border: '1px solid #fecaca', color: RED, fontSize: 14 }}>
             {error}
@@ -553,12 +590,18 @@ export default function PriceResearch() {
 
         {data && (
           <>
+            <nav aria-label="Price Research path" className="mb-2 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
+              <button type="button" onClick={() => { setData(null); setError(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Browse</button>
+              <span aria-hidden="true">/</span><span>{data.brand}</span>
+              {data.model && <><span aria-hidden="true">/</span><span>{data.model}</span></>}
+              <span aria-hidden="true">/</span><span>{displayRef}</span>
+            </nav>
             {/* ── Watch Identity ──────────────────────────────── */}
             <div className="mb-8" style={{ padding: '24px 0', borderBottom: `1px solid ${BORDER}` }}>
               <div style={{ fontSize: 13, color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
                 {data.brand}
               </div>
-              <div className="flex items-baseline gap-3 mb-3">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
                 {data.model ? (
                   <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
                 ) : (
@@ -607,14 +650,14 @@ export default function PriceResearch() {
                   })}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-                  {['All conditions', ...Object.keys((data.dial_groups || []).find(group => group.dial_color === data.selected_cohort.dial_color)?.condition_counts || {})].map(condition => {
-                    const selected = data.selected_cohort.condition === condition;
+                  {['All', 'New', 'Used', 'Unspecified'].map(condition => {
+                    const selected = conditionLabel(data.selected_cohort.condition) === condition;
                     return (
                       <button
                         key={condition}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => void fetchData(data.reference, condition === 'All conditions' ? '' : condition, data.selected_cohort.dial_color, data.brand)}
+                        onClick={() => void fetchData(data.reference, condition === 'All' ? '' : condition, data.selected_cohort.dial_color, data.brand)}
                         style={{ padding: '7px 11px', borderRadius: 6, border: `1px solid ${selected ? NAVY : BORDER}`, background: selected ? NAVY : WHITE, color: selected ? WHITE : TEXT, fontSize: 12, cursor: 'pointer' }}
                       >
                         {conditionLabel(condition)}
@@ -628,7 +671,7 @@ export default function PriceResearch() {
             {/* ── Stats Cards ──────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               {/* Volume */}
-              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
+              <div className="order-2 md:order-1" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Comparable evidence</h3>
                 <div style={{ fontSize: 14, color: MUTED }}>
                   Unique offers after eligibility checks:{' '}
@@ -671,7 +714,7 @@ export default function PriceResearch() {
               </div>
 
               {/* Liquidity — REAL data only, no invented seller/buyer counts */}
-              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
+              <div className="order-3 md:order-2" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
                 <div className="flex items-center justify-between mb-4">
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Liquidity & Demand</h3>
                   {data.liquidity && (
@@ -750,25 +793,25 @@ export default function PriceResearch() {
               </div>
 
               {/* Pricing Summary */}
-              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
+              <div className="order-1 md:order-3" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing</h3>
                 {stats ? (
                   <>
                     <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
-                      Avg:{' '}
+                      Average price:{' '}
                       <span style={{ color: GREEN, fontWeight: 700, fontSize: 20 }}>
                         ${stats.avg.toLocaleString()}
                       </span>
                     </div>
                     <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
-                      Median:{' '}
+                      Median price:{' '}
                       <span style={{ color: NAVY, fontWeight: 600 }}>
                         ${stats.median.toLocaleString()}
                       </span>
                     </div>
                     <div className="flex justify-between mt-3" style={{ fontSize: 12, color: MUTED }}>
-                      <span>Min: ${stats.min.toLocaleString()}</span>
-                      <span>Max: ${stats.max.toLocaleString()}</span>
+                      <span>Minimum price: ${stats.min.toLocaleString()}</span>
+                      <span>Maximum price: ${stats.max.toLocaleString()}</span>
                     </div>
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                       {data.sample_quality === 'robust' ? 'Robust' : data.sample_quality === 'provisional' ? 'Provisional' : 'Observational'} evidence · {stats.count} listings
@@ -789,7 +832,7 @@ export default function PriceResearch() {
                 <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
                   Catalog-valid dial cohorts with at least five comparable observations for {displayRef}.
                 </div>
-                <div role="img" aria-label={`Average comparable price by dial color for ${displayRef}`} style={{ height: 250, marginBottom: 18 }}>
+                {(data.dial_analysis || []).length > 1 && <div role="img" aria-label={`Average comparable price by dial color for ${displayRef}`} style={{ height: 210, marginBottom: 18 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={data.dial_analysis} margin={{ top: 8, right: 12, bottom: 12, left: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
@@ -811,16 +854,16 @@ export default function PriceResearch() {
                       </Bar>
                     </ComposedChart>
                   </ResponsiveContainer>
-                </div>
+                </div>}
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ textAlign: 'left', color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
                         <th style={{ padding: '8px 12px', fontWeight: 600 }}>Dial Color</th>
                         <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Listings</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Avg</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Min</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Max</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Average price</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Minimum price</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Maximum price</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -855,7 +898,7 @@ export default function PriceResearch() {
                     </div>
                   </div>
 
-                  <ResponsiveContainer width="100%" height={280}>
+                  <ResponsiveContainer width="100%" height={230}>
                     <ComposedChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#dee2e6" />
                       <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
@@ -864,13 +907,13 @@ export default function PriceResearch() {
                         contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                         formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
                       />
-                      <Area type="monotone" dataKey="max" stroke="none" fill={RED} fillOpacity={0.05} />
-                      <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
+                      <Area type="monotone" dataKey="max" name="Maximum price" stroke="none" fill={RED} fillOpacity={0.05} />
+                      <Area type="monotone" dataKey="min" name="Minimum price" stroke="none" fill={GREEN} fillOpacity={0.05} />
                       <Area type="monotone" dataKey="forecastUpper" stroke="none" fill={GOLD} fillOpacity={0.10} connectNulls={false} />
                       <Area type="monotone" dataKey="forecastLower" stroke="none" fill={WHITE} fillOpacity={1} connectNulls={false} />
-                      <Line type="monotone" dataKey="max" stroke={RED} strokeWidth={1} dot={false} />
-                      <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: WHITE, strokeWidth: 2 }} />
-                      <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} />
+                      <Line type="monotone" dataKey="max" name="Maximum price" stroke={RED} strokeWidth={1} dot={false} />
+                      <Line type="monotone" dataKey="avg" name="Average price" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: WHITE, strokeWidth: 2 }} />
+                      <Line type="monotone" dataKey="min" name="Minimum price" stroke={GREEN} strokeWidth={1} dot={false} />
                       <Line type="monotone" dataKey="forecast" name="Three-month projection" stroke={GOLD} strokeWidth={2} strokeDasharray="6 5" dot={{ r: 4, fill: GOLD, stroke: WHITE, strokeWidth: 2 }} connectNulls />
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -919,7 +962,7 @@ export default function PriceResearch() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    Required WTS fields and catalog configuration are checked first. Cohorts with five or more observations then use a market plausibility floor followed by the standard 1.5 x IQR method. Exclusions remain visible below.
+                    Required WTS fields and catalog configuration are checked first. Cohorts with five or more observations then use a market plausibility floor followed by the standard 1.5 x IQR method.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
@@ -950,7 +993,7 @@ export default function PriceResearch() {
                     <AlertTriangle size={17} /> {data.outliersRemoved} statistical price outlier{data.outliersRemoved === 1 ? '' : 's'}
                   </div>
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
-                    Exclusions stay visible below for audit and human review. They are not deleted from the database.
+                    Exclusions remain preserved for authorized audit and human review. They are not deleted from the database.
                   </div>
                   {data.evidence?.truncated && (
                     <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
@@ -977,7 +1020,7 @@ export default function PriceResearch() {
               </section>
             )}
 
-            {data.outlier_rows.length > 0 && (
+            {canReviewExcludedEvidence && data.outlier_rows.length > 0 && (
               <section style={{ marginBottom: 28 }}>
                 <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Discarded observations and outliers</h3>
@@ -1044,12 +1087,12 @@ export default function PriceResearch() {
                 />
               ))}
               {(data.evidence?.comparable_pages || 1) > 1 && (
-                <div className="flex items-center justify-between gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${BORDER}` }}>
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" style={{ padding: '14px clamp(12px, 3vw, 24px)', borderTop: `1px solid ${BORDER}` }}>
                   <button
                     type="button"
                     disabled={(data.evidence?.comparable_page || 1) <= 1 || loading}
                     onClick={() => void fetchData(data.reference, data.selected_cohort.condition, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) - 1)}
-                    style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) <= 1 ? 0.45 : 1 }}
+                    style={{ minHeight: 44, justifySelf: 'start', border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) <= 1 ? 0.45 : 1 }}
                   >Previous</button>
                   <span style={{ color: MUTED, fontSize: 12 }}>
                     Page {data.evidence?.comparable_page || 1} of {data.evidence?.comparable_pages || 1}
@@ -1058,7 +1101,7 @@ export default function PriceResearch() {
                     type="button"
                     disabled={(data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) || loading}
                     onClick={() => void fetchData(data.reference, data.selected_cohort.condition, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) + 1)}
-                    style={{ border: `1px solid ${BORDER}`, background: NAVY, color: WHITE, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) ? 0.45 : 1 }}
+                    style={{ minHeight: 44, justifySelf: 'end', border: `1px solid ${BORDER}`, background: NAVY, color: WHITE, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) ? 0.45 : 1 }}
                   >Next</button>
                 </div>
               )}
@@ -1092,13 +1135,13 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
   const date = row.listing_date;
   return (
     <button type="button" onClick={onOpen} aria-label={`View source detail for ${title} at $${row.price_usd.toLocaleString()}`}
-      style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
+      className="min-h-16"
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
-      <div style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: LIGHT_GRAY, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: MUTED }}><Eye size={18} /></div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-        <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+        <div className="flex flex-wrap gap-x-2" style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
           <span className="mr-2">Dial: {row.dial_color || 'Unspecified'}</span>
           <span className="mr-2">· {row.condition || 'Unspecified'}</span>
           {date && <span>· {date.split('T')[0]}</span>}

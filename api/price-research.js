@@ -21,6 +21,7 @@ const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
+const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -115,7 +116,18 @@ function summarizeComparableRows(rows) {
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Vary', 'Cookie');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  let canReviewExcludedEvidence = false;
+  try {
+    const sessionClient = authClient();
+    const sessionUser = sessionClient ? await resolveSession(sessionClient, req, res) : null;
+    canReviewExcludedEvidence = ['admin', 'reviewer'].includes(userRole(sessionUser));
+  } catch {
+    // Public research remains available when optional session resolution fails.
+  }
 
   const rawRef = (req.query.reference || '').trim();
   let brand = (req.query.brand || '').trim();
@@ -320,12 +332,17 @@ module.exports = async function handler(req, res) {
     const selectedDialGroup = dialGroups.find(group =>
       !requestedDial || group.dial_color.toLowerCase() === requestedDial
     ) || dialGroups[0] || { dial_color: 'Unspecified', rows: [], count: 0, condition_counts: {} };
-    const selectedRows = requestedCondition && requestedCondition !== 'all'
-      ? selectedDialGroup.rows.filter(row => String(row.condition || 'Unspecified').trim().toLowerCase() === requestedCondition)
+    const normalizedRequestedCondition = requestedCondition === 'unknown' ? 'unspecified' : requestedCondition;
+    const selectedRows = normalizedRequestedCondition && normalizedRequestedCondition !== 'all'
+      ? selectedDialGroup.rows.filter(row => {
+          const rowCondition = String(row.condition || 'Unspecified').trim().toLowerCase();
+          const normalizedRowCondition = rowCondition === 'unknown' ? 'unspecified' : rowCondition;
+          return normalizedRowCondition === normalizedRequestedCondition;
+        })
       : selectedDialGroup.rows;
     const selectedCohort = {
-      condition: requestedCondition && requestedCondition !== 'all'
-        ? (selectedRows[0]?.condition || 'Unspecified')
+      condition: normalizedRequestedCondition && normalizedRequestedCondition !== 'all'
+        ? (normalizedRequestedCondition === 'unspecified' ? 'Unspecified' : (selectedRows[0]?.condition || 'Unspecified'))
         : 'All conditions',
       dial_color: selectedDialGroup.dial_color,
       rows: selectedRows,
@@ -459,14 +476,14 @@ module.exports = async function handler(req, res) {
       rawCount: validPriceRows.length,
       outliersRemoved: statisticalOutlierRows.length,
       excludedEvidenceCount: outlierRows.length,
-      outliers: statisticalOutlierRows.map(row => row.price_usd),
-      outlier_rows: serializedOutliers.map(r => ({
+      outliers: canReviewExcludedEvidence ? statisticalOutlierRows.map(row => row.price_usd) : [],
+      outlier_rows: canReviewExcludedEvidence ? serializedOutliers.map(r => ({
         id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year, is_outlier: true, outlier_reason: r.outlier_reason,
         stored_price_usd: r.stored_price_usd, price_normalization: r.price_normalization,
-      })),
+      })) : [],
       analytics_ready: summary.analytics_ready,
       sample_quality: summary.sample_quality,
       stats: summary.analytics_ready ? summary.stats : null,

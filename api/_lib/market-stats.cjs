@@ -85,10 +85,15 @@ function normalizeDimension(value, fallback = 'Unspecified') {
   return clean || fallback;
 }
 
+function normalizeConditionDimension(value) {
+  const condition = normalizeDimension(value);
+  return ['unknown', 'unspecified'].includes(condition.toLowerCase()) ? 'Unspecified' : condition;
+}
+
 function buildComparableCohorts(rows) {
   const groups = new Map();
   for (const row of rows) {
-    const condition = normalizeDimension(row.condition);
+    const condition = normalizeConditionDimension(row.condition);
     const dial_color = normalizeDimension(row.dial_color);
     const key = `${condition.toLowerCase()}::${dial_color.toLowerCase()}`;
     if (!groups.has(key)) groups.set(key, { key, condition, dial_color, rows: [] });
@@ -106,7 +111,7 @@ function buildDialGroups(rows) {
     const key = dial_color.toLowerCase();
     if (!groups.has(key)) groups.set(key, { key, dial_color, rows: [], condition_counts: {} });
     const group = groups.get(key);
-    const condition = normalizeDimension(row.condition);
+    const condition = normalizeConditionDimension(row.condition);
     group.rows.push(row);
     group.condition_counts[condition] = (group.condition_counts[condition] || 0) + 1;
   }
