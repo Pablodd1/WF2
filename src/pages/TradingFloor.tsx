@@ -164,13 +164,17 @@ export default function TradingFloor() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setSearch(searchInput.trim());
-      setRegionFilter(regionInput.trim());
-      resetResults();
+      const nextSearch = searchInput.trim();
+      const nextRegion = regionInput.trim();
+      if (nextSearch !== search || nextRegion !== regionFilter) {
+        setSearch(nextSearch);
+        setRegionFilter(nextRegion);
+        resetResults();
+      }
     }, 300);
 
     return () => window.clearTimeout(timer);
-  }, [regionInput, resetResults, searchInput]);
+  }, [regionFilter, regionInput, resetResults, search, searchInput]);
 
   useEffect(() => {
     if (!filtersOpen) return;

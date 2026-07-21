@@ -141,6 +141,7 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.match(floor, /View results/);
   assert.match(floor, /matchMedia\('\(max-width: 640px\)'\)/);
   assert.match(floor, /media\.addEventListener\('change', updatePageSize\)/);
+  assert.match(floor, /if \(nextSearch !== search \|\| nextRegion !== regionFilter\)/);
   assert.match(header, /grid-cols-3/);
   assert.match(header, /sm:flex-row/);
 });
