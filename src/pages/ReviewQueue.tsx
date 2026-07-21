@@ -125,6 +125,20 @@ export default function ReviewQueue() {
   const [unbundledPage, setUnbundledPage] = useState(1);
   const [unbundledTotal, setUnbundledTotal] = useState(0);
   const [duplicateReviewed, setDuplicateReviewed] = useState<Set<string>>(new Set());
+  const [reviewerSession, setReviewerSession] = useState<{ email?: string; role?: string } | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/dealer-auth', { credentials: 'include', signal: controller.signal })
+      .then(async response => response.ok ? response.json() : null)
+      .then(result => {
+        if (result?.authenticated === true) setReviewerSession(result.user || null);
+      })
+      .catch(error => {
+        if (error?.name !== 'AbortError') setReviewerSession(null);
+      });
+    return () => controller.abort();
+  }, []);
 
   // Decisions are sent to the audited server transaction. The client never
   // writes market records directly.
@@ -335,7 +349,11 @@ export default function ReviewQueue() {
             <KeyRound size={14} className="text-gold-primary" />
             <span className="text-xs font-semibold">Reviewer session</span>
           </div>
-          <span className="text-[11px] text-text-muted pb-1">Approval requires a signed-in reviewer or administrator account.</span>
+          <span className="text-[11px] text-text-muted pb-1">
+            {reviewerSession
+              ? `Signed in as ${reviewerSession.role || 'reviewer'}${reviewerSession.email ? ` · ${reviewerSession.email}` : ''}.`
+              : 'Approval requires a signed-in reviewer or administrator account.'}
+          </span>
           {decisionError && <span className="w-full text-xs text-red-400">{decisionError}</span>}
         </div>
 
@@ -507,6 +525,8 @@ export default function ReviewQueue() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setSelected(selected?.id === item.id ? null : item)}
+                    aria-label={`Inspect ${item.brand} ${item.reference}`}
+                    title="Inspect listing evidence"
                     className="p-2 rounded-lg border border-border-default hover:border-gold-primary/50 transition-colors"
                   >
                     <Eye size={14} className="text-text-muted" />
@@ -526,6 +546,7 @@ export default function ReviewQueue() {
                       onClick={() => void submitDecision(item, 'REJECTED')}
                       disabled={decisionBusy === item.id}
                       className="p-2 rounded-lg border border-red-500/30 hover:border-red-400 transition-colors disabled:opacity-50"
+                      aria-label={`Reject ${item.brand} ${item.reference}`}
                       title="Reject proposal"
                     >
                       {decisionBusy === item.id ? <Loader2 size={14} className="animate-spin text-red-400" /> : <XCircle size={14} className="text-red-400" />}
