@@ -73,6 +73,14 @@ test('watch category and buyer intent can be combined', async () => {
   assert.equal(url.searchParams.get('listing_type'), 'in.(WTB,NTQ)');
 });
 
+test('public inventory excludes multi, trade, and unrecognized listing types', async () => {
+  const watches = await runQuery({ quality: 'market', item: 'watches' });
+  assert.equal(watches.searchParams.get('listing_type'), 'in.(WTS,WTB,NTQ)');
+
+  const all = await runQuery({ quality: 'market', item: 'all' });
+  assert.equal(all.searchParams.get('listing_type'), 'in.(WTS,WTB,NTQ,OTHER)');
+});
+
 test('unnormalized luxury records reject unsupported intent combinations', async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => { throw new Error('Invalid combination should not query Supabase'); };
