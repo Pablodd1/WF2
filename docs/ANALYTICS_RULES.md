@@ -49,5 +49,14 @@ Upper fence = Q3 + 1.5 * IQR
 
 ## Current Risk
 
-`api/price-research.js` uses 1.0 * IQR and marks analytics ready at 4 records. It also limits rows to 5000.
+Price Research uses the standard 1.5 * IQR rule and requires at least five
+outlier-clean observations. A bounded newest-first query is supplemented for
+catalog dials missing from the initial sample. High-volume references still
+require ongoing sampling QA so a dominant dial or recent repost history does
+not hide older valid observations.
+
+Repost deduplication prefers a structured verified `dealer_id`. Historical rows
+without dealer linkage fall back to an observed phone in the preserved source
+message, then an exact normalized message. Different verified dealers are never
+collapsed merely because they offer the same configuration at the same price.
 

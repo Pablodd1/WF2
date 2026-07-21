@@ -10,6 +10,11 @@ function dealerIdentity(rawMessage) {
   return phone ? phone.replace(/\D/g, '') : '';
 }
 
+function structuredDealerIdentity(row) {
+  const dealerId = String(row?.dealer_id || '').trim();
+  return dealerId ? compact(dealerId) : '';
+}
+
 function normalizedMessage(rawMessage) {
   return String(rawMessage || '')
     .replace(/^\s*\[[^\]]{3,80}\]\s*\+?\d[\d\s()-]{7,18}\s*:\s*/i, '')
@@ -19,7 +24,8 @@ function normalizedMessage(rawMessage) {
 }
 
 function repostSignature(row) {
-  const dealer = dealerIdentity(row.raw_message);
+  const verifiedDealer = structuredDealerIdentity(row);
+  const observedDealer = dealerIdentity(row.raw_message);
   const message = normalizedMessage(row.raw_message);
   const identity = [
     compact(row.brand),
@@ -29,7 +35,8 @@ function repostSignature(row) {
     Math.round(Number(row.price_usd) || 0),
   ].join('|');
 
-  if (dealer) return `DEALER:${dealer}|${identity}`;
+  if (verifiedDealer) return `VERIFIED_DEALER:${verifiedDealer}|${identity}`;
+  if (observedDealer) return `OBSERVED_PHONE:${observedDealer}|${identity}`;
   if (message) return `MESSAGE:${message}|${identity}`;
   return `RECORD:${row.id}`;
 }
@@ -53,4 +60,4 @@ function deduplicateReposts(rows) {
   return { uniqueRows, repostRows };
 }
 
-module.exports = { deduplicateReposts, dealerIdentity, normalizedMessage, repostSignature };
+module.exports = { deduplicateReposts, dealerIdentity, normalizedMessage, repostSignature, structuredDealerIdentity };

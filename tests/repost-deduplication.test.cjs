@@ -22,6 +22,17 @@ test('does not merge matching offers from different dealers', () => {
   assert.equal(deduplicateReposts(rows).uniqueRows.length, 2);
 });
 
+test('prefers structured verified dealer identity over changing raw-message text', () => {
+  const rows = [
+    { id: 'new', dealer_id: 'dealer-1', brand: 'Rolex', reference: '116500LN', dial_color: 'White', condition: 'New', price_usd: 27000, raw_message: 'Updated stock wording' },
+    { id: 'old', dealer_id: 'dealer-1', brand: 'Rolex', reference: '116500LN', dial_color: 'White', condition: 'New', price_usd: 27000, raw_message: 'Original stock wording' },
+    { id: 'other', dealer_id: 'dealer-2', brand: 'Rolex', reference: '116500LN', dial_color: 'White', condition: 'New', price_usd: 27000, raw_message: 'Original stock wording' },
+  ];
+  const result = deduplicateReposts(rows);
+  assert.deepEqual(result.uniqueRows.map(row => row.id), ['new', 'other']);
+  assert.equal(result.repostRows[0].duplicate_of_id, 'new');
+});
+
 test('keeps records without dealer or source text distinct', () => {
   const rows = [
     { id: 'a', brand: 'Rolex', reference: '116500LN', price_usd: 27000 },

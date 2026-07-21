@@ -172,3 +172,52 @@ Still required before merge:
 - The 54,170 staged unbundled children remain pending review. Review-ready does
   not mean customer-approved, and bundle parents must not be suppressed until
   their child sets reconcile.
+
+## Product review saved
+
+Alex's July 20 product feedback, the referenced luxury storefront review,
+mobile-first discovery decisions, forecast release gates, currency/emoji rules,
+WTB/posting workflow, dealer directory requirements, and account-page backlog
+are preserved in `docs/ALEX_PRODUCT_REVIEW_AND_FORECAST_PLAN_2026-07-20.md`.
+That document is discussion-ready and does not authorize production-data writes
+or forecast release.
+
+## Seller-to-child reconciliation completed locally
+
+The exact seller manifest was joined to the full 54,170-row staged-child set in
+a private, ignored audit artifact. It recovered original source date and observed
+seller evidence for 2,781 children across 1,217 parents. The cohort contains
+1,495 WTS and 1,286 WTB children with zero child/parent intent conflicts.
+
+The same scan identified 345 strong seller-aware repost candidate clusters
+covering 899 rows. Every cluster spans multiple source timestamps, so these are
+review candidates rather than automatic deletions. No production writes, dealer
+assignments, contact publication, image publication, approval, or parent
+suppression occurred. See
+`docs/SELLER_CHILD_LINEAGE_RECONCILIATION_2026-07-20.md`.
+
+## Seller-child staging gate prepared
+
+The branch now includes additive migration
+`20260721120000_seller_child_lineage_staging.sql` and a dry-run-first staging
+tool. The table is private to `service_role`, has no public read/write policy,
+requires an exact parent-lineage foreign key, and uses database checks to block
+public contact and unverified child-image publication. It does not update
+`watch_records`, approve children, or suppress parent listings.
+
+A fresh deterministic run reproduced the earlier reconciliation exactly and
+generated two local reviewer CSV files. Both contain 345 clusters, blank human
+decision fields, pseudonymous seller identities, and no raw phone values. The
+100-row child staging canary completed with `write=false`, `persisted=0`, and
+zero public or production mutations.
+
+Current verification is 131 normalization tests, 20 security tests, 11 focused
+seller-child tests, targeted ESLint, and a successful production build.
+
+The current Vercel branch Preview is deployed but protected by Vercel
+Authentication. Direct terminal requests to Price Research and Trading Floor
+redirect to `vercel.com/login`, so runtime data behavior must be checked in an
+authenticated Preview browser. This is not evidence of an API failure. Do not
+apply the child manifest to production until the Supabase Preview migration is
+green and an authenticated read-only regression confirms existing WTS, WTB,
+Price Research, and dealer-workspace behavior.
