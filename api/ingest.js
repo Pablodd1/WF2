@@ -771,7 +771,7 @@ module.exports = async function handler(req, res) {
       const region = String(req.query?.region || '').trim().slice(0, 50).replace(/[(),.%*]/g, ' ');
       const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
       const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'OTHER']);
-      const allowedItems = new Set(['all', 'watches', 'luxury']);
+      const allowedItems = new Set(['all', 'watches', 'jewelry', 'handbags', 'accessories', 'other', 'luxury']);
       const start = cursorMode ? 0 : (page - 1) * pageSize;
       const end = start + pageSize - (cursorMode ? 0 : 1);
       // Both server-key and publishable-key reads use the same customer-safe
@@ -791,7 +791,7 @@ module.exports = async function handler(req, res) {
       if (itemType && !allowedItems.has(itemType)) {
         return res.status(400).json({ error: 'Unsupported public inventory filter' });
       }
-      if (itemType === 'luxury' && listingType) {
+      if (itemType && !['all', 'watches'].includes(itemType) && listingType) {
         return res.status(400).json({ error: 'Intent filtering is unavailable for unnormalized luxury records' });
       }
 
@@ -802,6 +802,22 @@ module.exports = async function handler(req, res) {
       if (listingType === 'WTB') params.set('listing_type', 'in.(WTB,NTQ)');
       else if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
       if (!listingType && itemType === 'luxury') params.set('listing_type', 'eq.OTHER');
+      if (!listingType && itemType === 'jewelry') {
+        params.set('listing_type', 'eq.OTHER');
+        params.set('source_type', 'eq.jewelry_archive');
+      }
+      if (!listingType && itemType === 'handbags') {
+        params.set('listing_type', 'eq.OTHER');
+        params.set('source_type', 'in.(handbag_archive,handbags_archive,bag_archive)');
+      }
+      if (!listingType && itemType === 'accessories') {
+        params.set('listing_type', 'eq.OTHER');
+        params.set('source_type', 'in.(accessory_archive,accessories_archive)');
+      }
+      if (!listingType && itemType === 'other') {
+        params.set('listing_type', 'eq.OTHER');
+        params.set('source_type', 'not.in.(jewelry_archive,handbag_archive,handbags_archive,bag_archive,accessory_archive,accessories_archive)');
+      }
       if (!listingType && itemType === 'watches') params.set('listing_type', 'in.(WTS,WTB,NTQ)');
       if (!listingType && itemType === 'all') params.set('listing_type', 'in.(WTS,WTB,NTQ,OTHER)');
       if (imagesOnly) params.set('has_images', 'eq.true');
