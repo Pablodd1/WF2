@@ -23,6 +23,9 @@ jobs:
     env:
       PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -59,12 +62,23 @@ jobs:
             printf '\nCOMMIT;\n'
           } > /tmp/private-lineage-schema.sql
 
+      - name: Resolve IPv4 pooler target
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The project's direct db.* endpoint is IPv6-only. Supavisor session mode
+          # is IPv4-compatible and supports this transactional DDL workflow.
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-0-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
       - name: Apply allowlisted private schema
         shell: bash
         run: |
           set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
           psql \
-            "host=db.${SUPABASE_PROJECT_REF}.supabase.co port=5432 dbname=postgres user=postgres sslmode=require" \
+            "$db_url" \
             --set=ON_ERROR_STOP=1 \
             --file=/tmp/private-lineage-schema.sql
 
@@ -72,7 +86,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          db_url="host=db.${SUPABASE_PROJECT_REF}.supabase.co port=5432 dbname=postgres user=postgres sslmode=require"
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
           result="$(psql "$db_url" \
             --set=ON_ERROR_STOP=1 \
             --tuples-only --no-align \
