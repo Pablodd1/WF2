@@ -20,7 +20,7 @@ export function MarketHeader({ compact = false, className = '', showLogo = true 
 
   return (
     <header className={`relative z-40 border-b border-white/10 bg-[#070708]/95 text-white backdrop-blur-md ${className}`}>
-      <div className={`mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 ${compact ? 'py-2.5' : 'py-3.5'} sm:px-6 lg:px-8`}>
+      <div className={`mx-auto flex max-w-7xl flex-col items-stretch gap-2 px-4 ${compact ? 'py-2.5' : 'py-3.5'} sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6 lg:px-8`}>
         {showLogo ? (
           <Link to="/" aria-label="Curated Luxury home" className="flex min-w-0 items-center gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center border border-[#c9a96e]/65 font-serif text-sm text-[#d4b87a] shadow-[0_0_24px_rgba(201,169,110,.18)] sm:h-11 sm:w-11">CL</span>
@@ -30,11 +30,11 @@ export function MarketHeader({ compact = false, className = '', showLogo = true 
           <span className="sr-only">Curated Luxury</span>
         )}
 
-        <nav className="flex min-w-0 flex-1 items-center justify-end gap-1 overflow-x-auto" aria-label="Primary navigation">
+        <nav className="grid min-w-0 grid-cols-3 items-center gap-1 sm:flex sm:flex-1 sm:justify-end" aria-label="Primary navigation">
           {HEADER_LINKS.map(link => {
             const active = link.to ? location.pathname.startsWith(link.to) : false;
             const className = [
-              'flex h-10 shrink-0 items-center justify-center gap-1.5 border px-3 text-[11px] font-semibold transition-colors sm:px-4',
+              'flex h-10 min-w-0 items-center justify-center gap-1 border px-2 text-center text-[10px] font-semibold transition-colors sm:shrink-0 sm:gap-1.5 sm:px-4 sm:text-[11px]',
               active
                 ? 'border-[#d4b87a] bg-[#d4b87a] text-black'
                 : 'border-white/15 bg-white/[0.03] text-white/78 hover:border-[#d4b87a]/70 hover:text-white',
