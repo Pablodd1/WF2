@@ -145,3 +145,17 @@ WTB/posting workflow, dealer directory requirements, and account-page backlog
 are preserved in `docs/ALEX_PRODUCT_REVIEW_AND_FORECAST_PLAN_2026-07-20.md`.
 That document is discussion-ready and does not authorize production-data writes
 or forecast release.
+
+## Seller-to-child reconciliation completed locally
+
+The exact seller manifest was joined to the full 54,170-row staged-child set in
+a private, ignored audit artifact. It recovered original source date and observed
+seller evidence for 2,781 children across 1,217 parents. The cohort contains
+1,495 WTS and 1,286 WTB children with zero child/parent intent conflicts.
+
+The same scan identified 345 strong seller-aware repost candidate clusters
+covering 899 rows. Every cluster spans multiple source timestamps, so these are
+review candidates rather than automatic deletions. No production writes, dealer
+assignments, contact publication, image publication, approval, or parent
+suppression occurred. See
+`docs/SELLER_CHILD_LINEAGE_RECONCILIATION_2026-07-20.md`.

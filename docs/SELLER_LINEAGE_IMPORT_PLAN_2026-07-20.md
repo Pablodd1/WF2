@@ -15,6 +15,14 @@ For batch 002, prior read-only profiling found 5,541 unique phone matches using 
 
 The production implementation was then run against all 50,000 batch-002 parents and all 1,293,376 seller rows. Its stricter exact-raw-SHA-1 gate produced 5,350 `MATCH_READY`, 98 `REVIEW_REQUIRED`, and 44,552 unmatched parents. All 5,448 exact matches carried a front-image filename; 146 had a valid phone but no observed seller name. A 100-row dry run passed with zero database writes. The lower total than the normalized-text profile is intentional: 93 near-text matches were not silently promoted.
 
+The subsequent private child-lineage reconciliation intersected those exact
+parents with all 54,170 staged batch-002 children. It recovered seller and
+source-date evidence for 2,781 children across 1,217 parents. All matched child
+intents agree with their source-parent intents; 39 retain an exact phone identity
+but no observed name. No dealer IDs, contacts, images, approvals, duplicate
+suppression, or public rows were changed. Detailed evidence is in
+`docs/SELLER_CHILD_LINEAGE_RECONCILIATION_2026-07-20.md`.
+
 ## Intent-conflict review
 
 The 98 `REVIEW_REQUIRED` rows were rechecked against their exact parent raw
