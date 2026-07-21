@@ -131,3 +131,100 @@ exact reference + dial + condition cohort passes every gate and owner review.
 7. Resume image-to-child lineage only after parent/child and seller lineage are
    proven.
 
+## 2026-07-21 continuation checkpoint
+
+### Pushed access fix
+
+Branch `codex/human-review-lineage-panel` contains commit
+`0863607 Fix protected dealer login routing`.
+
+Root cause found: `DealerLogin` redirected an already-signed-in user back to a
+requested protected route before checking whether the user's role could access
+that route. A dealer or unprovisioned account could bounce between login and
+Human Review/Admin without a clear reason.
+
+Fix: protected route role checks now run before redirect. Review Queue requires
+`reviewer` or `admin`; Dashboard/Admin/Multi Listings require `admin`. When the
+current role is insufficient, the login page stays put and explains the role
+required instead of looping.
+
+Validation:
+
+- `node --test tests/security-boundaries.test.cjs tests/dealer-workspace.test.cjs`
+- `npx eslint src/pages/DealerLogin.tsx tests/security-boundaries.test.cjs`
+- `npm run build`
+
+### John reference dial review
+
+Read-only Railway run:
+
+`railway run node tools/shadow-reprocess/review-target-dials.cjs`
+
+No production writes were applied (`apply=false`).
+
+Result:
+
+- `Rolex 116500LN`: 12 target rows reviewed, all blocked.
+- `Rolex 52506`: 1 target row reviewed, blocked.
+- `Patek Philippe 5712/1A`, `5712/1R`, and `3712/1A`: no rows were applied by
+  this script because the approval policy only accepts already-staged pending
+  rows that pass every catalog and ambiguity gate.
+
+Important finding: `116500LN Panda` is repeatedly present in raw text, but it is
+blocked because final catalog dial values must remain `White` or `Black`. Do
+not auto-promote `Panda` as a final dial. Treat it as a raw/dealer alias that
+needs a deterministic alias policy and human-reviewed mapping to catalog
+`White` when the source clearly means the white panda Daytona.
+
+### Reference unknown-dial exposure
+
+Read-only targeted audits:
+
+- `Patek Philippe 5712/1A`: 80 unknown/empty dial rows sampled; 5 catalog-backed
+  `Blue` proposals; 75 bundle/multilisting rows blocked.
+- `Patek Philippe 5712/1R`: 299 rows sampled; 153 catalog-backed `Black`
+  proposals; 139 bundle rows blocked; remaining rows had no dial evidence.
+- `Patek Philippe 3712/1A`: 81 rows sampled; 25 catalog-backed `Blue`
+  proposals; 56 bundle rows blocked.
+- `Rolex 116500LN`: 15 rows sampled; 3 explicit raw-text proposals, 3 ambiguous
+  multi-dial catalog rows, 1 bundle row, 9 unresolved/no-evidence rows.
+- `Rolex 52506`: 0 unknown-dial rows sampled by the narrow reference audit.
+
+Recommendation: create a reviewed dial-alias policy before applying these
+corrections. Catalog single-dial Patek rows are safer than Rolex `Panda` rows,
+but bundle rows must stay blocked until split.
+
+### Price-normalization audit
+
+Read-only Railway run scanned 5,000 priced `watch_records` rows:
+
+`audit-output/price-normalization/rollout-20260721-mismatches.json`
+
+Result:
+
+- 843 mismatch rows found.
+- 755 high-severity mismatches.
+- 755 rows were explicit HKD reference-line corrections.
+- 88 rows were explicit USD reference-line corrections.
+- 142 canary-eligible rows.
+- 624 rows excluded from canary because they are bundle or multilisting context.
+- 20 rows excluded because normalized price is below the luxury floor.
+
+This confirms the HKD issue is still material and should be handled by bounded
+canaries, not broad update batches. Most rejected candidates are being rejected
+for the right reason: the raw context is bundle/multilisting and must be split
+before price correction.
+
+### Updated next work order
+
+1. Open/merge the protected-login fix after preview verification.
+2. Review the 142 price canary candidates and apply only those with exact
+   single-listing raw evidence.
+3. Create the `Panda` alias decision for `116500LN`: raw alias allowed,
+   catalog dial remains `White` when evidence is explicit.
+4. Apply safer catalog single-dial Patek corrections only after shadow-review
+   rows are staged and sampled.
+5. Keep bundle/multilisting parents out of price correction until the child
+   rows are split, lineage-linked, and seller/date preserved.
+6. Continue seller-lineage staging before any image lineage expansion.
+
