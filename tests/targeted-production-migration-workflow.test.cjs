@@ -27,10 +27,14 @@ test("targeted lineage workflow executes only the two allowlisted migrations", (
   assert.doesNotMatch(workflow, /supabase\/migrations\/\*/);
 });
 
-test("targeted lineage workflow fails atomically and verifies both tables", () => {
+test("targeted lineage workflow fails atomically and verifies private access", () => {
   assert.match(workflow, /BEGIN;/);
   assert.match(workflow, /COMMIT;/);
   assert.match(workflow, /ON_ERROR_STOP=1/);
   assert.match(workflow, /test \"\$result\" = \"2\"/);
+  assert.match(workflow, /has_table_privilege\('anon'/);
+  assert.match(workflow, /has_table_privilege\('authenticated'/);
+  assert.match(workflow, /has_table_privilege\('service_role'/);
+  assert.match(workflow, /relrowsecurity IS NOT TRUE/);
   assert.match(workflow, /environment: production/);
 });
