@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { stagingRow } = require('../tools/multilisting/prepare-unbundled-staging.cjs');
 const { partitionWritableRows } = require('../tools/multilisting/stage-unbundled-manifest.cjs');
+const { serializeJsonLine } = require('../tools/multilisting/json-line.cjs');
 
 test('creates a stable pending staging UUID while preserving the child audit key', () => {
   const source = {
@@ -39,6 +40,18 @@ test('marks absent dealer attribution instead of inventing contact data', () => 
   assert.equal(row.field_confidence.dealer_id, null);
 });
 
+test('preserves the actual unbundled source batch label', () => {
+  const row = stagingRow({
+    listing_id: 'source-005_000', source_record_id: 'source-005', child_index: 0,
+    raw_line: '5712/1A blue 2024 full set HKD 700k', brand: 'Patek Philippe',
+    reference: '5712/1A', listing_type: 'WTS', parser_version: 'manual-unbundle-full-v4',
+    review_bucket: 'review-ready', exact_raw_lineage: true, catalog_confirmed: true,
+    blockers: [], review_reasons: [],
+  }, {}, 'f94506b0-17a9-4656-9b51-9e81ed052ab8', 'MANUAL_UNBUNDLE_BATCH_005');
+
+  assert.equal(row.source, 'MANUAL_UNBUNDLE_BATCH_005');
+});
+
 test('unbundled approval migration keeps correction rows blocked and caps approval at 100', () => {
   const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260720190000_unbundled_staging_review.sql'), 'utf8');
   assert.match(sql, /v_review_bucket\s*<>\s*'review-ready'/);
@@ -64,4 +77,13 @@ test('staging refresh never overwrites completed human decisions', () => {
     { id: 'approved', verdict: 'APPROVED' },
     { id: 'rejected', verdict: 'REJECTED' },
   ]);
+});
+
+test('JSONL serialization preserves Unicode separators without splitting records', () => {
+  const source = { raw_line: '126283 green jub\u2028hkd 220000\u2029126503 black' };
+  const serialized = serializeJsonLine(source);
+  assert.equal(serialized.split('\n').length, 1);
+  assert.equal(JSON.parse(serialized).raw_line, source.raw_line);
+  assert.match(serialized, /\\u2028/);
+  assert.match(serialized, /\\u2029/);
 });

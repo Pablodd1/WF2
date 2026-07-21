@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const csv = require('csv-parser');
 const { buildCanaryRow } = require('./build-unbundled-canary.cjs');
+const { serializeJsonLine } = require('./json-line.cjs');
 
 const VERSION = 'manual-unbundle-full-v4';
 const DEFAULT_SHARD_SIZE = 10_000;
@@ -53,7 +54,7 @@ function flushShard(outputDir, shardNumber, rowsByBucket) {
     fs.mkdirSync(directory, { recursive: true });
     const finalPath = path.join(directory, `part-${String(shardNumber).padStart(6, '0')}.jsonl`);
     const temporary = `${finalPath}.partial`;
-    fs.writeFileSync(temporary, `${rows.map(row => JSON.stringify(row)).join('\n')}\n`);
+    fs.writeFileSync(temporary, `${rows.map(serializeJsonLine).join('\n')}\n`);
     fs.renameSync(temporary, finalPath);
     files.push({ bucket, path: finalPath, rows: rows.length, bytes: fs.statSync(finalPath).size });
   }

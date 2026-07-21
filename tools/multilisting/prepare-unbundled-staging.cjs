@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
 const { deterministicUuid } = require('./bundle-cohort.cjs');
+const { serializeJsonLine } = require('./json-line.cjs');
 
 function text(value) {
   return String(value ?? '').trim();
@@ -26,7 +27,7 @@ async function loadLineage(filePath) {
   return rows;
 }
 
-function stagingRow(row, lineage, batchId) {
+function stagingRow(row, lineage, batchId, sourceLabel = 'MANUAL_UNBUNDLE_BATCH_002') {
   const sourceDate = text(row.source_created_at) || text(lineage?.listing_date) || text(lineage?.source_created_at) || null;
   const flags = [
     'UNBUNDLED_CHILD',
@@ -49,7 +50,7 @@ function stagingRow(row, lineage, batchId) {
     price_raw: row.price_raw,
     price_usd: row.price_usd,
     currency: row.price_currency,
-    source: 'MANUAL_UNBUNDLE_BATCH_002',
+    source: sourceLabel,
     confidence: 0,
     verdict: 'PENDING',
     created_at: sourceDate,
@@ -80,7 +81,7 @@ function stagingRow(row, lineage, batchId) {
   };
 }
 
-async function prepare({ normalizedDir, lineagePath, outputDir, batchId }) {
+async function prepare({ normalizedDir, lineagePath, outputDir, batchId, sourceLabel = 'MANUAL_UNBUNDLE_BATCH_002' }) {
   const report = JSON.parse(fs.readFileSync(path.join(normalizedDir, 'report.json'), 'utf8'));
   const lineage = await loadLineage(lineagePath);
   fs.mkdirSync(outputDir, { recursive: true });
@@ -101,7 +102,7 @@ async function prepare({ normalizedDir, lineagePath, outputDir, batchId }) {
       if (!line.trim()) continue;
       const row = JSON.parse(line);
       const source = lineage.get(text(row.source_record_id));
-      const staged = stagingRow(row, source, batchId);
+      const staged = stagingRow(row, source, batchId, sourceLabel);
       result.rows += 1;
       result.reviewBuckets[file.bucket] = (result.reviewBuckets[file.bucket] || 0) + 1;
       if (ids.has(staged.id)) result.duplicateIds += 1;
@@ -110,7 +111,7 @@ async function prepare({ normalizedDir, lineagePath, outputDir, batchId }) {
         || staged.verdict !== 'PENDING' || staged.confidence !== 0) result.invalidRows += 1;
       if (staged.created_at) result.sourceDates += 1;
       if (staged.field_confidence.dealer_id || staged.field_confidence.seller_phone) result.dealerAttribution += 1;
-      output.write(`${JSON.stringify(staged)}\n`);
+      output.write(`${serializeJsonLine(staged)}\n`);
     }
   }
   await new Promise((resolve, reject) => output.end(error => error ? reject(error) : resolve()));
@@ -126,10 +127,14 @@ async function main() {
   const lineagePath = process.env.UNBUNDLED_SOURCE_LINEAGE || process.argv[3] || null;
   const outputDir = path.resolve(process.env.UNBUNDLED_STAGING_OUTPUT || 'audit-output/unbundled/batch-002-staging');
   const batchId = text(process.env.UNBUNDLED_BATCH_ID);
+  const sourceLabel = text(process.env.UNBUNDLED_SOURCE_LABEL || 'MANUAL_UNBUNDLE_BATCH_002');
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(batchId)) {
     throw new Error('UNBUNDLED_BATCH_ID must be a UUID');
   }
-  const result = await prepare({ normalizedDir, lineagePath, outputDir, batchId });
+  if (!/^MANUAL_UNBUNDLE_BATCH_\d{3}$/i.test(sourceLabel)) {
+    throw new Error('UNBUNDLED_SOURCE_LABEL must match MANUAL_UNBUNDLE_BATCH_NNN');
+  }
+  const result = await prepare({ normalizedDir, lineagePath, outputDir, batchId, sourceLabel });
   process.stdout.write(`${JSON.stringify({ event: 'unbundled_staging_manifest_complete', ...result }, null, 2)}\n`);
   if (!result.passed) process.exitCode = 1;
 }
