@@ -136,3 +136,12 @@ Before merge:
 - The 54,170 staged unbundled children remain pending review. Review-ready does
   not mean customer-approved, and bundle parents must not be suppressed until
   their child sets reconcile.
+
+## Product review saved
+
+Alex's July 20 product feedback, the referenced luxury storefront review,
+mobile-first discovery decisions, forecast release gates, currency/emoji rules,
+WTB/posting workflow, dealer directory requirements, and account-page backlog
+are preserved in `docs/ALEX_PRODUCT_REVIEW_AND_FORECAST_PLAN_2026-07-20.md`.
+That document is discussion-ready and does not authorize production-data writes
+or forecast release.
