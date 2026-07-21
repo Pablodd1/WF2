@@ -68,6 +68,24 @@ test('WTB includes NTQ but excludes unsplit bundle parents', async () => {
   assert.equal(url.pathname, '/rest/v1/trading_floor_listings');
 });
 
+test('watch category and buyer intent can be combined', async () => {
+  const url = await runQuery({ quality: 'market', item: 'watches', type: 'WTB' });
+  assert.equal(url.searchParams.get('listing_type'), 'in.(WTB,NTQ)');
+});
+
+test('unnormalized luxury records reject unsupported intent combinations', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => { throw new Error('Invalid combination should not query Supabase'); };
+  try {
+    const res = responseRecorder();
+    await handler({ method: 'GET', query: { item: 'luxury', type: 'WTS' } }, res);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.error, /unavailable for unnormalized luxury/i);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('bulk and trade are not public filters', async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => { throw new Error('Unsupported filters should not query Supabase'); };
@@ -99,6 +117,7 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   const path = require('node:path');
   const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.tsx'), 'utf8');
   const floor = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
+  const header = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'MarketHeader.tsx'), 'utf8');
   assert.match(app, /path="\/trading" element=\{<TradingFloor \/>\}/);
   assert.doesNotMatch(floor, /label: 'Bulk listings'/);
   assert.doesNotMatch(floor, /label: 'Trade'/);
@@ -107,4 +126,13 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.match(floor, /Main inventory/);
   assert.match(floor, /Full archive/);
   assert.match(floor, /Main indexed inventory first/);
+  assert.match(floor, /useState<CategoryFilter>/);
+  assert.match(floor, /useState<IntentFilter>/);
+  assert.match(floor, /MobileFilterSheet/);
+  assert.match(floor, /Filter inventory/);
+  assert.match(floor, /View results/);
+  assert.match(floor, /matchMedia\('\(max-width: 640px\)'\)/);
+  assert.match(floor, /media\.addEventListener\('change', updatePageSize\)/);
+  assert.match(header, /grid-cols-3/);
+  assert.match(header, /sm:flex-row/);
 });

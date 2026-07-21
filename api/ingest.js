@@ -791,6 +791,9 @@ module.exports = async function handler(req, res) {
       if (itemType && !allowedItems.has(itemType)) {
         return res.status(400).json({ error: 'Unsupported public inventory filter' });
       }
+      if (itemType === 'luxury' && listingType) {
+        return res.status(400).json({ error: 'Intent filtering is unavailable for unnormalized luxury records' });
+      }
 
       // NTQ is historical buyer-intent shorthand. Customer-facing WTB must
       // include both values so every "looking for / want to buy" request is

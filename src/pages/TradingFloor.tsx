@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { isCustomerSafeFeaturedListing } from '../lib/featuredListings';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
+  Check,
+  Filter,
   Globe2,
   Grid,
   List,
@@ -24,12 +26,16 @@ const PANEL = '#16161F';
 const PAGE = '#08080C';
 const RED = '#EF4444';
 
-const FILTER_OPTIONS = [
-  { label: 'Watches', value: 'watches', group: 'Inventory' },
-  { label: 'Other luxury (unnormalized)', value: 'luxury', group: 'Inventory' },
-  { label: 'All inventory', value: 'all', group: 'Inventory' },
-  { label: 'For sale', value: 'WTS', group: 'Intent' },
-  { label: 'Want to buy / Looking for', value: 'WTB', group: 'Intent' },
+const CATEGORY_OPTIONS = [
+  { label: 'All inventory', value: 'all' },
+  { label: 'Watches', value: 'watches' },
+  { label: 'Other luxury', value: 'luxury' },
+] as const;
+
+const INTENT_OPTIONS = [
+  { label: 'All activity', value: '' },
+  { label: 'For sale', value: 'WTS' },
+  { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
 interface ListingRecord {
@@ -94,12 +100,22 @@ interface ListingBenchmark {
 
 type ViewMode = 'grid' | 'list';
 type InventoryScope = 'market' | 'archive';
+type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
+type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 
 export default function TradingFloor() {
   const [searchParams] = useSearchParams();
-  const initialFilter = searchParams.get('item') || searchParams.get('type') || 'all';
+  const requestedCategory = searchParams.get('item');
+  const requestedIntent = searchParams.get('type')?.toUpperCase();
+  const initialCategory = CATEGORY_OPTIONS.some(option => option.value === requestedCategory)
+    ? requestedCategory as CategoryFilter
+    : 'all';
+  const initialIntent = initialCategory !== 'luxury' && INTENT_OPTIONS.some(option => option.value === requestedIntent)
+    ? requestedIntent as IntentFilter
+    : '';
   const initialSearch = searchParams.get('q') || '';
-  const [activeFilter, setActiveFilter] = useState(initialFilter);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>(initialCategory);
+  const [intentFilter, setIntentFilter] = useState<IntentFilter>(initialIntent);
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [search, setSearch] = useState(initialSearch);
   const [listings, setListings] = useState<ListingRecord[]>([]);
@@ -117,7 +133,15 @@ export default function TradingFloor() {
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [inventoryScope, setInventoryScope] = useState<InventoryScope>('market');
-  const pageSize = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 48;
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 48);
+  const activeFilterCount = [
+    categoryFilter !== 'all',
+    Boolean(intentFilter),
+    Boolean(conditionFilter),
+    Boolean(regionFilter),
+    inventoryScope === 'archive',
+  ].filter(Boolean).length;
 
   const resetResults = useCallback(() => {
     setCursor(null);
@@ -126,6 +150,17 @@ export default function TradingFloor() {
     setListings([]);
     setSelectedListing(null);
   }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 640px)');
+    const updatePageSize = () => {
+      setPageSize(media.matches ? 24 : 48);
+      resetResults();
+    };
+    updatePageSize();
+    media.addEventListener('change', updatePageSize);
+    return () => media.removeEventListener('change', updatePageSize);
+  }, [resetResults]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -138,6 +173,20 @@ export default function TradingFloor() {
   }, [regionInput, resetResults, searchInput]);
 
   useEffect(() => {
+    if (!filtersOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFiltersOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [filtersOpen]);
+
+  useEffect(() => {
     const controller = new AbortController();
 
     async function load() {
@@ -148,9 +197,8 @@ export default function TradingFloor() {
         const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
         params.set('quality', inventoryScope);
         if (cursor) params.set('cursor', cursor);
-        const selectedFilter = FILTER_OPTIONS.find(option => option.value.toLowerCase() === activeFilter.toLowerCase());
-        if (selectedFilter?.group === 'Inventory') params.set('item', selectedFilter.value);
-        if (selectedFilter?.group === 'Intent') params.set('type', selectedFilter.value);
+        params.set('item', categoryFilter);
+        if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
         if (conditionFilter) params.set('condition', conditionFilter);
         if (regionFilter.trim()) params.set('region', regionFilter.trim());
@@ -182,7 +230,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [activeFilter, conditionFilter, cursor, inventoryScope, pageSize, regionFilter, search]);
+  }, [categoryFilter, conditionFilter, cursor, intentFilter, inventoryScope, pageSize, regionFilter, search]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -222,99 +270,82 @@ export default function TradingFloor() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar" aria-label="Trading floor filters">
-              {FILTER_OPTIONS.map(option => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => { setActiveFilter(option.value); resetResults(); }}
-                  className="h-9 shrink-0 rounded-md px-4 text-sm font-medium transition"
-                  style={{
-                    border: `1px solid ${activeFilter.toLowerCase() === option.value.toLowerCase() ? GOLD : BORDER}`,
-                    background: activeFilter.toLowerCase() === option.value.toLowerCase() ? GOLD : PANEL,
-                    color: activeFilter.toLowerCase() === option.value.toLowerCase() ? '#09090D' : MUTED,
-                  }}
-                  title={`${option.group}: ${option.label}`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="relative block min-w-0 sm:w-[330px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
-                <input
-                  type="search"
-                  value={searchInput}
-                  onChange={event => setSearchInput(event.target.value)}
-                  placeholder="Search brand, reference, or dial"
-                  className="h-10 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
-                  style={{ borderColor: BORDER, background: PANEL, color: INK }}
-                />
-              </label>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Additional marketplace filters">
-            <label className="min-w-0">
-              <span className="sr-only">Condition</span>
-              <select
-                value={conditionFilter}
-                onChange={event => { setConditionFilter(event.target.value); resetResults(); }}
-                className="h-10 w-full rounded-md border px-3 text-sm outline-none"
-                style={{ borderColor: BORDER, background: PANEL, color: INK }}
-              >
-                <option value="">All conditions</option>
-                <option value="New">New</option>
-                <option value="Used">Used</option>
-                <option value="Unknown">Condition not stated</option>
-              </select>
-            </label>
-            <label className="min-w-0">
-              <span className="sr-only">Location</span>
+          <div className="sticky top-0 z-20 -mx-4 flex gap-2 border-y px-4 py-3 md:static md:mx-0 md:border-0 md:p-0" style={{ borderColor: BORDER, background: SURFACE }}>
+            <label className="relative block min-w-0 flex-1 md:max-w-[460px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
               <input
                 type="search"
-                value={regionInput}
-                onChange={event => setRegionInput(event.target.value)}
-                placeholder="Filter by city, country, or region"
-                className="h-10 w-full rounded-md border px-3 text-sm outline-none"
+                value={searchInput}
+                onChange={event => setSearchInput(event.target.value)}
+                placeholder="Search brand, reference, or dial"
+                className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
               />
             </label>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(true)}
+              className="relative flex h-11 shrink-0 items-center gap-2 rounded-md border px-4 text-sm font-semibold md:hidden"
+              style={{ borderColor: GOLD, background: PANEL, color: GOLD_BRIGHT }}
+              aria-haspopup="dialog"
+              aria-expanded={filtersOpen}
+            >
+              <Filter size={17} /> Filter
+              {activeFilterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]" style={{ background: GOLD, color: '#09090D' }}>{activeFilterCount}</span>}
+            </button>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex gap-2" aria-label="Inventory date coverage">
-              <button
-                type="button"
-                onClick={() => { setInventoryScope('market'); resetResults(); }}
-                className="h-9 rounded-md border px-4 text-sm font-medium"
-                style={{ borderColor: inventoryScope === 'market' ? GOLD : BORDER, background: inventoryScope === 'market' ? GOLD : PANEL, color: inventoryScope === 'market' ? '#09090D' : MUTED }}
-              >
-                Main inventory
-              </button>
-              <button
-                type="button"
-                onClick={() => { setInventoryScope('archive'); resetResults(); }}
-                className="h-9 rounded-md border px-4 text-sm font-medium"
-                style={{ borderColor: inventoryScope === 'archive' ? GOLD : BORDER, background: inventoryScope === 'archive' ? GOLD : PANEL, color: inventoryScope === 'archive' ? '#09090D' : MUTED }}
-              >
-                Full archive
-              </button>
+
+          <div className="hidden gap-4 md:grid" aria-label="Marketplace filters">
+            <FilterGroup label="Category">
+              {CATEGORY_OPTIONS.map(option => (
+                <FilterChoice key={option.value} active={categoryFilter === option.value} label={option.label} onClick={() => {
+                  setCategoryFilter(option.value);
+                  if (option.value === 'luxury') setIntentFilter('');
+                  resetResults();
+                }} />
+              ))}
+            </FilterGroup>
+            <FilterGroup label="Intent">
+              {INTENT_OPTIONS.map(option => (
+                <FilterChoice key={option.value || 'all'} active={intentFilter === option.value} label={option.label} disabled={categoryFilter === 'luxury' && Boolean(option.value)} onClick={() => {
+                  setIntentFilter(option.value);
+                  resetResults();
+                }} />
+              ))}
+            </FilterGroup>
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+              <ConditionSelect value={conditionFilter} onChange={value => { setConditionFilter(value); resetResults(); }} />
+              <LocationInput value={regionInput} onChange={setRegionInput} />
             </div>
-            <p className="text-xs leading-5" style={{ color: MUTED }}>
-              {inventoryScope === 'market'
-                ? 'Main indexed inventory first. Searches still include the complete historical archive.'
-                : 'Includes historical records whose original posting date or fields may be incomplete.'}
-            </p>
+            <InventoryScopeControl value={inventoryScope} onChange={value => { setInventoryScope(value); resetResults(); }} />
           </div>
+
           <CurrencyConverter compact />
         </div>
       </div>
 
+      {filtersOpen && (
+        <MobileFilterSheet
+          category={categoryFilter}
+          intent={intentFilter}
+          condition={conditionFilter}
+          region={regionInput}
+          inventoryScope={inventoryScope}
+          onApply={next => {
+            setCategoryFilter(next.category);
+            setIntentFilter(next.intent);
+            setConditionFilter(next.condition);
+            setRegionInput(next.region);
+            setInventoryScope(next.inventoryScope);
+            setFiltersOpen(false);
+            resetResults();
+          }}
+          onClose={() => setFiltersOpen(false)}
+        />
+      )}
+
       <div className="mx-auto max-w-7xl px-4 py-5">
-        {featuredListings.length > 0 && !cursor && !search && ['all', 'watches', 'WTS'].includes(activeFilter) && (
+        {featuredListings.length > 0 && !cursor && !search && ['all', 'watches'].includes(categoryFilter) && ['', 'WTS'].includes(intentFilter) && (
           <FeaturedImageRail listings={featuredListings} onSelect={setSelectedListing} />
         )}
 
@@ -368,6 +399,158 @@ export default function TradingFloor() {
         )}
       </div>
     </main>
+  );
+}
+
+function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <fieldset>
+      <legend className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{label}</legend>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </fieldset>
+  );
+}
+
+function FilterChoice({ active, disabled = false, label, onClick }: { active: boolean; disabled?: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className="flex min-h-11 items-center gap-2 rounded-md border px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-35"
+      style={{ borderColor: active ? GOLD : BORDER, background: active ? GOLD : PANEL, color: active ? '#09090D' : INK }}
+    >
+      {active && <Check size={15} />} {label}
+    </button>
+  );
+}
+
+function ConditionSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>
+      Condition
+      <select
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        className="mt-2 h-11 w-full rounded-md border px-3 text-sm font-normal normal-case tracking-normal outline-none"
+        style={{ borderColor: BORDER, background: PANEL, color: INK }}
+      >
+        <option value="">All conditions</option>
+        <option value="New">New</option>
+        <option value="Used">Used</option>
+        <option value="Unknown">Condition not stated</option>
+      </select>
+    </label>
+  );
+}
+
+function LocationInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>
+      Location
+      <input
+        type="search"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        placeholder="City, country, or region"
+        className="mt-2 h-11 w-full rounded-md border px-3 text-sm font-normal normal-case tracking-normal outline-none"
+        style={{ borderColor: BORDER, background: PANEL, color: INK }}
+      />
+    </label>
+  );
+}
+
+function InventoryScopeControl({ value, onChange }: { value: InventoryScope; onChange: (value: InventoryScope) => void }) {
+  return (
+    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <FilterGroup label="Coverage">
+        <FilterChoice active={value === 'market'} label="Main inventory" onClick={() => onChange('market')} />
+        <FilterChoice active={value === 'archive'} label="Full archive" onClick={() => onChange('archive')} />
+      </FilterGroup>
+      <p className="max-w-xl text-xs leading-5" style={{ color: MUTED }}>
+        {value === 'market'
+          ? 'Main indexed inventory first. Searches still include the complete historical archive.'
+          : 'Includes historical records whose original posting date or fields may be incomplete.'}
+      </p>
+    </div>
+  );
+}
+
+function MobileFilterSheet({
+  category,
+  intent,
+  condition,
+  region,
+  inventoryScope,
+  onApply,
+  onClose,
+}: {
+  category: CategoryFilter;
+  intent: IntentFilter;
+  condition: string;
+  region: string;
+  inventoryScope: InventoryScope;
+  onApply: (filters: { category: CategoryFilter; intent: IntentFilter; condition: string; region: string; inventoryScope: InventoryScope }) => void;
+  onClose: () => void;
+}) {
+  const [draftCategory, setDraftCategory] = useState(category);
+  const [draftIntent, setDraftIntent] = useState(intent);
+  const [draftCondition, setDraftCondition] = useState(condition);
+  const [draftRegion, setDraftRegion] = useState(region);
+  const [draftInventoryScope, setDraftInventoryScope] = useState(inventoryScope);
+
+  return (
+    <div className="fixed inset-0 z-50 md:hidden" role="presentation">
+      <button type="button" aria-label="Close filters" className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mobile-filter-title"
+        className="absolute inset-y-0 right-0 flex w-full max-w-[390px] flex-col border-l shadow-2xl"
+        style={{ borderColor: BORDER, background: SURFACE, color: INK }}
+      >
+        <header className="flex h-16 shrink-0 items-center justify-between border-b px-5" style={{ borderColor: BORDER }}>
+          <h2 id="mobile-filter-title" className="text-lg font-semibold">Filter inventory</h2>
+          <button type="button" onClick={onClose} aria-label="Close filters" className="flex h-11 w-11 items-center justify-center rounded-md border" style={{ borderColor: BORDER }}>
+            <X size={20} />
+          </button>
+        </header>
+
+        <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
+          <FilterGroup label="Category">
+            {CATEGORY_OPTIONS.map(option => (
+              <FilterChoice key={option.value} active={draftCategory === option.value} label={option.label} onClick={() => {
+                setDraftCategory(option.value);
+                if (option.value === 'luxury') setDraftIntent('');
+              }} />
+            ))}
+          </FilterGroup>
+          <FilterGroup label="Intent">
+            {INTENT_OPTIONS.map(option => (
+              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={draftCategory === 'luxury' && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
+            ))}
+          </FilterGroup>
+          {draftCategory === 'luxury' && (
+            <p className="text-xs leading-5" style={{ color: MUTED }}>Non-watch records remain in one unnormalized review category until their seller or buyer intent is supported by source evidence.</p>
+          )}
+          <ConditionSelect value={draftCondition} onChange={setDraftCondition} />
+          <LocationInput value={draftRegion} onChange={setDraftRegion} />
+          <InventoryScopeControl value={draftInventoryScope} onChange={setDraftInventoryScope} />
+        </div>
+
+        <footer className="grid shrink-0 grid-cols-2 gap-3 border-t p-4" style={{ borderColor: BORDER, background: SURFACE }}>
+          <button type="button" onClick={() => {
+            setDraftCategory('all');
+            setDraftIntent('');
+            setDraftCondition('');
+            setDraftRegion('');
+            setDraftInventoryScope('market');
+          }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
+          <button type="button" onClick={() => onApply({ category: draftCategory, intent: draftIntent, condition: draftCondition, region: draftRegion.trim(), inventoryScope: draftInventoryScope })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
+        </footer>
+      </section>
+    </div>
   );
 }
 

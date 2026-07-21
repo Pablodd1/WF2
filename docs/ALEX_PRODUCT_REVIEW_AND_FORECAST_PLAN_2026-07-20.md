@@ -89,7 +89,10 @@ Keep projections off until seller/date lineage improves and the known John refer
 - Never download millions of rows into the browser.
 - Avoid automatic infinite scroll because it harms navigation, footer access, accessibility, data use, and error recovery.
 
-This cursor pattern is already merged for the Trading Floor. Remaining work is filter-sheet UX, scroll restoration, and long-run mobile testing.
+This cursor pattern is already merged for the Trading Floor. The mobile filter
+sheet and responsive 24/48 row request sizes are implemented on
+`codex/alex-mobile-product-plan`. Remaining work is scroll restoration,
+long-run mobile testing, and real-device acceptance.
 
 ## 3. Mobile-first acceptance
 
@@ -168,7 +171,17 @@ Build a versioned dealer/group codebook only from confirmed examples. AI may sug
 
 ### Current gap
 
-The merged Trading Floor currently exposes Watches, Other luxury, All inventory, WTS, WTB, condition, and free-text location. It does not yet expose the complete category taxonomy, price range, brand/model facets, image/verified-dealer toggles, or the mobile filter sheet.
+The current implementation separates category from intent, so users can combine
+Watches with WTS or WTB without one filter replacing the other. It includes a
+mobile filter sheet for category, intent, condition, location, and archive
+coverage. It does not yet expose the complete category taxonomy, price range,
+brand/model facets, image/verified-dealer toggles, or sorting.
+
+Legacy non-watch rows still use one `OTHER` listing type and therefore do not
+contain a trustworthy independent WTS/WTB dimension. The UI disables those
+intent controls for `Other luxury`, and the API rejects handcrafted combinations
+instead of returning misleading watch results. Category and intent must be
+normalized independently before those filters can be enabled.
 
 All search/filter execution must remain server-side.
 
@@ -287,10 +300,10 @@ authorize production-data changes or enable forecasting.
 | --- | --- | --- | --- | --- |
 | 1 | Three-month Price Research projection | Forecast code and UI states exist, but the audited cohorts do not have enough monthly history and verified seller lineage. | Give every exact reference + dial/configuration + condition cohort a readiness result. Display numeric projections only after the existing sample, history, recency, dealer-diversity, and rolling-backtest gates pass. | Blocked by evidence; keep `ENABLE_PRICE_FORECASTS=false`. |
 | 2 | Tabs/pages versus infinite scroll | Trading Floor already uses cursor pagination and bounded page sizes. | Keep distinct pages for Home, Discover, Want to Buy, Price Research, Post, and Account. Use explicit `Load more`; do not use opaque infinite scroll or thousands of numbered pages. | Architecture decided; scroll restoration and long-run testing remain. |
-| 3 | Mobile-first experience | Responsive checks have passed at 390 x 844, but emulation is not a substitute for iPhone Safari. | Use a sticky Search / Filter / Sort row and a full-height mobile filter sheet. Test 360 x 800, 390 x 844, 412 x 915, tablet, and real iPhone Safari. | Partial; real-device acceptance remains. |
+| 3 | Mobile-first experience | Responsive checks passed at 360 x 800 and 390 x 844. The branch now includes a sticky Search / Filter row, full-height filter sheet, 44 px controls, and 24-row mobile requests. Emulation is not a substitute for iPhone Safari. | Add Sort, test 412 x 915 and tablet, run 20-page loading, and certify on a real iPhone Safari. | Branch implementation complete; real-device and long-run acceptance remain. |
 | 4 | Friendly currency converter | Display-only converter exists for eight currencies with dated ECB evidence. | Keep conversion separate from normalized source values. Add a mobile sheet, stale/offline label, remembered display currency, and confirm whether AED is required. | Implemented foundation; mobile/offline QA remains. |
 | 5 | Emoji prices | Keycap and full-width numeric forms are deterministic; unknown pictographic codes are blocked. | Add copied raw examples as regression fixtures. Maintain a reviewed dealer/group codebook; never let AI guess or approve an unknown emoji price. | Safe baseline implemented; examples required. |
-| 6 | Filters and Accessories | Basic category, intent, condition, and location controls exist. | Add server-side category facets for Watches, Handbags, Jewelry, Accessories, and Other, followed by intent, single listing, location, identity, price, condition, image, and dealer filters. Desktop gets a restrained sidebar; mobile gets the filter sheet. | Incomplete. |
+| 6 | Filters and Accessories | Category and intent are now independent. Desktop has grouped controls; mobile has a filter sheet. Legacy non-watch records cannot yet be split truthfully by intent. | Normalize Category and Intent into independent fields, then add Watches, Handbags, Jewelry, Accessories, and Other followed by identity, price, image, dealer, and sort controls. | Safe first slice implemented on branch; taxonomy/data migration remains. |
 | 7 | Want to Buy and posting | Moderated WTS/WTB submission contracts exist; submissions enter review. | Keep Want to Buy as a dedicated page. Show optional `Current WTS market context` behind an expandable section, never mixing WTB budgets into WTS analytics. Permit posting only for authenticated beta roles and require moderation. | Foundation implemented; product policy and acceptance testing remain. |
 | 8 | Dealer directory and profiles | Routes and UI exist; verified public identity depends on exact source lineage and consent. | Keep the directory hidden during beta if desired, but show verified dealer summaries in listing detail. Never publish an observed phone/name as a verified dealer without reviewed linkage and contact consent. | Blocked by lineage review. |
 | 9 | Settings, billing, pricing, listings, profile, help | Account workspace and support-ticket contracts exist; billing is a placeholder. | Release Profile, My Listings, Settings, and Help only after authorization tests. Keep Billing/Pricing hidden until plans, entitlements, taxes, refunds, and a payment provider are approved. Replace placeholder profile art only after real dealer media consent. | Shell exists; security and commercial decisions remain. |
@@ -317,11 +330,11 @@ cohort.
 
 A 390 x 844 browser pass confirmed that the global header, Price Research entry,
 and expanded currency converter fit without obvious page-level horizontal
-overflow. The converter stacks its amount, source currency, swap action, result,
-and target currency in a usable order. Trading Floor category/intent pills are
-still clipped horizontally, however, and there is no single mobile `Filter`
-action or full-height filter sheet. This supports the P1 mobile-filter work and
-is not a real-iPhone Safari certification.
+overflow. A subsequent 360 x 800 pass confirmed the stacked header, three primary
+navigation actions, Search / Filter row, full-height filter sheet, active-filter
+badge, and 24-row request size. A fresh 1440 x 900 pass confirmed grouped desktop
+filters and the 48-row request size. These checks are browser emulation, not a
+real-iPhone Safari certification.
 
 ### Recommended WTB market-research decision
 
@@ -335,9 +348,10 @@ an estimate.
 ### Current rollout note
 
 PR #59 (`codex/trading-floor-customer-quality`) was closed without merge on
-July 20, 2026. Its customer-ready inventory ordering and malformed historical
-price safeguards remain available on the branch, but are not part of `main`.
-They require a fresh review/reopen decision before release.
+July 20, 2026. Its two reviewed commits were carried forward onto
+`codex/alex-mobile-product-plan`, together with the mobile discovery work. Main
+is unchanged until this consolidated branch receives review and a successful
+Preview deployment.
 
 ## Definition of done
 
