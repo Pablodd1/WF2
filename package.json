@@ -23,6 +23,7 @@
     "audit:multilisting-lineage": "node tools/multilisting/audit-lineage-readiness.cjs",
     "audit:unbundled-csv": "node tools/multilisting/audit-unbundled-csv.cjs",
     "audit:unbundled-lineage": "node tools/multilisting/reconcile-unbundled-lineage.cjs",
+    "audit:unbundled-collection": "node tools/multilisting/audit-unbundled-collection.cjs",
     "stage:unbundled-canary": "node tools/multilisting/build-unbundled-canary.cjs",
     "normalize:unbundled-batch": "node tools/multilisting/normalize-unbundled-batch.cjs",
     "enrich:unbundled-sources": "node tools/multilisting/enrich-unbundled-source-lineage.cjs",

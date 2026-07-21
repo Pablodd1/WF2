@@ -15,7 +15,15 @@ function required(name) {
 function atomicJson(filePath, value) {
   const temporary = `${filePath}.partial`;
   fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`);
-  fs.renameSync(temporary, filePath);
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      fs.renameSync(temporary, filePath);
+      return;
+    } catch (error) {
+      if (!['EPERM', 'EBUSY', 'EACCES'].includes(error.code) || attempt === 9) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * (attempt + 1));
+    }
+  }
 }
 
 async function rest(baseUrl, key, resource, options = {}) {
