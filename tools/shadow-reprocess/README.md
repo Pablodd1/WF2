@@ -40,6 +40,12 @@ It writes only shadow proposals.
 4. Verify queue counts and Railway `lease_complete` logs before considering any
    promotion. Do not bulk-promote shadow rows.
 
+Cursor mode is a finite historical scan and exits after it reaches the end of
+the current archive. Queue mode remains alive by default so it can receive new
+work. `SHADOW_EXIT_ON_COMPLETE=true|false` may override that behavior for an
+explicit operational reason; do not force a completed cursor scan to poll every
+few seconds.
+
 ## Targeted remediation
 
 After a parser correction, re-evaluate one existing shadow-review bucket before
