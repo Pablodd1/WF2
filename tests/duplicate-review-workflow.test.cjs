@@ -5,6 +5,7 @@ const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 const { parseCsvLine } = require('../tools/duplicate-audit/stage-review-candidates.cjs');
+const { intentRelation, rawRelation, sellerRelation } = require('../tools/duplicate-audit/audit-review-batch.cjs');
 
 const migration = fs.readFileSync(
   path.join(__dirname, '..', 'supabase', 'migrations', '20260721170000_duplicate_review_workflow.sql'),
@@ -23,4 +24,20 @@ test('duplicate workflow is reversible and never deletes source records', () => 
   assert.match(migration, /watch_records_deleted.*false/);
   assert.doesNotMatch(migration, /DELETE FROM public\.watch_records/);
   assert.match(migration, /suppress_from_analytics = v_decision = 'SUPPRESS'/);
+});
+
+test('source-evidence audit keeps missing seller lineage unresolved', () => {
+  const left = { raw_message: 'Rolex 116500LN White', listing_type: 'WTS' };
+  const right = { raw_message: 'Rolex 116500LN White', listing_type: 'WTS' };
+  assert.equal(sellerRelation(left, right), 'UNKNOWN');
+  assert.equal(rawRelation(left, right), 'MATCHED');
+  assert.equal(intentRelation(left, right), 'MATCHED');
+});
+
+test('source-evidence audit detects seller and intent conflicts', () => {
+  const left = { seller_phone: '+15550001111', raw_message: 'Patek 5712 WTS', listing_type: 'WTS' };
+  const right = { seller_phone: '+15550002222', raw_message: 'Patek 5712 WTB', listing_type: 'WTB' };
+  assert.equal(sellerRelation(left, right), 'CONFLICTING');
+  assert.equal(rawRelation(left, right), 'DIFFERENT');
+  assert.equal(intentRelation(left, right), 'CONFLICTING');
 });

@@ -38,13 +38,30 @@ candidate report with:
 ```powershell
 $env:DUPLICATE_CANDIDATE_CSV = "audit-output/duplicates/patek-philippe/candidate-clusters.csv"
 $env:DUPLICATE_CANDIDATE_MAX_ROWS = "100"
+$env:DUPLICATE_CANDIDATE_SCAN_LIMIT = "20000"
+$env:DUPLICATE_REVIEW_SELECTION_OUTPUT = "audit-output/duplicates/patek-philippe/review-batch-001.csv"
 $env:APPLY_DUPLICATE_REVIEW_CANDIDATES = "true"
 railway run npm run stage:duplicate-review
 ```
 
-The command writes only to the private review table and reports
-`publicRowsMutated: 0`. Do not stage a full-brand report until the first
-bounded candidate set has been audited.
+The command skips unresolved bundle-risk rows and synthetic child IDs, saves
+the exact selected review batch, validates source IDs when writing, and writes
+only to the private review table. It reports `publicRowsMutated: 0`. Do not
+stage a full-brand report until the first bounded candidate set has been
+audited.
+
+Before any decision, run the read-only source-evidence join against the saved
+batch:
+
+```powershell
+$env:DUPLICATE_REVIEW_SELECTION_CSV = "audit-output/duplicates/patek-philippe/review-batch-001.csv"
+$env:DUPLICATE_REVIEW_EVIDENCE_OUTPUT = "audit-output/duplicates/patek-philippe/review-batch-001-evidence.json"
+railway run node tools/duplicate-audit/audit-review-batch.cjs
+```
+
+This report joins each pair to the original `watch_records` row and records
+raw-message, seller, intent, date, and source relationships. It writes no
+database rows and never auto-approves a decision.
 
 ## Approval boundary
 
