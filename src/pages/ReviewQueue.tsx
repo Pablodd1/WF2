@@ -51,6 +51,20 @@ interface ReviewItem {
   priority: number;
   rawMessage?: string;
   reviewEvidence?: Record<string, unknown>;
+  sellerName?: string | null;
+  sellerPhone?: string | null;
+  originalPostedAt?: string | null;
+  source?: string | null;
+  sourceType?: string | null;
+  duplicate?: {
+    candidateId: string;
+    canonical?: Record<string, unknown> | null;
+    duplicate?: Record<string, unknown> | null;
+    matchType: string;
+    confidence: number;
+    bundleRisk: boolean;
+    status: string;
+  };
 }
 
 const reasonFilters = [
@@ -87,6 +101,30 @@ interface ShadowQueueApiItem {
     reasons?: string[];
     catalog?: CatalogEvidence;
   };
+  sourceEvidence?: {
+    rawMessage?: string | null;
+    sellerName?: string | null;
+    sellerPhone?: string | null;
+    originalPostingDate?: string | null;
+    source?: string | null;
+    sourceType?: string | null;
+    imageUrls?: unknown[];
+    thumbnailUrl?: string | null;
+  };
+}
+
+interface DuplicateQueueApiItem {
+  id: string;
+  canonical_id: string;
+  duplicate_id: string;
+  match_type: string;
+  confidence: number;
+  bundle_risk?: boolean;
+  status: string;
+  created_at?: string;
+  evidence?: Record<string, unknown>;
+  canonical?: Record<string, unknown> | null;
+  duplicate?: Record<string, unknown> | null;
 }
 
 interface UnbundledQueueApiItem {
@@ -100,6 +138,7 @@ interface UnbundledQueueApiItem {
   price_raw?: number | null;
   price_usd?: number | null;
   currency?: string | null;
+  source?: string | null;
   listing_type?: string | null;
   created_at?: string | null;
   flags?: string[];
@@ -123,7 +162,7 @@ interface CorrectionDraft {
 }
 
 export default function ReviewQueue() {
-  const [lane, setLane] = useState<'shadow' | 'unbundled'>('unbundled');
+  const [lane, setLane] = useState<'shadow' | 'unbundled' | 'duplicates'>('unbundled');
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [reasonFilter, setReasonFilter] = useState('');
@@ -161,6 +200,58 @@ export default function ReviewQueue() {
   useEffect(() => {
     let active = true;
     setLoadError(null);
+    if (lane === 'duplicates') {
+      const params = new URLSearchParams({ limit: '50', page: '1', status: 'PENDING' });
+      fetch(`/api/duplicate-review-queue?${params.toString()}`, { credentials: 'include' })
+        .then(async response => {
+          if (!response.ok) throw new Error('Duplicate review queue is unavailable');
+          return response.json();
+        })
+        .then(data => {
+          if (!active) return;
+          setUnbundledTotal(Number(data.total || 0));
+          setItems(((data.items || []) as DuplicateQueueApiItem[]).map((item): ReviewItem => {
+            const duplicate = item.duplicate || {};
+            return {
+              id: item.id,
+              reference: String(duplicate.reference || item.evidence?.reference || 'Unresolved'),
+              brand: String(duplicate.brand || 'Unknown'),
+              model: 'Duplicate candidate',
+              dial: String(duplicate.dial_color || item.evidence?.dial || 'Unverified'),
+              price: Number(duplicate.price_usd || item.evidence?.candidate_price || 0),
+              currency: String(duplicate.currency || 'Unknown'),
+              aiFields: [item.match_type],
+              catalogFields: [],
+              catalog: null,
+              status: 'pending',
+              submittedAt: String(item.created_at || new Date(0).toISOString()),
+              listingTitle: String(duplicate.raw_message || 'Raw duplicate candidate message unavailable'),
+              reviewReasons: [item.match_type, ...(item.bundle_risk ? ['BUNDLE_RISK'] : [])],
+              disposition: 'HUMAN_REVIEW',
+              priority: Math.round(Number(item.confidence || 0) * 100),
+              rawMessage: String(duplicate.raw_message || ''),
+              sellerName: String(duplicate.seller_name || '') || null,
+              sellerPhone: String(duplicate.seller_phone || '') || null,
+              originalPostedAt: String(duplicate.listing_date || duplicate.created_at || '') || null,
+              source: String(duplicate.source || '') || null,
+              sourceType: String(duplicate.source_type || '') || null,
+              duplicate: {
+                candidateId: item.id,
+                canonical: item.canonical,
+                duplicate: item.duplicate,
+                matchType: item.match_type,
+                confidence: Number(item.confidence || 0),
+                bundleRisk: Boolean(item.bundle_risk),
+                status: item.status,
+              },
+            };
+          }));
+        })
+        .catch(error => {
+          if (active) setLoadError(error instanceof Error ? error.message : 'Duplicate review queue is unavailable');
+        });
+      return () => { active = false; };
+    }
     if (lane === 'unbundled') {
       const params = new URLSearchParams({ limit: '50', page: String(unbundledPage), bucket: unbundledBucket });
       if (search.trim()) params.set('search', search.trim());
@@ -197,6 +288,10 @@ export default function ReviewQueue() {
               priority: ready ? 30 : 90,
               rawMessage: item.raw_message || undefined,
               reviewEvidence: item.field_confidence,
+              sellerName: String(item.field_confidence?.seller_name || '') || null,
+              sellerPhone: String(item.field_confidence?.seller_phone || '') || null,
+              originalPostedAt: item.created_at || null,
+              source: String(item.source || '') || null,
             };
           }));
         })
@@ -235,6 +330,12 @@ export default function ReviewQueue() {
             reviewReasons: item.decision?.reasons || [],
             disposition: item.decision?.disposition || 'HUMAN_REVIEW',
             priority: Number(item.priority || 0),
+            rawMessage: item.sourceEvidence?.rawMessage || undefined,
+            sellerName: item.sourceEvidence?.sellerName || null,
+            sellerPhone: item.sourceEvidence?.sellerPhone || null,
+            originalPostedAt: item.sourceEvidence?.originalPostingDate || null,
+            source: item.sourceEvidence?.source || null,
+            sourceType: item.sourceEvidence?.sourceType || null,
           };
         }));
       })
@@ -346,6 +447,35 @@ export default function ReviewQueue() {
     }
   };
 
+  const submitDuplicateDecision = async (item: ReviewItem, decision: 'SUPPRESS' | 'KEEP_BOTH' | 'DEFER') => {
+    const reason = window.prompt(
+      decision === 'SUPPRESS'
+        ? 'Why is this the same observation and safe to suppress from analytics?'
+        : decision === 'KEEP_BOTH'
+          ? 'Why are both observations valid and distinct?'
+          : 'Why should duplicate review remain deferred?'
+    );
+    if (!reason?.trim()) return;
+    setDecisionBusy(item.id);
+    setDecisionError(null);
+    try {
+      const response = await fetch('/api/duplicate-review-decision', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidateId: item.id, decision, reason }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Duplicate review decision failed');
+      setItems(current => current.filter(candidate => candidate.id !== item.id));
+      setSelected(null);
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : 'Duplicate review decision failed');
+    } finally {
+      setDecisionBusy(null);
+    }
+  };
+
   const draftFor = (item: ReviewItem): CorrectionDraft => correctionDrafts[item.id] || {
     brand: item.brand === 'Unknown' ? '' : item.brand,
     reference: item.reference === 'Unresolved' ? '' : item.reference,
@@ -432,6 +562,12 @@ export default function ReviewQueue() {
           >
             Normalization corrections
           </button>
+          <button
+            onClick={() => { setLane('duplicates'); setSelected(null); }}
+            className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'duplicates' ? 'bg-red-400 text-black' : 'border border-border-default text-text-secondary'}`}
+          >
+            Duplicate candidates
+          </button>
           {lane === 'unbundled' && (
             <span className="ml-auto text-xs text-text-muted">{unbundledTotal.toLocaleString()} pending in this lane</span>
           )}
@@ -498,10 +634,10 @@ export default function ReviewQueue() {
             ))}
           </div>
           <div className="flex items-center gap-1 overflow-x-auto bg-bg-card border border-border-default rounded-lg p-1">
-            {(lane === 'shadow' ? reasonFilters : [
+            {(lane === 'shadow' ? reasonFilters : lane === 'unbundled' ? [
               { value: 'review-ready', label: 'Review ready' },
               { value: 'human-correction', label: 'Needs correction' },
-            ]).map(reason => (
+            ] : []).map(reason => (
               <button
                 key={reason.value || 'priority'}
                 onClick={() => {
@@ -603,7 +739,7 @@ export default function ReviewQueue() {
                       Approve & publish
                     </button>
                   )}
-                  {item.status === 'pending' && (
+                  {item.status === 'pending' && lane !== 'duplicates' && (
                     <button
                       onClick={() => void submitDecision(item, 'REJECTED')}
                       disabled={decisionBusy === item.id}
@@ -614,21 +750,49 @@ export default function ReviewQueue() {
                       {decisionBusy === item.id ? <Loader2 size={14} className="animate-spin text-red-400" /> : <XCircle size={14} className="text-red-400" />}
                     </button>
                   )}
+                  {item.status === 'pending' && lane === 'duplicates' && (
+                    <>
+                      <button
+                        onClick={() => void submitDuplicateDecision(item, 'SUPPRESS')}
+                        disabled={decisionBusy === item.id}
+                        className="rounded-lg bg-red-400 px-2.5 py-2 text-xs font-bold text-black disabled:opacity-50"
+                      >
+                        Suppress duplicate
+                      </button>
+                      <button
+                        onClick={() => void submitDuplicateDecision(item, 'KEEP_BOTH')}
+                        disabled={decisionBusy === item.id}
+                        className="rounded-lg border border-emerald-500/40 px-2.5 py-2 text-xs font-bold text-emerald-300 disabled:opacity-50"
+                      >
+                        Keep both
+                      </button>
+                      <button
+                        onClick={() => void submitDuplicateDecision(item, 'DEFER')}
+                        disabled={decisionBusy === item.id}
+                        className="p-2 rounded-lg border border-border-default disabled:opacity-50"
+                        aria-label={`Defer duplicate ${item.reference}`}
+                        title="Defer duplicate review"
+                      >
+                        <Clock size={14} className="text-text-muted" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
               {/* Expanded Detail */}
               {selected?.id === item.id && (
                   <div className="mt-4 pt-4 border-t border-border-default">
-                  {lane === 'unbundled' && (
+                  {(lane === 'unbundled' || item.rawMessage || item.sellerName || item.sellerPhone) && (
                     <div className="mb-4 rounded-lg border border-border-default bg-bg-elevated/40 p-3">
-                      <h4 className="text-xs font-bold text-text-primary mb-2">Preserved source evidence</h4>
+                      <h4 className="text-xs font-bold text-text-primary mb-2">Preserved raw source evidence</h4>
                       <div className="grid gap-2 text-xs text-text-secondary sm:grid-cols-2">
-                        <span>Parent source: <strong className="text-text-primary">{String(item.reviewEvidence?.source_record_id || 'Not linked')}</strong></span>
+                        <span>Parent/source: <strong className="text-text-primary">{String(item.reviewEvidence?.source_record_id || item.id || 'Not linked')}</strong></span>
                         <span>Child source: <strong className="text-text-primary">{String(item.reviewEvidence?.source_child_id || item.id)}</strong></span>
-                        <span>Seller: <strong className="text-text-primary">{String(item.reviewEvidence?.seller_name || 'Not present in this export')}</strong></span>
-                        <span>Phone: <strong className="text-text-primary">{String(item.reviewEvidence?.seller_phone || 'Not present in this export')}</strong></span>
-                        <span>Posted: <strong className="text-text-primary">{item.submittedAt ? new Date(item.submittedAt).toLocaleString() : 'Not preserved'}</strong></span>
+                        <span>Seller: <strong className="text-text-primary">{String(item.sellerName || item.reviewEvidence?.seller_name || 'Not present')}</strong></span>
+                        <span>Phone: <strong className="text-text-primary">{String(item.sellerPhone || item.reviewEvidence?.seller_phone || 'Not present')}</strong></span>
+                        <span>Posted: <strong className="text-text-primary">{item.originalPostedAt ? new Date(item.originalPostedAt).toLocaleString() : 'Not preserved'}</strong></span>
+                        <span>Source: <strong className="text-text-primary">{String(item.source || item.sourceType || 'Not identified')}</strong></span>
                         <span>Image: <strong className="text-text-primary">{String(item.reviewEvidence?.front_image || 'Not lineage-confirmed')}</strong></span>
                       </div>
                       <div className="mt-3 rounded border border-border-default bg-bg-card p-3 text-xs text-text-secondary whitespace-pre-wrap break-words">
@@ -639,6 +803,29 @@ export default function ReviewQueue() {
                           <strong className="text-text-secondary">Parent raw message:</strong>{'\n'}{String(item.reviewEvidence.parent_raw_message)}
                         </div>
                       )}
+                    </div>
+                  )}
+                  {lane === 'duplicates' && item.duplicate && (
+                    <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-xs">
+                      <div className="font-bold text-red-200">Duplicate comparison</div>
+                      <div className="mt-2 grid gap-2 text-text-secondary sm:grid-cols-2">
+                        <span>Match: <strong className="text-text-primary">{item.duplicate.matchType}</strong></span>
+                        <span>Confidence: <strong className="text-text-primary">{Math.round(item.duplicate.confidence * 100)}%</strong></span>
+                        <span>Bundle risk: <strong className="text-text-primary">{item.duplicate.bundleRisk ? 'Yes - defer' : 'No'}</strong></span>
+                        <span>Raw records: <strong className="text-text-primary">preserved; never deleted</strong></span>
+                      </div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {(['canonical', 'duplicate'] as const).map(side => {
+                          const record = item.duplicate?.[side] || {};
+                          return (
+                            <div key={side} className="rounded border border-border-default bg-bg-card p-3">
+                              <div className="font-bold text-text-primary">{side === 'canonical' ? 'Canonical observation' : 'Candidate duplicate'}</div>
+                              <div className="mt-2 text-text-secondary whitespace-pre-wrap break-words">{String(record.raw_message || 'Raw message unavailable')}</div>
+                              <div className="mt-2 text-text-muted">{String(record.brand || 'Unknown')} · {String(record.reference || 'Unresolved')} · {String(record.dial_color || 'Unverified')} · {String(record.price_usd || 'No price')}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                   <div className="grid gap-4 md:grid-cols-2">

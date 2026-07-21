@@ -14,6 +14,7 @@
     "media:seed-manifest": "node tools/mission-images/seed-media-manifest.cjs",
     "media:publish-other-pilot": "node tools/mission-images/publish-other-pilot.cjs",
     "audit:duplicates": "node tools/duplicate-audit/audit-brand.cjs",
+    "stage:duplicate-review": "node tools/duplicate-audit/stage-review-candidates.cjs",
     "audit:price-normalization": "node tools/price-quality/audit-price-normalization.cjs",
     "audit:emoji-prices": "node tools/price-quality/audit-emoji-prices.cjs",
     "stage:price-canary": "node tools/price-quality/stage-price-canary.cjs",
@@ -51,6 +52,7 @@
     "stage:seller-child-lineage": "node tools/dealer-lineage/stage-child-lineage-manifest.cjs",
     "audit:forecast-readiness": "node tools/forecast-readiness/audit-live-cohorts.cjs",
     "test:normalization": "node --test tests/normalization-v4.test.cjs tests/dial-normalization.test.cjs tests/market-row-normalization.test.cjs tests/market-stats.test.cjs tests/market-forecast.test.cjs tests/price-research-eligibility.test.cjs tests/repost-deduplication.test.cjs tests/shadow-reprocess.test.cjs tests/normalization-work-queue.test.cjs tests/promotion-policy.test.cjs tests/catalog-confirmation.test.cjs tests/review-decision-policy.test.cjs tests/zero-hallucination-contract.test.cjs tests/bundle-cohort.test.cjs tests/trading-record-safety.test.cjs tests/trading-cursor.test.cjs tests/fx-rates.test.cjs",
+    "test:duplicate-review": "node --test tests/duplicate-review-workflow.test.cjs tests/duplicate-signatures.test.cjs tests/duplicate-audit-bundles.test.cjs",
     "test:security": "node --test tests/service-token.test.cjs tests/security-boundaries.test.cjs tests/dealer-submissions.test.cjs tests/dealer-workspace.test.cjs tests/forecast-release-gate.test.cjs"
   },
   "dependencies": {
