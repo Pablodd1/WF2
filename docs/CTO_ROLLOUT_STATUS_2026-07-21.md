@@ -54,10 +54,10 @@ Required action:
 
 1. Run the read-only migration-ledger check and reconcile the manually applied
    migration timestamps before enabling automatic migration pushes.
-2. Stage a 100-parent private canary and inspect raw message, phone, source
-   timestamp, intent, and image filename.
-3. Stage the 5,350 exact parent matches only after the canary evidence is
-   approved.
+2. The 100-parent private canary is now staged and fully reconciled: 100/100
+   matched, with zero unmatched, conflicting, orphaned, or field-mismatch rows.
+3. Owner-review the canary evidence, then stage the 5,350 exact parent matches
+   only after explicit approval.
 4. Stage child lineage only after its parent rows exist and the child review
    gates pass.
 5. Do not assign `dealer_id` or publish contact until an approved directory
@@ -120,8 +120,8 @@ exact reference + dial + condition cohort passes every gate and owner review.
 ## Next safe work order
 
 1. Reconcile the production migration ledger through the read-only workflow.
-2. Stage 100 exact seller-lineage parents, review evidence, then stage the
-   approved 5,350-row cohort privately.
+2. Owner-review the completed 100-parent canary, then stage the approved
+   5,350-row cohort privately.
 3. Review the 345 seller-aware repost clusters; do not delete source evidence.
 4. Add Alex's exact emoji-price messages to regression tests.
 5. Design and canary the independent luxury-category migration.

@@ -202,8 +202,8 @@ enable `ENABLE_PRODUCTION_MIGRATIONS` solely because the files exist.
 ### P0 - data trust
 
 1. Review and merge PR #66 only after owner approval of the source-backed empty categories.
-2. Run the 100-parent private seller-lineage canary after the read-only ledger check.
-3. Review 98 intent conflicts.
+2. Owner-review the completed 100-parent private seller-lineage canary after the read-only ledger check.
+3. Keep the 98 reviewed intent conflicts blocked until child-level segmentation resolves WTS/WTB intent.
 4. Add Alex's copied emoji examples and regression fixtures.
 5. Keep forecasts disabled.
 
