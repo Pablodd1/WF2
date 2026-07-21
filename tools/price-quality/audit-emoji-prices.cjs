@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { analyzeRecord } = require('../shadow-reprocess/shadow-reprocess.cjs');
 
 const DEFAULT_MAX_ROWS = 5000;
 const DEFAULT_PAGE_SIZE = 250;
@@ -138,6 +139,41 @@ async function countRows(baseUrl, key, mode) {
   return Number((response.headers.get('content-range') || '').split('/')[1] || 0);
 }
 
+function currentParserFindings(records) {
+  return records
+    // Avoid expensive catalog/parser work for rows that cannot contain a
+    // private pictographic code. Numeric keycaps are intentionally excluded.
+    .filter(row => pictographs(row.raw_message).length > 0)
+    .map(analyzeRecord)
+    .filter(row => row.change_flags.includes('EMOJI_PRICE_AMBIGUOUS'));
+}
+
+async function readCurrentParserFindings(baseUrl, key, maxRows, pageSize) {
+  const findings = [];
+  let scanned = 0;
+  let lastId = String(process.env.EMOJI_AUDIT_START_ID || '').trim();
+
+  while (scanned < maxRows) {
+    const limit = Math.min(pageSize, maxRows - scanned);
+    const params = new URLSearchParams({
+      select: 'id,raw_message,brand,reference,price_raw,price_usd,currency,listing_type,dial_color,parser_version',
+      raw_message: 'not.is.null',
+      order: 'id.asc',
+      limit: String(limit),
+    });
+    if (lastId) params.set('id', `gt.${lastId}`);
+    const response = await supabaseRequest(baseUrl, key, `watch_records?${params}`);
+    const page = await response.json();
+    if (!page.length) break;
+    scanned += page.length;
+    lastId = page[page.length - 1].id;
+    findings.push(...currentParserFindings(page));
+    if (page.length < limit) break;
+  }
+
+  return { findings, scanned, lastId };
+}
+
 async function main() {
   const baseUrl = required('SUPABASE_URL');
   const key = process.env.SUPABASE_SECRET_KEY || required('SUPABASE_SERVICE_ROLE_KEY');
@@ -147,10 +183,21 @@ async function main() {
   const totalPlanned = await countRows(baseUrl, key, 'planned');
   const totalExact = await countRows(baseUrl, key, 'exact');
   const rows = await readRows(baseUrl, key, maxRows, pageSize);
-  const summary = summarizeRows(rows);
+  const scanCurrent = String(process.env.EMOJI_AUDIT_SCAN_CURRENT || '').toLowerCase() === 'true';
+  const current = scanCurrent
+    ? await readCurrentParserFindings(baseUrl, key, maxRows, pageSize)
+    : { findings: [], scanned: 0, lastId: null };
+  const summary = summarizeRows(scanCurrent ? current.findings : rows);
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(outputPath, `${JSON.stringify({ generated_at: new Date().toISOString(), rows, samples: summary.privateSamples }, null, 2)}\n`);
+  fs.writeFileSync(outputPath, `${JSON.stringify({
+    generated_at: new Date().toISOString(),
+    mode: scanCurrent ? 'bounded_current_parser_rescan' : 'materialized_shadow_flags',
+    rows_scanned: scanCurrent ? current.scanned : rows.length,
+    last_source_record_id: scanCurrent && current.lastId ? pseudonym(current.lastId) : null,
+    flagged_rows: scanCurrent ? current.findings.length : rows.length,
+    samples: summary.privateSamples,
+  }, null, 2)}\n`);
 
   console.log(JSON.stringify({
     generated_at: new Date().toISOString(),
@@ -158,6 +205,12 @@ async function main() {
     total_flagged_planned: totalPlanned,
     rows_scanned: rows.length,
     scan_truncated: rows.length < totalExact,
+    current_parser_rescan: {
+      enabled: scanCurrent,
+      rows_scanned: current.scanned,
+      flagged_rows: current.findings.length,
+      last_source_record_pseudonym: current.lastId ? pseudonym(current.lastId) : null,
+    },
     token_summary: summary.tokens,
     private_output: outputPath,
     safety: {
@@ -176,4 +229,11 @@ if (require.main === module) {
   });
 }
 
-module.exports = { codePoints, maskPrivateContact, pictographs, pseudonym, summarizeRows };
+module.exports = {
+  codePoints,
+  currentParserFindings,
+  maskPrivateContact,
+  pictographs,
+  pseudonym,
+  summarizeRows,
+};
