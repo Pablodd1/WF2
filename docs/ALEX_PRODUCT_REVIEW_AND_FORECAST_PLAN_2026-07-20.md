@@ -348,6 +348,12 @@ reported no horizontal overflow. The direct anonymous Price Research URL still
 redirected to Dealer Login; whether Price Research should be public read-only is
 a product/access-policy decision, not a responsive-layout defect.
 
+The production WTS cursor was also exercised for 20 consecutive mobile-size
+pages: 480 unique rows, 24 rows per page, zero repeated IDs, and a valid next
+cursor on every page. The full read took about 24 seconds over the network. This
+passes the bounded-pagination correctness gate; device memory profiling still
+requires a real phone session.
+
 ### Recommended WTB market-research decision
 
 Show a collapsed `Current for-sale market context` panel on a WTB detail page
