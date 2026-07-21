@@ -90,6 +90,16 @@ test('Price Research shows redacted source evidence and verified seller activity
   assert.doesNotMatch(page, /title\.startsWith\('Raw source'\)/);
 });
 
+test('Price Research only returns excluded observation rows to reviewers and admins', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const route = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
+  assert.match(route, /\['admin', 'reviewer'\]\.includes\(userRole\(sessionUser\)\)/);
+  assert.match(route, /outlier_rows: canReviewExcludedEvidence \?/);
+  assert.match(route, /Cache-Control', 'no-store/);
+  assert.match(route, /Vary', 'Cookie/);
+});
+
 test('Trading Floor click-through shows source evidence and only verified seller analytics', () => {
   const fs = require('node:fs');
   const path = require('node:path');

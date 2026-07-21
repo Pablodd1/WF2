@@ -66,6 +66,20 @@ test('groups one dial once while preserving condition counts', () => {
   assert.deepEqual(groups[0].condition_counts, { New: 1, Used: 1, Unspecified: 1 });
 });
 
+test('treats unknown and unspecified condition labels as one non-inferred cohort', () => {
+  const rows = [
+    { condition: 'Unknown', dial_color: 'Blue' },
+    { condition: 'Unspecified', dial_color: 'Blue' },
+    { condition: null, dial_color: 'Blue' },
+  ];
+  const cohorts = buildComparableCohorts(rows);
+  const groups = buildDialGroups(rows);
+  assert.equal(cohorts.length, 1);
+  assert.equal(cohorts[0].condition, 'Unspecified');
+  assert.equal(cohorts[0].count, 3);
+  assert.deepEqual(groups[0].condition_counts, { Unspecified: 3 });
+});
+
 test('classifies row-level outliers with an auditable reason', () => {
   const stats = summarizePrices([100, 101, 102, 103, 104, 105, 500]).stats;
   assert.deepEqual(classifyPrice(102, stats), { included: true, reason: null });
