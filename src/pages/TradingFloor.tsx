@@ -353,7 +353,7 @@ export default function TradingFloor() {
       )}
 
       <div className="mx-auto max-w-7xl px-4 py-5">
-        {featuredListings.length > 0 && !cursor && !search && ['all', 'watches'].includes(categoryFilter) && ['', 'WTS'].includes(intentFilter) && (
+        {featuredListings.length > 0 && !selectedListing && !cursor && !search && ['all', 'watches'].includes(categoryFilter) && ['', 'WTS'].includes(intentFilter) && (
           <FeaturedImageRail listings={featuredListings} onSelect={setSelectedListing} />
         )}
 
