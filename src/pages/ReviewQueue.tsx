@@ -49,6 +49,8 @@ interface ReviewItem {
   reviewReasons: string[];
   disposition: 'HUMAN_REVIEW' | 'READY_FOR_HUMAN_APPROVAL' | 'CATALOG_CONFIRMATION_REQUIRED';
   priority: number;
+  rawMessage?: string;
+  reviewEvidence?: Record<string, unknown>;
 }
 
 const reasonFilters = [
@@ -105,6 +107,19 @@ interface UnbundledQueueApiItem {
   dealerAttributionMissing?: boolean;
   catalogConfirmed?: boolean;
   exactRawLineage?: boolean;
+  field_confidence?: Record<string, unknown>;
+}
+
+interface CorrectionDraft {
+  brand: string;
+  reference: string;
+  dial_color: string;
+  condition: string;
+  year: string;
+  price_raw: string;
+  price_usd: string;
+  currency: string;
+  listing_type: string;
 }
 
 export default function ReviewQueue() {
@@ -126,6 +141,7 @@ export default function ReviewQueue() {
   const [unbundledTotal, setUnbundledTotal] = useState(0);
   const [duplicateReviewed, setDuplicateReviewed] = useState<Set<string>>(new Set());
   const [reviewerSession, setReviewerSession] = useState<{ email?: string; role?: string } | null>(null);
+  const [correctionDrafts, setCorrectionDrafts] = useState<Record<string, CorrectionDraft>>({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -179,6 +195,8 @@ export default function ReviewQueue() {
               ],
               disposition: ready ? 'READY_FOR_HUMAN_APPROVAL' : 'HUMAN_REVIEW',
               priority: ready ? 30 : 90,
+              rawMessage: item.raw_message || undefined,
+              reviewEvidence: item.field_confidence,
             };
           }));
         })
@@ -323,6 +341,50 @@ export default function ReviewQueue() {
       setSelected(null);
     } catch (error) {
       setDecisionError(error instanceof Error ? error.message : 'Review decision failed');
+    } finally {
+      setDecisionBusy(null);
+    }
+  };
+
+  const draftFor = (item: ReviewItem): CorrectionDraft => correctionDrafts[item.id] || {
+    brand: item.brand === 'Unknown' ? '' : item.brand,
+    reference: item.reference === 'Unresolved' ? '' : item.reference,
+    dial_color: item.dial === 'Unverified' ? '' : item.dial,
+    condition: '',
+    year: '',
+    price_raw: item.price ? String(item.price) : '',
+    price_usd: item.price ? String(item.price) : '',
+    currency: item.currency === 'Unknown' ? '' : item.currency,
+    listing_type: 'WTS',
+  };
+
+  const submitHumanAction = async (item: ReviewItem, action: 'SAVE' | 'DEFER' | 'RECYCLE') => {
+    const reason = action === 'SAVE'
+      ? 'Human correction saved; catalog and duplicate gates must revalidate before approval.'
+      : window.prompt(action === 'RECYCLE' ? 'Why is this being sent to recycle?' : 'Why should this remain pending?');
+    if (action !== 'SAVE' && !reason?.trim()) return;
+    setDecisionBusy(item.id);
+    setDecisionError(null);
+    try {
+      const response = await fetch('/api/unbundled-review-action', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stagingId: item.id,
+          action,
+          reason,
+          fields: action === 'SAVE' ? draftFor(item) : {},
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Human review action failed');
+      setItems(current => current.map(candidate => candidate.id === item.id
+        ? { ...candidate, status: action === 'RECYCLE' ? 'rejected' : 'pending' }
+        : candidate));
+      setSelected(null);
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : 'Human review action failed');
     } finally {
       setDecisionBusy(null);
     }
@@ -557,7 +619,28 @@ export default function ReviewQueue() {
 
               {/* Expanded Detail */}
               {selected?.id === item.id && (
-                <div className="mt-4 pt-4 border-t border-border-default">
+                  <div className="mt-4 pt-4 border-t border-border-default">
+                  {lane === 'unbundled' && (
+                    <div className="mb-4 rounded-lg border border-border-default bg-bg-elevated/40 p-3">
+                      <h4 className="text-xs font-bold text-text-primary mb-2">Preserved source evidence</h4>
+                      <div className="grid gap-2 text-xs text-text-secondary sm:grid-cols-2">
+                        <span>Parent source: <strong className="text-text-primary">{String(item.reviewEvidence?.source_record_id || 'Not linked')}</strong></span>
+                        <span>Child source: <strong className="text-text-primary">{String(item.reviewEvidence?.source_child_id || item.id)}</strong></span>
+                        <span>Seller: <strong className="text-text-primary">{String(item.reviewEvidence?.seller_name || 'Not present in this export')}</strong></span>
+                        <span>Phone: <strong className="text-text-primary">{String(item.reviewEvidence?.seller_phone || 'Not present in this export')}</strong></span>
+                        <span>Posted: <strong className="text-text-primary">{item.submittedAt ? new Date(item.submittedAt).toLocaleString() : 'Not preserved'}</strong></span>
+                        <span>Image: <strong className="text-text-primary">{String(item.reviewEvidence?.front_image || 'Not lineage-confirmed')}</strong></span>
+                      </div>
+                      <div className="mt-3 rounded border border-border-default bg-bg-card p-3 text-xs text-text-secondary whitespace-pre-wrap break-words">
+                        {item.rawMessage || 'Raw child listing unavailable. Do not approve until the parent/source message is recovered.'}
+                      </div>
+                      {!!item.reviewEvidence?.parent_raw_message && (
+                        <div className="mt-2 rounded border border-border-default bg-bg-card p-3 text-xs text-text-muted whitespace-pre-wrap break-words">
+                          <strong className="text-text-secondary">Parent raw message:</strong>{'\n'}{String(item.reviewEvidence.parent_raw_message)}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <h4 className="text-xs font-bold text-text-primary mb-2">Deterministic change flags</h4>
@@ -619,6 +702,50 @@ export default function ReviewQueue() {
                         <strong className="text-amber-300">Duplicate review completed.</strong> I checked the preserved raw line and context and confirm this is a distinct listing observation. Approval remains disabled until this is acknowledged.
                       </span>
                     </label>
+                  )}
+                  {lane === 'unbundled' && (
+                    <div className="mt-4 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-bold text-orange-200">Human correction</div>
+                          <div className="mt-1 text-[11px] text-text-muted">Edit only what the raw evidence supports. Saving keeps this row pending for catalog, duplicate, and publication revalidation.</div>
+                        </div>
+                        <span className="text-[10px] uppercase font-bold text-orange-300">AI advisory only</span>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        {(['brand', 'reference', 'dial_color', 'condition', 'year', 'price_raw', 'price_usd', 'currency', 'listing_type'] as const).map(field => {
+                          const draft = draftFor(item);
+                          return (
+                            <label key={field} className="text-[10px] uppercase tracking-wide text-text-muted">
+                              {field.replace('_', ' ')}
+                              {field === 'listing_type' ? (
+                                <select
+                                  value={draft[field]}
+                                  onChange={event => setCorrectionDrafts(current => ({ ...current, [item.id]: { ...draft, [field]: event.target.value } }))}
+                                  className="mt-1 w-full rounded border border-border-default bg-bg-card px-2 py-2 text-xs normal-case text-text-primary"
+                                >
+                                  <option value="WTS">WTS / For sale</option>
+                                  <option value="WTB">WTB / Looking for</option>
+                                  <option value="NTQ">NTQ / Price check</option>
+                                  <option value="OTHER">Other</option>
+                                </select>
+                              ) : (
+                                <input
+                                  value={draft[field]}
+                                  onChange={event => setCorrectionDrafts(current => ({ ...current, [item.id]: { ...draft, [field]: event.target.value } }))}
+                                  className="mt-1 w-full rounded border border-border-default bg-bg-card px-2 py-2 text-xs normal-case text-text-primary"
+                                />
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button onClick={() => void submitHumanAction(item, 'SAVE')} disabled={decisionBusy === item.id} className="rounded-lg bg-orange-400 px-3 py-2 text-xs font-bold text-black disabled:opacity-50">Save correction & revalidate</button>
+                        <button onClick={() => void submitHumanAction(item, 'DEFER')} disabled={decisionBusy === item.id} className="rounded-lg border border-border-default px-3 py-2 text-xs font-bold text-text-secondary disabled:opacity-50">Leave pending</button>
+                        <button onClick={() => void submitHumanAction(item, 'RECYCLE')} disabled={decisionBusy === item.id} className="rounded-lg border border-red-500/40 px-3 py-2 text-xs font-bold text-red-300 disabled:opacity-50">Send to recycle</button>
+                      </div>
+                    </div>
                   )}
                   <div className="mt-4 rounded-lg border border-border-default bg-bg-elevated/40 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
