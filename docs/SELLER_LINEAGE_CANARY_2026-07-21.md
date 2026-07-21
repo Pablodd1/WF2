@@ -4,6 +4,14 @@
 **Mode:** read-only local scan and dry-run staging  
 **Production writes:** 0
 
+## Schema status
+
+The private staging schema is now deployed and verified through the controlled
+Supabase workflow. The successful run is
+[29873517110](https://github.com/Pablodd1/wf/actions/runs/29873517110).
+This changed schema only. No seller rows were inserted and no public listing,
+dealer, contact, approval, duplicate, or image state was changed.
+
 ## Scope
 
 The seller export was reconciled against the 16 preserved unbundled parent raw-message files. The scan used exact raw-message SHA-1 evidence, phone identity, and source timestamp evidence. It did not infer dealers, publish contact information, attach images, or change listings.
@@ -37,10 +45,16 @@ The high unmatched count is not evidence that the listings are invalid. It means
 
 ## Safe next step
 
-1. Apply the two private seller-lineage migrations in Supabase Preview.
-2. Insert only the 100-parent canary using the existing checkpointed stage command.
-3. Inspect raw message, seller phone, seller name, source date, intent, and image filename for the canary.
-4. Stage child lineage only after the parent canary passes.
-5. Keep dealer assignment, public contact, duplicate suppression, and image publication disabled until identity and consent gates pass.
+1. Run the read-only production migration-ledger check and reconcile any
+   already-applied migration timestamps before enabling automatic migration
+   pushes.
+2. Insert only the 100-parent canary using the existing checkpointed stage
+   command with `APPLY_SELLER_LINEAGE_STAGING=true`.
+3. Inspect raw message, seller phone, seller name, source date, intent, and
+   image filename for every canary row.
+4. Stage child lineage only after the parent canary passes and the owner
+   approves the evidence report.
+5. Keep dealer assignment, public contact, duplicate suppression, and image
+   publication disabled until identity and consent gates pass.
 
 The generated local artifacts are under `audit-output/dealer-lineage/seller-lineage/`; they are intentionally excluded from Git because they contain private contact evidence.

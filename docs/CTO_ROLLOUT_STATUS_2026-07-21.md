@@ -42,25 +42,24 @@ The 98 blocked rows include mixed WTS/WTB source messages. They must remain
 blocked until line segmentation identifies the intent of each child. They must
 not contribute to public dealer activity totals.
 
-### Production staging blocker
+### Production staging status
 
 The additive private tables `seller_listing_lineage_staging` and
-`seller_child_lineage_staging` are not present in production; PostgREST returns
-`PGRST205` for both. The migrations pass 16 focused safety tests and deny all
-`anon` and `authenticated` access, but the production migration ledger and
-automatic migration workflow are not yet reconciled. Therefore no lineage rows
-were written during this rollout.
+`seller_child_lineage_staging` are now present in the target Supabase project.
+The controlled migration run [29873517110](https://github.com/Pablodd1/wf/actions/runs/29873517110)
+verified both tables, RLS, and privilege boundaries. No lineage rows were
+written during that schema rollout.
 
 Required action:
 
-1. Apply only migrations
-   `20260720220000_seller_listing_lineage_staging.sql` and
-   `20260721120000_seller_child_lineage_staging.sql` through a stable reviewed
-   SQL path.
-2. Verify both tables are service-role-only.
-3. Stage a 100-parent canary, sample raw message, phone, source timestamp,
-   intent, and image filename, then stage the 5,350 exact parent matches.
-4. Stage child lineage only after its parent rows exist.
+1. Run the read-only migration-ledger check and reconcile the manually applied
+   migration timestamps before enabling automatic migration pushes.
+2. Stage a 100-parent private canary and inspect raw message, phone, source
+   timestamp, intent, and image filename.
+3. Stage the 5,350 exact parent matches only after the canary evidence is
+   approved.
+4. Stage child lineage only after its parent rows exist and the child review
+   gates pass.
 5. Do not assign `dealer_id` or publish contact until an approved directory
    identity and contact consent are proven.
 
@@ -120,7 +119,7 @@ exact reference + dial + condition cohort passes every gate and owner review.
 
 ## Next safe work order
 
-1. Deploy and canary the two private lineage migrations.
+1. Reconcile the production migration ledger through the read-only workflow.
 2. Stage 100 exact seller-lineage parents, review evidence, then stage the
    approved 5,350-row cohort privately.
 3. Review the 345 seller-aware repost clusters; do not delete source evidence.
