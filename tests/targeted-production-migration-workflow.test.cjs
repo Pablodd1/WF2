@@ -36,7 +36,7 @@ test("targeted lineage workflow fails atomically and verifies private access", (
   assert.match(workflow, /has_table_privilege\('authenticated'/);
   assert.match(workflow, /has_table_privilege\('service_role'/);
   assert.match(workflow, /relrowsecurity IS NOT TRUE/);
-  assert.match(workflow, /aws-0-us-west-2\.pooler\.supabase\.com/);
+  assert.match(workflow, /aws-1-us-west-2\.pooler\.supabase\.com/);
   assert.match(workflow, /postgres\.\$\{SUPABASE_PROJECT_REF\}/);
   assert.match(workflow, /environment: production/);
 });

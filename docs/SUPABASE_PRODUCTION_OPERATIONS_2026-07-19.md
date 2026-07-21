@@ -48,7 +48,7 @@ first production `db push`.
 The targeted private-lineage workflow uses the project's IPv4-compatible
 Supavisor session pooler by default because this project resolves its direct
 `db.<project-ref>.supabase.co` endpoint to IPv6. The current default is
-`aws-0-us-west-2.pooler.supabase.com:5432` with user
+`aws-1-us-west-2.pooler.supabase.com:5432` with user
 `postgres.<project-ref>`. Optional production environment secrets
 `SUPABASE_DB_HOST`, `SUPABASE_DB_USER`, and `SUPABASE_DB_PORT` override those
 defaults without changing the migration SQL.

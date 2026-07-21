@@ -68,7 +68,7 @@ jobs:
           set -euo pipefail
           # The project's direct db.* endpoint is IPv6-only. Supavisor session mode
           # is IPv4-compatible and supports this transactional DDL workflow.
-          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-0-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
           echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
           echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
 

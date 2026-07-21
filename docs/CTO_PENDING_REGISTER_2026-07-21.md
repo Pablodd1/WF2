@@ -179,26 +179,31 @@ Before release:
 
 Keep these pages concise. Publish real tools, methodology, app availability, owned community channels, privacy, terms, corrections, and contact information. Do not repeat feature marketing on every page.
 
-## Blocking infrastructure item
+## Private lineage infrastructure status
 
-The private lineage migration workflow is merged, but execution remains blocked because GitHub Actions has `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` while the targeted migration workflow still needs:
+The private lineage schema is now applied and verified through the controlled
+workflow. Successful run: [29873517110](https://github.com/Pablodd1/wf/actions/runs/29873517110).
 
-- `SUPABASE_PROJECT_REF=bptrvfncppbjnchsaxtb`
-- the current `SUPABASE_DB_PASSWORD` as a GitHub Actions secret.
+Verified in the target Supabase project:
 
-After those secrets exist, dispatch the targeted workflow with confirmation phrase:
+- both private staging tables exist;
+- `anon` and `authenticated` have no `SELECT` privilege;
+- row-level security is enabled on both tables;
+- `service_role` can read both tables;
+- the transaction completed without changing listings or publishing contact data.
 
-`APPLY_PRIVATE_LINEAGE_SCHEMA`
-
-Then verify both private tables before staging any seller data. Do not publish seller contact information during this step.
+The remaining infrastructure task is migration-ledger reconciliation. A new
+manual, read-only ledger workflow must be run and reviewed before automatic
+production migration pushes are enabled. Do not rerun the schema workflow or
+enable `ENABLE_PRODUCTION_MIGRATIONS` solely because the files exist.
 
 ## Priority queue
 
 ### P0 - data trust
 
 1. Review and merge PR #66 only after owner approval of the source-backed empty categories.
-2. Apply private lineage schema and run the 100-parent canary.
-3. Review 98 intent conflicts.
+2. Owner-review the completed 100-parent private seller-lineage canary after the read-only ledger check.
+3. Keep the 98 reviewed intent conflicts blocked until child-level segmentation resolves WTS/WTB intent.
 4. Add Alex's copied emoji examples and regression fixtures.
 5. Keep forecasts disabled.
 
