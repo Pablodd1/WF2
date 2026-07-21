@@ -69,6 +69,16 @@ test('human review evidence and AI assistance require reviewer or admin authoriz
   }
 });
 
+test('dealer login does not redirect unauthorized roles into protected review routes', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerLogin.tsx'), 'utf8');
+  assert.match(page, /requiredRolesFor/);
+  assert.match(page, /route === '\/review' \|\| route === '\/review-queue'/);
+  assert.match(page, /requires \$\{requiredRolesFor\(requestedDestination\)\?\.join\(' or '\)\} access/);
+  assert.match(page, /Review Queue accepts reviewer or admin/);
+});
+
 test('public listing evidence is redacted and public dealer profiles omit raw messages', () => {
   const fs = require('node:fs');
   const path = require('node:path');
