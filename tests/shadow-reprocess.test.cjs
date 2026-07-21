@@ -154,6 +154,28 @@ test('proposes a catalog-backed dial only for a deterministic single-dial refere
   assert.equal(result.proposed_candidates[0].dial_evidence, 'exact_catalog_single_dial');
 });
 
+test('keeps raw panda evidence but proposes catalog white for Rolex 116500LN', () => {
+  const result = analyzeRecord({
+    id: 'dial-panda',
+    raw_message: 'Rolex Daytona 116500LN panda dial full links USD 30000',
+    brand: 'Rolex',
+    reference: '116500LN',
+    dial_color: 'Unknown',
+    currency: 'USD',
+    price_raw: 30000,
+    price_usd: 30000,
+    listing_type: 'WTS',
+  });
+  const candidate = result.proposed_candidates[0];
+  assert.equal(result.candidate_count, 1);
+  assert.equal(candidate.dial_color, 'White');
+  assert.equal(candidate.dial_evidence, 'explicit_raw_text');
+  assert.equal(candidate.dial_reason, 'raw_alias_panda_to_white');
+  assert.equal(candidate.raw_line, 'Rolex Daytona 116500LN panda dial full links USD 30000');
+  assert.ok(result.change_flags.includes('DIAL_CHANGED'));
+  assert.ok(!result.change_flags.includes('DIAL_AMBIGUOUS'));
+});
+
 test('flags a text and structured dial conflict instead of silently overwriting it', () => {
   const result = analyzeRecord({
     id: 'dial-2',
