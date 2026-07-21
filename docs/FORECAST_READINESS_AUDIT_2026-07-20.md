@@ -1,7 +1,9 @@
 # Three-month forecast readiness audit
 
-**Date:** July 20, 2026  
-**Source:** live `watchfacts-poc.vercel.app` read APIs  
+**Date:** July 20, 2026
+
+**Source:** live `watchfacts-poc.vercel.app` read APIs
+
 **Writes:** none
 
 ## CTO decision
