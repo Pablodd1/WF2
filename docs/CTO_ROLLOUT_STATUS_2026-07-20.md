@@ -102,26 +102,62 @@ modified by these commits.
 
 ## Current deployment gate
 
-The former Supabase Preview branch for the already-merged PR was removed. The
-Vercel branch preview therefore loads the new UI but reports that the Trading
-Floor database is not configured and returns zero records. That zero is an
-environment state, not a validated marketplace total.
+Draft PR #55 is open at
+`https://github.com/Pablodd1/wf/pull/55`. Supabase created Preview project
+`dtghoeidkfjhdybeodiq`; database, services, APIs, configuration, migrations,
+seeding, and edge-function checks passed. Both Vercel projects built.
 
-Before merge:
+The `wf` Vercel Preview is database-backed. Two cursor pages were checked for
+each intent:
 
-1. Open a fresh pull request from `codex/batch-002-full-normalization` to
-   `main`; the installed GitHub integration can read checks but returned `403`
-   when asked to create the PR.
-2. Confirm that Supabase creates a fresh Preview branch and applies
-   `20260721000000_dealer_listing_submissions.sql` and
-   `20260721020000_dealer_workspace.sql` successfully.
-3. Confirm both Vercel preview checks are Ready on the current head.
-4. Test cursor page 1/page 2 for WTS and WTB against Preview Supabase, checking
-   no overlap and stable descending source-date order.
-5. Verify a linked dealer can edit only its own profile, see its own listings,
+- WTS: 24 + 24 records, no repeated IDs, all rows WTS, estimated total
+  1,368,619.
+- WTB: 24 + 24 records, no repeated IDs, all rows WTB/NTQ-compatible buyer
+  intent, estimated total 183,305.
+- Requests used the server key and returned a next cursor with `hasMore=true`.
+
+The `watchfacts-poc` Vercel Preview still returns `supabase_not_configured`.
+This is an environment-integration difference between the two Vercel projects,
+not a database migration failure. Production merge remains blocked until the
+client-facing Vercel project is confirmed to receive its production variables.
+
+Unauthenticated Preview requests to `/api/dealer-workspace` and
+`/api/dealer-submissions` return `unauthenticated`. This proves that beta skip
+cannot read or write dealer account data. A deliberately linked Preview dealer
+is still required to prove positive profile/ticket isolation without changing
+production identity data.
+
+Owner-reference Preview QA:
+
+- Patek 5712/1A Blue: 523 outlier-clean all-condition observations; 122 unknown
+  dial rows remain excluded from exact dial analytics.
+- Patek 5712/1R Black: 10 outlier-clean all-condition observations.
+- Patek 3712/1A Blue: 8 outlier-clean all-condition observations.
+- Rolex 116500LN: 904 White and 355 Black outlier-clean observations.
+- Rolex 52506 Blue: 216 outlier-clean observations; displayed range remains
+  $34,000-$62,500, so the historical $244 evidence stays excluded.
+
+Forecasts remain correctly withheld. Exact condition cohorts fail one or more
+of: 12 monthly periods, five linked verified dealers, and evidence newer than
+three months. `ENABLE_PRICE_FORECASTS` must remain disabled.
+
+The deeper Patek 5712/1A New cohort check found a $20,152 observation that the
+old 10%-of-median plausibility floor allowed. The shared floor is now 25% of the
+interpolated cohort median, before IQR. Raw rows remain immutable and excluded
+evidence stays auditable. Customer Trading Floor responses also withhold
+sub-$1,000 reference prices (for example a live Rolex row at $132) as
+`PRICE_BELOW_PLAUSIBILITY_FLOOR` instead of presenting them as valid asks.
+
+Still required before merge:
+
+1. Confirm `watchfacts-poc` Production retains the required Supabase variables;
+   its PR Preview is not database-configured even though `wf` Preview is.
+2. Verify a linked Preview dealer can edit only its own profile, see its own listings,
    and create a support ticket. Beta skip must not permit these writes.
-6. Keep forecasts disabled until the five John references and a stratified
+3. Keep forecasts disabled until the five John references and a stratified
    50-reference backtest report are approved.
+4. Re-test Patek 5712/1A New and the sub-$1,000 Trading Floor row after the
+   latest safety commit deploys, confirming both are visibly excluded/withheld.
 
 ## Deliberately deferred
 

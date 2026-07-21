@@ -78,6 +78,13 @@ function sanitizeTradingRecord(record) {
     issues.push('REFERENCE_TOKEN_AS_PRICE');
   }
 
+  const usdPrice = Number(sanitized.price_usd);
+  if (sanitized.reference && Number.isFinite(usdPrice) && usdPrice > 0 && usdPrice < 1000) {
+    sanitized.price_usd = null;
+    sanitized.price_raw = null;
+    issues.push('PRICE_BELOW_PLAUSIBILITY_FLOOR');
+  }
+
   return {
     ...sanitized,
     data_quality_issues: issues,

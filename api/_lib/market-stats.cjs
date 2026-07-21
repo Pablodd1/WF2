@@ -10,6 +10,17 @@ function percentile(sorted, probability) {
   return sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower);
 }
 
+function marketPlausibilityFloor(values) {
+  const sorted = values.map(Number)
+    .filter(value => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  const median = sorted.length ? percentile(sorted, 0.5) : 0;
+  // Exact reference + dial + condition offers below one quarter of the cohort
+  // median are not comparable luxury-watch prices. Preserve them as excluded
+  // evidence so currency/parser errors remain auditable.
+  return Math.max(1000, Math.round(median * 0.25));
+}
+
 function summarizePrices(values) {
   const raw = values.map(Number).filter(value => Number.isFinite(value) && value > 0);
   const sortedRaw = [...raw].sort((a, b) => a - b);
@@ -104,5 +115,12 @@ function buildDialGroups(rows) {
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
-module.exports = { buildComparableCohorts, buildDialGroups, classifyPrice, percentile, summarizePrices };
+module.exports = {
+  buildComparableCohorts,
+  buildDialGroups,
+  classifyPrice,
+  marketPlausibilityFloor,
+  percentile,
+  summarizePrices,
+};
 
