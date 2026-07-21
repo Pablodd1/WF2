@@ -89,6 +89,7 @@ interface ShadowQueueApiItem {
 
 interface UnbundledQueueApiItem {
   id: string;
+  batchId?: string | null;
   raw_message?: string | null;
   brand?: string | null;
   reference?: string | null;
@@ -343,7 +344,7 @@ export default function ReviewQueue() {
             onClick={() => { setLane('unbundled'); setSelected(null); }}
             className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'unbundled' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
           >
-            Unbundled batch 002
+            All unbundled batches
           </button>
           <button
             onClick={() => { setLane('shadow'); setSelected(null); }}
