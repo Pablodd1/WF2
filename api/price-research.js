@@ -114,6 +114,21 @@ function summarizeComparableRows(rows) {
   return { marketPriceFloorUsd, summary };
 }
 
+async function loadAnalyticsSuppressedIds(client) {
+  try {
+    const { data, error } = await client
+      .from('duplicate_review_candidates')
+      .select('duplicate_id')
+      .eq('status', 'SUPPRESSED')
+      .limit(20_000);
+    if (error) return new Set();
+    return new Set((data || []).map(row => String(row.duplicate_id || '')).filter(Boolean));
+  } catch {
+    // Keep analytics available before the duplicate-review migration is deployed.
+    return new Set();
+  }
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store');
@@ -308,22 +323,25 @@ module.exports = async function handler(req, res) {
           price_usd: normalized.analytics_price_usd,
         };
       });
-    const bundleParentExcludedCount = normalizedRows.filter(row => row.bundle_candidate_count > 1).length;
-    const totalListings = normalizedRows.length - bundleParentExcludedCount;
-    const requiredFieldExclusions = normalizedRows
+    const analyticsSuppressedIds = await loadAnalyticsSuppressedIds(client);
+    const duplicateSuppressedRows = normalizedRows.filter(row => analyticsSuppressedIds.has(String(row.id)));
+    const analyticsRows = normalizedRows.filter(row => !analyticsSuppressedIds.has(String(row.id)));
+    const bundleParentExcludedCount = analyticsRows.filter(row => row.bundle_candidate_count > 1).length;
+    const totalListings = analyticsRows.length - bundleParentExcludedCount;
+    const requiredFieldExclusions = analyticsRows
       .map(row => ({ row, reason: classifyResearchEligibility(row, catalogHit) }))
       .filter(item => item.reason)
       .map(({ row, reason }) => ({ ...row, is_outlier: true, outlier_reason: reason }));
-    const eligibleMarketRows = normalizedRows.filter(row => !classifyResearchEligibility(row, catalogHit));
+    const eligibleMarketRows = analyticsRows.filter(row => !classifyResearchEligibility(row, catalogHit));
     // Reposts remain immutable evidence, but the same dealer repeatedly offering
     // the same configuration at the same price is one market observation.
     const { uniqueRows: marketRows, repostRows } = deduplicateReposts(eligibleMarketRows);
-    const currencyCorrections = normalizedRows.filter(row => row.price_normalization).length;
+    const currencyCorrections = analyticsRows.filter(row => row.price_normalization).length;
     const isUnknownDial = value => {
       const normalized = String(value || '').trim().toUpperCase();
       return !normalized || ['UNKNOWN', 'UNSPECIFIED', 'N/A', 'NA', 'NONE', 'NULL', '-'].includes(normalized);
     };
-    const unknownDialCount = normalizedRows.filter(row => isUnknownDial(row.dial_color)).length;
+    const unknownDialCount = analyticsRows.filter(row => isUnknownDial(row.dial_color)).length;
 
     const cohorts = buildComparableCohorts(marketRows);
     const dialGroups = buildDialGroups(marketRows);
@@ -450,12 +468,16 @@ module.exports = async function handler(req, res) {
       model, dialColors,
       dial_analysis,
       dial_data_quality: {
-        known_count: normalizedRows.length - unknownDialCount,
+        known_count: analyticsRows.length - unknownDialCount,
         unknown_count: unknownDialCount,
-        completeness_percent: normalizedRows.length
-          ? Math.round(((normalizedRows.length - unknownDialCount) / normalizedRows.length) * 1000) / 10
+        completeness_percent: analyticsRows.length
+          ? Math.round(((analyticsRows.length - unknownDialCount) / analyticsRows.length) * 1000) / 10
           : 0,
         status: unknownDialCount === 0 ? 'complete' : 'incomplete',
+      },
+      duplicate_data_quality: {
+        suppressed_from_analytics: duplicateSuppressedRows.length,
+        status: duplicateSuppressedRows.length ? 'reviewed_duplicates_excluded' : 'no_reviewed_duplicates_excluded',
       },
       currency_data_quality: {
         corrected_count: currencyCorrections,
@@ -522,6 +544,7 @@ module.exports = async function handler(req, res) {
         statistical_outlier_count: statisticalOutlierRows.length,
         required_field_excluded_count: requiredFieldExclusions.length,
         repost_excluded_count: repostRows.length,
+        duplicate_suppressed_count: duplicateSuppressedRows.length,
         unsplit_bundle_excluded_count: bundleParentExcludedCount,
         plausibility_floor_usd: marketPriceFloorUsd,
         plausibility_excluded_count: outlierRows.filter(row => row.outlier_reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR').length,

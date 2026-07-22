@@ -207,6 +207,10 @@ enable `ENABLE_PRODUCTION_MIGRATIONS` solely because the files exist.
 4. Add Alex's copied emoji examples and regression fixtures.
 5. Keep forecasts disabled.
 
+Duplicate review is prepared as a private, reversible lane. Candidate pairs
+must be staged from a read-only report and reviewed against both raw messages
+before analytics suppression. No raw row deletion is permitted.
+
 ### P1 - mobile marketplace
 
 6. Add scroll/filter restoration.
