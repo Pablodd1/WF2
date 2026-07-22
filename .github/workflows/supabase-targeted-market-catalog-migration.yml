@@ -76,6 +76,15 @@ jobs:
           db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
           psql "$db_url" --set=ON_ERROR_STOP=1 --file=/tmp/market-catalog-schema.sql
 
+      - name: Add bundle-parent lookup index without blocking writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          index="supabase/migrations/20260722170000_bundle_parent_lookup_index.sql"
+          test -f "$index"
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$index"
+
       - name: Verify market view and catalog columns
         shell: bash
         run: |
@@ -90,4 +99,7 @@ jobs:
           anon_select="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT has_table_privilege('anon', 'public.trading_floor_market_listings', 'SELECT');")"
           test "$anon_select" = "t"
 
-          psql "$db_url" --set=ON_ERROR_STOP=1 --command="SELECT id FROM public.trading_floor_market_listings LIMIT 1;"
+          index_count="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_shadow_v4_bundle_parent_source';")"
+          test "$index_count" = "1"
+
+          psql "$db_url" --set=ON_ERROR_STOP=1 --command="SET statement_timeout = '15s'; SELECT id FROM public.trading_floor_market_listings WHERE reference = '5712/1A' ORDER BY created_at DESC LIMIT 10; SELECT id FROM public.trading_floor_market_listings WHERE reference = '5712/1R' ORDER BY created_at DESC LIMIT 10;"
