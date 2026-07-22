@@ -292,10 +292,22 @@ function catalogStats() {
 function listCatalogReferences(brand, model = null) {
   loadCatalogs();
   const expectedBrand = normalizeBrand(brand);
-  return [..._sourceByBrandReference.values()]
-    .filter(entry => normalizeBrand(entry.brand) === expectedBrand)
-    .filter(entry => entry.model && (!model || entry.model === model))
-    .map(entry => ({ reference: entry.reference, brand: entry.brand, model: entry.model }));
+  const candidates = [];
+  for (const entry of _sourceByBrandReference.values()) candidates.push(entry);
+  for (const [reference, entry] of _catalog) candidates.push({ ...entry, reference });
+  for (const [reference, entry] of _enriched) candidates.push({ ...entry, reference });
+
+  const unique = new Map();
+  for (const entry of candidates) {
+    if (normalizeBrand(entry.brand) !== expectedBrand || !entry.reference || !entry.model) continue;
+    const key = normalizeRef(entry.reference);
+    if (!unique.has(key) || entry.source === 'local_catalog_v1') {
+      unique.set(key, { reference: entry.reference, brand: entry.brand, model: entry.model });
+    }
+  }
+  return [...unique.values()]
+    .filter(entry => !model || entry.model === model)
+    .sort((a, b) => a.model.localeCompare(b.model) || a.reference.localeCompare(b.reference));
 }
 
 function listCatalogBrands() {

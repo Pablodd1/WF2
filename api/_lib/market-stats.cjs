@@ -69,16 +69,55 @@ function classifyPrice(value, stats, options = {}) {
   return { included: true, reason: null };
 }
 
-function normalizeDimension(value, fallback = 'Unspecified') {
+function normalizeDimension(value, fallback = null, keepUnknown = false) {
   const clean = String(value || '').trim();
-  return clean || fallback;
+  const normalized = clean.toLowerCase().trim();
+  if (!normalized) return fallback;
+  if (['unspecified', 'unknown', 'unknow', 'n/a', 'na', '-'].includes(normalized)) {
+    return keepUnknown ? clean : fallback;
+  }
+  return clean;
 }
 
-function buildComparableCohorts(rows) {
+function normalizeComparableCondition(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'new') return 'New';
+  if (normalized === 'used') return 'Used';
+  return 'Unspecified';
+}
+
+function buildDialFilters(rows) {
   const groups = new Map();
   for (const row of rows) {
-    const condition = normalizeDimension(row.condition);
-    const dial_color = normalizeDimension(row.dial_color);
+    const dial = normalizeDimension(row.dial_color);
+    if (!dial) continue;
+    const key = dial.toLowerCase();
+    const current = groups.get(key) || { dial_color: dial, count: 0 };
+    current.count += 1;
+    groups.set(key, current);
+  }
+  return [...groups.values()].sort((a, b) => b.count - a.count || a.dial_color.localeCompare(b.dial_color));
+}
+
+function selectComparableRows(rows, options = {}) {
+  const requestedDial = String(options.dial || '').trim().toLowerCase();
+  const requestedCondition = normalizeComparableCondition(options.condition);
+  const hasConditionFilter = ['new', 'used', 'unspecified'].includes(String(options.condition || '').trim().toLowerCase());
+  return rows.filter(row => {
+    const dial = normalizeDimension(row.dial_color);
+    if (!dial) return false;
+    if (requestedDial && dial.toLowerCase() !== requestedDial) return false;
+    return !hasConditionFilter || normalizeComparableCondition(row.condition) === requestedCondition;
+  });
+}
+
+function buildComparableCohorts(rows, options = {}) {
+  const { includeUnknown = false } = options;
+  const groups = new Map();
+  for (const row of rows) {
+    const condition = normalizeDimension(row.condition, null, includeUnknown);
+    const dial_color = normalizeDimension(row.dial_color, null, includeUnknown);
+    if (condition == null || dial_color == null) continue;
     const key = `${condition.toLowerCase()}::${dial_color.toLowerCase()}`;
     if (!groups.has(key)) groups.set(key, { key, condition, dial_color, rows: [] });
     groups.get(key).rows.push(row);
@@ -88,5 +127,13 @@ function buildComparableCohorts(rows) {
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
-module.exports = { buildComparableCohorts, classifyPrice, percentile, summarizePrices };
+module.exports = {
+  buildComparableCohorts,
+  buildDialFilters,
+  classifyPrice,
+  normalizeComparableCondition,
+  percentile,
+  selectComparableRows,
+  summarizePrices,
+};
 

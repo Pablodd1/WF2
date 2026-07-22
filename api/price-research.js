@@ -7,7 +7,15 @@
 const { getClient } = require('./_lib/supabase');
 const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
 const { lookupCatalog } = require('./_lib/catalog');
-const { buildComparableCohorts, classifyPrice, summarizePrices } = require('./_lib/market-stats.cjs');
+const {
+  buildComparableCohorts,
+  buildDialFilters,
+  classifyPrice,
+  normalizeComparableCondition,
+  selectComparableRows,
+  summarizePrices,
+} = require('./_lib/market-stats.cjs');
+const { buildThreeMonthForecast } = require('./_lib/market-forecast.cjs');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { segmentDealerMessage } = require('./_lib/normalization-v4.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
@@ -30,7 +38,12 @@ function lookupModel(reference, brand) {
 // market_reference_indicators_current has never been queried by live code — if
 // column names differ, we fall back to a live-derived count. REAL DATA ONLY:
 // no invented seller/buyer numbers.
-async function lookupLiquidity(client, reference, listingCount, demand) {
+async function lookupLiquidity(client, reference, listingCount, demand, selection) {
+  // Indicator rows are reference-level only. Do not present them as though
+  // they were dial/condition-specific when the user has filtered the cohort.
+  if (selection?.dial || selection?.condition !== 'All') {
+    return { source: 'live_fallback', listing_count: listingCount, ...demand };
+  }
   try {
     const { data, error } = await client
       .from('market_reference_indicators_current')
@@ -56,10 +69,10 @@ async function lookupLiquidity(client, reference, listingCount, demand) {
   return { source: 'live_fallback', listing_count: listingCount, ...demand };
 }
 
-async function lookupDemand(client, brand, referenceVariants, catalog) {
+async function lookupDemand(client, brand, referenceVariants, catalog, selection = {}) {
   const { data, error } = await client
     .from('watch_records')
-    .select('id,brand,reference,dial_color,listing_type,verdict')
+    .select('id,brand,reference,dial_color,condition,listing_type,verdict')
     .eq('brand', brand)
     .in('reference', referenceVariants)
     .in('listing_type', ['WTB', 'NTQ'])
@@ -67,11 +80,16 @@ async function lookupDemand(client, brand, referenceVariants, catalog) {
     .limit(5000);
   if (error) return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
 
-  const eligible = (data || []).filter(row => !classifyDemandEligibility(row, catalog));
+  const eligible = (data || [])
+    .filter(row => !classifyDemandEligibility(row, catalog))
+    .map(row => {
+      const dial = normalizeDialValue(row.dial_color);
+      return { ...row, dial_color: dial.known ? dial.value : null };
+    });
+  const scoped = selectComparableRows(eligible, selection);
   const grouped = new Map();
-  for (const row of eligible) {
-    const normalizedDial = normalizeDialValue(row.dial_color);
-    const dial = normalizedDial.known ? normalizedDial.value : '';
+  for (const row of scoped) {
+    const dial = row.dial_color || '';
     const key = dial.toLowerCase();
     if (!key) continue;
     const current = grouped.get(key) || { dial_color: dial, count: 0 };
@@ -218,7 +236,7 @@ module.exports = async function handler(req, res) {
         totalListings: 0, sampledListings: 0, sampleCapped: false, count: 0,
         analytics_ready: false, listing_count: 0,
         sample_quality: 'observational',
-        selected_cohort: { condition: 'Unspecified', dial_color: 'Unspecified', count: 0 },
+        selected_cohort: null,
         cohorts: [], outliers: [], outlier_rows: [], outliersRemoved: 0, excludedEvidenceCount: 0, rawCount: 0,
         methodology: { method: 'IQR_1_5', minimum_sample: 5, included_count: 0, excluded_count: 0 },
         stats: null, liquidity: null, monthly: [], prices: [], rows: []
@@ -236,7 +254,8 @@ module.exports = async function handler(req, res) {
         return {
           ...normalized,
           bundle_candidate_count: segmentDealerMessage(row.raw_message || '').length,
-          dial_color: normalizedDial.known ? normalizedDial.value : normalized.dial_color,
+          // Hide placeholder dial values from charting and summary analytics.
+          dial_color: normalizedDial.known ? normalizedDial.value : null,
           stored_price_usd: row.price_usd,
           price_usd: normalized.analytics_price_usd,
         };
@@ -265,21 +284,22 @@ module.exports = async function handler(req, res) {
     // Reposts remain immutable evidence, but the same dealer repeatedly offering
     // the same configuration at the same price is one market observation.
     const { uniqueRows: marketRows, repostRows } = deduplicateReposts(eligibleMarketRows);
-    const currencyCorrections = normalizedRows.filter(row => row.price_normalization).length;
-    const isUnknownDial = value => {
-      const normalized = String(value || '').trim().toUpperCase();
-      return !normalized || ['UNKNOWN', 'UNSPECIFIED', 'N/A', 'NA', 'NONE', 'NULL', '-'].includes(normalized);
-    };
-    const unknownDialCount = normalizedRows.filter(row => isUnknownDial(row.dial_color)).length;
-
-    const cohorts = buildComparableCohorts(marketRows);
+    const dialFilters = buildDialFilters(marketRows);
     const requestedCondition = String(req.query.condition || '').trim().toLowerCase();
+    const selectedCondition = ['new', 'used', 'unspecified'].includes(requestedCondition)
+      ? normalizeComparableCondition(requestedCondition)
+      : 'All';
     const requestedDial = String(req.query.dial || '').trim().toLowerCase();
-    const selectedCohort = cohorts.find(cohort =>
-      (!requestedCondition || cohort.condition.toLowerCase() === requestedCondition)
-      && (!requestedDial || cohort.dial_color.toLowerCase() === requestedDial)
-    ) || cohorts[0] || { condition: 'Unspecified', dial_color: 'Unspecified', rows: [], count: 0 };
-    const listedRows = selectedCohort.rows;
+    const selectedDial = dialFilters.find(filter => filter.dial_color.toLowerCase() === requestedDial)?.dial_color
+      || dialFilters[0]?.dial_color
+      || null;
+    const selection = { dial: selectedDial || '', condition: selectedCondition };
+    const listedRows = selectedDial ? selectComparableRows(marketRows, selection) : [];
+    const currencyCorrections = listedRows.filter(row => row.price_normalization).length;
+    const cohorts = buildComparableCohorts(
+      marketRows.map(row => ({ ...row, condition: normalizeComparableCondition(row.condition) })),
+      { includeUnknown: true }
+    );
 
     // A deterministic safety floor runs before IQR. Otherwise a malformed low-
     // price cluster can make the IQR lower fence negative and contaminate every
@@ -297,7 +317,11 @@ module.exports = async function handler(req, res) {
     const {
       statisticalOutlierRows,
       allExcludedRows: outlierRows,
-    } = partitionExcludedEvidence(requiredFieldExclusions, repostRows, classifiedRows);
+    } = partitionExcludedEvidence(
+      selectComparableRows(requiredFieldExclusions, selection),
+      selectComparableRows(repostRows, selection),
+      classifiedRows
+    );
 
     // Monthly aggregation
     const monthlyMap = {};
@@ -318,10 +342,14 @@ module.exports = async function handler(req, res) {
       .map(m => ({ month: m.month, count: m.count, avg_price: Math.round(m.sum / m.count), min_price: m.min, max_price: m.max }))
       .sort((a, b) => a.month.localeCompare(b.month));
 
-    // ── Dial analysis: EVERY dial color found in real listings (rule: all must show) ──
+    // Dial analysis: concrete dial colors from real listings only.
     const dialMap = {};
-    marketRows.forEach(r => {
-      const dial = r.dial_color || 'Unspecified';
+    const dialAnalysisRows = selectedCondition === 'All'
+      ? marketRows
+      : selectComparableRows(marketRows, { condition: selectedCondition });
+    dialAnalysisRows.forEach(r => {
+      if (!r.dial_color) return;
+      const dial = r.dial_color;
       const key = String(dial).trim().toLowerCase();
       if (!dialMap[key]) dialMap[key] = { dial_color: String(dial).trim(), rows: [] };
       dialMap[key].rows.push(r);
@@ -336,6 +364,7 @@ module.exports = async function handler(req, res) {
           avg_price: dialSummary.stats.avg,
           min_price: dialSummary.stats.min,
           max_price: dialSummary.stats.max,
+          analytics_ready: dialSummary.analytics_ready,
         };
       })
       .filter(Boolean)
@@ -344,8 +373,12 @@ module.exports = async function handler(req, res) {
 
     // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
     const model = catalogHit?.found ? (catalogHit.model || null) : lookupModel(targetRef, brand);
-    const demand = await lookupDemand(client, brand, referenceVariants, catalogHit);
-    const liquidity = await lookupLiquidity(client, targetRef, marketRows.length, demand);
+    const demand = await lookupDemand(client, brand, referenceVariants, catalogHit, selection);
+    const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
+    const forecast = buildThreeMonthForecast(monthly, {
+      enabled: selectedCondition !== 'All',
+      observationCount: includedRows.length,
+    });
 
     const outlierEvidenceLimit = 100;
     const serializedOutliers = outlierRows.slice(0, outlierEvidenceLimit);
@@ -358,22 +391,21 @@ module.exports = async function handler(req, res) {
       model, dialColors,
       dial_analysis,
       dial_data_quality: {
-        known_count: normalizedRows.length - unknownDialCount,
-        unknown_count: unknownDialCount,
-        completeness_percent: normalizedRows.length
-          ? Math.round(((normalizedRows.length - unknownDialCount) / normalizedRows.length) * 1000) / 10
-          : 0,
-        status: unknownDialCount === 0 ? 'complete' : 'incomplete',
+        known_count: listedRows.length,
+        unknown_count: 0,
+        completeness_percent: listedRows.length ? 100 : 0,
+        status: 'complete',
       },
       currency_data_quality: {
         corrected_count: currencyCorrections,
         status: currencyCorrections ? 'corrected_for_analytics' : 'as_stored',
       },
-      totalListings,
-      listing_count: marketRows.length,
-      eligible_observation_count: eligibleMarketRows.length,
-      unique_offer_count: marketRows.length,
-      repost_count: repostRows.length,
+      totalListings: listedRows.length,
+      reference_listing_count: totalListings,
+      listing_count: listedRows.length,
+      eligible_observation_count: listedRows.length,
+      unique_offer_count: listedRows.length,
+      repost_count: selectComparableRows(repostRows, selection).length,
       sampledListings: rows.length,
       sampleCapped: rows.length >= sampleLimit,
       count: prices.length,
@@ -391,11 +423,11 @@ module.exports = async function handler(req, res) {
       analytics_ready: summary.analytics_ready,
       sample_quality: summary.sample_quality,
       stats: summary.analytics_ready ? summary.stats : null,
-      selected_cohort: {
-        condition: selectedCohort.condition,
-        dial_color: selectedCohort.dial_color,
-        count: selectedCohort.count,
-      },
+      selected_cohort: selectedDial
+        ? { condition: selectedCondition, dial_color: selectedDial, count: listedRows.length }
+        : null,
+      selected_filters: { dial_color: selectedDial, condition: selectedCondition },
+      dial_filters: dialFilters,
       cohorts: cohorts.map(cohort => {
         const cohortSummary = summarizeComparableRows(cohort.rows).summary;
         return {
@@ -431,6 +463,7 @@ module.exports = async function handler(req, res) {
         truncated: includedRows.length > evidencePageSize || outlierRows.length > outlierEvidenceLimit,
       },
       liquidity,
+      forecast,
       monthly, prices,
       rows: serializedComparables.map(r => ({
         id: r.id,

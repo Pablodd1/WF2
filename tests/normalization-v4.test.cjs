@@ -46,6 +46,13 @@ test('inherits Chinese HKD section context for bare dollar prices', () => {
   assert.equal(candidates[0].prices[0].amount_original, 283_000);
 });
 
+test('recognizes HDK as a Hong Kong dollar typo without defaulting to USD', () => {
+  const prices = extractPriceObservations('4200H HDK 380K');
+  assert.equal(prices.length, 1);
+  assert.equal(prices[0].currency_original, 'HKD');
+  assert.equal(prices[0].amount_usd, 48718);
+});
+
 test('preserves explicit HKD and USD equivalents', () => {
   const prices = extractPriceObservations('105,000HK$/13,500US$');
   assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original]), [

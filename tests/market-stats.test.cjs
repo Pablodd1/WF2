@@ -2,7 +2,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildComparableCohorts, classifyPrice, summarizePrices } = require('../api/_lib/market-stats.cjs');
+const {
+  buildComparableCohorts,
+  buildDialFilters,
+  classifyPrice,
+  selectComparableRows,
+  summarizePrices,
+} = require('../api/_lib/market-stats.cjs');
 
 test('uses standard 1.5 IQR fences and preserves outliers separately', () => {
   const result = summarizePrices([100, 101, 102, 103, 104, 105, 500]);
@@ -45,6 +51,60 @@ test('merges dial labels that differ only by case', () => {
   assert.equal(cohorts.length, 1);
   assert.equal(cohorts[0].dial_color, 'Ice Blue');
   assert.equal(cohorts[0].count, 2);
+});
+
+test('filters unknown dial/condition cohorts when includeUnknown is false', () => {
+  const cohorts = buildComparableCohorts([
+    { condition: 'Used', dial_color: 'Unknown' },
+    { condition: 'Unknown', dial_color: 'Blue' },
+    { condition: 'Used', dial_color: 'Black' },
+  ], { includeUnknown: false });
+  assert.equal(cohorts.length, 1);
+  assert.equal(cohorts[0].dial_color, 'Black');
+});
+
+test('keeps unknown cohorts when includeUnknown is true', () => {
+  const cohorts = buildComparableCohorts([
+    { condition: 'Used', dial_color: 'Unknown' },
+    { condition: 'New', dial_color: 'Blue' },
+  ], { includeUnknown: true });
+  const unknown = cohorts.find(item => item.condition.toLowerCase() === 'used' && item.dial_color.toLowerCase() === 'unknown');
+  assert.ok(Boolean(unknown));
+});
+
+test('filters a price-history cohort by both dial and condition', () => {
+  const rows = [
+    { dial_color: 'Blue', condition: 'New', id: 'blue-new' },
+    { dial_color: 'Blue', condition: 'Used', id: 'blue-used' },
+    { dial_color: 'Black', condition: 'Used', id: 'black-used' },
+    { dial_color: 'Blue', condition: 'Unknown', id: 'blue-unspecified' },
+  ];
+
+  assert.deepEqual(
+    selectComparableRows(rows, { dial: 'Blue', condition: 'New' }).map(row => row.id),
+    ['blue-new']
+  );
+  assert.deepEqual(
+    selectComparableRows(rows, { dial: 'Blue', condition: 'All' }).map(row => row.id),
+    ['blue-new', 'blue-used', 'blue-unspecified']
+  );
+  assert.deepEqual(
+    selectComparableRows(rows, { dial: 'Blue', condition: 'Unspecified' }).map(row => row.id),
+    ['blue-unspecified']
+  );
+});
+
+test('builds dial filters without placeholder dial values', () => {
+  const filters = buildDialFilters([
+    { dial_color: 'Blue' },
+    { dial_color: 'blue' },
+    { dial_color: 'Unknown' },
+    { dial_color: 'Black' },
+  ]);
+  assert.deepEqual(filters, [
+    { dial_color: 'Blue', count: 2 },
+    { dial_color: 'Black', count: 1 },
+  ]);
 });
 
 test('classifies row-level outliers with an auditable reason', () => {

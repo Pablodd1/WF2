@@ -39,3 +39,57 @@ test('reads an explicit USD equivalent from the short multiline listing block', 
   assert.equal(result.analytics_price_usd, 168000);
   assert.equal(result.price_normalization, 'EXPLICIT_USD_FROM_REFERENCE_LINE');
 });
+
+test('detects CNY values and prefers explicit yuan pricing when present', () => {
+  const result = normalizeMarketRow(
+    { price_usd: 90000, raw_message: '116500LN Gold dial\n¥ 1,000,000\nUSDT 18,000' },
+    '116500LN',
+  );
+  assert.equal(result.analytics_price_usd, 18000);
+  assert.equal(result.price_normalization, 'EXPLICIT_USD_FROM_REFERENCE_LINE');
+});
+
+test('repairs mixed-currency rows in one pass via EUR and GBP', () => {
+  const row = normalizeMarketRow(
+    { price_usd: 11000, raw_message: '1908 52506 New / used 1908 18\n1908 Gold Plate EUR 8,200\nGMT-Special GBP 8,000' },
+    '1908',
+  );
+  assert.equal(row.analytics_price_usd, 8856);
+  assert.equal(row.price_normalization, 'EXPLICIT_EUR_FROM_REFERENCE_LINE');
+});
+
+test('converts SGD and CNY when they appear on the reference line', () => {
+  const row = normalizeMarketRow(
+    { price_usd: 70000, raw_message: '5712/1R silver dial\n5712/1R - S$ 98,000' },
+    '5712/1R',
+  );
+  assert.equal(row.analytics_price_usd, 72520);
+  assert.equal(row.price_normalization, 'EXPLICIT_SGD_FROM_REFERENCE_LINE');
+});
+
+test('inherits HKD context for a bare dollar amount in a Hong Kong inventory section', () => {
+  const row = normalizeMarketRow(
+    { price_usd: 283000, raw_message: 'Brand New Rolex\nHKD ~ Without Box\n126500 White N5/26 $283000' },
+    '126500',
+  );
+  assert.equal(row.analytics_price_usd, 36282);
+  assert.equal(row.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
+});
+
+test('does not silently treat an unqualified bare dollar amount as USD', () => {
+  const row = normalizeMarketRow(
+    { price_usd: 283000, raw_message: '126500 White N5/26 $283000' },
+    '126500',
+  );
+  assert.equal(row.analytics_price_usd, 283000);
+  assert.equal(row.price_normalization, null);
+});
+
+test('recognizes the common HDK typo as Hong Kong dollars', () => {
+  const row = normalizeMarketRow(
+    { price_usd: 380000, raw_message: '4200H/222A-B934 new HDK 380K' },
+    '4200H/222A-B934',
+  );
+  assert.equal(row.analytics_price_usd, 48718);
+  assert.equal(row.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
+});

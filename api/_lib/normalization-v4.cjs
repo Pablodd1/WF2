@@ -1,8 +1,8 @@
-'use strict';
+﻿'use strict';
 
 const CURRENCY_ALIASES = [
   { code: 'USDT', pattern: 'USDT' },
-  { code: 'HKD', pattern: 'HKD|HK\\$|H\\.?K\\.?D\\.?|港币|港幣' },
+  { code: 'HKD', pattern: 'HKD|HDK|HK\\$|H\\.?K\\.?D\\.?|H\\.?D\\.?K\\.?|港幣|港币|港元|萬港幣|万港币|萬港币|万港幣' },
   { code: 'USD', pattern: 'USD|US\\$|U\\$' },
   { code: 'EUR', pattern: 'EUR|€' },
   { code: 'GBP', pattern: 'GBP|£' },
@@ -12,7 +12,19 @@ const CURRENCY_ALIASES = [
 ];
 
 const CURRENCY_TOKEN = CURRENCY_ALIASES.map(item => item.pattern).join('|');
-const MULTIPLIERS = { k: 1_000, m: 1_000_000, mn: 1_000_000, w: 10_000, '万': 10_000 };
+const MULTIPLIERS = {
+  k: 1_000,
+  m: 1_000_000,
+  mn: 1_000_000,
+  w: 10_000,
+  萬: 10_000,
+  万: 10_000,
+  ten: 10_000,
+  thou: 1_000,
+  thousands: 1_000,
+  mil: 1_000_000,
+  mill: 1_000_000,
+};
 const USD_PER_UNIT = { USD: 1, USDT: 1, HKD: 1 / 7.8, EUR: 1.08, GBP: 1.27, CHF: 1.12, SGD: 0.74, CNY: 0.138 };
 
 const BRAND_HEADERS = [
@@ -29,15 +41,18 @@ const BRAND_HEADERS = [
 ];
 
 function normalizeCurrencyToken(token) {
-  const clean = String(token || '').toUpperCase().replace(/\s/g, '');
-  if (/^(HKD|HK\$|H\.?K\.?D\.?)$/.test(clean) || /港币|港幣/.test(token)) return 'HKD';
+  const clean = String(token || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (
+    /^(HKD|HDK|HK\$|H\.?K\.?D\.?|H\.?D\.?K\.?)$/.test(clean)
+    || /港币|港幣|港元|萬港幣|万港币|萬港币|万港幣/.test(token)
+  ) return 'HKD';
   if (/^(USD|US\$|U\$)$/.test(clean)) return 'USD';
   if (clean === 'USDT') return 'USDT';
   if (clean === 'EUR' || clean === '€') return 'EUR';
   if (clean === 'GBP' || clean === '£') return 'GBP';
   if (clean === 'CHF') return 'CHF';
   if (clean === 'SGD' || clean === 'S$') return 'SGD';
-  if (/^(CNY|RMB|CN¥)$/.test(clean)) return 'CNY';
+  if (/^(CNY|RMB|CN¥|¥)$/.test(clean)) return 'CNY';
   return null;
 }
 
@@ -103,8 +118,9 @@ function extractPriceObservations(text, context = {}) {
     });
   };
 
-  const leftCurrency = new RegExp(`(${CURRENCY_TOKEN})\\s*([\\d][\\d.,]*)(?:\\s*(k|m|mn|w|万))?`, 'gi');
-  const rightCurrency = new RegExp(`([\\d][\\d.,]*)(?:\\s*(k|m|mn|w|万))?\\s*(${CURRENCY_TOKEN})`, 'gi');
+  const multipliers = '(k|m|mn|w|mil|mill|ten|thou|thousands|萬|万)';
+  const leftCurrency = new RegExp(`(${CURRENCY_TOKEN})\\s*([\\d][\\d.,]*)(?:\\s*${multipliers})?`, 'gi');
+  const rightCurrency = new RegExp(`([\\d][\\d.,]*)(?:\\s*${multipliers})?\\s*(${CURRENCY_TOKEN})`, 'gi');
 
   for (const match of line.matchAll(leftCurrency)) {
     add(match[0], match[2], match[3], match[1], match.index, 'explicit_line_currency');
@@ -115,7 +131,7 @@ function extractPriceObservations(text, context = {}) {
 
   // A bare dollar sign inherits an explicit section/message currency. Without
   // context it remains unresolved instead of silently becoming USD.
-  const dollarPattern = /\$\s*([\d][\d.,]*)(?:\s*(k|m|mn|w|万))?/gi;
+  const dollarPattern = /\$\s*([\d][\d.,]*)(?:\s*(k|m|mn|w|mil|mill|ten|thou|thousands))?/gi;
   for (const match of line.matchAll(dollarPattern)) {
     const contextCurrency = context.currency_context || null;
     if (contextCurrency) {
@@ -124,7 +140,7 @@ function extractPriceObservations(text, context = {}) {
   }
 
   if (!observations.length && context.currency_context) {
-    const bare = line.match(/\b(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)\s*(k|m|mn|w|万)\b/i);
+    const bare = line.match(/\b(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)\s*(k|m|mn|w|mil|mill|ten|thou|thousands)\b/i);
     if (bare) add(bare[0], bare[1], bare[2], context.currency_context, bare.index, 'section_currency');
   }
 

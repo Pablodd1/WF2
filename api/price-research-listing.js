@@ -4,6 +4,27 @@
  * not make the main analytics response unnecessarily large.
  */
 const { getClient } = require('./_lib/supabase');
+const DEFAULT_LISTING_IMAGE_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/';
+
+function toAbsoluteImageUrl(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/\.(jpg|jpeg|png|webp|gif|avif|heic)(\?|$)/i.test(trimmed)) {
+    const rawBase = process.env.DO_LISTINGS || process.env.PRICE_RESEARCH_IMAGE_BASE || DEFAULT_LISTING_IMAGE_BASE;
+    try {
+      new URL(trimmed);
+      return trimmed;
+    } catch {
+      const base = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
+      return `${base}${trimmed.replace(/^\/+/, '')}`;
+    }
+  }
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'https:' ? url.toString() : null;
+  } catch { return null; }
+}
 
 function collectUrls(value, found = []) {
   if (Array.isArray(value)) {
@@ -15,10 +36,8 @@ function collectUrls(value, found = []) {
     return found;
   }
   if (typeof value !== 'string') return found;
-  try {
-    const url = new URL(value.trim());
-    if (url.protocol === 'https:') found.push(url.toString());
-  } catch { /* Ignore malformed or non-URL media values. */ }
+  const absolute = toAbsoluteImageUrl(value);
+  if (absolute) found.push(absolute);
   return found;
 }
 

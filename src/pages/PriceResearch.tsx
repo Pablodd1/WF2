@@ -31,6 +31,20 @@ interface MonthlyPoint {
 
 interface DialPoint {
   dial_color: string; count: number; avg_price: number; min_price: number; max_price: number;
+  analytics_ready?: boolean;
+}
+
+interface DialFilter {
+  dial_color: string;
+  count: number;
+}
+
+interface ForecastPoint {
+  month: string;
+  avg_price: number;
+  min_price: number;
+  max_price: number;
+  projected: true;
 }
 
 interface ListingDetailData {
@@ -118,7 +132,9 @@ interface PriceData {
   excludedEvidenceCount?: number;
   analytics_ready: boolean;
   sample_quality: 'observational' | 'provisional' | 'robust';
-  selected_cohort: { condition: string; dial_color: string; count: number };
+  selected_cohort: { condition: string; dial_color: string; count: number } | null;
+  selected_filters?: { dial_color: string | null; condition: string };
+  dial_filters?: DialFilter[];
   cohorts: CohortPoint[];
   stats: {
     avg: number; median: number; min: number; max: number; range: number;
@@ -126,6 +142,7 @@ interface PriceData {
   } | null;
   liquidity: LiquidityData | null;
   monthly: MonthlyPoint[];
+  forecast?: { available: boolean; reason: string | null; method?: string; points: ForecastPoint[] };
   prices: number[];
   rows: RowData[];
   outlier_rows: RowData[];
@@ -182,6 +199,8 @@ function dialSwatch(color: string) {
 }
 
 function dialChartColor(color: string) {
+  const normalized = color.trim().toLowerCase();
+  if (['white', 'white dial', 'silver', 'grey', 'gray', 'mother of pearl', 'mop'].includes(normalized)) return NAVY;
   const swatch = dialSwatch(color);
   return swatch.startsWith('#') ? swatch : '#9aa1aa';
 }
@@ -330,14 +349,37 @@ export default function PriceResearch() {
       }
     : null;
 
-  // Chart data: combine monthly + forecast placeholder
-  const chartData = (data?.monthly || []).map(m => ({
+  const activeDial = data?.selected_filters?.dial_color || data?.selected_cohort?.dial_color || '';
+  const activeCondition = data?.selected_filters?.condition || data?.selected_cohort?.condition || 'All';
+  const selectedDialLine = activeDial ? dialChartColor(activeDial) : BLUE;
+  const priceHistoryTitle = `${activeDial || 'Selected'} Dial Price History - ${activeCondition === 'All' ? 'All Conditions' : activeCondition}`;
+  const historicalChartData = (data?.monthly || []).map(m => ({
     month: m.month,
     min: m.min_price,
     avg: m.avg_price,
     max: m.max_price,
     count: m.count,
+    range: [m.min_price, m.max_price],
+    projected: false,
   }));
+  const forecastPoints = data?.forecast?.available ? data.forecast.points : [];
+  const chartData = historicalChartData.length && forecastPoints.length
+    ? [
+        {
+          ...historicalChartData[historicalChartData.length - 1],
+          forecast_avg: historicalChartData[historicalChartData.length - 1].avg,
+          forecast_range: historicalChartData[historicalChartData.length - 1].range,
+          projected: true,
+        },
+        ...forecastPoints.map(point => ({
+          month: point.month,
+          count: null,
+          forecast_avg: point.avg_price,
+          forecast_range: [point.min_price, point.max_price],
+          projected: true,
+        })),
+      ]
+    : historicalChartData;
 
   const displayRef = data?.resolvedRef || data?.reference || query;
 
@@ -488,36 +530,57 @@ export default function PriceResearch() {
               </div>
             </div>
 
-            {data.cohorts.length > 1 && (
+            {(data.dial_filters?.length || 0) > 0 && (
               <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
-                  Every condition and dial group is visible. Select one to update the pricing summary and graph with comparable watches only.
+                  Select a dial, then a condition. Every market metric and chart below uses that exact selection.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {data.cohorts.map(cohort => {
-                    const selected = data.selected_cohort.condition === cohort.condition
-                      && data.selected_cohort.dial_color === cohort.dial_color;
+                  {data.dial_filters?.map(dial => {
+                    const selected = activeDial.toLowerCase() === dial.dial_color.toLowerCase();
                     return (
                       <button
-                        key={`${cohort.condition}-${cohort.dial_color}`}
+                        key={dial.dial_color}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => void fetchData(data.reference, cohort.condition, cohort.dial_color, data.brand)}
+                        onClick={() => void fetchData(data.reference, activeCondition === 'All' ? '' : activeCondition, dial.dial_color, data.brand)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 12px',
                           borderRadius: 8, cursor: 'pointer', backgroundColor: selected ? '#eef1f6' : WHITE,
                           border: `1px solid ${selected ? NAVY : BORDER}`,
                         }}
                       >
-                        <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto', background: dialSwatch(cohort.dial_color), border: '1px solid rgba(0,0,0,0.18)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.35)' }} />
+                        <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto', background: dialSwatch(dial.dial_color), border: '1px solid rgba(0,0,0,0.18)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.35)' }} />
                         <span style={{ minWidth: 0, flex: 1 }}>
-                          <span style={{ display: 'block', color: TEXT, fontSize: 13, fontWeight: 700 }}>{cohort.dial_color}</span>
-                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{cohort.condition} · {cohort.count.toLocaleString()} listings</span>
+                          <span style={{ display: 'block', color: TEXT, fontSize: 13, fontWeight: 700 }}>{dial.dial_color}</span>
+                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{dial.count.toLocaleString()} eligible listings</span>
                         </span>
-                        <span style={{ color: GREEN, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                          {cohort.avg_price == null ? 'No price' : `$${cohort.avg_price.toLocaleString()}`}
-                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-2" style={{ marginTop: 14 }} aria-label="Condition filter">
+                  {['All', 'New', 'Used', 'Unspecified'].map(condition => {
+                    const selected = activeCondition === condition;
+                    return (
+                      <button
+                        key={condition}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => void fetchData(data.reference, condition === 'All' ? '' : condition, activeDial, data.brand)}
+                        style={{
+                          border: `1px solid ${selected ? NAVY : BORDER}`,
+                          background: selected ? NAVY : WHITE,
+                          color: selected ? WHITE : TEXT,
+                          borderRadius: 999,
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          fontWeight: selected ? 700 : 500,
+                          padding: '7px 13px',
+                        }}
+                      >
+                        {condition}
                       </button>
                     );
                   })}
@@ -540,7 +603,7 @@ export default function PriceResearch() {
                   Final chart set: {data.count.toLocaleString()} observations · {data.outliersRemoved} statistical price outliers removed
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
-                  Cohort: {data.selected_cohort.condition} / {data.selected_cohort.dial_color}
+                  Cohort: {data.selected_cohort ? `${data.selected_cohort.condition} / ${data.selected_cohort.dial_color}` : 'No eligible price cohort'}
                 </div>
                 {data.eligible_observation_count != null && (
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 6, lineHeight: 1.4 }}>
@@ -555,7 +618,7 @@ export default function PriceResearch() {
                 {data.dial_data_quality && data.dial_data_quality.unknown_count > 0 && (
                   <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6, lineHeight: 1.4 }}>
                     Dial data {data.dial_data_quality.completeness_percent}% complete.{' '}
-                    {data.dial_data_quality.unknown_count.toLocaleString()} listing observations remain unspecified and are being normalized.
+                    {data.dial_data_quality.unknown_count.toLocaleString()} listing observations have no supported dial evidence and are excluded from comparable pricing.
                   </div>
                 )}
                 {data.currency_data_quality && data.currency_data_quality.corrected_count > 0 && (
@@ -704,8 +767,8 @@ export default function PriceResearch() {
                           <Cell
                             key={dial.dial_color}
                             fill={dialChartColor(dial.dial_color)}
-                            stroke={data.selected_cohort.dial_color === dial.dial_color ? NAVY : 'transparent'}
-                            strokeWidth={data.selected_cohort.dial_color === dial.dial_color ? 3 : 0}
+                            stroke={data.selected_cohort?.dial_color === dial.dial_color ? NAVY : 'transparent'}
+                            strokeWidth={data.selected_cohort?.dial_color === dial.dial_color ? 3 : 0}
                           />
                         ))}
                       </Bar>
@@ -745,13 +808,13 @@ export default function PriceResearch() {
             )}
 
             {/* ── Price Chart ───────────────────────────────── */}
-            {data.analytics_ready && chartData.length >= 1 && (
+            {chartData.length >= 1 ? (
               <>
                 <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Price History (Monthly)</h3>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{priceHistoryTitle}</h3>
                     <div className="flex gap-3">
-                      <span style={{ fontSize: 13, color: MUTED }}>Included observations only</span>
+                      <span style={{ fontSize: 13, color: MUTED }}>{data.analytics_ready ? 'Included observations only' : 'Observational evidence only'}</span>
                     </div>
                   </div>
 
@@ -762,36 +825,57 @@ export default function PriceResearch() {
                       <YAxis stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                       <Tooltip
                         contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                        formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                        labelFormatter={label => `${label}${String(label) === forecastPoints[0]?.month ? ' (forecast begins)' : ''}`}
+                        formatter={(value: number | number[], name: string) => {
+                          if (Array.isArray(value)) return [`$${value[0].toLocaleString()} - $${value[1].toLocaleString()}`, name === 'forecast_range' ? 'Projected range' : 'Price range'];
+                          if (value == null) return ['', ''];
+                          const labels: Record<string, string> = { avg: 'Average price', forecast_avg: 'Projected average' };
+                          return [`$${value.toLocaleString()}`, labels[name] || name];
+                        }}
                       />
-                      <Area type="monotone" dataKey="max" stroke="none" fill={RED} fillOpacity={0.05} />
-                      <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
-                      <Line type="monotone" dataKey="max" stroke={RED} strokeWidth={1} dot={false} />
-                      <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: WHITE, strokeWidth: 2 }} />
-                      <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} />
+                      <Area type="monotone" dataKey="range" stroke="none" fill={selectedDialLine} fillOpacity={0.12} />
+                      <Line type="monotone" dataKey="avg" name="Average price" stroke={selectedDialLine} strokeWidth={3} dot={{ r: 4, fill: selectedDialLine, stroke: WHITE, strokeWidth: 2 }} connectNulls={false} />
+                      <Area type="monotone" dataKey="forecast_range" stroke="none" fill={selectedDialLine} fillOpacity={0.07} />
+                      <Line type="monotone" dataKey="forecast_avg" name="Projected average" stroke={selectedDialLine} strokeWidth={2} strokeDasharray="7 5" dot={false} connectNulls={false} />
                     </ComposedChart>
                   </ResponsiveContainer>
 
                   <div className="flex items-center gap-6 mt-3" style={{ fontSize: 13, color: MUTED }}>
                     <span className="flex items-center gap-1.5">
                       <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: GREEN, display: 'inline-block' }} />
-                      ${stats?.min?.toLocaleString() || 'N/A'} MIN
+                      {data.analytics_ready ? `$${stats?.min?.toLocaleString() || 'N/A'} MINIMUM` : 'MINIMUM OBSERVATION'}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: BLUE, display: 'inline-block' }} />
-                      ${stats?.avg?.toLocaleString() || 'N/A'} AVERAGE
+                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: selectedDialLine, display: 'inline-block' }} />
+                      {data.analytics_ready ? `$${stats?.avg?.toLocaleString() || 'N/A'} AVERAGE` : 'NO MARKET AVERAGE'}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: RED, display: 'inline-block' }} />
-                      ${stats?.max?.toLocaleString() || 'N/A'} MAX
+                      {data.analytics_ready ? `$${stats?.max?.toLocaleString() || 'N/A'} MAXIMUM` : 'MAXIMUM OBSERVATION'}
                     </span>
+                    {data.forecast?.available && <span className="flex items-center gap-1.5">
+                      <span style={{ width: 18, borderTop: `2px dashed ${selectedDialLine}`, display: 'inline-block' }} />
+                      3-month projection
+                    </span>}
                   </div>
 
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
+                    {data.analytics_ready ? <>
                     Based on {data.count} comparable WTS listings · standard 1.5× IQR fences applied.
-                  </div>
+                    </> : (
+                      <>Based on {data.count} qualifying WTS observation{data.count === 1 ? '' : 's'}; price rating and IQR outlier fences begin at five observations.</>
+                    )}
+                    {data.forecast?.available
+                      ? ` Forecast uses a ${data.forecast.method}.`
+                      : ` ${data.forecast?.reason || 'No forecast is available for this selection.'}`}
+                </div>
                 </div>
               </>
+            ) : (
+              <section aria-label="Insufficient price history evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Not enough comparable listings to display a reliable price history for this selection.</h3>
+                <p style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>Choose another condition or dial color to inspect its independent evidence.</p>
+              </section>
             )}
 
             {/* ── Listings Table ──────────────────────────────── */}
@@ -854,7 +938,7 @@ export default function PriceResearch() {
                   <div>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Insufficient qualified market evidence</h3>
                     <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginTop: 5 }}>
-                      Price statistics and charts require at least five approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort.
+                      Price ratings and statistical outlier fences require at least five approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort. Available dated observations remain visible above without an average or rating.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
                       {data.sampledListings.toLocaleString()} observations checked · {(data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · 0 qualified comparables
@@ -900,8 +984,8 @@ export default function PriceResearch() {
                           </td>
                           <td style={{ padding: '11px 8px' }}>{(row.listing_date || row.created_at) ? (row.listing_date || row.created_at).split('T')[0] : 'Unknown'}</td>
                           <td style={{ padding: '11px 8px', color: '#8a6500' }}>{outlierReason(row.outlier_reason)}</td>
-                          <td style={{ padding: '11px 8px' }}>{row.condition || 'Unspecified'}</td>
-                          <td style={{ padding: '11px 8px' }}>{row.dial_color || 'Unspecified'}</td>
+                          <td style={{ padding: '11px 8px' }}>{row.condition || '-'}</td>
+                          <td style={{ padding: '11px 8px' }}>{row.dial_color || '-'}</td>
                           <td style={{ padding: '11px 8px', color: MUTED }}>
                             <span className="flex items-center gap-2">{row.source || 'Unknown'} <Eye size={14} aria-hidden="true" /></span>
                           </td>
@@ -935,7 +1019,7 @@ export default function PriceResearch() {
                   <button
                     type="button"
                     disabled={(data.evidence?.comparable_page || 1) <= 1 || loading}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.condition, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) - 1)}
+                    onClick={() => void fetchData(data.reference, data.selected_cohort?.condition || '', data.selected_cohort?.dial_color || '', data.brand, (data.evidence?.comparable_page || 1) - 1)}
                     style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) <= 1 ? 0.45 : 1 }}
                   >Previous</button>
                   <span style={{ color: MUTED, fontSize: 12 }}>
@@ -944,7 +1028,7 @@ export default function PriceResearch() {
                   <button
                     type="button"
                     disabled={(data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) || loading}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.condition, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) + 1)}
+                    onClick={() => void fetchData(data.reference, data.selected_cohort?.condition || '', data.selected_cohort?.dial_color || '', data.brand, (data.evidence?.comparable_page || 1) + 1)}
                     style={{ border: `1px solid ${BORDER}`, background: NAVY, color: WHITE, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) ? 0.45 : 1 }}
                   >Next</button>
                 </div>
@@ -985,7 +1069,7 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
         <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-          <span className="mr-2">Dial: {row.dial_color || 'Unspecified'}</span>
+          {row.dial_color && <span className="mr-2">Dial: {row.dial_color}</span>}
           <span className="mr-2">· {row.condition || 'Unspecified'}</span>
           {date && <span>· {date.split('T')[0]}</span>}
         </div>
