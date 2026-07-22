@@ -100,6 +100,16 @@ test('resolves curated Patek shorthand to the canonical blue-dial configuration'
   assert.deepEqual(match.dialColors, ['Blue']);
 });
 
+test('resolves rose-gold Patek shorthand to the exact canonical reference', () => {
+  const match = lookupCatalog('5712/1R', 'Patek Philippe');
+  assert.equal(match.found, true);
+  assert.equal(match.brand, 'Patek Philippe');
+  assert.equal(match.model, 'Nautilus');
+  assert.equal(match.matchType, 'exact_alias');
+  assert.equal(match.matchedRef, '5712/1R-001');
+  assert.deepEqual(match.dialColors, ['Black']);
+});
+
 test('confirms a proposed dial only when it agrees with the exact catalog reference', () => {
   const black = confirmCatalogCandidate({ brand: 'Rolex', reference: '116500LN', dial_color: 'Black' });
   const white = confirmCatalogCandidate({ brand: 'Rolex', reference: '116500LN', dial_color: 'White' });
