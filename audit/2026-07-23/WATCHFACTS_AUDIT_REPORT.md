@@ -12,7 +12,7 @@ All **117,744** supplied listing rows in `public/parsedWatches.json` were re-par
 
 **Headline findings**
 
-- The stored dataset is **not safe for Price Research in its current form**: only **1 row (0.0008%)** passes every deterministic eligibility gate, and only **1,900 rows (1.6%)** pass all gates if the missing intent-lineage gate is waived. The blockers are structural, not marginal.
+- The stored dataset is **not safe for Price Research in its current form**: only **1 row (0.0008%)** passes every deterministic eligibility gate, and only **1,947 rows (1.7%)** pass all gates if the missing intent-lineage gate is waived. The blockers are structural, not marginal.
 - **93,695 rows (79.6%) are exact-raw reposts** of another listing (12,808 duplicate groups; 11,241 rows are truly unique). Analytics that do not deduplicate are measuring repost flooding, not market supply.
 - **22,157 rows (18.8%) actively contradict their own raw evidence** on price or currency (REJECT_CANDIDATE) — e.g. explicit `hkd147k` stored as USD, explicit `HKD:755000` stored with no price, stored `priceUSD` columns containing the year (20,582 rows) or duplicating the HKD amount (53,609 rows).
 - **Currency evidence is strong where present**: 102,065 rows (86.7%) carry an explicit deterministic currency token; 13,560 rows (11.5%) are bare-`$` ambiguous; 837 have price tokens with no currency; 1,004 fail price parse; 278 have currencies (EUR/GBP/CHF) with no deterministic repo FX rate.
@@ -177,7 +177,7 @@ The supplied export strips message/section context, so intent is unknowable for 
 | Gate set | Eligible |
 |---|---|
 | Strict (all gates incl. explicit WTS intent) | **1** |
-| Deterministic-clean with intent gate waived (sensitivity) | 1,900 |
+| Deterministic-clean with intent gate waived (sensitivity) | 1,947 |
 
 Strict-eligible row: `pk_126398` — *"For sale 5980/1A Black dial 2008 good condition Full set *98,000USD*"* — WTS token, single listing, EXACT_MATCH, dial present, USD explicit, unique.
 
@@ -185,7 +185,7 @@ Excluded totals (dominant first-exclusion reason): intent not in evidence 117,56
 
 ## 13. Outlier totals by cohort
 
-Outliers computed **only after deterministic eligibility filtering** (1,900 intent-waived clean rows), cohort = brand|reference|condition|dial, 1.5×IQR, cohorts with ≥5 observations only. Outliers are flagged and preserved, never deleted.
+Outliers computed **only after deterministic eligibility filtering** (1,947 intent-waived clean rows), cohort = brand|reference|condition|dial, 1.5×IQR, cohorts with ≥5 observations only. Outliers are flagged and preserved, never deleted.
 
 | Outlier status | Rows |
 |---|---|
@@ -316,7 +316,7 @@ Additional systemic risks confirmed during the audit:
 
 ## 18. Recommended first bounded canary
 
-**Scope:** the 1,900 intent-waived deterministically clean rows, further bounded to (a) explicit USD/USDT currency only (removes the undated-FX caveat), (b) UNIQUE or CANONICAL duplicate status, (c) cohort size ≥ 5 with outlier fences applied. Estimated canary size: ~600–900 rows (exact count reproducible from `watchfacts_audit_master.csv` filter: `currency_normalized in (USD,USDT)` ∧ gates in §12).
+**Scope:** the 1,947 intent-waived deterministically clean rows, further bounded to (a) explicit USD/USDT currency only (removes the undated-FX caveat), (b) UNIQUE or CANONICAL duplicate status, (c) cohort size ≥ 5 with outlier fences applied. Estimated canary size: ~600–900 rows (exact count reproducible from `watchfacts_audit_master.csv` filter: `currency_normalized in (USD,USDT)` ∧ gates in §12).
 
 **Sequence:**
 1. Re-join canary rows to `raw_messages` to restore seller/date/intent lineage (currently 0% coverage) — hard gate.
