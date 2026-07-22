@@ -9,6 +9,8 @@
  * Stage E: Currency Conversion to USD
  */
 
+const { requireServiceToken } = require('./_lib/require-service-token.cjs');
+
 const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
 const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
 const APPROVE_THRESHOLD = 85;
@@ -1156,16 +1158,14 @@ async function analyzeOne(chunk, ctx) {
 
 // ─── Handler ───
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); return res.status(405).json({ error: 'Method not allowed' }); }
+  if (!requireServiceToken(req, res)) return;
 
   const { text } = req.body || {};
   if (!text || typeof text !== 'string' || !text.trim()) {
     return res.status(400).json({ error: 'text (string) required' });
   }
+  if (text.length > 100_000) return res.status(413).json({ error: 'text exceeds 100,000 characters' });
 
   await refreshRates();
   const kimiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;

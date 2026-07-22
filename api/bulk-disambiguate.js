@@ -15,13 +15,12 @@
  */
 
 const BATCH_SIZE = 20;
+const MAX_RECORDS = 100;
+const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!requireServiceToken(req, res)) return;
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -32,6 +31,7 @@ module.exports = async function handler(req, res) {
   if (!Array.isArray(records) || records.length === 0) {
     return res.status(400).json({ error: 'records array required' });
   }
+  if (records.length > MAX_RECORDS) return res.status(413).json({ error: `Maximum ${MAX_RECORDS} records per request` });
 
   // Split into batches
   const batches = [];

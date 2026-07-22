@@ -50,3 +50,20 @@ request with the configured bearer token reaches normal request validation, and
 the WhatsApp listener can ingest a controlled test message. Roll back both
 deployments together if the caller and API token values do not match.
 
+Browser review mutations use the authenticated dealer session instead of
+exposing `INGEST_API_TOKEN` to the client. AI parse and reprocessing require the
+`reviewer` or `admin` role; catalog ingestion and demo tools require `admin`.
+
+## Telegram Webhook Authentication
+
+Set a separate random server-only `TELEGRAM_WEBHOOK_SECRET` in Vercel, then
+register the same value as Telegram's `secret_token` when configuring the bot
+webhook. Telegram webhook POSTs must include the
+`X-Telegram-Bot-Api-Secret-Token` header. Manual alert triggers use
+`INGEST_API_TOKEN` instead.
+
+Release condition: a webhook with the wrong secret returns `401`, a correctly
+signed `/start` test reaches the configured test chat, and a manual trigger
+without the bearer token returns `401`. If the secret cannot be configured,
+disable the webhook route rather than accepting unsigned updates.
+
