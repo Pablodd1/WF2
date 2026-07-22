@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { confirmCatalogCandidate } = require('../tools/shadow-reprocess/catalog-confirmation.cjs');
+const { confirmCatalogCandidate } = require('../api/_lib/catalog-confirmation.cjs');
 const { buildPromotionDecision } = require('../tools/shadow-reprocess/promotion-policy.cjs');
 const { listCatalogBrands, lookupCatalog } = require('../api/_lib/catalog.js');
 
@@ -11,6 +11,30 @@ test('confirms an exact catalog reference with matching brand', () => {
   assert.equal(confirmation.confirmed, true);
   assert.equal(confirmation.match.brand, 'Rolex');
   assert.equal(confirmation.match.matchType, 'exact');
+});
+
+test('catalog confirmation provides persisted model provenance', () => {
+  const confirmation = confirmCatalogCandidate({ brand: 'Patek Philippe', reference: '5712/1A', dial_color: 'Blue' });
+  assert.equal(confirmation.confirmed, true);
+  assert.equal(confirmation.match.model, 'Nautilus');
+  assert.equal(confirmation.match.reference, '5712/1A-001');
+  assert.equal(confirmation.dialConfirmed, true);
+});
+
+test('live ingest persists only catalog-backed model identity', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'ingest.js'), 'utf8');
+  const migration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260722143000_catalog_model_provenance.sql'), 'utf8');
+
+  assert.doesNotMatch(source, /if \(llm\.model\) parsed\.model = llm\.model/);
+  assert.match(source, /confirmCatalogCandidate/);
+  assert.match(source, /catalog_confirmed: catalogConfirmation\.confirmed/);
+  assert.match(source, /verdict: catalogReviewRequired \? 'MUST_REVIEW'/);
+  assert.match(source, /isMissingCatalogColumn/);
+  assert.match(source, /withoutCatalogColumns\(normalizedListing\)/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS model TEXT/);
+  assert.match(migration, /catalog_confirmed BOOLEAN NOT NULL DEFAULT false/);
 });
 
 test('returns a review decision when catalog brand conflicts with candidate', () => {
