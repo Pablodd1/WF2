@@ -19,6 +19,7 @@ const {
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 const { sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
+const { confirmCatalogCandidate } = require('./_lib/catalog-confirmation.cjs');
 const { decodeTradingCursor, encodeTradingCursor, tradingCursorFilter } = require('./_lib/trading-cursor.cjs');
 
 // ============================================================
@@ -568,6 +569,16 @@ async function insertSupabase(tableName, record, url, key) {
   return data[0];
 }
 
+function withoutCatalogColumns(record) {
+  const { model: _model, catalog_confirmed: _confirmed, catalog_match: _match, ...legacy } = record;
+  return legacy;
+}
+
+function isMissingCatalogColumn(error) {
+  return /(?:model|catalog_confirmed|catalog_match).*(?:column|schema cache)|(?:column|schema cache).*(?:model|catalog_confirmed|catalog_match)/i
+    .test(String(error?.message || ''));
+}
+
 // ============================================================
 // Single Ingest Logic Flow
 // ============================================================
@@ -606,7 +617,6 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
         const llm = await llmEnrich(cand.rawLine, parsed, deepseekKey);
         if (llm.brand && llm.brand !== 'Unknown') parsed.brand = llm.brand;
         if (llm.reference) parsed.ref = llm.reference;
-        if (llm.model) parsed.model = llm.model;
         if (llm.dialColor) parsed.dial = llm.dialColor;
         if (llm.material) parsed.material = llm.material;
         if (llm.bracelet) parsed.bracelet = llm.bracelet;
@@ -620,6 +630,18 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       }
     }
 
+    const catalogConfirmation = confirmCatalogCandidate({
+      brand: parsed.brand,
+      reference: parsed.ref,
+      dial_color: parsed.dial,
+    });
+    const catalogReviewRequired = !catalogConfirmation.confirmed
+      || !catalogConfirmation.match?.model
+      || (parsed.dial && catalogConfirmation.dialConfirmed !== true);
+    parsed.model = catalogConfirmation.confirmed
+      ? (catalogConfirmation.match?.model || null)
+      : null;
+
     // Prepare JASS-5 structures
     const listingId = `list_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const primaryPrice = parsed.prices?.find(price => price.is_primary) || parsed.prices?.[0] || null;
@@ -627,6 +649,7 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       id: listingId,
       brand: parsed.brand,
       reference: parsed.ref,
+      model: parsed.model,
       dial_color: parsed.dial,
       condition: parsed.condition,
       year: parsed.year,
@@ -634,7 +657,7 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       price_usd: primaryPrice?.amount_usd || null,
       currency: primaryPrice?.currency_original || null,
       confidence: parsed.confidence,
-      verdict: parsed.approval_state,
+      verdict: catalogReviewRequired ? 'MUST_REVIEW' : parsed.approval_state,
       source,
       raw_message: cand.rawLine,
       parser_version: 'v4.0-context',
@@ -644,15 +667,30 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       flags: {
         raw_message_id: rawRecord.id || null,
         set_status: parsed.set_status || null,
-        catalog_status: parsed.catalog_status,
+        catalog_status: catalogConfirmation.reason,
       },
-      review_reason: parsed.review_reasons?.join(',') || null,
+      catalog_confirmed: catalogConfirmation.confirmed && Boolean(catalogConfirmation.match?.model),
+      catalog_match: catalogConfirmation.match || {},
+      review_reason: [...new Set([
+        ...(parsed.review_reasons || []),
+        ...(catalogReviewRequired
+          ? [catalogConfirmation.dialReason || catalogConfirmation.reason || 'CATALOG_REVIEW_REQUIRED']
+          : []),
+      ])].join(',') || null,
     };
 
     if (supabaseUrl && serviceKey) {
       try {
         // Ingest into watch_records table
-        await insertSupabase('watch_records', normalizedListing, supabaseUrl, serviceKey);
+        try {
+          await insertSupabase('watch_records', normalizedListing, supabaseUrl, serviceKey);
+        } catch (error) {
+          if (!isMissingCatalogColumn(error)) throw error;
+          // Expand-before-deploy compatibility: preserve the source event if a
+          // frontend deploy briefly precedes the additive database migration.
+          // The row remains MUST_REVIEW and claims no persisted confirmation.
+          await insertSupabase('watch_records', withoutCatalogColumns(normalizedListing), supabaseUrl, serviceKey);
+        }
 
         // Ingest related prices
         if (parsed.prices && parsed.prices.length > 0) {
