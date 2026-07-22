@@ -76,14 +76,17 @@ jobs:
           db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
           psql "$db_url" --set=ON_ERROR_STOP=1 --file=/tmp/market-catalog-schema.sql
 
-      - name: Add bundle-parent lookup index without blocking writes
+      - name: Add Trading Floor indexes without blocking writes
         shell: bash
         run: |
           set -euo pipefail
-          index="supabase/migrations/20260722170000_bundle_parent_lookup_index.sql"
-          test -f "$index"
+          bundle_index="supabase/migrations/20260722170000_bundle_parent_lookup_index.sql"
+          reference_index="supabase/migrations/20260722180000_reference_created_at_index.sql"
+          test -f "$bundle_index"
+          test -f "$reference_index"
           db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
-          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$index"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$bundle_index"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$reference_index"
 
       - name: Verify market view and catalog columns
         shell: bash
@@ -99,7 +102,7 @@ jobs:
           anon_select="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT has_table_privilege('anon', 'public.trading_floor_market_listings', 'SELECT');")"
           test "$anon_select" = "t"
 
-          index_count="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_shadow_v4_bundle_parent_source';")"
-          test "$index_count" = "1"
+          index_count="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND indexname IN ('idx_shadow_v4_bundle_parent_source', 'idx_watch_records_reference_created_at_desc');")"
+          test "$index_count" = "2"
 
-          psql "$db_url" --set=ON_ERROR_STOP=1 --command="SET statement_timeout = '15s'; SELECT id FROM public.trading_floor_market_listings WHERE reference = '5712/1A' ORDER BY created_at DESC LIMIT 10; SELECT id FROM public.trading_floor_market_listings WHERE reference = '5712/1R' ORDER BY created_at DESC LIMIT 10;"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --command="SET statement_timeout = '15s'; SELECT id FROM public.trading_floor_market_listings WHERE reference = '5712/1A' ORDER BY created_at DESC LIMIT 10; SELECT id FROM public.trading_floor_market_listings WHERE reference = '5712/1R' ORDER BY created_at DESC LIMIT 10; SELECT id FROM public.trading_floor_market_listings WHERE reference = '3712/1A' ORDER BY created_at DESC LIMIT 10; SELECT id FROM public.trading_floor_market_listings WHERE reference = '116500LN' ORDER BY created_at DESC LIMIT 10; SELECT id FROM public.trading_floor_market_listings WHERE reference = '52506' ORDER BY created_at DESC LIMIT 10;"
