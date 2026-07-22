@@ -1,9 +1,12 @@
 # Curated Luxury / WatchFacts External AI Assistance Handoff
 
-**Date:** July 22, 2026  
-**Repository:** `Pablodd1/wf`  
-**Working branch:** `codex/zero-hallucination-normalization`  
-**Verified branch head:** `1fd413a`  
+**Date:** July 22, 2026
+
+**Repository:** `Pablodd1/wf`
+
+**Working branch:** `codex/zero-hallucination-normalization`
+
+**Verified branch head:** `1fd413a`
 **Purpose:** safely divide evidence-review work across another capable AI environment without allowing it to guess market data or mutate production.
 
 ## Authority and safety boundary
