@@ -11,8 +11,9 @@ function defaultDestination(role?: string) {
 function requiredRolesFor(path?: string): DealerRole[] | null {
   const route = String(path || '').split('?')[0];
   if (route === '/dashboard' || route === '/admin' || route === '/multi-listings') return ['admin'];
-  if (route === '/review' || route === '/review-queue') return ['reviewer', 'admin'];
-  if (route.startsWith('/dealer') || route === '/analytics' || route === '/clean' || route === '/reprocess' || route === '/dealers') {
+  if (route === '/review' || route === '/review-queue' || route === '/reprocess') return ['reviewer', 'admin'];
+  if (route === '/demo' || route === '/demo-mode') return ['admin'];
+  if (route.startsWith('/dealer') || route === '/analytics' || route === '/clean' || route === '/dealers') {
     return ['dealer', 'reviewer', 'admin'];
   }
   return null;

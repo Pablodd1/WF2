@@ -6,6 +6,9 @@
  * CommonJS for Vercel serverless — maxDuration: 60
  */
 
+const { authorizeMutation } = require('./_lib/authorize-mutation.cjs');
+const { consumeAiQuota, rejectForQuota } = require('./_lib/ai-quota.cjs');
+
 const KIMI_URL = 'https://api.moonshot.ai/v1/chat/completions';
 const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
 
@@ -135,19 +138,21 @@ async function tryAI(text, gKey, kKey, cKey) {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  if (!await authorizeMutation(req, res, new Set(['reviewer', 'admin']))) return;
+
   const { rawMessage, currentGuess } = req.body;
   if (!rawMessage || typeof rawMessage !== 'string') {
     return res.status(400).json({ error: 'rawMessage (string) required' });
   }
+  if (rawMessage.length > 50_000) return res.status(413).json({ error: 'rawMessage exceeds 50,000 characters' });
+
+  const quota = await consumeAiQuota(req, { route: 'ai-parse', limit: 10, windowSeconds: 60 });
+  if (!quota.allowed) return rejectForQuota(res, quota);
 
   const gKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   const kKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;

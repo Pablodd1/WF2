@@ -42,10 +42,10 @@ export default function App() {
         <Route path="/review" element={<Navigate to="/review-queue" replace />} />
         <Route path="/review-queue" element={<DealerGate allowedRoles={['reviewer', 'admin']}><ReviewQueue /></DealerGate>} />
         <Route path="/clean" element={<DealerGate><CleanPage /></DealerGate>} />
-        <Route path="/reprocess" element={<DealerGate><ReprocessPage /></DealerGate>} />
+        <Route path="/reprocess" element={<DealerGate allowedRoles={['reviewer', 'admin']}><ReprocessPage /></DealerGate>} />
         <Route path="/study" element={<Navigate to="/clean" replace />} />
-        <Route path="/demo" element={<DemoPage />} />
-        <Route path="/demo-mode" element={<DemoMode />} />
+        <Route path="/demo" element={<DealerGate allowedRoles={['admin']}><DemoPage /></DealerGate>} />
+        <Route path="/demo-mode" element={<DealerGate allowedRoles={['admin']}><DemoMode /></DealerGate>} />
         <Route path="/admin" element={<DealerGate allowedRoles={['admin']}><AdminPage /></DealerGate>} />
         <Route path="/multi-listings" element={<DealerGate allowedRoles={['admin']}><MultiListings /></DealerGate>} />
         <Route path="/dealers" element={<DealerGate><DealerDirectory /></DealerGate>} />

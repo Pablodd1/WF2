@@ -31,6 +31,8 @@
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
+const { authorizeMutation } = require('./_lib/authorize-mutation.cjs');
+const { consumeAiQuota, rejectForQuota } = require('./_lib/ai-quota.cjs');
 const APPROVE_THRESHOLD = 85;
 const HUMAN_THRESHOLD = 65;
 const BATCH_SIZE = 20; // max records per DeepSeek API call
@@ -464,12 +466,17 @@ module.exports = async function handler(req, res) {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (!await authorizeMutation(req, res, new Set(['reviewer', 'admin']))) return;
 
   const { mode = 'batch', records, limit = 500, offset = 0 } = req.body || {};
 
   if (!records || !Array.isArray(records)) {
     return res.status(400).json({ error: '`records` array required. Pass HUMAN+RECYCLE rows from parsedWatches.json.' });
   }
+  if (records.length > 500) return res.status(413).json({ error: 'Maximum 500 records per request' });
+
+  const quota = await consumeAiQuota(req, { route: 'reprocess', limit: 5, windowSeconds: 60 });
+  if (!quota.allowed) return rejectForQuota(res, quota);
 
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
 
