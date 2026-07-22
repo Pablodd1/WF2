@@ -13,6 +13,12 @@
       "alias": "5712/1A",
       "canonical_reference": "5712/1A-001",
       "reason": "Dealer-market shorthand for the steel Nautilus 5712/1A-001 configuration."
+    },
+    {
+      "brand": "Patek Philippe",
+      "alias": "5712/1R",
+      "canonical_reference": "5712/1R-001",
+      "reason": "Dealer-market shorthand for the rose-gold Nautilus 5712/1R-001 configuration."
     }
   ]
 }
