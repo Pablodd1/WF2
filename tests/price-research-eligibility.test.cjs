@@ -41,6 +41,13 @@ test('requires a catalog model, dial and price', () => {
   assert.equal(classifyResearchEligibility({ ...valid, price_usd: null }, catalog), 'MISSING_PRICE');
 });
 
+test('excludes a price whose reference-line currency proof is incomplete', () => {
+  assert.equal(
+    classifyResearchEligibility({ ...valid, analytics_currency_status: 'CURRENCY_AMBIGUOUS' }, catalog),
+    'CURRENCY_AMBIGUOUS',
+  );
+});
+
 test('rejects unsplit bundle source rows from price analytics', () => {
   assert.equal(
     classifyResearchEligibility({ ...valid, bundle_candidate_count: 3 }, catalog),

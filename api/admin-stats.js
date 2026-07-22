@@ -19,7 +19,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const types = ['WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'OTHER'];
-    const [totalRecords, approved, human, recycle, typeEstimates, sampleResult] = await Promise.all([
+    const [totalRecords, approved, human, recycle, typeEstimates, sampleResult, patekRecords, patekWts, patekImages] = await Promise.all([
       plannedCount(client),
       plannedCount(client, query => query.eq('verdict', 'APPROVED')),
       plannedCount(client, query => query.eq('verdict', 'HUMAN')),
@@ -29,6 +29,9 @@ module.exports = async function handler(req, res) {
         .select('reference,price_usd,brand,dial_color,year,confidence,created_at')
         .order('created_at', { ascending: false })
         .limit(1000),
+      plannedCount(client, query => query.eq('brand', 'Patek Philippe')),
+      plannedCount(client, query => query.eq('brand', 'Patek Philippe').eq('verdict', 'APPROVED').eq('listing_type', 'WTS')),
+      plannedCount(client, query => query.eq('brand', 'Patek Philippe').eq('has_images', true)),
     ]);
     if (sampleResult.error) throw sampleResult.error;
 
@@ -55,6 +58,7 @@ module.exports = async function handler(req, res) {
       human,
       recycle,
       typeCounts,
+      patek: { records: patekRecords, approvedWts: patekWts, imageBacked: patekImages, countsEstimated: true },
       qualitySampleSize: sample.length,
       missingRef: sample.filter(row => missing(row.reference)).length,
       missingPrice: sample.filter(row => !Number.isFinite(Number(row.price_usd)) || Number(row.price_usd) <= 0).length,

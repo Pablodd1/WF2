@@ -10,6 +10,7 @@ function classifyResearchEligibility(row, catalog) {
   if (!row?.reference) return 'MISSING_REFERENCE';
   if (!catalog?.found || !catalog.model) return 'CATALOG_MODEL_UNCONFIRMED';
   if (!Number.isFinite(price) || price <= 0) return 'MISSING_PRICE';
+  if (row?.analytics_currency_status && row.analytics_currency_status !== 'VERIFIED') return row.analytics_currency_status;
   if (isReferencePriceCollision(row)) return 'REFERENCE_TOKEN_AS_PRICE';
 
   const dial = normalizeDialValue(row?.dial_color);

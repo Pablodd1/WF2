@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { basename, customerSafe, recordId, sourceIdentityAgrees, validReference } = require('../tools/mission-images/link-images-from-raw-lineage.cjs');
+const { basename, customerSafe, recordId, requestedBrandMatches, sourceIdentityAgrees, validReference } = require('../tools/mission-images/link-images-from-raw-lineage.cjs');
 
 test('maps a raw source row to its imported watch record id', () => {
   assert.equal(recordId('auction_watches', 'abc-123'), 'mysql_auction_watches_abc-123');
@@ -32,4 +32,8 @@ test('requires exact structured source brand and reference agreement', () => {
   assert.equal(sourceIdentityAgrees(listing, { brand: 'Patek Philippe', normalized_reference: '5712/1R' }), false);
   assert.equal(sourceIdentityAgrees(listing, { brand: 'Rolex', normalized_reference: '5712/1A' }), false);
   assert.equal(sourceIdentityAgrees(listing, {}), false);
+});
+
+test('does not constrain image lineage unless a brand filter is requested', () => {
+  assert.equal(requestedBrandMatches('Patek Philippe'), true);
 });
