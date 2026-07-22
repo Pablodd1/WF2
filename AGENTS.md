@@ -2,6 +2,14 @@
 
 These instructions apply to the whole repository.
 
+## Current Continuation Handoff
+
+Before continuing work after July 18, 2026, read
+`docs/RESET_HANDOFF_AND_CLIENT_EXECUTIVE_SUMMARY_2026-07-18.md`. It records the
+latest merged production state, verified counts, client deliverables, staged
+data operations, restart commands, and approval gates. Older dated rollout
+documents remain historical evidence and must not override the newer handoff.
+
 ## Mission
 
 WatchFacts is a watch-market intelligence platform. The system ingests dealer messages, preserves raw evidence, splits messages into candidate listings, classifies WTS/WTB intent, normalizes watches and prices, reconciles references against catalog data, validates media when available, routes uncertainty to review, and powers Trading Floor, Price Research, Admin, and analytics.
@@ -19,6 +27,7 @@ WatchFacts is a watch-market intelligence platform. The system ingests dealer me
 - Do not discard outliers; flag them and preserve them.
 - Do not load millions of rows into browser memory.
 - Every normalized record must retain lineage to source message, context block or line, parser version, media, and decision evidence.
+- Treat third-party or legacy dealer directories as private reconciliation evidence only. Do not expose their URLs in customer navigation or profiles, and do not create or verify a dealer solely because a directory entry exists.
 
 ## Normalization Prime Directive
 

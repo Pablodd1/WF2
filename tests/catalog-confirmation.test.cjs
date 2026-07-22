@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { confirmCatalogCandidate } = require('../tools/shadow-reprocess/catalog-confirmation.cjs');
+const { confirmCatalogCandidate } = require('../api/_lib/catalog-confirmation.cjs');
 const { buildPromotionDecision } = require('../tools/shadow-reprocess/promotion-policy.cjs');
 const { listCatalogBrands, lookupCatalog } = require('../api/_lib/catalog.js');
 
@@ -11,6 +11,30 @@ test('confirms an exact catalog reference with matching brand', () => {
   assert.equal(confirmation.confirmed, true);
   assert.equal(confirmation.match.brand, 'Rolex');
   assert.equal(confirmation.match.matchType, 'exact');
+});
+
+test('catalog confirmation provides persisted model provenance', () => {
+  const confirmation = confirmCatalogCandidate({ brand: 'Patek Philippe', reference: '5712/1A', dial_color: 'Blue' });
+  assert.equal(confirmation.confirmed, true);
+  assert.equal(confirmation.match.model, 'Nautilus');
+  assert.equal(confirmation.match.reference, '5712/1A-001');
+  assert.equal(confirmation.dialConfirmed, true);
+});
+
+test('live ingest persists only catalog-backed model identity', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'ingest.js'), 'utf8');
+  const migration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260722143000_catalog_model_provenance.sql'), 'utf8');
+
+  assert.doesNotMatch(source, /if \(llm\.model\) parsed\.model = llm\.model/);
+  assert.match(source, /confirmCatalogCandidate/);
+  assert.match(source, /catalog_confirmed: catalogConfirmation\.confirmed/);
+  assert.match(source, /verdict: catalogReviewRequired \? 'MUST_REVIEW'/);
+  assert.match(source, /isMissingCatalogColumn/);
+  assert.match(source, /withoutCatalogColumns\(normalizedListing\)/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS model TEXT/);
+  assert.match(migration, /catalog_confirmed BOOLEAN NOT NULL DEFAULT false/);
 });
 
 test('returns a review decision when catalog brand conflicts with candidate', () => {
@@ -74,4 +98,37 @@ test('resolves curated Patek shorthand to the canonical blue-dial configuration'
   assert.equal(match.matchType, 'exact_alias');
   assert.equal(match.matchedRef, '5712/1A-001');
   assert.deepEqual(match.dialColors, ['Blue']);
+});
+
+test('resolves rose-gold Patek shorthand to the exact canonical reference', () => {
+  const match = lookupCatalog('5712/1R', 'Patek Philippe');
+  assert.equal(match.found, true);
+  assert.equal(match.brand, 'Patek Philippe');
+  assert.equal(match.model, 'Nautilus');
+  assert.equal(match.matchType, 'exact_alias');
+  assert.equal(match.matchedRef, '5712/1R-001');
+  assert.deepEqual(match.dialColors, ['Black']);
+});
+
+test('confirms a proposed dial only when it agrees with the exact catalog reference', () => {
+  const black = confirmCatalogCandidate({ brand: 'Rolex', reference: '116500LN', dial_color: 'Black' });
+  const white = confirmCatalogCandidate({ brand: 'Rolex', reference: '116500LN', dial_color: 'White' });
+  const purple = confirmCatalogCandidate({ brand: 'Rolex', reference: '116500LN', dial_color: 'Purple' });
+
+  assert.equal(black.dialConfirmed, true);
+  assert.equal(white.dialConfirmed, true);
+  assert.equal(purple.confirmed, true);
+  assert.equal(purple.dialConfirmed, false);
+  assert.equal(purple.dialReason, 'CATALOG_DIAL_CONFLICT');
+});
+
+test('blocks a dial correction that conflicts with the exact catalog configuration', () => {
+  const candidate = { brand: 'Rolex', reference: '116500LN', dial_color: 'Purple', prices: [] };
+  const confirmation = confirmCatalogCandidate(candidate);
+  const decision = buildPromotionDecision({
+    source_listing_type: 'WTB', candidate_count: 1, proposed_candidates: [candidate], change_flags: ['DIAL_CHANGED'],
+  }, confirmation);
+
+  assert.equal(decision.disposition, 'HUMAN_REVIEW');
+  assert.deepEqual(decision.reasons, ['CATALOG_DIAL_CONFLICT']);
 });

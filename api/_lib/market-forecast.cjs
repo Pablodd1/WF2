@@ -1,51 +1,105 @@
 'use strict';
 
-function nextMonth(month) {
-  const [year, value] = String(month).split('-').map(Number);
-  const date = new Date(Date.UTC(year, value, 1));
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+const { percentile } = require('./market-stats.cjs');
+
+function monthIndex(month) {
+  const match = String(month || '').match(/^(\d{4})-(\d{2})$/);
+  return match ? Number(match[1]) * 12 + Number(match[2]) - 1 : null;
 }
 
-function buildThreeMonthForecast(monthly, options = {}) {
-  if (!options.enabled) {
-    return { available: false, reason: 'Select a specific condition to view the three-month forecast.', points: [] };
-  }
-  const history = (monthly || []).filter(point => Number.isFinite(Number(point.avg_price)));
-  if (history.length < 3 || Number(options.observationCount || 0) < 5) {
-    return { available: false, reason: 'At least three monthly points and five comparable listings are required for a forecast.', points: [] };
-  }
+function monthLabel(index) {
+  const year = Math.floor(index / 12);
+  const month = (index % 12) + 1;
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
 
-  const points = history.slice(-6);
-  const n = points.length;
-  const sumX = points.reduce((sum, _point, index) => sum + index, 0);
-  const sumY = points.reduce((sum, point) => sum + Number(point.avg_price), 0);
-  const sumXY = points.reduce((sum, point, index) => sum + index * Number(point.avg_price), 0);
-  const sumXX = points.reduce((sum, _point, index) => sum + index * index, 0);
-  const denominator = n * sumXX - sumX * sumX;
-  const slope = denominator ? (n * sumXY - sumX * sumY) / denominator : 0;
-  const intercept = (sumY - slope * sumX) / n;
-  const meanLowerSpread = points.reduce((sum, point) => sum + Math.max(0, Number(point.avg_price) - Number(point.min_price)), 0) / n;
-  const meanUpperSpread = points.reduce((sum, point) => sum + Math.max(0, Number(point.max_price) - Number(point.avg_price)), 0) / n;
+function median(values) {
+  const sorted = values.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  return sorted.length ? percentile(sorted, 0.5) : null;
+}
 
-  let month = points[points.length - 1].month;
-  const forecast = Array.from({ length: 3 }, (_value, index) => {
-    month = nextMonth(month);
-    const avg = Math.max(0, Math.round(intercept + slope * (n + index)));
+function buildMonthlyMedians(rows) {
+  const months = new Map();
+  for (const row of rows) {
+    const date = new Date(row.listing_date || '');
+    const price = Number(row.price_usd);
+    if (!Number.isFinite(date.getTime()) || !Number.isFinite(price) || price <= 0) continue;
+    const month = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+    if (!months.has(month)) months.set(month, []);
+    months.get(month).push(price);
+  }
+  return [...months.entries()].map(([month, prices]) => ({
+    month, month_index: monthIndex(month), count: prices.length, median_price: Math.round(median(prices)),
+  })).sort((a, b) => a.month.localeCompare(b.month));
+}
+
+function linearFit(points) {
+  if (points.length < 2) return null;
+  const xMean = points.reduce((sum, point) => sum + point.month_index, 0) / points.length;
+  const yMean = points.reduce((sum, point) => sum + point.median_price, 0) / points.length;
+  const denominator = points.reduce((sum, point) => sum + ((point.month_index - xMean) ** 2), 0);
+  if (!denominator) return null;
+  const slope = points.reduce((sum, point) => sum + ((point.month_index - xMean) * (point.median_price - yMean)), 0) / denominator;
+  return { slope, intercept: yMean - slope * xMean };
+}
+
+function predict(fit, index) {
+  return Math.max(0, fit.intercept + fit.slope * index);
+}
+
+function buildMarketForecast(rows, options = {}) {
+  const minimumMonths = options.minimumMonths || 12;
+  const minimumOffers = options.minimumOffers || 30;
+  const minimumDealers = options.minimumDealers || 5;
+  const minimumBacktestPoints = options.minimumBacktestPoints || 4;
+  const now = options.now ? new Date(options.now) : new Date();
+  const monthly = buildMonthlyMedians(rows);
+  const dealerCount = new Set(rows.map(row => row.dealer_id).filter(Boolean)).size;
+  const reasons = [];
+  if (rows.length < minimumOffers) reasons.push('MINIMUM_OFFERS_NOT_MET');
+  if (monthly.length < minimumMonths) reasons.push('MINIMUM_MONTHS_NOT_MET');
+  if (dealerCount < minimumDealers) reasons.push('MINIMUM_VERIFIED_DEALERS_NOT_MET');
+  const latestIndex = monthly.at(-1)?.month_index;
+  const currentIndex = now.getUTCFullYear() * 12 + now.getUTCMonth();
+  if (latestIndex == null || currentIndex - latestIndex > 3) reasons.push('RECENT_DATA_NOT_MET');
+  if (reasons.length) return { ready: false, reasons, monthly, offer_count: rows.length, verified_dealer_count: dealerCount };
+
+  const modelErrors = [];
+  const naiveErrors = [];
+  for (let index = 6; index < monthly.length; index += 1) {
+    const training = monthly.slice(0, index);
+    const fit = linearFit(training);
+    if (!fit) continue;
+    const actual = monthly[index].median_price;
+    modelErrors.push(Math.abs(actual - predict(fit, monthly[index].month_index)));
+    naiveErrors.push(Math.abs(actual - training.at(-1).median_price));
+  }
+  if (modelErrors.length < minimumBacktestPoints) {
+    return { ready: false, reasons: ['BACKTEST_HISTORY_NOT_MET'], monthly, offer_count: rows.length, verified_dealer_count: dealerCount };
+  }
+  const modelMae = modelErrors.reduce((sum, value) => sum + value, 0) / modelErrors.length;
+  const naiveMae = naiveErrors.reduce((sum, value) => sum + value, 0) / naiveErrors.length;
+  if (!(modelMae < naiveMae * 0.95)) {
     return {
-      month,
-      avg_price: avg,
-      min_price: Math.max(0, Math.round(avg - meanLowerSpread)),
-      max_price: Math.round(avg + meanUpperSpread),
-      projected: true,
+      ready: false, reasons: ['MODEL_DID_NOT_BEAT_NAIVE_BASELINE'], monthly,
+      offer_count: rows.length, verified_dealer_count: dealerCount,
+      backtest: { points: modelErrors.length, model_mae: Math.round(modelMae), naive_mae: Math.round(naiveMae) },
     };
-  });
+  }
 
+  const fit = linearFit(monthly);
+  const uncertainty = Math.max(1, Math.round(percentile([...modelErrors].sort((a, b) => a - b), 0.8)));
+  const points = [1, 2, 3].map(offset => {
+    const index = latestIndex + offset;
+    const expected = Math.round(predict(fit, index));
+    return { month: monthLabel(index), expected_price: expected, lower: Math.max(0, expected - uncertainty), upper: expected + uncertainty };
+  });
   return {
-    available: true,
-    reason: null,
-    method: 'six-month linear trend with historical average range',
-    points: forecast,
+    ready: true, reasons: [], monthly, points, offer_count: rows.length, verified_dealer_count: dealerCount,
+    method: 'MONTHLY_MEDIAN_LINEAR_TREND', horizon_months: 3,
+    backtest: { points: modelErrors.length, model_mae: Math.round(modelMae), naive_mae: Math.round(naiveMae) },
+    uncertainty_method: '80TH_PERCENTILE_ROLLING_ABSOLUTE_ERROR',
   };
 }
 
-module.exports = { buildThreeMonthForecast };
+module.exports = { buildMarketForecast, buildMonthlyMedians, linearFit, monthIndex };

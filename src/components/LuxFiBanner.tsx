@@ -20,7 +20,7 @@ export function LuxFiBanner() {
         </div>
         <div className="flex items-center justify-center bg-[#101116] px-6 py-6">
           <a
-            href="https://watchfacts.com/lux-fi"
+            href="https://luxfi.ai/#add-fi"
             target="_blank"
             rel="noreferrer"
             className="flex h-14 w-full items-center justify-center gap-2 rounded-md bg-[#2f68dc] px-5 text-base font-semibold text-white transition-colors hover:bg-[#2457bd]"

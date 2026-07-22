@@ -14,23 +14,46 @@
  */
 
 const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
+const { consumeAiQuota, rejectForQuota } = require('./_lib/ai-quota.cjs');
+const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
+
+const REVIEW_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    brand: { type: 'STRING', nullable: true },
+    reference: { type: 'STRING', nullable: true },
+    dialColor: { type: 'STRING', nullable: true },
+    condition: { type: 'STRING', nullable: true },
+    year: { type: 'INTEGER', nullable: true },
+    price: { type: 'NUMBER', nullable: true },
+    currency: { type: 'STRING', nullable: true },
+    confidence: { type: 'INTEGER' },
+    interpretations: { type: 'ARRAY', items: { type: 'STRING' } },
+    ambiguities: { type: 'ARRAY', items: { type: 'STRING' } },
+    reasoning: { type: 'STRING' },
+  },
+  required: ['brand', 'reference', 'dialColor', 'condition', 'year', 'price', 'currency', 'confidence', 'interpretations', 'ambiguities', 'reasoning'],
+};
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const dealerAuth = await authorizeDealer(req, res, new Set(['reviewer', 'admin']));
+  if (dealerAuth.error) return res.status(dealerAuth.status).json({ error: dealerAuth.error });
+
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY not set in Vercel env' });
+    return res.status(503).json({ error: 'Gemini review assistance is not configured' });
   }
 
   const { rawMessage, currentGuess } = req.body || {};
-  if (!rawMessage) {
+  const boundedRawMessage = String(rawMessage || '').trim().slice(0, 12_000);
+  if (!boundedRawMessage) {
     return res.status(400).json({ error: 'rawMessage required' });
   }
+
+  const quota = await consumeAiQuota(req, { route: 'co-pilot', limit: 10 });
+  if (!quota.allowed) return rejectForQuota(res, quota);
 
   const systemPrompt = `You are a luxury watch co-pilot helping a human reviewer fix a record the parser couldn't fully understand.
 
@@ -63,25 +86,34 @@ Return JSON with:
 
 ${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}`;
 
-  const userPrompt = currentGuess
-    ? `Raw dealer message: "${rawMessage}"\n\nCurrent parser guess: ${JSON.stringify(currentGuess)}\n\nHelp the human verify or correct this.`
-    : `Raw dealer message: "${rawMessage}"\n\nWhat watch is this? Help the human reviewer fill in the fields.`;
+  const boundedGuess = currentGuess && typeof currentGuess === 'object'
+    ? {
+        brand: currentGuess.brand || null,
+        reference: currentGuess.reference || null,
+        dialColor: currentGuess.dialColor || null,
+        condition: currentGuess.condition || null,
+        price: currentGuess.price || null,
+        currency: currentGuess.currency || null,
+      }
+    : null;
+  const userPrompt = boundedGuess
+    ? `Raw dealer message: "${boundedRawMessage}"\n\nCurrent deterministic candidate: ${JSON.stringify(boundedGuess)}\n\nHelp the human verify or correct this. Catalog approval is handled separately and must not be claimed.`
+    : `Raw dealer message: "${boundedRawMessage}"\n\nHelp the human reviewer identify only explicitly supported fields. Catalog approval is handled separately.`;
 
   try {
-    const aiResp = await fetch('https://api.openai.com/v1/chat/completions', {
+    const model = process.env.GEMINI_REVIEW_MODEL || 'gemini-2.5-flash';
+    const aiResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
+        contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: 'application/json',
+          responseSchema: REVIEW_SCHEMA,
+        },
       }),
     });
 
@@ -89,18 +121,19 @@ ${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}`;
       const errText = await aiResp.text();
       return res.status(500).json({
         success: false,
-        error: `OpenAI HTTP ${aiResp.status}: ${errText.slice(0, 200)}`,
+        error: `Gemini HTTP ${aiResp.status}: ${errText.slice(0, 200)}`,
       });
     }
 
     const data = await aiResp.json();
-    const content = data.choices?.[0]?.message?.content || '{}';
+    const content = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || '{}';
     const parsed = JSON.parse(content);
 
     return res.status(200).json({
       success: true,
       copilot: parsed,
-      tokens: data.usage?.total_tokens || 0,
+      tokens: data.usageMetadata?.totalTokenCount || 0,
+      model,
     });
   } catch (e) {
     return res.status(500).json({

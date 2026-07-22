@@ -10,6 +10,17 @@ function percentile(sorted, probability) {
   return sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower);
 }
 
+function marketPlausibilityFloor(values) {
+  const sorted = values.map(Number)
+    .filter(value => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  const median = sorted.length ? percentile(sorted, 0.5) : 0;
+  // Exact reference + dial + condition offers below one quarter of the cohort
+  // median are not comparable luxury-watch prices. Preserve them as excluded
+  // evidence so currency/parser errors remain auditable.
+  return Math.max(1000, Math.round(median * 0.25));
+}
+
 function summarizePrices(values) {
   const raw = values.map(Number).filter(value => Number.isFinite(value) && value > 0);
   const sortedRaw = [...raw].sort((a, b) => a - b);
@@ -69,55 +80,21 @@ function classifyPrice(value, stats, options = {}) {
   return { included: true, reason: null };
 }
 
-function normalizeDimension(value, fallback = null, keepUnknown = false) {
+function normalizeDimension(value, fallback = 'Unspecified') {
   const clean = String(value || '').trim();
-  const normalized = clean.toLowerCase().trim();
-  if (!normalized) return fallback;
-  if (['unspecified', 'unknown', 'unknow', 'n/a', 'na', '-'].includes(normalized)) {
-    return keepUnknown ? clean : fallback;
-  }
-  return clean;
+  return clean || fallback;
 }
 
-function normalizeComparableCondition(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'new') return 'New';
-  if (normalized === 'used') return 'Used';
-  return 'Unspecified';
+function normalizeConditionDimension(value) {
+  const condition = normalizeDimension(value);
+  return ['unknown', 'unspecified'].includes(condition.toLowerCase()) ? 'Unspecified' : condition;
 }
 
-function buildDialFilters(rows) {
+function buildComparableCohorts(rows) {
   const groups = new Map();
   for (const row of rows) {
-    const dial = normalizeDimension(row.dial_color);
-    if (!dial) continue;
-    const key = dial.toLowerCase();
-    const current = groups.get(key) || { dial_color: dial, count: 0 };
-    current.count += 1;
-    groups.set(key, current);
-  }
-  return [...groups.values()].sort((a, b) => b.count - a.count || a.dial_color.localeCompare(b.dial_color));
-}
-
-function selectComparableRows(rows, options = {}) {
-  const requestedDial = String(options.dial || '').trim().toLowerCase();
-  const requestedCondition = normalizeComparableCondition(options.condition);
-  const hasConditionFilter = ['new', 'used', 'unspecified'].includes(String(options.condition || '').trim().toLowerCase());
-  return rows.filter(row => {
-    const dial = normalizeDimension(row.dial_color);
-    if (!dial) return false;
-    if (requestedDial && dial.toLowerCase() !== requestedDial) return false;
-    return !hasConditionFilter || normalizeComparableCondition(row.condition) === requestedCondition;
-  });
-}
-
-function buildComparableCohorts(rows, options = {}) {
-  const { includeUnknown = false } = options;
-  const groups = new Map();
-  for (const row of rows) {
-    const condition = normalizeDimension(row.condition, null, includeUnknown);
-    const dial_color = normalizeDimension(row.dial_color, null, includeUnknown);
-    if (condition == null || dial_color == null) continue;
+    const condition = normalizeConditionDimension(row.condition);
+    const dial_color = normalizeDimension(row.dial_color);
     const key = `${condition.toLowerCase()}::${dial_color.toLowerCase()}`;
     if (!groups.has(key)) groups.set(key, { key, condition, dial_color, rows: [] });
     groups.get(key).rows.push(row);
@@ -127,13 +104,28 @@ function buildComparableCohorts(rows, options = {}) {
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
+function buildDialGroups(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const dial_color = normalizeDimension(row.dial_color);
+    const key = dial_color.toLowerCase();
+    if (!groups.has(key)) groups.set(key, { key, dial_color, rows: [], condition_counts: {} });
+    const group = groups.get(key);
+    const condition = normalizeConditionDimension(row.condition);
+    group.rows.push(row);
+    group.condition_counts[condition] = (group.condition_counts[condition] || 0) + 1;
+  }
+  return [...groups.values()]
+    .map(group => ({ ...group, count: group.rows.length }))
+    .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
 module.exports = {
   buildComparableCohorts,
-  buildDialFilters,
+  buildDialGroups,
   classifyPrice,
-  normalizeComparableCondition,
+  marketPlausibilityFloor,
   percentile,
-  selectComparableRows,
   summarizePrices,
 };
 

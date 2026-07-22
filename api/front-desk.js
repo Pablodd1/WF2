@@ -1,4 +1,5 @@
 const MAX_MESSAGE_LENGTH = 600;
+const { consumeAiQuota } = require('./_lib/ai-quota.cjs');
 
 const systemInstruction = `You are Curated Luxury AI, a concise front-desk assistant for a luxury-watch market intelligence site. Help people choose only one of these routes: /trading for dated dealer listings, /price-research for reference pricing research, or /dashboard for dealer operations. Do not give financial advice, claim data is verified, invent prices, promise sourcing, or discuss private dealer data. Return strict JSON with keys reply and route. route must be one of null, /trading, /price-research, /dashboard.`;
 
@@ -17,6 +18,9 @@ module.exports = async function handler(req, res) {
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) return res.status(200).json(fallback(message));
+
+  const quota = await consumeAiQuota(req, { route: 'front-desk', limit: 20 });
+  if (!quota.allowed) return res.status(200).json({ ...fallback(message), limited: true });
 
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {

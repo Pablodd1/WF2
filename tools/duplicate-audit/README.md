@@ -26,9 +26,16 @@ railway run npm run audit:duplicates
 
 Reports are written under `audit-output/duplicates/<brand>/` and are intentionally ignored by Git because they contain production record IDs. The Markdown summary redacts dealer identity with a one-way hash.
 
+The scanner checkpoints its in-memory signature index to a local binary state
+file every 25 pages by default, so an interrupted full-brand scan resumes
+without rebuilding previous pages. Set `DUPLICATE_AUDIT_CHECKPOINT_PAGES` to
+change that interval. Set `DUPLICATE_AUDIT_RESET=true` only when intentionally
+starting a fresh report.
+
 ## Interpretation
 
 - `suppress_from_analytics=true` is a proposal, not an applied production decision.
-- Bundle-risk rows are always review-only.
+- Bundle rows are segmented into line-level candidates before comparison.
+- Matches involving a split candidate are always review-only until lineage is approved.
 - Price updates remain in historical Price Research.
 - Matching inventory from different dealers is never auto-collapsed.

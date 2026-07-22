@@ -12,6 +12,10 @@ const variants = String(process.env.TARGET_REFERENCE_VARIANTS || reference)
   .split(',').map(value => value.trim()).filter(Boolean);
 const maxRows = Math.max(1, Math.min(Number(process.env.TARGET_MAX_ROWS || 5000), 5000));
 const dryRun = String(process.env.DRY_RUN || 'true').toLowerCase() !== 'false';
+const allowedDials = String(process.env.TARGET_ALLOWED_DIALS || 'Blue')
+  .split(',').map(value => value.trim()).filter(Boolean);
+const allowedEvidence = String(process.env.TARGET_ALLOWED_EVIDENCE || '')
+  .split(',').map(value => value.trim()).filter(Boolean);
 
 if (!baseUrl || !key) throw new Error('SUPABASE_URL and a server key are required');
 if (!brand || !reference || !variants.length) throw new Error('TARGET_BRAND and TARGET_REFERENCE_VARIANTS are required');
@@ -54,8 +58,15 @@ async function run() {
     return row.candidate_count === 1
       && row.change_flags.includes('DIAL_CHANGED')
       && !row.change_flags.includes('DIAL_AMBIGUOUS')
-      && candidate?.dial_color === 'Blue';
+      && allowedDials.includes(candidate?.dial_color)
+      && (!allowedEvidence.length || allowedEvidence.includes(candidate?.dial_evidence));
   });
+
+  const proposedByDial = proposed.reduce((counts, row) => {
+    const dial = row.proposed_candidates?.[0]?.dial_color || 'Unknown';
+    counts[dial] = (counts[dial] || 0) + 1;
+    return counts;
+  }, {});
 
   if (!dryRun && proposed.length) {
     await rest('normalization_shadow_v4?on_conflict=source_record_id', {
@@ -72,7 +83,9 @@ async function run() {
     reference,
     scanned: records.length,
     shadowProposals: proposed.length,
-    proposedDial: 'Blue',
+    proposedByDial,
+    allowedDials,
+    allowedEvidence,
     status: dryRun ? 'verified_only' : 'pending_human_approval',
   }));
 }

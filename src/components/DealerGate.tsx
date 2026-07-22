@@ -4,9 +4,10 @@ import { Navigate, useLocation } from 'react-router-dom';
 interface DealerGateProps {
   children: ReactNode;
   allowBetaSkip?: boolean;
+  allowedRoles?: Array<'dealer' | 'reviewer' | 'admin'>;
 }
 
-export function DealerGate({ children, allowBetaSkip = false }: DealerGateProps) {
+export function DealerGate({ children, allowBetaSkip = false, allowedRoles }: DealerGateProps) {
   const location = useLocation();
   // The demo entry point is deliberately limited to the routes that pass
   // allowBetaSkip. Do not let a stale Vercel build variable show the Skip
@@ -23,13 +24,14 @@ export function DealerGate({ children, allowBetaSkip = false }: DealerGateProps)
     fetch('/api/dealer-auth', { credentials: 'include', signal: controller.signal })
       .then(async response => {
         const result = response.headers.get('content-type')?.includes('application/json') ? await response.json() : null;
-        setState(response.ok && result?.authenticated === true ? 'authorized' : 'denied');
+        const roleAllowed = !allowedRoles?.length || allowedRoles.includes(result?.user?.role);
+        setState(response.ok && result?.authenticated === true && roleAllowed ? 'authorized' : 'denied');
       })
       .catch(error => {
         if (error?.name !== 'AbortError') setState('denied');
       });
     return () => controller.abort();
-  }, [betaSkipEnabled, state]);
+  }, [allowedRoles, betaSkipEnabled, state]);
 
   if (state === 'loading' || (state === 'beta' && !betaSkipEnabled)) {
     return <div className="flex min-h-screen items-center justify-center bg-bg-primary text-sm text-text-secondary">Checking dealer session...</div>;

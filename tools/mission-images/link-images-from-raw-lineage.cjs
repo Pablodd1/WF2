@@ -26,8 +26,23 @@ function validReference(value) {
   return ref.length >= 3 && !/^(?:19|20)\d{2}Y?$/i.test(ref) && !/^UNKNOWN$/i.test(ref);
 }
 
-function customerSafe(row) {
+function normalizedIdentity(value) {
+  return String(value || '').normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function sourceIdentityAgrees(row, rawData) {
+  const brand = normalizedIdentity(row?.brand);
+  const sourceBrand = normalizedIdentity(rawData?.brand);
+  const reference = normalizedIdentity(row?.reference);
+  const sourceReferences = [rawData?.normalized_reference, rawData?.reference]
+    .map(normalizedIdentity)
+    .filter(Boolean);
+  return Boolean(brand && sourceBrand && brand === sourceBrand && reference && sourceReferences.includes(reference));
+}
+
+function customerSafe(row, rawData) {
   return row && row.brand && !/^unknown$/i.test(row.brand) && validReference(row.reference) &&
+    sourceIdentityAgrees(row, rawData) && !row.has_images && !(Array.isArray(row.image_urls) && row.image_urls.length) &&
     !['RECYCLE'].includes(String(row.verdict || '').toUpperCase()) &&
     !['MULTI', 'OTHER'].includes(String(row.listing_type || '').toUpperCase());
 }
@@ -44,6 +59,7 @@ async function supabase(pathname, options = {}) {
 
 async function loadRawLineage() {
   const byFilename = new Map();
+  const ambiguousFilenames = new Set();
   let offset = 0;
   const pageSize = 1000;
   while (true) {
@@ -53,20 +69,27 @@ async function loadRawLineage() {
       for (const field of IMAGE_FIELDS) {
         const filename = basename(row.raw_data?.[field]);
         if (!filename || !MIME.has(path.extname(filename).toLowerCase())) continue;
-        byFilename.set(filename, { source_table: row.source_table, source_id: row.source_id, record_id: recordId(row.source_table, row.source_id) });
+        const link = { source_table: row.source_table, source_id: row.source_id, record_id: recordId(row.source_table, row.source_id), raw_data: row.raw_data };
+        const existing = byFilename.get(filename);
+        if (existing && existing.record_id !== link.record_id) {
+          ambiguousFilenames.add(filename);
+          byFilename.delete(filename);
+        } else if (!ambiguousFilenames.has(filename)) {
+          byFilename.set(filename, link);
+        }
       }
     }
     if (!rows || rows.length < pageSize) break;
     offset += pageSize;
   }
-  return byFilename;
+  return { byFilename, ambiguousFilenames };
 }
 
 async function fetchWatchRows(ids) {
   if (!ids.length) return [];
   const expression = ids.map(id => `"${id}"`).join(',');
   const params = new URLSearchParams({
-    select: 'id,brand,reference,dial_color,condition,price_usd,listing_type,verdict,has_images,thumbnail_url',
+    select: 'id,brand,reference,dial_color,condition,price_usd,listing_type,verdict,has_images,image_urls,thumbnail_url',
     id: `in.(${expression})`,
   });
   return supabase(`watch_records?${params}`);
@@ -83,7 +106,7 @@ async function run() {
   if (!fs.existsSync(CSV_PATH)) throw new Error(`Inventory CSV not found: ${CSV_PATH}`);
   if (!SUPABASE_URL || !SERVICE_KEY) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
 
-  const lineage = await loadRawLineage();
+  const { byFilename: lineage, ambiguousFilenames } = await loadRawLineage();
   const foundByRecord = new Map();
   let scanned = 0;
   const stream = fs.createReadStream(CSV_PATH).pipe(csv());
@@ -117,7 +140,7 @@ async function run() {
     const byId = new Map((watches || []).map(row => [row.id, row]));
     for (const item of batch) {
       const watch = byId.get(item.record_id);
-      if (!customerSafe(watch) || !(await reachable(item.public_url))) continue;
+      if (!customerSafe(watch, item.raw_data) || !(await reachable(item.public_url))) continue;
       safe.push({ ...item, verification_status: 'url_reachable', watch });
       if (safe.length >= TARGET) break;
     }
@@ -127,7 +150,7 @@ async function run() {
   if (APPLY && safe.length) {
     databaseResult = await supabase('rpc/attach_listing_media_batch', {
       method: 'POST',
-      body: JSON.stringify({ payload: safe.map(({ watch, ...item }) => item) }),
+      body: JSON.stringify({ payload: safe.map(({ watch, raw_data, ...item }) => item) }),
     });
   }
 
@@ -135,11 +158,12 @@ async function run() {
     status: safe.length >= TARGET ? 'target_met' : 'target_not_met',
     mode: APPLY ? 'apply' : 'dry_run',
     raw_image_filenames: lineage.size,
+    ambiguous_image_filenames: ambiguousFilenames.size,
     csv_rows_scanned: scanned,
     lineage_matches: candidates.length,
     customer_safe_matches: safe.length,
     database_result: databaseResult,
-    sample: safe.slice(0, 10).map(item => ({ record_id: item.record_id, brand: item.watch.brand, reference: item.watch.reference, url: item.public_url })),
+    sample: safe.slice(0, 10).map(item => ({ record_id: item.record_id, brand: item.watch.brand, reference: item.watch.reference, url: item.public_url, source_identity_verified: true })),
   }, null, 2)}\n`);
   if (!safe.length) process.exitCode = 2;
 }
@@ -151,4 +175,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { basename, customerSafe, recordId, validReference };
+module.exports = { basename, customerSafe, normalizedIdentity, recordId, sourceIdentityAgrees, validReference };

@@ -2,6 +2,10 @@
 
 Last updated: 2026-07-13
 
+> Historical checkpoint: for the current production state and continuation
+> sequence, use
+> `docs/RESET_HANDOFF_AND_CLIENT_EXECUTIVE_SUMMARY_2026-07-18.md`.
+
 ## Current verified state
 
 - Trading Floor reads live data with server-side pagination.

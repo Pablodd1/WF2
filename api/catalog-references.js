@@ -8,7 +8,7 @@
 const { getClient } = require('./_lib/supabase');
 const { listCatalogReferences, lookupCatalog } = require('./_lib/catalog');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
-const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
+const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
@@ -32,23 +32,24 @@ async function mapWithConcurrency(items, concurrency, mapper) {
 async function loadReferenceEvidence(client, brand, entry) {
   const { data, error } = await client
     .from('watch_records')
-    .select('reference, price_usd, dial_color, raw_message')
+    .select('id, reference, price_usd, dial_color, raw_message, flags')
     .eq('brand', brand)
     .eq('reference', entry.reference)
     .eq('verdict', 'APPROVED')
     .eq('listing_type', 'WTS')
+    .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
     .gt('price_usd', 0)
     .limit(REFERENCE_SAMPLE_LIMIT);
   if (error) throw error;
   if (!data?.length) return null;
 
   const catalog = lookupCatalog(entry.reference, brand);
-  const qualified = data
-    .map(row => {
-      const normalized = normalizeMarketRow(row, entry.reference);
-      return { ...row, price_usd: normalized.analytics_price_usd };
-    })
-    .filter(row => !classifyResearchEligibility({ ...row, brand }, catalog));
+  const shadowBundleIds = await loadShadowBundleParentIds(client, data);
+  const qualified = data.filter(row => !classifyResearchEligibility({
+    ...row,
+    brand,
+    bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds),
+  }, catalog));
   if (qualified.length < MINIMUM_ANALYTICS_SAMPLE) return null;
 
   const dials = new Map();

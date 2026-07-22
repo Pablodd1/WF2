@@ -13,6 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { consumeAiQuota, rejectForQuota } = require('./_lib/ai-quota.cjs');
 
 let _enriched = null;
 function loadEnriched() {
@@ -169,6 +170,9 @@ module.exports = async function handler(req, res) {
   if (!reference && !rawMessage) {
     return res.status(400).json({ error: 'reference or rawMessage required' });
   }
+
+  const quota = await consumeAiQuota(req, { route: 'test-mode-compare', limit: 10 });
+  if (!quota.allowed) return rejectForQuota(res, quota);
 
   // If only rawMessage, try to extract reference
   let ref = reference;

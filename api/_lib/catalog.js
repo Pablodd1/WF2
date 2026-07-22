@@ -14,6 +14,8 @@ let _catalog = null;
 let _enriched = null;
 let _sourceByBrandReference = null;
 let _sourceByReference = null;
+let _collapsedByBrandReference = null;
+let _collapsedByReference = null;
 let _curationOverrides = null;
 let _curationAliases = null;
 
@@ -102,12 +104,25 @@ function applyCuration(entry, reference = null) {
   };
 }
 
+function addCollapsedEntry(reference, entry) {
+  const collapsed = collapseRef(reference);
+  if (!collapsed) return;
+  const brandKey = `${normalizeBrand(entry.brand)}|${collapsed}`;
+  if (!_collapsedByBrandReference.has(brandKey)) _collapsedByBrandReference.set(brandKey, []);
+  _collapsedByBrandReference.get(brandKey).push({ reference, entry });
+  if (!_collapsedByReference.has(collapsed)) _collapsedByReference.set(collapsed, []);
+  _collapsedByReference.get(collapsed).push({ reference, entry });
+}
+
 function loadCatalogs() {
-  if (_catalog && _enriched && _sourceByBrandReference && _sourceByReference) return;
+  if (_catalog && _enriched && _sourceByBrandReference && _sourceByReference
+    && _collapsedByBrandReference && _collapsedByReference) return;
   _catalog = new Map();
   _enriched = new Map();
   _sourceByBrandReference = new Map();
   _sourceByReference = new Map();
+  _collapsedByBrandReference = new Map();
+  _collapsedByReference = new Map();
 
   try {
     const catalog = JSON.parse(readFileSync(resolve(PUBLIC_DIR, 'catalog.json'), 'utf8'));
@@ -124,6 +139,7 @@ function loadCatalogs() {
         dialColors: item.dial_colors || null,
         source: 'catalog',
       });
+      addCollapsedEntry(ref, _catalog.get(ref));
     }
   } catch (error) {
     console.error('[catalog] failed to load catalog.json:', error.message);
@@ -145,6 +161,7 @@ function loadCatalogs() {
         avgPrice: item.avg_price != null ? item.avg_price : null,
         source: 'enriched',
       });
+      addCollapsedEntry(ref, _enriched.get(ref));
     }
   } catch (error) {
     console.error('[catalog] failed to load enriched_refs.json:', error.message);
@@ -166,7 +183,8 @@ function loadCatalogs() {
         variants: item.variants || [],
         source: 'local_catalog_v1',
       };
-        _sourceByBrandReference.set(`${normalizeBrand(brand)}|${ref}`, entry);
+      _sourceByBrandReference.set(`${normalizeBrand(brand)}|${ref}`, entry);
+      addCollapsedEntry(ref, entry);
       const candidates = _sourceByReference.get(ref) || [];
       candidates.push(entry);
       _sourceByReference.set(ref, candidates);
@@ -252,12 +270,23 @@ function lookupCatalog(reference, expectedBrand = null) {
   }
 
   const collapsed = collapseRef(reference);
-  for (const map of [_sourceByBrandReference, _catalog, _enriched]) {
-    for (const [key, entry] of map) {
-      const entryRef = map === _sourceByBrandReference ? key.split('|').slice(1).join('|') : key;
-      if (collapseRef(entryRef) === collapsed && entry.model && compatibleWithBrand(entry, expectedBrand)) {
-        return found(entry, 'collapsed', entryRef);
-      }
+  const collapsedCandidates = expectedBrand
+    ? (_collapsedByBrandReference.get(`${normalizeBrand(expectedBrand)}|${collapsed}`) || [])
+    : (_collapsedByReference.get(collapsed) || []);
+  const collapsedBrands = new Set(collapsedCandidates.map(candidate => normalizeBrand(candidate.entry.brand)).filter(Boolean));
+  if (!expectedBrand && collapsedBrands.size > 1) {
+    return {
+      ...empty,
+      matchType: 'ambiguous_reference',
+      candidates: collapsedCandidates.map(candidate => ({ brand: candidate.entry.brand, model: candidate.entry.model || null })),
+    };
+  }
+  const sourceRank = { local_catalog_v1: 0, catalog_curation: 0, catalog: 1, enriched: 2 };
+  const orderedCollapsed = [...collapsedCandidates].sort((left, right) =>
+    (sourceRank[left.entry.source] ?? 9) - (sourceRank[right.entry.source] ?? 9));
+  for (const candidate of orderedCollapsed) {
+    if (candidate.entry.model && compatibleWithBrand(candidate.entry, expectedBrand)) {
+      return found(candidate.entry, 'collapsed', candidate.reference);
     }
   }
 

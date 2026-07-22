@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { isCustomerSafeFeaturedListing } from '../lib/featuredListings';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
+  ArrowLeft,
+  Check,
+  Filter,
   Globe2,
   Grid,
   List,
@@ -11,6 +14,7 @@ import {
 } from 'lucide-react';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
+import { CurrencyConverter } from '../components/CurrencyConverter';
 import { rateMarketPrice, type MarketPriceRating } from '../lib/marketPriceRating';
 
 const GOLD = '#C9A96E';
@@ -23,14 +27,19 @@ const PANEL = '#16161F';
 const PAGE = '#08080C';
 const RED = '#EF4444';
 
-const FILTER_OPTIONS = [
-  { label: 'Watches', value: 'watches', group: 'Inventory' },
-  { label: 'Other luxury (unnormalized)', value: 'luxury', group: 'Inventory' },
-  { label: 'Bulk listings', value: 'multi', group: 'Inventory' },
-  { label: 'All inventory', value: 'all', group: 'Inventory' },
-  { label: 'For sale', value: 'WTS', group: 'Intent' },
-  { label: 'Want to buy / Looking for', value: 'WTB', group: 'Intent' },
-  { label: 'Trade', value: 'TRADE', group: 'Intent' },
+const CATEGORY_OPTIONS = [
+  { label: 'All inventory', value: 'all' },
+  { label: 'Watches', value: 'watches' },
+  { label: 'Handbags', value: 'handbags' },
+  { label: 'Jewelry', value: 'jewelry' },
+  { label: 'Accessories', value: 'accessories' },
+  { label: 'Other luxury', value: 'other' },
+] as const;
+
+const INTENT_OPTIONS = [
+  { label: 'All activity', value: '' },
+  { label: 'For sale', value: 'WTS' },
+  { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
 interface ListingRecord {
@@ -47,13 +56,16 @@ interface ListingRecord {
   verdict: string | null;
   source: string;
   source_type: string | null;
+  item_category: 'WATCH' | 'HANDBAG' | 'JEWELRY' | 'ACCESSORY' | 'OTHER';
   listing_date: string | null;
   listing_status: string | null;
-  created_at: string;
+  created_at: string | null;
   confidence: number;
   has_images: boolean;
   thumbnail_url: string | null;
   region: string | null;
+  data_quality_issues?: string[];
+  data_quality_review_required?: boolean;
 }
 
 interface TradingFloorResponse {
@@ -62,11 +74,24 @@ interface TradingFloorResponse {
   records?: ListingRecord[];
   total?: number;
   totalIsEstimate?: boolean;
+  nextCursor?: string | null;
+  hasMore?: boolean;
 }
 
 interface ListingContact {
   contact_available: boolean;
+  dealer_id?: string;
   dealer_name?: string;
+  dealer_company?: string | null;
+  dealer_country?: string | null;
+  dealer_city?: string | null;
+  dealer_avatar_url?: string | null;
+  dealer_profile_summary?: string | null;
+  dealer_profile_url?: string;
+  dealer_rating?: number | null;
+  dealer_review_count?: number;
+  dealer_group_count?: number;
+  dealer_stats?: { total_posts: number; active_listings: number; wts_posts: number; wtb_posts: number; first_post_at: string | null; last_post_at: string | null; posting_years: number } | null;
   whatsapp_url?: string;
   reason?: string;
 }
@@ -79,32 +104,139 @@ interface ListingBenchmark {
 }
 
 type ViewMode = 'grid' | 'list';
+type InventoryScope = 'market' | 'archive';
+type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
+type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 
 export default function TradingFloor() {
-  const [searchParams] = useSearchParams();
-  const initialFilter = searchParams.get('item') || searchParams.get('type') || 'all';
-  const [activeFilter, setActiveFilter] = useState(initialFilter);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedCategory = searchParams.get('item');
+  const requestedIntent = searchParams.get('type')?.toUpperCase();
+  const categoryFilter = CATEGORY_OPTIONS.some(option => option.value === requestedCategory)
+    ? requestedCategory as CategoryFilter
+    : 'all';
+  const intentFilter = ['all', 'watches'].includes(categoryFilter) && INTENT_OPTIONS.some(option => option.value === requestedIntent)
+    ? requestedIntent as IntentFilter
+    : '';
+  const search = searchParams.get('q') || '';
+  const conditionFilter = searchParams.get('condition') || '';
+  const regionFilter = searchParams.get('region') || '';
+  const inventoryScope: InventoryScope = searchParams.get('scope') === 'archive' ? 'archive' : 'market';
+  const [searchInput, setSearchInput] = useState(search);
   const [listings, setListings] = useState<ListingRecord[]>([]);
   const [featuredListings, setFeaturedListings] = useState<ListingRecord[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
   const [total, setTotal] = useState(0);
   const [totalIsEstimate, setTotalIsEstimate] = useState(false);
-  const [page, setPage] = useState(1);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [regionInput, setRegionInput] = useState(regionFilter);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const pageSize = 50;
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 48);
+  const resultsTopRef = useRef<HTMLDivElement | null>(null);
+  const listScrollPositionRef = useRef<number | null>(null);
+  const viewKey = [categoryFilter, intentFilter, search, conditionFilter, regionFilter, inventoryScope].join('\u001f');
+  const previousViewKeyRef = useRef(viewKey);
+  const activeFilterCount = [
+    categoryFilter !== 'all',
+    Boolean(intentFilter),
+    Boolean(conditionFilter),
+    Boolean(regionFilter),
+    inventoryScope === 'archive',
+  ].filter(Boolean).length;
+
+  const resetResults = useCallback(() => {
+    setCursor(null);
+    setNextCursor(null);
+    setHasMore(false);
+    setListings([]);
+    setSelectedListing(null);
+    listScrollPositionRef.current = null;
+  }, []);
+
+  const updateViewParams = useCallback((updates: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(updates)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const openListing = useCallback((listing: ListingRecord) => {
+    listScrollPositionRef.current = window.scrollY;
+    setSelectedListing(listing);
+    window.requestAnimationFrame(() => {
+      const top = resultsTopRef.current?.getBoundingClientRect().top;
+      if (typeof top === 'number') {
+        window.scrollTo({ top: Math.max(0, window.scrollY + top - 16), behavior: 'auto' });
+      }
+    });
+  }, []);
+
+  const closeListing = useCallback(() => {
+    const restoreTo = listScrollPositionRef.current;
+    setSelectedListing(null);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (restoreTo !== null) window.scrollTo({ top: restoreTo, behavior: 'auto' });
+        listScrollPositionRef.current = null;
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 640px)');
+    const updatePageSize = () => {
+      setPageSize(media.matches ? 24 : 48);
+      resetResults();
+    };
+    updatePageSize();
+    media.addEventListener('change', updatePageSize);
+    return () => media.removeEventListener('change', updatePageSize);
+  }, [resetResults]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
+      const nextSearch = searchInput.trim();
+      const nextRegion = regionInput.trim();
+      if (nextSearch !== search || nextRegion !== regionFilter) {
+        resetResults();
+        updateViewParams({ q: nextSearch || null, region: nextRegion || null });
+      }
     }, 300);
 
     return () => window.clearTimeout(timer);
-  }, [searchInput]);
+  }, [regionFilter, regionInput, resetResults, search, searchInput, updateViewParams]);
+
+  useEffect(() => {
+    setSearchInput(search);
+    setRegionInput(regionFilter);
+  }, [regionFilter, search]);
+
+  useEffect(() => {
+    if (previousViewKeyRef.current === viewKey) return;
+    previousViewKeyRef.current = viewKey;
+    resetResults();
+  }, [resetResults, viewKey]);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFiltersOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [filtersOpen]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -114,12 +246,14 @@ export default function TradingFloor() {
       setError('');
 
       try {
-        const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-        params.set('quality', 'archive');
-        const selectedFilter = FILTER_OPTIONS.find(option => option.value.toLowerCase() === activeFilter.toLowerCase());
-        if (selectedFilter?.group === 'Inventory') params.set('item', selectedFilter.value);
-        if (selectedFilter?.group === 'Intent') params.set('type', selectedFilter.value);
+        const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
+        params.set('quality', inventoryScope);
+        if (cursor) params.set('cursor', cursor);
+        params.set('item', categoryFilter);
+        if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
+        if (conditionFilter) params.set('condition', conditionFilter);
+        if (regionFilter.trim()) params.set('region', regionFilter.trim());
 
         const response = await fetch(`/api/ingest?${params.toString()}`, { signal: controller.signal });
         const data = await response.json() as TradingFloorResponse;
@@ -129,13 +263,14 @@ export default function TradingFloor() {
         if (!response.ok || data.status !== 'ok') throw new Error(data.error || 'Unable to load listings');
 
         const nextListings = data.records || [];
-        setListings(nextListings);
-        setTotal(Number(data.total) || 0);
-        setTotalIsEstimate(Boolean(data.totalIsEstimate));
-        setSelectedListing(current => {
-          if (!current) return null;
-          return nextListings.find(listing => listing.id === current.id) || null;
-        });
+        setListings(current => cursor ? [...current, ...nextListings.filter(row => !current.some(existing => existing.id === row.id))] : nextListings);
+        if (!cursor) {
+          setTotal(Number(data.total) || 0);
+          setTotalIsEstimate(Boolean(data.totalIsEstimate));
+        }
+        setNextCursor(data.nextCursor || null);
+        setHasMore(Boolean(data.hasMore && data.nextCursor));
+        if (!cursor) setSelectedListing(null);
       } catch (caught) {
         if ((caught as Error).name !== 'AbortError') {
           setError((caught as Error).message || 'Failed to load listings');
@@ -147,13 +282,13 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [activeFilter, page, pageSize, search]);
+  }, [categoryFilter, conditionFilter, cursor, intentFilter, inventoryScope, pageSize, regionFilter, search]);
 
   useEffect(() => {
     const controller = new AbortController();
     async function loadFeatured() {
       try {
-        const params = new URLSearchParams({ item: 'watches', images: 'true', quality: 'archive', page: '1', pageSize: '100' });
+        const params = new URLSearchParams({ item: 'watches', images: 'true', quality: 'market', page: '1', pageSize: '100' });
         const response = await fetch(`/api/ingest?${params}`, { signal: controller.signal });
         const data = await response.json() as TradingFloorResponse;
         if (response.ok && data.status === 'ok') {
@@ -166,8 +301,6 @@ export default function TradingFloor() {
     void loadFeatured();
     return () => controller.abort();
   }, []);
-
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -189,57 +322,98 @@ export default function TradingFloor() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar" aria-label="Trading floor filters">
-              {FILTER_OPTIONS.map(option => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => { setActiveFilter(option.value); setPage(1); setSelectedListing(null); }}
-                  className="h-9 shrink-0 rounded-md px-4 text-sm font-medium transition"
-                  style={{
-                    border: `1px solid ${activeFilter.toLowerCase() === option.value.toLowerCase() ? GOLD : BORDER}`,
-                    background: activeFilter.toLowerCase() === option.value.toLowerCase() ? GOLD : PANEL,
-                    color: activeFilter.toLowerCase() === option.value.toLowerCase() ? '#09090D' : MUTED,
-                  }}
-                  title={`${option.group}: ${option.label}`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="relative block min-w-0 sm:w-[330px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
-                <input
-                  type="search"
-                  value={searchInput}
-                  onChange={event => setSearchInput(event.target.value)}
-                  placeholder="Search brand, reference, or dial"
-                  className="h-10 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
-                  style={{ borderColor: BORDER, background: PANEL, color: INK }}
-                />
-              </label>
-            </div>
+          <div className="sticky top-0 z-20 -mx-4 flex gap-2 border-y px-4 py-3 md:static md:mx-0 md:border-0 md:p-0" style={{ borderColor: BORDER, background: SURFACE }}>
+            <label className="relative block min-w-0 flex-1 md:max-w-[460px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
+              <input
+                type="search"
+                value={searchInput}
+                onChange={event => setSearchInput(event.target.value)}
+                placeholder="Search brand, reference, or dial"
+                className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
+                style={{ borderColor: BORDER, background: PANEL, color: INK }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(true)}
+              className="relative flex h-11 shrink-0 items-center gap-2 rounded-md border px-4 text-sm font-semibold md:hidden"
+              style={{ borderColor: GOLD, background: PANEL, color: GOLD_BRIGHT }}
+              aria-haspopup="dialog"
+              aria-expanded={filtersOpen}
+            >
+              <Filter size={17} /> Filter
+              {activeFilterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]" style={{ background: GOLD, color: '#09090D' }}>{activeFilterCount}</span>}
+            </button>
           </div>
+
+          <div className="hidden gap-4 md:grid" aria-label="Marketplace filters">
+            <FilterGroup label="Category">
+              {CATEGORY_OPTIONS.map(option => (
+                <FilterChoice key={option.value} active={categoryFilter === option.value} label={option.label} onClick={() => {
+                  resetResults();
+                  updateViewParams({
+                    item: option.value === 'all' ? null : option.value,
+                    type: !['all', 'watches'].includes(option.value) ? null : intentFilter || null,
+                  });
+                }} />
+              ))}
+            </FilterGroup>
+            <FilterGroup label="Intent">
+              {INTENT_OPTIONS.map(option => (
+                <FilterChoice key={option.value || 'all'} active={intentFilter === option.value} label={option.label} disabled={!['all', 'watches'].includes(categoryFilter) && Boolean(option.value)} onClick={() => {
+                  resetResults();
+                  updateViewParams({ type: option.value || null });
+                }} />
+              ))}
+            </FilterGroup>
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+              <ConditionSelect value={conditionFilter} onChange={value => { resetResults(); updateViewParams({ condition: value || null }); }} />
+              <LocationInput value={regionInput} onChange={setRegionInput} />
+            </div>
+            <InventoryScopeControl value={inventoryScope} onChange={value => { resetResults(); updateViewParams({ scope: value === 'archive' ? 'archive' : null }); }} />
+          </div>
+
+          <CurrencyConverter compact />
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-5">
-        {featuredListings.length > 0 && page === 1 && !search && (
-          <FeaturedImageRail listings={featuredListings} onSelect={setSelectedListing} />
+      {filtersOpen && (
+        <MobileFilterSheet
+          category={categoryFilter}
+          intent={intentFilter}
+          condition={conditionFilter}
+          region={regionInput}
+          inventoryScope={inventoryScope}
+          onApply={next => {
+            setRegionInput(next.region);
+            setFiltersOpen(false);
+            resetResults();
+            updateViewParams({
+              item: next.category === 'all' ? null : next.category,
+              type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
+              condition: next.condition || null,
+              region: next.region.trim() || null,
+              scope: next.inventoryScope === 'archive' ? 'archive' : null,
+            });
+          }}
+          onClose={() => setFiltersOpen(false)}
+        />
+      )}
+
+      <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-5">
+        {featuredListings.length > 0 && !selectedListing && !cursor && !search && ['all', 'watches'].includes(categoryFilter) && ['', 'WTS'].includes(intentFilter) && (
+          <FeaturedImageRail listings={featuredListings} onSelect={openListing} />
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</span>
-          <span>Page <strong style={{ color: INK }}>{page}</strong> of <strong style={{ color: INK }}>{totalPages}</strong></span>
-          <span title="Records are fetched 50 at a time from Postgres for speed; pagination and search still query the server-side dataset.">50 per page keeps the browser fast; search runs on the database.</span>
+          <span title="Records are fetched in bounded batches from Postgres; search and filters run on the database.">{pageSize} per request keeps mobile memory bounded.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
         {selectedListing ? (
-          <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={() => setSelectedListing(null)} />
+          <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={closeListing} />
         ) : loading && listings.length === 0 ? (
           <div className="flex justify-center py-16">
             <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
@@ -261,36 +435,179 @@ export default function TradingFloor() {
                 key={listing.id}
                 listing={listing}
                 selected={false}
-                onSelect={() => setSelectedListing(listing)}
+                onSelect={() => openListing(listing)}
               />
             ))}
           </div>
         )}
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-3 pt-8">
+        {hasMore && nextCursor && !selectedListing && (
+          <div className="flex items-center justify-center pt-8">
             <button
               type="button"
-              onClick={() => { setPage(current => Math.max(1, current - 1)); setSelectedListing(null); }}
-              disabled={page === 1 || loading}
-              className="h-10 rounded-md border px-4 text-sm font-medium disabled:cursor-default disabled:opacity-45"
-              style={{ borderColor: BORDER, background: PANEL, color: page === 1 ? MUTED : INK }}
+              onClick={() => setCursor(nextCursor)}
+              disabled={loading}
+              className="h-11 min-w-[160px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
+              style={{ borderColor: GOLD, background: GOLD, color: '#09090D' }}
             >
-              Previous
-            </button>
-            <button
-              type="button"
-              onClick={() => { setPage(current => Math.min(totalPages, current + 1)); setSelectedListing(null); }}
-              disabled={page >= totalPages || loading}
-              className="h-10 rounded-md border px-4 text-sm font-medium disabled:cursor-default disabled:opacity-45"
-              style={{ borderColor: BORDER, background: PANEL, color: page >= totalPages ? MUTED : INK }}
-            >
-              Next
+              {loading ? 'Loading...' : 'Load more'}
             </button>
           </div>
         )}
       </div>
     </main>
+  );
+}
+
+function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <fieldset>
+      <legend className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{label}</legend>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </fieldset>
+  );
+}
+
+function FilterChoice({ active, disabled = false, label, onClick }: { active: boolean; disabled?: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className="flex min-h-11 items-center gap-2 rounded-md border px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-35"
+      style={{ borderColor: active ? GOLD : BORDER, background: active ? GOLD : PANEL, color: active ? '#09090D' : INK }}
+    >
+      {active && <Check size={15} />} {label}
+    </button>
+  );
+}
+
+function ConditionSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>
+      Condition
+      <select
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        className="mt-2 h-11 w-full rounded-md border px-3 text-sm font-normal normal-case tracking-normal outline-none"
+        style={{ borderColor: BORDER, background: PANEL, color: INK }}
+      >
+        <option value="">All conditions</option>
+        <option value="New">New</option>
+        <option value="Used">Used</option>
+        <option value="Unknown">Condition not stated</option>
+      </select>
+    </label>
+  );
+}
+
+function LocationInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>
+      Location
+      <input
+        type="search"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        placeholder="City, country, or region"
+        className="mt-2 h-11 w-full rounded-md border px-3 text-sm font-normal normal-case tracking-normal outline-none"
+        style={{ borderColor: BORDER, background: PANEL, color: INK }}
+      />
+    </label>
+  );
+}
+
+function InventoryScopeControl({ value, onChange }: { value: InventoryScope; onChange: (value: InventoryScope) => void }) {
+  return (
+    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <FilterGroup label="Coverage">
+        <FilterChoice active={value === 'market'} label="Main inventory" onClick={() => onChange('market')} />
+        <FilterChoice active={value === 'archive'} label="Full archive" onClick={() => onChange('archive')} />
+      </FilterGroup>
+      <p className="max-w-xl text-xs leading-5" style={{ color: MUTED }}>
+        {value === 'market'
+          ? 'Main indexed inventory first. Searches still include the complete historical archive.'
+          : 'Includes historical records whose original posting date or fields may be incomplete.'}
+      </p>
+    </div>
+  );
+}
+
+function MobileFilterSheet({
+  category,
+  intent,
+  condition,
+  region,
+  inventoryScope,
+  onApply,
+  onClose,
+}: {
+  category: CategoryFilter;
+  intent: IntentFilter;
+  condition: string;
+  region: string;
+  inventoryScope: InventoryScope;
+  onApply: (filters: { category: CategoryFilter; intent: IntentFilter; condition: string; region: string; inventoryScope: InventoryScope }) => void;
+  onClose: () => void;
+}) {
+  const [draftCategory, setDraftCategory] = useState(category);
+  const [draftIntent, setDraftIntent] = useState(intent);
+  const [draftCondition, setDraftCondition] = useState(condition);
+  const [draftRegion, setDraftRegion] = useState(region);
+  const [draftInventoryScope, setDraftInventoryScope] = useState(inventoryScope);
+
+  return (
+    <div className="fixed inset-0 z-50 md:hidden" role="presentation">
+      <button type="button" aria-label="Close filters" className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mobile-filter-title"
+        className="absolute inset-y-0 right-0 flex w-full max-w-[390px] flex-col border-l shadow-2xl"
+        style={{ borderColor: BORDER, background: SURFACE, color: INK }}
+      >
+        <header className="flex h-16 shrink-0 items-center justify-between border-b px-5" style={{ borderColor: BORDER }}>
+          <h2 id="mobile-filter-title" className="text-lg font-semibold">Filter inventory</h2>
+          <button type="button" onClick={onClose} aria-label="Close filters" className="flex h-11 w-11 items-center justify-center rounded-md border" style={{ borderColor: BORDER }}>
+            <X size={20} />
+          </button>
+        </header>
+
+        <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
+          <FilterGroup label="Category">
+            {CATEGORY_OPTIONS.map(option => (
+              <FilterChoice key={option.value} active={draftCategory === option.value} label={option.label} onClick={() => {
+                setDraftCategory(option.value);
+                if (!['all', 'watches'].includes(option.value)) setDraftIntent('');
+              }} />
+            ))}
+          </FilterGroup>
+          <FilterGroup label="Intent">
+            {INTENT_OPTIONS.map(option => (
+              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
+            ))}
+          </FilterGroup>
+          {!['all', 'watches'].includes(draftCategory) && (
+            <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
+          )}
+          <ConditionSelect value={draftCondition} onChange={setDraftCondition} />
+          <LocationInput value={draftRegion} onChange={setDraftRegion} />
+          <InventoryScopeControl value={draftInventoryScope} onChange={setDraftInventoryScope} />
+        </div>
+
+        <footer className="grid shrink-0 grid-cols-2 gap-3 border-t p-4" style={{ borderColor: BORDER, background: SURFACE }}>
+          <button type="button" onClick={() => {
+            setDraftCategory('all');
+            setDraftIntent('');
+            setDraftCondition('');
+            setDraftRegion('');
+            setDraftInventoryScope('market');
+          }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
+          <button type="button" onClick={() => onApply({ category: draftCategory, intent: draftIntent, condition: draftCondition, region: draftRegion.trim(), inventoryScope: draftInventoryScope })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -364,6 +681,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       <div className="mt-5 min-h-[56px]">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
           <span>{listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}</span>
+          {listing.data_quality_review_required && <span className="rounded-full border px-2 py-0.5" style={{ borderColor: '#B7791F', color: '#F6C453' }}>Data under review</span>}
         </div>
         <button
           type="button"
@@ -385,7 +703,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
       <div className="mt-auto pt-4">
         <ActionButton
-          label="CHECK AVAILABILITY"
+          label={isBuyerIntent(listing.listing_type) ? 'VIEW BUYER REQUEST' : 'CHECK AVAILABILITY'}
           onClick={onSelect}
         />
       </div>
@@ -397,6 +715,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const canLoadBenchmark = Boolean(listing.reference && listing.brand && listing.listing_type === 'WTS');
   const [contact, setContact] = useState<ListingContact | null>(null);
+  const [rawMessage, setRawMessage] = useState<string | null>(null);
   const [benchmark, setBenchmark] = useState<ListingBenchmark>({
     loading: canLoadBenchmark,
     count: 0,
@@ -410,6 +729,10 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       .then(response => response.json())
       .then(payload => setContact(payload))
       .catch(error => { if (error?.name !== 'AbortError') setContact({ contact_available: false, reason: 'CONTACT_UNAVAILABLE' }); });
+    fetch(`/api/trading-listing?id=${encodeURIComponent(listing.id)}`, { credentials: 'include', signal: controller.signal })
+      .then(async response => response.ok ? response.json() : null)
+      .then(payload => setRawMessage(payload?.listing?.raw_message || null))
+      .catch(error => { if (error?.name !== 'AbortError') setRawMessage(null); });
 
     if (!canLoadBenchmark) return () => controller.abort();
     const reference = listing.reference as string;
@@ -431,6 +754,15 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
   return (
     <section className="mb-8 grid gap-8 lg:grid-cols-[minmax(320px,504px)_1fr]" aria-label="Selected listing">
+      <button
+        type="button"
+        onClick={onClose}
+        className="col-span-full inline-flex min-h-11 w-fit items-center gap-2 rounded-md border px-4 text-sm font-medium"
+        style={{ borderColor: BORDER, color: INK, background: SURFACE }}
+      >
+        <ArrowLeft size={17} /> Back to results
+      </button>
+
       <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
         <ListingImage listing={listing} className="h-[648px] w-full" large />
       </div>
@@ -462,22 +794,63 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             ))}
           </div>
 
+          {listing.data_quality_review_required && (
+            <p className="mt-5 border-l-2 pl-3 text-sm leading-6" style={{ borderColor: '#B7791F', color: '#F6C453' }}>
+              One or more normalized fields were withheld because they conflict with the source data. The original listing remains preserved for review.
+            </p>
+          )}
+
           <div className="mt-6 text-[15px]" style={{ color: INK }}>
               <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
           </div>
         </div>
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Check availability</h2>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(listing.listing_type) ? 'Buyer request contact' : 'Check availability'}</h2>
+          {contact?.dealer_name && (
+            <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
+              <div className="text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>
+              {contact.dealer_company && <div className="mt-1 text-sm" style={{ color: MUTED }}>{contact.dealer_company}</div>}
+              <div className="mt-2 text-sm" style={{ color: MUTED }}>
+                {[contact.dealer_city, contact.dealer_country].filter(Boolean).join(', ') || 'Location not published'}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs" style={{ color: MUTED }}>
+                <span>{contact.dealer_rating == null ? 'Unrated' : `${Number(contact.dealer_rating).toFixed(2)} rating`}</span>
+                <span>{Number(contact.dealer_review_count || 0).toLocaleString()} reviews</span>
+                <span>{Number(contact.dealer_group_count || 0).toLocaleString()} common groups</span>
+              </div>
+              {contact.dealer_stats && (
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <ContactMetric label="For sale" value={contact.dealer_stats.wts_posts} />
+                  <ContactMetric label="Looking for" value={contact.dealer_stats.wtb_posts} />
+                  <ContactMetric label="Active" value={contact.dealer_stats.active_listings} />
+                </div>
+              )}
+            </div>
+          )}
+          {contact?.dealer_profile_url && (
+            <Link to={contact.dealer_profile_url} className="mt-4 block text-sm" style={{ color: GOLD_BRIGHT }}>
+              View full dealer profile
+            </Link>
+          )}
           {contact?.contact_available && contact.whatsapp_url ? (
             <>
-              <p className="mt-3 text-sm" style={{ color: MUTED }}>Contact {contact.dealer_name || 'the verified dealer'} directly about this item.</p>
+              <p className="mt-3 text-sm" style={{ color: MUTED }}>{isBuyerIntent(listing.listing_type) ? `Contact ${contact.dealer_name || 'the verified buyer'} about this request.` : `Contact ${contact.dealer_name || 'the verified dealer'} directly about this item.`}</p>
               <a href={contact.whatsapp_url} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
-                <MessageCircle size={18} /> Continue on WhatsApp
+                <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
               </a>
             </>
           ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Dealer contact has not yet been verified for this historical listing.</p>
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>{contact?.dealer_profile_url ? 'This dealer profile is verified; direct WhatsApp contact is awaiting consent or a verified phone.' : 'Dealer identity has not yet been verified for this historical listing.'}</p>
+          )}
+        </div>
+
+        <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Raw source message</h2>
+          {rawMessage ? (
+            <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{rawMessage}</pre>
+          ) : (
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Source evidence is unavailable for this record.</p>
           )}
         </div>
 
@@ -506,6 +879,10 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
 function MarketStat({ label, value }: { label: string; value: number }) {
   return <div><div className="text-[11px] uppercase" style={{ color: MUTED }}>{label}</div><div className="mt-1 text-sm font-semibold" style={{ color: INK }}>${Math.round(value).toLocaleString()}</div></div>;
+}
+
+function ContactMetric({ label, value }: { label: string; value: number }) {
+  return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{Number(value || 0).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
 }
 
 function ListingImage({ listing, className, large = false }: { listing: ListingRecord; className: string; large?: boolean }) {
@@ -568,9 +945,11 @@ function RegionLabel({ region }: { region: string }) {
 
 function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
-  const postedDate = formatListingDate(listing.listing_date || listing.created_at);
+  const postedDate = formatListingDate(listing.listing_date);
   const rawPriceLabel = formatRawPrice(listing);
-  const usdPriceLabel = formatUsdPrice(listing.price_usd);
+  const usdPriceLabel = listing.data_quality_issues?.includes('REFERENCE_TOKEN_AS_PRICE')
+    ? 'Price under review'
+    : formatUsdPrice(listing.price_usd, listing.listing_type);
   const title = buildListingTitle(listing);
 
   return {
@@ -596,20 +975,24 @@ function buildListingTitle(listing: ListingRecord) {
 
 function listingKindLabel(listing: ListingRecord) {
   if (listing.listing_type === 'MULTI') return 'Multi-listing';
-  if (listing.listing_type === 'OTHER') return 'Unnormalized luxury item';
+  if (listing.item_category === 'JEWELRY') return 'Jewelry';
+  if (listing.item_category === 'HANDBAG') return 'Handbag';
+  if (listing.item_category === 'ACCESSORY') return 'Accessory';
+  if (listing.item_category === 'OTHER') return 'Other luxury item';
   return 'Watch';
 }
 
 function formatRawPrice(listing: ListingRecord) {
+  if (listing.data_quality_issues?.includes('REFERENCE_TOKEN_AS_PRICE')) return 'Price under review';
   if (listing.price_raw && listing.currency) {
     return `${compactNumber(listing.price_raw)}${listing.currency}`;
   }
   if (listing.price_usd) return `${compactNumber(listing.price_usd)}USD`;
-  return 'Price on request';
+  return isBuyerIntent(listing.listing_type) ? 'Buyer budget not stated' : 'Price on request';
 }
 
-function formatUsdPrice(value: number | null) {
-  if (value == null || value <= 0) return 'Ask';
+function formatUsdPrice(value: number | null, listingType: string) {
+  if (value == null || value <= 0) return isBuyerIntent(listingType) ? 'Buyer budget not stated' : 'Price on request';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -631,7 +1014,7 @@ function formatListingDate(dateStr: string | null) {
 
 function normalizeRegion(region: string | null) {
   const value = cleanValue(region);
-  if (!value) return 'Asia';
+  if (!value) return 'Location not provided';
   if (/north.?america|usa|us|canada/i.test(value)) return 'North America';
   if (/europe|uk|germany|france|italy|swiss/i.test(value)) return 'Europe';
   if (/asia|hong|china|japan|singapore|hk/i.test(value)) return 'Asia';
@@ -655,4 +1038,8 @@ function customerIntentLabel(value: string) {
   if (value === 'WTB' || value === 'NTQ') return 'Want to buy';
   if (value === 'TRADE') return 'Trade';
   return cleanValue(value) || 'Listing';
+}
+
+function isBuyerIntent(value: string) {
+  return value === 'WTB' || value === 'NTQ';
 }

@@ -28,13 +28,50 @@ const DIAL_ALIASES = new Map([
   ['PANDA', 'Panda'],
   ['MOP WHITE', 'White Mother of Pearl'],
   ['WHITE MOP', 'White Mother of Pearl'],
+  ['BLK', 'Black'],
+  ['BK', 'Black'],
+  ['WHT', 'White'],
+  ['BLU', 'Blue'],
+  ['GRN', 'Green'],
+  ['GRENN', 'Green'],
+  ['GREEEN', 'Green'],
+  ['GERY', 'Grey'],
+  ['SLIVER', 'Silver'],
+  ['CHAMP', 'Champagne'],
+  ['METE', 'Meteorite'],
+  ['TIFF', 'Tiffany Blue'],
+  ['TIFFANI', 'Tiffany Blue'],
+  ['TIFFINI', 'Tiffany Blue'],
+  ['TB', 'Tiffany Blue'],
+  ['WIM', 'Wimbledon'],
+  ['WIMB', 'Wimbledon'],
+  ['WIN', 'Wimbledon'],
+  ['WIMBELDON', 'Wimbledon'],
+  ['CANDY', 'Candy Pink'],
+  ['PISTA', 'Pistachio'],
+  ['PISTACHO', 'Pistachio'],
+  ['PISTSCHIO', 'Pistachio'],
+  ['PIS', 'Pistachio'],
+  ['CELE', 'Celebration'],
+  ['CELEB', 'Celebration'],
+  ['OMBR', 'Ombre'],
+  ['OMBER', 'Ombre'],
+  ['YML', 'Yellow Mother of Pearl'],
+  ['PAVED', 'Pave'],
+  ['RALNBOW', 'Rainbow'],
+  ['AVENTUINE', 'Aventurine'],
+  ['EISENKISSEL', 'Eisenkiesel'],
+  ['EISIKINSELL', 'Eisenkiesel'],
 ]);
 
 const KNOWN_DIAL_TERMS = [
   'White Mother of Pearl', 'Black Mother of Pearl', 'Mother of Pearl',
   'Reverse Panda', 'Tiffany Blue', 'Ombre Green', 'Ice Blue', 'Olive Green',
   'Sunburst Blue', 'Sunburst Black', 'Champagne', 'Meteorite', 'Skeleton',
-  'Salmon', 'Chocolate', 'Anthracite', 'Burgundy', 'Lavender', 'Turquoise',
+  'Candy Pink', 'Pistachio', 'Wimbledon', 'Sundust', 'Celebration', 'Pave',
+  'Rainbow', 'Aventurine', 'Eisenkiesel', 'Carnelian', 'Onyx', 'Rhodium',
+  'Ivory', 'Opal', 'Puzzle', 'Coffee', 'Smoke', 'Zebra', 'Multicolour',
+  'Yellow Mother of Pearl', 'Salmon', 'Chocolate', 'Anthracite', 'Burgundy', 'Lavender', 'Turquoise',
   'Panda', 'Copper', 'Bronze', 'Silver', 'Black', 'Blue', 'White', 'Grey',
   'Green', 'Brown', 'Pink', 'Purple', 'Yellow', 'Orange', 'Red', 'Gold',
   'Beige', 'Slate', 'Diamond',
@@ -123,19 +160,30 @@ function extractDialFromText(rawText, catalogDials = []) {
   return null;
 }
 
+function alignDealerDialAliasToCatalog(value, catalogDials = []) {
+  const key = comparisonKey(value);
+  const catalog = uniqueCatalogDials(catalogDials);
+  const catalogKeys = new Set(catalog.map(comparisonKey));
+  if (key === 'PANDA' && (catalogKeys.has('WHITE') || catalogKeys.has('SILVER')) && !catalogKeys.has('PANDA')) {
+    return { value: 'White', reason: 'raw_alias_panda_to_white' };
+  }
+  return { value, reason: null };
+}
+
 function resolveDial({ sourceDial, rawText, catalogDials = [] }) {
   const source = normalizeDialValue(sourceDial);
   const catalog = uniqueCatalogDials(catalogDials);
   const fromText = extractDialFromText(rawText, catalog);
 
   if (fromText) {
-    const conflictsWithSource = source.known && comparisonKey(source.value) !== comparisonKey(fromText);
+    const aligned = alignDealerDialAliasToCatalog(fromText, catalog);
+    const conflictsWithSource = source.known && comparisonKey(source.value) !== comparisonKey(aligned.value);
     return {
-      value: fromText,
+      value: aligned.value,
       evidence: 'explicit_raw_text',
       confidence: 95,
       ambiguous: conflictsWithSource,
-      reason: conflictsWithSource ? 'source_text_conflict' : null,
+      reason: conflictsWithSource ? 'source_text_conflict' : aligned.reason,
     };
   }
   if (source.known) {
@@ -153,6 +201,7 @@ function resolveDial({ sourceDial, rawText, catalogDials = [] }) {
 module.exports = {
   comparisonKey,
   extractDialFromText,
+  alignDealerDialAliasToCatalog,
   normalizeDialValue,
   resolveDial,
   uniqueCatalogDials,

@@ -29,3 +29,10 @@ test('Railway worker can opt into queue mode while retaining a safe legacy defau
   assert.match(worker, /claim_normalization_shadow_work/);
   assert.match(worker, /releaseQueueWork/);
 });
+
+test('completed cursor scans stop while queue workers remain available by default', () => {
+  assert.match(worker, /SHADOW_EXIT_ON_COMPLETE/);
+  assert.match(worker, /workerMode === 'cursor'/);
+  assert.match(worker, /shouldStop = result\.complete && exitOnComplete/);
+  assert.match(worker, /event: 'worker_complete'/);
+});

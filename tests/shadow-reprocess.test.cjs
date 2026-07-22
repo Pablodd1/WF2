@@ -99,6 +99,43 @@ test('retains an existing structured source price when a marketplace title has n
   assert.equal(result.review_status, 'NO_CHANGE');
 });
 
+test('blocks unresolved dealer emoji price codes from automatic promotion', () => {
+  const result = analyzeRecord({
+    id: 'emoji-price-1',
+    raw_message: '126500LN White HKD \u{1F525}\u{1F4B0}',
+    brand: 'Rolex',
+    reference: '126500LN',
+    currency: null,
+    price_raw: null,
+    listing_type: 'WTS',
+  });
+  assert.ok(result.change_flags.includes('EMOJI_PRICE_AMBIGUOUS'));
+  assert.equal(result.proposed_candidates[0].price_raw, null);
+  assert.equal(result.review_status, 'PENDING');
+});
+
+test('does not copy a collapsed parent price into bundle children without line prices', () => {
+  const result = analyzeRecord({
+    id: 'bundle-parent-price',
+    raw_message: 'RM010Ti open cert full set\nRM67-01 blue dial\nRM35-03 white dial',
+    brand: 'Richard Mille',
+    reference: 'RM010TI',
+    currency: 'USDT',
+    price_raw: 1_390_000,
+    price_usd: 1_390_000,
+    listing_type: 'WTS',
+  });
+
+  assert.equal(result.candidate_count, 3);
+  assert.ok(result.change_flags.includes('BUNDLE_SPLIT_REQUIRED'));
+  for (const candidate of result.proposed_candidates) {
+    assert.equal(candidate.price_raw, null);
+    assert.equal(candidate.price_usd, null);
+    assert.equal(candidate.currency, null);
+    assert.deepEqual(candidate.prices, []);
+  }
+});
+
 test('proposes a catalog-backed dial only for a deterministic single-dial reference', () => {
   const result = analyzeRecord({
     id: 'dial-1',
@@ -115,6 +152,28 @@ test('proposes a catalog-backed dial only for a deterministic single-dial refere
   assert.ok(result.change_flags.includes('DIAL_CHANGED'));
   assert.ok(result.proposed_candidates[0].dial_color);
   assert.equal(result.proposed_candidates[0].dial_evidence, 'exact_catalog_single_dial');
+});
+
+test('keeps raw panda evidence but proposes catalog white for Rolex 116500LN', () => {
+  const result = analyzeRecord({
+    id: 'dial-panda',
+    raw_message: 'Rolex Daytona 116500LN panda dial full links USD 30000',
+    brand: 'Rolex',
+    reference: '116500LN',
+    dial_color: 'Unknown',
+    currency: 'USD',
+    price_raw: 30000,
+    price_usd: 30000,
+    listing_type: 'WTS',
+  });
+  const candidate = result.proposed_candidates[0];
+  assert.equal(result.candidate_count, 1);
+  assert.equal(candidate.dial_color, 'White');
+  assert.equal(candidate.dial_evidence, 'explicit_raw_text');
+  assert.equal(candidate.dial_reason, 'raw_alias_panda_to_white');
+  assert.equal(candidate.raw_line, 'Rolex Daytona 116500LN panda dial full links USD 30000');
+  assert.ok(result.change_flags.includes('DIAL_CHANGED'));
+  assert.ok(!result.change_flags.includes('DIAL_AMBIGUOUS'));
 });
 
 test('flags a text and structured dial conflict instead of silently overwriting it', () => {

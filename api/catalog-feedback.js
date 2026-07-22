@@ -15,6 +15,8 @@
  *   SUPABASE_SERVICE_ROLE_KEY – service-role JWT
  */
 
+const { authorizeMutation } = require('./_lib/authorize-mutation.cjs');
+
 function normalizeRef(ref) {
   return String(ref || '').toUpperCase().replace(/[^A-Z0-9/]/g, '');
 }
@@ -98,7 +100,7 @@ async function fetchRecentFeedback(supabaseUrl, serviceKey, limit = 100) {
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -128,6 +130,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!await authorizeMutation(req, res, new Set(['reviewer', 'admin']))) return;
 
   const {
     reference,

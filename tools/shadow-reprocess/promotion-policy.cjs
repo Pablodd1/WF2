@@ -5,6 +5,7 @@ const BLOCKING_FLAGS = new Set([
   'NO_CANDIDATE',
   'CURRENCY_AMBIGUOUS',
   'PRICE_PARSE_FAILED',
+  'EMOJI_PRICE_AMBIGUOUS',
   'DIAL_AMBIGUOUS',
 ]);
 
@@ -59,6 +60,14 @@ function buildPromotionDecision(shadowRow, catalogConfirmation = null) {
       return {
         disposition: 'HUMAN_REVIEW',
         reasons: [catalogConfirmation.reason],
+        candidate: null,
+        catalog: catalogConfirmation.match || null,
+      };
+    }
+    if (flags.has('DIAL_CHANGED') && catalogConfirmation.dialConfirmed !== true) {
+      return {
+        disposition: 'HUMAN_REVIEW',
+        reasons: [catalogConfirmation.dialReason || 'CATALOG_DIAL_UNCONFIRMED'],
         candidate: null,
         catalog: catalogConfirmation.match || null,
       };

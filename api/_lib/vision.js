@@ -25,6 +25,8 @@
 
 'use strict';
 
+const { fetchPublicImage } = require('./safe-image-fetch.cjs');
+
 // ── Image resize (sharp) — prevents 4MB+ images from breaking Gemini/HTTP ──
 let _sharp = null;
 async function getSharp() {
@@ -152,9 +154,9 @@ async function analyzeWithGPT4o(imageUrl, textReference, textBrand) {
   // Attempt 2: Download + resize + base64 (fallback for CDNs that block OpenAI)
   console.log('[vision] GPT-4o URL passthrough failed, trying download+resize+base64...');
   try {
-    const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
-    if (imgRes.ok) {
-      const buf = Buffer.from(await imgRes.arrayBuffer());
+    const image = await fetchPublicImage(imageUrl);
+    if (image.buffer.length) {
+      const buf = image.buffer;
       const resized = await resizeToBase64(buf);
       if (resized) {
         result = await gpt4oCall(apiKey, [
@@ -215,13 +217,8 @@ async function analyzeWithGemini(imageUrl, textReference, textBrand) {
   if (!apiKey) return null;
 
   // Download the image
-  const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
-  if (!imgRes.ok) {
-    console.error('[vision] Gemini image fetch failed:', imgRes.status);
-    return null;
-  }
-
-  const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+  const image = await fetchPublicImage(imageUrl);
+  const imgBuffer = image.buffer;
 
   // Resize via sharp (removes 4MB size gate — phone photos now work)
   const resized = await resizeToBase64(imgBuffer);

@@ -17,6 +17,10 @@ const {
   segmentDealerMessage,
 } = require('./_lib/normalization-v4.cjs');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
+const { requireServiceToken } = require('./_lib/require-service-token.cjs');
+const { sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
+const { confirmCatalogCandidate } = require('./_lib/catalog-confirmation.cjs');
+const { decodeTradingCursor, encodeTradingCursor, tradingCursorFilter } = require('./_lib/trading-cursor.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -565,6 +569,16 @@ async function insertSupabase(tableName, record, url, key) {
   return data[0];
 }
 
+function withoutCatalogColumns(record) {
+  const { model: _model, catalog_confirmed: _confirmed, catalog_match: _match, ...legacy } = record;
+  return legacy;
+}
+
+function isMissingCatalogColumn(error) {
+  return /(?:model|catalog_confirmed|catalog_match).*(?:column|schema cache)|(?:column|schema cache).*(?:model|catalog_confirmed|catalog_match)/i
+    .test(String(error?.message || ''));
+}
+
 // ============================================================
 // Single Ingest Logic Flow
 // ============================================================
@@ -603,7 +617,6 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
         const llm = await llmEnrich(cand.rawLine, parsed, deepseekKey);
         if (llm.brand && llm.brand !== 'Unknown') parsed.brand = llm.brand;
         if (llm.reference) parsed.ref = llm.reference;
-        if (llm.model) parsed.model = llm.model;
         if (llm.dialColor) parsed.dial = llm.dialColor;
         if (llm.material) parsed.material = llm.material;
         if (llm.bracelet) parsed.bracelet = llm.bracelet;
@@ -617,6 +630,18 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       }
     }
 
+    const catalogConfirmation = confirmCatalogCandidate({
+      brand: parsed.brand,
+      reference: parsed.ref,
+      dial_color: parsed.dial,
+    });
+    const catalogReviewRequired = !catalogConfirmation.confirmed
+      || !catalogConfirmation.match?.model
+      || (parsed.dial && catalogConfirmation.dialConfirmed !== true);
+    parsed.model = catalogConfirmation.confirmed
+      ? (catalogConfirmation.match?.model || null)
+      : null;
+
     // Prepare JASS-5 structures
     const listingId = `list_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const primaryPrice = parsed.prices?.find(price => price.is_primary) || parsed.prices?.[0] || null;
@@ -624,6 +649,7 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       id: listingId,
       brand: parsed.brand,
       reference: parsed.ref,
+      model: parsed.model,
       dial_color: parsed.dial,
       condition: parsed.condition,
       year: parsed.year,
@@ -631,7 +657,7 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       price_usd: primaryPrice?.amount_usd || null,
       currency: primaryPrice?.currency_original || null,
       confidence: parsed.confidence,
-      verdict: parsed.approval_state,
+      verdict: catalogReviewRequired ? 'MUST_REVIEW' : parsed.approval_state,
       source,
       raw_message: cand.rawLine,
       parser_version: 'v4.0-context',
@@ -641,15 +667,30 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       flags: {
         raw_message_id: rawRecord.id || null,
         set_status: parsed.set_status || null,
-        catalog_status: parsed.catalog_status,
+        catalog_status: catalogConfirmation.reason,
       },
-      review_reason: parsed.review_reasons?.join(',') || null,
+      catalog_confirmed: catalogConfirmation.confirmed && Boolean(catalogConfirmation.match?.model),
+      catalog_match: catalogConfirmation.match || {},
+      review_reason: [...new Set([
+        ...(parsed.review_reasons || []),
+        ...(catalogReviewRequired
+          ? [catalogConfirmation.dialReason || catalogConfirmation.reason || 'CATALOG_REVIEW_REQUIRED']
+          : []),
+      ])].join(',') || null,
     };
 
     if (supabaseUrl && serviceKey) {
       try {
         // Ingest into watch_records table
-        await insertSupabase('watch_records', normalizedListing, supabaseUrl, serviceKey);
+        try {
+          await insertSupabase('watch_records', normalizedListing, supabaseUrl, serviceKey);
+        } catch (error) {
+          if (!isMissingCatalogColumn(error)) throw error;
+          // Expand-before-deploy compatibility: preserve the source event if a
+          // frontend deploy briefly precedes the additive database migration.
+          // The row remains MUST_REVIEW and claims no persisted confirmation.
+          await insertSupabase('watch_records', withoutCatalogColumns(normalizedListing), supabaseUrl, serviceKey);
+        }
 
         // Ingest related prices
         if (parsed.prices && parsed.prices.length > 0) {
@@ -746,15 +787,6 @@ module.exports = async function handler(req, res) {
         total: 0,
         records: [],
         status: 'supabase_not_configured',
-        configuration: {
-          supabaseUrlPresent: Boolean(supabaseUrl),
-          serviceRoleKeyPresent: Boolean(serviceRoleKey),
-          secretKeyPresent: Boolean(secretKey),
-          serverKeyPresent: Boolean(serviceKey),
-          publishableKeyPresent: Boolean(publishableKey),
-          vercelRuntime: Boolean(process.env.VERCEL),
-          gitBranch: process.env.VERCEL_GIT_COMMIT_REF || null,
-        },
       });
     }
     try {
@@ -768,19 +800,43 @@ module.exports = async function handler(req, res) {
       const itemType = String(req.query?.item || '').toLowerCase();
       const search = String(req.query?.q || '').trim().slice(0, 100);
       const quality = String(req.query?.quality || 'market').toLowerCase();
+      const pagination = String(req.query?.pagination || '').toLowerCase();
+      const cursorMode = pagination === 'cursor';
+      const cursorValue = String(req.query?.cursor || '').trim();
+      const cursor = cursorValue ? decodeTradingCursor(cursorValue) : null;
+      if (cursorValue && !cursor) return res.status(400).json({ error: 'Invalid pagination cursor' });
+      const condition = String(req.query?.condition || '').trim().slice(0, 30).replace(/[(),.%*]/g, ' ');
+      const region = String(req.query?.region || '').trim().slice(0, 50).replace(/[(),.%*]/g, ' ');
       const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
-      const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'OTHER']);
-      const allowedItems = new Set(['all', 'watches', 'luxury', 'multi']);
-      const start = (page - 1) * pageSize;
-      const end = start + pageSize - 1;
-      const tableName = serviceKey ? 'watch_records' : 'trading_floor_listings';
+      const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'OTHER']);
+      const allowedItems = new Set(['all', 'watches', 'jewelry', 'handbags', 'accessories', 'other', 'luxury']);
+      const start = cursorMode ? 0 : (page - 1) * pageSize;
+      const end = start + pageSize - (cursorMode ? 0 : 1);
+      // Both server-key and publishable-key reads use the same customer-safe
+      // database view so publication rules cannot drift by deployment mode.
+      // Main inventory is intentionally stricter than the archive: incomplete
+      // watch identity and implausible WTS prices remain reviewable in the full
+      // archive but cannot consume customer-market page slots or totals.
+      const tableName = quality === 'archive'
+        ? 'trading_floor_listings'
+        : 'trading_floor_market_listings';
       const params = new URLSearchParams({
         // Keep this response marketplace-safe even when a server key is used.
         select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region',
         // This matches the production created_at DESC index. NULLS LAST needs a
         // dedicated index before it can be enabled safely on millions of rows.
-        order: 'created_at.desc',
+        order: cursorMode ? 'created_at.desc,id.desc' : 'created_at.desc',
       });
+
+      if (listingType && !allowedTypes.has(listingType)) {
+        return res.status(400).json({ error: 'Unsupported public listing type' });
+      }
+      if (itemType && !allowedItems.has(itemType)) {
+        return res.status(400).json({ error: 'Unsupported public inventory filter' });
+      }
+      if (itemType && !['all', 'watches'].includes(itemType) && listingType) {
+        return res.status(400).json({ error: 'Intent filtering is unavailable for unnormalized luxury records' });
+      }
 
       // NTQ is historical buyer-intent shorthand. Customer-facing WTB must
       // include both values so every "looking for / want to buy" request is
@@ -789,10 +845,27 @@ module.exports = async function handler(req, res) {
       if (listingType === 'WTB') params.set('listing_type', 'in.(WTB,NTQ)');
       else if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
       if (!listingType && itemType === 'luxury') params.set('listing_type', 'eq.OTHER');
-      if (!listingType && itemType === 'multi') params.set('listing_type', 'eq.MULTI');
-      if (!listingType && itemType === 'watches') params.set('listing_type', 'not.in.(MULTI,OTHER)');
-      if (!listingType && itemType === 'all') params.set('listing_type', 'neq.MULTI');
+      if (!listingType && itemType === 'jewelry') {
+        params.set('listing_type', 'eq.OTHER');
+        params.set('source_type', 'eq.jewelry_archive');
+      }
+      if (!listingType && itemType === 'handbags') {
+        params.set('listing_type', 'eq.OTHER');
+        params.set('source_type', 'in.(handbag_archive,handbags_archive,bag_archive)');
+      }
+      if (!listingType && itemType === 'accessories') {
+        params.set('listing_type', 'eq.OTHER');
+        params.set('source_type', 'in.(accessory_archive,accessories_archive)');
+      }
+      if (!listingType && itemType === 'other') {
+        params.set('listing_type', 'eq.OTHER');
+        params.set('source_type', 'not.in.(jewelry_archive,handbag_archive,handbags_archive,bag_archive,accessory_archive,accessories_archive)');
+      }
+      if (!listingType && itemType === 'watches') params.set('listing_type', 'in.(WTS,WTB,NTQ)');
+      if (!listingType && itemType === 'all') params.set('listing_type', 'in.(WTS,WTB,NTQ,OTHER)');
       if (imagesOnly) params.set('has_images', 'eq.true');
+      if (condition) params.set('condition', `ilike.${condition}`);
+      if (region) params.set('region', `ilike.*${region}*`);
       // Customer-facing inventory never includes RECYCLE records. The recent
       // view avoids letting undated legacy imports dominate page one, while the
       // all-inventory view and every explicit search still include those rows.
@@ -801,6 +874,8 @@ module.exports = async function handler(req, res) {
       // Supabase preview bootstrap rows are useful for deployment checks, but
       // must never be presented as dealer inventory in a customer environment.
       params.set('id', 'not.like.preview_demo_*');
+      const cursorFilter = tradingCursorFilter(cursor);
+      if (cursorFilter) params.set('and', `(${cursorFilter})`);
       if (quality !== 'archive' && !search) {
         params.set('created_at', 'not.is.null');
       }
@@ -829,21 +904,29 @@ module.exports = async function handler(req, res) {
             'Range-Unit': 'items',
             'Range': `${start}-${end}`,
             // Estimated counts avoid a full-table count for a multi-million-row archive.
-            'Prefer': 'count=estimated',
+            // Estimated counts may fall back to an exact scan for filtered
+            // cohorts. Reference search only needs a fast approximate total.
+            'Prefer': search ? 'count=planned' : 'count=estimated',
           },
         }
       );
       if (!resp.ok) throw new Error(`Supabase returned ${resp.status}`);
       const records = await resp.json();
+      const hasMore = cursorMode && Array.isArray(records) && records.length > pageSize;
+      const visibleRecords = Array.isArray(records) ? records.slice(0, pageSize) : [];
+      const customerRecords = visibleRecords.map(sanitizeTradingRecord);
+      const nextCursor = hasMore ? encodeTradingCursor(visibleRecords[visibleRecords.length - 1]) : null;
       const contentRange = resp.headers.get('content-range') || '';
       const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
       return res.status(200).json({
-        count: Array.isArray(records) ? records.length : 0,
+        count: customerRecords.length,
         total,
         page,
         pageSize,
         totalIsEstimate: true,
-        records: Array.isArray(records) ? records : [],
+        nextCursor,
+        hasMore,
+        records: customerRecords,
         status: 'ok',
         accessMode: serviceKey ? 'server_key' : 'publishable_read_only',
       });
@@ -853,6 +936,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!requireServiceToken(req, res)) return;
 
   if (!supabaseUrl || !serviceKey) {
     return res.status(503).json({

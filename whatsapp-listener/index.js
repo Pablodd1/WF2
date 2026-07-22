@@ -7,6 +7,7 @@ const path = require('path');
 // ── CONFIG ──
 const TARGET_GROUP_NAME = 'WatchFacts';  // Will match any group containing this
 const API_ENDPOINT = 'https://watchfacts-poc.vercel.app/api/ingest';
+const INGEST_API_TOKEN = process.env.INGEST_API_TOKEN;
 const AUTH_DIR = './auth_info_baileys';
 const IMAGE_DIR = './downloaded_images';
 
@@ -149,7 +150,10 @@ async function sendToAPI(record) {
     try {
         const response = await axios.post(API_ENDPOINT, record, {
             timeout: 10000,
-            headers: { 'Content-Type': 'application/json' }
+            headers: {
+                'Content-Type': 'application/json',
+                ...(INGEST_API_TOKEN ? { Authorization: `Bearer ${INGEST_API_TOKEN}` } : {}),
+            }
         });
         console.log(`✅ Sent: ${record.reference || 'N/A'} | Status: ${response.status}`);
         return true;

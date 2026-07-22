@@ -12,8 +12,19 @@ npm install
 ## Run
 
 ```bash
+export INGEST_API_TOKEN=<same secret configured in Vercel>
 node index.js
 ```
+
+On Windows PowerShell:
+
+```powershell
+$env:INGEST_API_TOKEN='<same secret configured in Vercel>'
+node index.js
+```
+
+The listener sends this value as a bearer token to `/api/ingest`. Keep it in
+Railway or the local environment only; do not commit it.
 
 ## First Time: Pair with WhatsApp
 

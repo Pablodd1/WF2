@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  alignDealerDialAliasToCatalog,
   normalizeDialValue,
   resolveDial,
   uniqueCatalogDials,
@@ -24,6 +25,11 @@ test('canonicalizes spelling and dealer shorthand without losing meaningful vari
   assert.equal(normalizeDialValue('salmon').value, 'Salmon');
   assert.equal(normalizeDialValue('champagne').value, 'Champagne');
   assert.equal(normalizeDialValue('reverse panda').value, 'Reverse Panda');
+  assert.equal(normalizeDialValue('blk').value, 'Black');
+  assert.equal(normalizeDialValue('pista').value, 'Pistachio');
+  assert.equal(normalizeDialValue('wim').value, 'Wimbledon');
+  assert.equal(normalizeDialValue('mete').value, 'Meteorite');
+  assert.equal(normalizeDialValue('yml').value, 'Yellow Mother of Pearl');
 });
 
 test('prefers explicit raw text over an unknown source value', () => {
@@ -83,6 +89,34 @@ test('flags conflicting source and explicit text for review', () => {
   assert.equal(result.value, 'White');
   assert.equal(result.ambiguous, true);
   assert.equal(result.reason, 'source_text_conflict');
+});
+
+test('maps dealer panda shorthand to catalog white when panda is not a catalog dial', () => {
+  const result = resolveDial({
+    sourceDial: 'Unknown',
+    rawText: 'Rolex Daytona 116500LN panda dial full set',
+    catalogDials: ['Black', 'White'],
+  });
+  assert.equal(normalizeDialValue('panda dial').value, 'Panda');
+  assert.deepEqual(alignDealerDialAliasToCatalog('Panda', ['Black', 'White']), {
+    value: 'White',
+    reason: 'raw_alias_panda_to_white',
+  });
+  assert.deepEqual(alignDealerDialAliasToCatalog('Panda', ['Black', 'Silver']), {
+    value: 'White',
+    reason: 'raw_alias_panda_to_white',
+  });
+  assert.equal(result.value, 'White');
+  assert.equal(result.evidence, 'explicit_raw_text');
+  assert.equal(result.ambiguous, false);
+  assert.equal(result.reason, 'raw_alias_panda_to_white');
+});
+
+test('preserves panda when the exact catalog models panda as its own dial', () => {
+  assert.deepEqual(alignDealerDialAliasToCatalog('Panda', ['Panda', 'Black']), {
+    value: 'Panda',
+    reason: null,
+  });
 });
 
 test('does not confuse case, bracelet, or bezel materials with dial color', () => {

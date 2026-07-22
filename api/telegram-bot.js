@@ -7,7 +7,9 @@
  */
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const TELEGRAM_API = 'https://api.telegram.org/bot';
+const { requireServiceToken, tokensMatch } = require('./_lib/require-service-token.cjs');
 
 async function sendMessage(chatId, text) {
   if (!TELEGRAM_BOT_TOKEN) return;
@@ -44,11 +46,6 @@ async function getStats() {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
   // Health check
   if (req.method === 'GET') {
     return res.status(200).json({ status: 'ok', bot: !!TELEGRAM_BOT_TOKEN });
@@ -60,6 +57,10 @@ module.exports = async function handler(req, res) {
 
   // Handle Telegram webhook update
   if (body.message) {
+    if (!TELEGRAM_WEBHOOK_SECRET) return res.status(503).json({ error: 'Telegram webhook authentication is not configured' });
+    const suppliedSecret = req.headers?.['x-telegram-bot-api-secret-token'];
+    if (!tokensMatch(suppliedSecret, TELEGRAM_WEBHOOK_SECRET)) return res.status(401).json({ error: 'Unauthorized' });
+
     const chatId = body.message.chat.id;
     const text = body.message.text || '';
     const command = text.split(' ')[0];
@@ -123,6 +124,7 @@ module.exports = async function handler(req, res) {
 
   // Handle manual trigger (for cron jobs)
   if (body.action === 'alert-owner') {
+    if (!requireServiceToken(req, res)) return;
     const stats = await getStats();
     if (stats && stats.human > 0) {
       const msg = `
@@ -138,5 +140,5 @@ ${stats.recycle} records in recycle bin.
     return res.status(200).json({ sent: true });
   }
 
-  return res.status(200).json({ ok: true });
+  return res.status(400).json({ error: 'Unsupported Telegram update' });
 }

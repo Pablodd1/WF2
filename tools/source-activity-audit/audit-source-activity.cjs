@@ -20,7 +20,7 @@ function required(name) {
 
 function newState(keyFingerprint) {
   return {
-    version: 1,
+    version: 2,
     keyFingerprint,
     lastId: '',
     rowsScanned: 0,
@@ -37,6 +37,9 @@ function newState(keyFingerprint) {
 function loadState(keyFingerprint) {
   if (!resume || !fs.existsSync(statePath)) return newState(keyFingerprint);
   const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  if (state.version !== 2) {
+    throw new Error('Existing checkpoint used import timestamps as posting dates; use a new output directory');
+  }
   if (state.keyFingerprint !== keyFingerprint) {
     throw new Error('SOURCE_AUDIT_HASH_KEY does not match the existing checkpoint; use the original key or a new output directory');
   }
@@ -163,7 +166,7 @@ function writeReports(state) {
     '- Poster IDs are keyed HMAC pseudonyms; phone numbers and names are never written to report files.',
     '- An observed poster is not a verified dealer. Customer attribution remains blocked until dealer lineage and consent are verified.',
     '- NTQ is counted with WTB according to the current product rule.',
-    '- Posting year uses listing_date first and created_at second; it is not the watch manufacture year.', '',
+    '- Posting year uses only listing_date, the preserved original source timestamp; import created_at is never substituted.', '',
   ];
   fs.writeFileSync(path.join(outputDir, 'summary.md'), lines.join('\n'));
   return summary;
@@ -210,7 +213,7 @@ async function main() {
       increment(activity.years, year || 'UNKNOWN');
       increment(activity.evidence, poster.evidence);
       increment(activity.sources, source);
-      const postDate = row.listing_date || row.created_at || null;
+      const postDate = row.listing_date || null;
       if (postDate && (!activity.firstPost || postDate < activity.firstPost)) activity.firstPost = postDate;
       if (postDate && (!activity.lastPost || postDate > activity.lastPost)) activity.lastPost = postDate;
       state.posters[posterId] = activity;

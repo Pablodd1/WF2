@@ -4,27 +4,8 @@
  * not make the main analytics response unnecessarily large.
  */
 const { getClient } = require('./_lib/supabase');
-const DEFAULT_LISTING_IMAGE_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/';
-
-function toAbsoluteImageUrl(value) {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (/\.(jpg|jpeg|png|webp|gif|avif|heic)(\?|$)/i.test(trimmed)) {
-    const rawBase = process.env.DO_LISTINGS || process.env.PRICE_RESEARCH_IMAGE_BASE || DEFAULT_LISTING_IMAGE_BASE;
-    try {
-      new URL(trimmed);
-      return trimmed;
-    } catch {
-      const base = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
-      return `${base}${trimmed.replace(/^\/+/, '')}`;
-    }
-  }
-  try {
-    const url = new URL(trimmed);
-    return url.protocol === 'https:' ? url.toString() : null;
-  } catch { return null; }
-}
+const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
+const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 
 function collectUrls(value, found = []) {
   if (Array.isArray(value)) {
@@ -36,8 +17,10 @@ function collectUrls(value, found = []) {
     return found;
   }
   if (typeof value !== 'string') return found;
-  const absolute = toAbsoluteImageUrl(value);
-  if (absolute) found.push(absolute);
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol === 'https:') found.push(url.toString());
+  } catch { /* Ignore malformed or non-URL media values. */ }
   return found;
 }
 
@@ -84,11 +67,16 @@ module.exports = async function handler(req, res) {
       .eq('id', id)
       .eq('verdict', 'APPROVED')
       .eq('listing_type', 'WTS')
+      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
       .maybeSingle();
 
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Listing not found' });
     const rawSource = await resolveRawSource(client, data);
+    const normalized = normalizeMarketRow(
+      { ...data, raw_message: rawSource.text },
+      data.reference,
+    );
 
     const imageUrls = [...new Set([
       ...collectUrls(data.thumbnail_url),
@@ -103,9 +91,11 @@ module.exports = async function handler(req, res) {
         brand: data.brand,
         reference: data.reference,
         price_raw: data.price_raw,
-        price_usd: data.price_usd,
+        price_usd: normalized.analytics_price_usd,
+        stored_price_usd: data.price_usd,
+        price_normalization: normalized.price_normalization,
         currency: data.currency,
-        raw_message: rawSource.text,
+        raw_message: redactPublicSource(rawSource.text),
         raw_message_scope: rawSource.scope,
         raw_message_lineage_id: rawSource.lineage_id,
         created_at: data.created_at,

@@ -48,6 +48,7 @@ module.exports = async function handler(req, res) {
       'CURRENCY_CHANGED',
       'CURRENCY_AMBIGUOUS',
       'PRICE_PARSE_FAILED',
+      'EMOJI_PRICE_AMBIGUOUS',
     ];
     // The checkpoint is the exact throughput source. Load it first so a
     // temporary planner-count failure cannot hide live normalization progress.

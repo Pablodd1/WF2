@@ -39,7 +39,7 @@ interface InsightData {
   }>;
   prices: number[];
   rows: Array<{
-    price_usd: number; created_at: string; dial_color: string | null;
+    price_usd: number; created_at: string; listing_date?: string | null; dial_color: string | null;
     condition: string | null; source: string; year: number | null; raw_message: string;
   }>;
 }
@@ -100,7 +100,7 @@ export default function InsightDetails() {
     price: r.price_usd,
     currency: 'USD',
     dial: r.dial_color || 'N/A',
-    date: r.created_at ? r.created_at.split('T')[0] : '',
+    date: r.listing_date ? r.listing_date.split('T')[0] : '',
     condition: r.condition || 'N/A',
     region: '',
     phone: '',

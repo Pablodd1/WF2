@@ -4,12 +4,14 @@
  */
 
 const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
+const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (!requireServiceToken(req, res)) return;
 
   const kimiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
   if (!kimiKey) {
@@ -19,6 +21,9 @@ module.exports = async function handler(req, res) {
   const { imageBase64, imageUrl, reference } = req.body;
   if (!imageBase64 && !imageUrl) {
     return res.status(400).json({ error: 'imageBase64 or imageUrl required' });
+  }
+  if (imageBase64 && imageBase64.length > 14_000_000) {
+    return res.status(413).json({ error: 'imageBase64 exceeds the 10 MB image limit' });
   }
 
   const systemPrompt = `You are a luxury watch expert analyzing watch images.

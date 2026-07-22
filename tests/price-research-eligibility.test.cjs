@@ -48,6 +48,16 @@ test('rejects unsplit bundle source rows from price analytics', () => {
   );
 });
 
+test('rejects a numeric reference copied into the market price', () => {
+  assert.equal(
+    classifyResearchEligibility(
+      { brand: 'Rolex', reference: '16610', dial_color: 'Black', price_raw: 16610, price_usd: 16610 },
+      catalog,
+    ),
+    'REFERENCE_TOKEN_AS_PRICE',
+  );
+});
+
 test('WTB demand requires identity and dial but not an asking price', () => {
   assert.equal(classifyDemandEligibility({ ...valid, price_usd: null }, catalog), null);
   assert.equal(classifyDemandEligibility({ ...valid, dial_color: 'Purple', price_usd: null }, catalog), 'CATALOG_DIAL_MISMATCH');

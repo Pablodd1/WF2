@@ -4,7 +4,7 @@ const { parseNumber, segmentDealerMessage } = require('../../api/_lib/normalizat
 const { lookupCatalog } = require('../../api/_lib/catalog.js');
 const { comparisonKey, normalizeDialValue, resolveDial } = require('../../api/_lib/dial-normalization.cjs');
 
-const VERSION = 'v4.1-dial-context';
+const VERSION = 'v4.2-line-condition';
 const USD_PER_UNIT = { USD: 1, USDT: 1, HKD: 1 / 7.8, EUR: 1.08, GBP: 1.27, CHF: 1.12, SGD: 0.74, CNY: 0.138 };
 
 function normalizeText(value) {
@@ -60,7 +60,11 @@ function analyzeRecord(record) {
   const proposed = candidates.map(candidate => {
     const parsedPrices = candidate.prices || [];
     const sourceCurrencyPrice = parsedPrices.length ? null : sourceCurrencyTextObservation(candidate, record);
-    const retainedSourcePrice = parsedPrices.length || sourceCurrencyPrice ? null : sourcePriceObservation(record);
+    // A collapsed parent price cannot be assigned to an arbitrary child. Only
+    // retain a structured source price when the message resolves to one watch.
+    const retainedSourcePrice = candidates.length === 1 && !parsedPrices.length && !sourceCurrencyPrice
+      ? sourcePriceObservation(record)
+      : null;
     const prices = sourceCurrencyPrice ? [sourceCurrencyPrice] : retainedSourcePrice ? [retainedSourcePrice] : parsedPrices;
     const primary = prices.find(price => price.is_primary) || prices[0] || null;
     const candidateBrand = candidate.context.brand_context || record.brand || null;
@@ -93,6 +97,7 @@ function analyzeRecord(record) {
       dial_ambiguous: dial.ambiguous,
       dial_reason: dial.reason,
       prices,
+      emoji_price_ambiguous: candidate.emoji_price_ambiguous === true,
     };
   });
 
@@ -118,6 +123,7 @@ function analyzeRecord(record) {
       flags.add('CURRENCY_AMBIGUOUS');
     }
     if (!next.price_raw && record.price_raw != null) flags.add('PRICE_PARSE_FAILED');
+    if (next.listing_type !== 'WTB' && next.emoji_price_ambiguous) flags.add('EMOJI_PRICE_AMBIGUOUS');
   }
   const changeFlags = [...flags];
 

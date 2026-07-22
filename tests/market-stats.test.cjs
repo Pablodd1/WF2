@@ -4,9 +4,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   buildComparableCohorts,
-  buildDialFilters,
+  buildDialGroups,
   classifyPrice,
-  selectComparableRows,
+  marketPlausibilityFloor,
   summarizePrices,
 } = require('../api/_lib/market-stats.cjs');
 
@@ -53,58 +53,31 @@ test('merges dial labels that differ only by case', () => {
   assert.equal(cohorts[0].count, 2);
 });
 
-test('filters unknown dial/condition cohorts when includeUnknown is false', () => {
-  const cohorts = buildComparableCohorts([
-    { condition: 'Used', dial_color: 'Unknown' },
-    { condition: 'Unknown', dial_color: 'Blue' },
-    { condition: 'Used', dial_color: 'Black' },
-  ], { includeUnknown: false });
-  assert.equal(cohorts.length, 1);
-  assert.equal(cohorts[0].dial_color, 'Black');
-});
-
-test('keeps unknown cohorts when includeUnknown is true', () => {
-  const cohorts = buildComparableCohorts([
-    { condition: 'Used', dial_color: 'Unknown' },
+test('groups one dial once while preserving condition counts', () => {
+  const groups = buildDialGroups([
     { condition: 'New', dial_color: 'Blue' },
-  ], { includeUnknown: true });
-  const unknown = cohorts.find(item => item.condition.toLowerCase() === 'used' && item.dial_color.toLowerCase() === 'unknown');
-  assert.ok(Boolean(unknown));
+    { condition: 'Used', dial_color: 'Blue' },
+    { condition: null, dial_color: 'blue' },
+    { condition: 'New', dial_color: 'Green' },
+  ]);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].dial_color, 'Blue');
+  assert.equal(groups[0].count, 3);
+  assert.deepEqual(groups[0].condition_counts, { New: 1, Used: 1, Unspecified: 1 });
 });
 
-test('filters a price-history cohort by both dial and condition', () => {
+test('treats unknown and unspecified condition labels as one non-inferred cohort', () => {
   const rows = [
-    { dial_color: 'Blue', condition: 'New', id: 'blue-new' },
-    { dial_color: 'Blue', condition: 'Used', id: 'blue-used' },
-    { dial_color: 'Black', condition: 'Used', id: 'black-used' },
-    { dial_color: 'Blue', condition: 'Unknown', id: 'blue-unspecified' },
+    { condition: 'Unknown', dial_color: 'Blue' },
+    { condition: 'Unspecified', dial_color: 'Blue' },
+    { condition: null, dial_color: 'Blue' },
   ];
-
-  assert.deepEqual(
-    selectComparableRows(rows, { dial: 'Blue', condition: 'New' }).map(row => row.id),
-    ['blue-new']
-  );
-  assert.deepEqual(
-    selectComparableRows(rows, { dial: 'Blue', condition: 'All' }).map(row => row.id),
-    ['blue-new', 'blue-used', 'blue-unspecified']
-  );
-  assert.deepEqual(
-    selectComparableRows(rows, { dial: 'Blue', condition: 'Unspecified' }).map(row => row.id),
-    ['blue-unspecified']
-  );
-});
-
-test('builds dial filters without placeholder dial values', () => {
-  const filters = buildDialFilters([
-    { dial_color: 'Blue' },
-    { dial_color: 'blue' },
-    { dial_color: 'Unknown' },
-    { dial_color: 'Black' },
-  ]);
-  assert.deepEqual(filters, [
-    { dial_color: 'Blue', count: 2 },
-    { dial_color: 'Black', count: 1 },
-  ]);
+  const cohorts = buildComparableCohorts(rows);
+  const groups = buildDialGroups(rows);
+  assert.equal(cohorts.length, 1);
+  assert.equal(cohorts[0].condition, 'Unspecified');
+  assert.equal(cohorts[0].count, 3);
+  assert.deepEqual(groups[0].condition_counts, { Unspecified: 3 });
 });
 
 test('classifies row-level outliers with an auditable reason', () => {
@@ -122,5 +95,10 @@ test('rejects implausible watch prices before applying IQR fences', () => {
     { included: false, reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' }
   );
   assert.deepEqual(classifyPrice(24000, stats, { minimumPrice: 1000 }), { included: true, reason: null });
+});
+
+test('uses a conservative cohort-relative luxury-watch plausibility floor', () => {
+  assert.equal(marketPlausibilityFloor([20152, 109625, 130000, 172590, 239500]), 32500);
+  assert.equal(marketPlausibilityFloor([244, 229487, 240000, 244184, 250000, 262000]), 60523);
 });
 

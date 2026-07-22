@@ -15,6 +15,8 @@
  */
 
 const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
+const { fetchPublicImage } = require('./_lib/safe-image-fetch.cjs');
+const { authorizeMutation } = require('./_lib/authorize-mutation.cjs');
 
 function normRef(s) {
   return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -47,11 +49,8 @@ notes (short string)
 Set legible to false if the image is blurry, cropped, a box/strap only, or otherwise not a clear watch face. Be honest when unsure. Example: {"brand":"Rolex","referenceVisible":"116610LN","modelGuess":"Submariner","dialColor":"Black","legible":true,"confidence":92,"notes":"clear dial"}`;
 
 async function fetchImageBase64(imageUrl) {
-  const imgRes = await fetch(imageUrl);
-  if (!imgRes.ok) throw new Error(`Image fetch failed: ${imgRes.status}`);
-  const buf = Buffer.from(await imgRes.arrayBuffer());
-  const mime = imgRes.headers.get('content-type') || 'image/jpeg';
-  return { base64: buf.toString('base64'), mime };
+  const image = await fetchPublicImage(imageUrl);
+  return { base64: image.buffer.toString('base64'), mime: image.mime };
 }
 
 function repairJson(raw) {
@@ -139,6 +138,7 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!await authorizeMutation(req, res, new Set(['reviewer', 'admin']))) return;
 
   const { imageUrl, reference, brand } = req.body || {};
   if (!imageUrl) return res.status(400).json({ error: 'imageUrl required' });
@@ -217,6 +217,7 @@ module.exports = async function handler(req, res) {
     });
   } catch (e) {
     console.error('[verify-image]', e.message);
-    return res.status(500).json({ error: e.message });
+    const status = /image url|private|reserved|disallowed port|10 mb|not an image/i.test(e.message) ? 400 : 502;
+    return res.status(status).json({ error: status === 400 ? e.message : 'Image verification failed' });
   }
 }

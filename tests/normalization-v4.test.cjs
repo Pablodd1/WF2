@@ -5,11 +5,32 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
+  decodeNumericUnicode,
   extractPriceObservations,
+  hasUnresolvedEmojiPrice,
   inferBrandFromReference,
   parseNumber,
   segmentDealerMessage,
 } = require('../api/_lib/normalization-v4.cjs');
+
+test('decodes standard keycap and full-width digits without changing other emoji', () => {
+  assert.equal(decodeNumericUnicode('HKD 1\uFE0F\u20E32\uFE0F\u20E35\uFE0F\u20E3K \u{1F525}'), 'HKD 125K \u{1F525}');
+  assert.equal(decodeNumericUnicode('HKD \uFF11\uFF12\uFF15K'), 'HKD 125K');
+});
+
+test('parses keycap prices but preserves the exact raw price evidence', () => {
+  const prices = extractPriceObservations('126500 White HKD 1\uFE0F\u20E32\uFE0F\u20E35\uFE0F\u20E3K');
+  assert.equal(prices.length, 1);
+  assert.equal(prices[0].amount_original, 125_000);
+  assert.equal(prices[0].currency_original, 'HKD');
+  assert.equal(prices[0].raw_price_text, 'HKD 1\uFE0F\u20E32\uFE0F\u20E35\uFE0F\u20E3K');
+});
+
+test('routes private emoji price codes to review instead of guessing a value', () => {
+  assert.equal(hasUnresolvedEmojiPrice('126500 White HKD \u{1F525}\u{1F4B0}'), true);
+  assert.equal(hasUnresolvedEmojiPrice('126500 White \u{1F525} HKD 125K'), false);
+  assert.equal(hasUnresolvedEmojiPrice('126500 White \u{1F525}'), false);
+});
 
 test('inherits HKD for bare dollar prices under an HKD section', () => {
   const candidates = segmentDealerMessage(`
@@ -36,6 +57,39 @@ test('parses Chinese HKD labels and ten-thousand multipliers without a USD fallb
   assert.equal(prices[0].amount_original, 2_200_000);
   assert.equal(prices[0].currency_original, 'HKD');
   assert.equal(prices[0].currency_evidence, 'explicit_line_currency');
+});
+
+test('normalizes explicit HDK typo markers before and after the amount', () => {
+  const prefix = extractPriceObservations('HDK 380K');
+  const suffix = extractPriceObservations('380K HDK');
+  for (const prices of [prefix, suffix]) {
+    assert.equal(prices.length, 1);
+    assert.equal(prices[0].amount_original, 380_000);
+    assert.equal(prices[0].currency_original, 'HKD');
+    assert.equal(prices[0].amount_usd, 48_718);
+    assert.equal(prices[0].currency_evidence, 'explicit_line_currency');
+  }
+});
+
+test('parses explicit mil, mill, and million multipliers on either side of HKD', () => {
+  const cases = [
+    ['HKD 380 mil', 380_000],
+    ['380 mil HKD', 380_000],
+    ['HKD 1.2 mill', 1_200_000],
+    ['1.2 million HKD', 1_200_000],
+  ];
+
+  for (const [raw, expected] of cases) {
+    const prices = extractPriceObservations(raw);
+    assert.equal(prices.length, 1, raw);
+    assert.equal(prices[0].amount_original, expected, raw);
+    assert.equal(prices[0].currency_original, 'HKD', raw);
+  }
+});
+
+test('does not assign a currency to a multiplier without explicit or inherited evidence', () => {
+  assert.deepEqual(extractPriceObservations('380 mil'), []);
+  assert.deepEqual(extractPriceObservations('1.2 million'), []);
 });
 
 test('inherits Chinese HKD section context for bare dollar prices', () => {
@@ -177,4 +231,119 @@ test('extracts all 13 watches from the Hong Kong inventory fixture', () => {
   assert.equal(candidates[0].prices[0].currency_original, 'HKD');
   assert.equal(candidates[11].context.brand_context, 'Patek Philippe');
   assert.equal(candidates[12].context.brand_context, 'Rolex');
+});
+
+test('accepts HK only beside a price without treating location text as currency context', () => {
+  const suffix = extractPriceObservations('4.2m HK');
+  const prefix = extractPriceObservations('HK 380k');
+  assert.equal(suffix[0].amount_original, 4_200_000);
+  assert.equal(suffix[0].currency_original, 'HKD');
+  assert.equal(prefix[0].amount_original, 380_000);
+  assert.equal(prefix[0].currency_original, 'HKD');
+
+  const locationOnly = segmentDealerMessage('126334 Used 2023 $125000 arrive HK');
+  assert.deepEqual(locationOnly[0].prices, []);
+  assert.equal(locationOnly[0].context.currency_context, undefined);
+});
+
+test('does not absorb an alphanumeric certificate token into an HKD price', () => {
+  const prices = extractPriceObservations('5711/1A white, 2019y, SC330,950k hkd');
+  assert.equal(prices.length, 1);
+  assert.equal(prices[0].amount_original, 950_000);
+  assert.equal(prices[0].currency_original, 'HKD');
+});
+
+test('prefers the amount after a shared currency token over a preceding year or edition count', () => {
+  const year = extractPriceObservations('15202BA yellow NOS 2018 HKD 720,000');
+  const edition = extractPriceObservations('26620IO Black Panther 2021 Ltd 250 HKD 1,450,000');
+  assert.deepEqual(year.map(price => price.amount_original), [720_000]);
+  assert.deepEqual(edition.map(price => price.amount_original), [1_450_000]);
+
+  const explicitPair = extractPriceObservations('105,000HK$/13,500US$');
+  assert.deepEqual(explicitPair.map(price => [price.amount_original, price.currency_original]), [
+    [105_000, 'HKD'],
+    [13_500, 'USD'],
+  ]);
+});
+
+test('keeps both outward prices when a currency token bridges two explicit amounts', () => {
+  const prices = extractPriceObservations('RM65-01 LeBron James N10/25 498k Usdt 3.85m hkd');
+  assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original, price.amount_usd]), [
+    [498_000, 'USDT', 498_000],
+    [3_850_000, 'HKD', 493_590],
+  ]);
+});
+
+test('prefers prefix pairs when a year or date fragment starts a currency chain', () => {
+  const yearChain = extractPriceObservations('New 5072R 2024 HKD 1.545M USDT 200,000');
+  const dateChain = extractPriceObservations('New RM07-01 2025/8HKD 2.04m usdt 260000');
+  assert.deepEqual(yearChain.map(price => [price.amount_original, price.currency_original]), [
+    [1_545_000, 'HKD'],
+    [200_000, 'USDT'],
+  ]);
+  assert.deepEqual(dateChain.map(price => [price.amount_original, price.currency_original]), [
+    [2_040_000, 'HKD'],
+    [260_000, 'USDT'],
+  ]);
+});
+
+test('accepts punctuation between an explicit currency and amount', () => {
+  const prices = extractPriceObservations('5980/60G-001 N8/25 HKD:1340000');
+  assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original]), [
+    [1_340_000, 'HKD'],
+  ]);
+});
+
+test('does not replace a valid price with a following month or year', () => {
+  const month = extractPriceObservations('6007G red $225,000hkd 5/2025');
+  const year = extractPriceObservations('5711/110P $3,200,000hkd 2019');
+  assert.deepEqual(month.map(price => [price.amount_original, price.currency_original]), [
+    [225_000, 'HKD'],
+  ]);
+  assert.deepEqual(year.map(price => [price.amount_original, price.currency_original]), [
+    [3_200_000, 'HKD'],
+  ]);
+});
+
+test('does not parse date fragments as standalone currency prices', () => {
+  assert.deepEqual(extractPriceObservations('5980/60G 12/2025 HKD'), []);
+  assert.deepEqual(extractPriceObservations('5726/1A blue 2025/8 HK'), []);
+});
+
+test('does not concatenate a comma-delimited year with the following price', () => {
+  const cases = [
+    ['Brand new 26656ti,N12/2024,3.1M hkd ready hk', 3_100_000],
+    ['Brand new 15605sk blue,N4/2025,255K HKD', 255_000],
+    ['Brand new 5990/1r N8/2024,1.99M hkd,ready hk', 1_990_000],
+  ];
+  for (const [raw, amount] of cases) {
+    const prices = extractPriceObservations(raw);
+    assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original]), [
+      [amount, 'HKD'],
+    ]);
+  }
+});
+
+test('does not treat the first letter of a following word as a multiplier', () => {
+  const prices = extractPriceObservations('79010SG-0001 new 2021 NOS HKD 20,000 White Tag');
+  assert.deepEqual(prices.map(price => [price.amount_original, price.currency_original]), [
+    [20_000, 'HKD'],
+  ]);
+});
+
+test('does not treat a reference ending in M as a section-inherited million price', () => {
+  const prices = extractPriceObservations('9??14060M black oys 18y Card 65600', {
+    currency_context: 'HKD',
+  });
+  assert.deepEqual(prices, []);
+});
+
+test('explicit listing condition overrides an inherited section condition', () => {
+  const candidates = segmentDealerMessage(`Audemars Piguet Brand New
+15202bc salmon 2019 used full set 855k hkd
+15510ST black N11/2025 New 365k hkd`);
+
+  assert.equal(candidates.length, 2);
+  assert.equal(candidates[0].context.condition_context, 'Used');
+  assert.equal(candidates[1].context.condition_context, 'New');
 });
