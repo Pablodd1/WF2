@@ -904,7 +904,9 @@ module.exports = async function handler(req, res) {
             'Range-Unit': 'items',
             'Range': `${start}-${end}`,
             // Estimated counts avoid a full-table count for a multi-million-row archive.
-            'Prefer': 'count=estimated',
+            // Estimated counts may fall back to an exact scan for filtered
+            // cohorts. Reference search only needs a fast approximate total.
+            'Prefer': search ? 'count=planned' : 'count=estimated',
           },
         }
       );
