@@ -38,7 +38,26 @@ function lookupModel(reference, brand) {
 // market_reference_indicators_current has never been queried by live code — if
 // column names differ, we fall back to a live-derived count. REAL DATA ONLY:
 // no invented seller/buyer numbers.
-async function lookupLiquidity(client, reference, listingCount, demand) {
+function normalizeConditionFilter(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'new') return 'New';
+  if (normalized === 'used') return 'Used';
+  if (normalized === 'all' || normalized === 'all conditions' || !normalized) return 'All';
+  return 'Unspecified';
+}
+
+function matchesSelection(row, selection) {
+  const dial = String(row.dial_color || '').trim().toLowerCase();
+  if (!dial || (selection.dial && dial !== String(selection.dial).toLowerCase())) return false;
+  return selection.condition === 'All' || normalizeConditionFilter(row.condition) === selection.condition;
+}
+
+async function lookupLiquidity(client, reference, listingCount, demand, selection) {
+  // Reference-level indicators are not valid evidence for a dial/condition
+  // selection. Use scoped live counts instead of displaying stale aggregates.
+  if (selection?.dial || selection?.condition !== 'All') {
+    return { source: 'live_fallback', listing_count: listingCount, ...demand };
+  }
   try {
     const { data, error } = await client
       .from('market_reference_indicators_current')
@@ -64,10 +83,10 @@ async function lookupLiquidity(client, reference, listingCount, demand) {
   return { source: 'live_fallback', listing_count: listingCount, ...demand };
 }
 
-async function lookupDemand(client, brand, referenceVariants, catalog) {
+async function lookupDemand(client, brand, referenceVariants, catalog, selection) {
   const { data, error } = await client
     .from('watch_records')
-    .select('id,brand,reference,dial_color,listing_type,verdict,raw_message,flags')
+    .select('id,brand,reference,dial_color,condition,listing_type,verdict,raw_message,flags')
     .eq('brand', brand)
     .in('reference', referenceVariants)
     .in('listing_type', ['WTB', 'NTQ'])
@@ -81,7 +100,10 @@ async function lookupDemand(client, brand, referenceVariants, catalog) {
     .map(row => ({ ...row, bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds) }))
     .filter(row => !classifyDemandEligibility(row, catalog));
   const grouped = new Map();
-  for (const row of eligible) {
+  for (const row of eligible.filter(row => matchesSelection({
+    ...row,
+    dial_color: normalizeDialValue(row.dial_color).known ? normalizeDialValue(row.dial_color).value : '',
+  }, selection))) {
     const normalizedDial = normalizeDialValue(row.dial_color);
     const dial = normalizedDial.known ? normalizedDial.value : '';
     const key = dial.toLowerCase();
@@ -336,7 +358,6 @@ module.exports = async function handler(req, res) {
     // Reposts remain immutable evidence, but the same dealer repeatedly offering
     // the same configuration at the same price is one market observation.
     const { uniqueRows: marketRows, repostRows } = deduplicateReposts(eligibleMarketRows);
-    const currencyCorrections = analyticsRows.filter(row => row.price_normalization).length;
     const isUnknownDial = value => {
       const normalized = String(value || '').trim().toUpperCase();
       return !normalized || ['UNKNOWN', 'UNSPECIFIED', 'N/A', 'NA', 'NONE', 'NULL', '-'].includes(normalized);
@@ -350,23 +371,17 @@ module.exports = async function handler(req, res) {
     const selectedDialGroup = dialGroups.find(group =>
       !requestedDial || group.dial_color.toLowerCase() === requestedDial
     ) || dialGroups[0] || { dial_color: 'Unspecified', rows: [], count: 0, condition_counts: {} };
-    const normalizedRequestedCondition = requestedCondition === 'unknown' ? 'unspecified' : requestedCondition;
-    const selectedRows = normalizedRequestedCondition && normalizedRequestedCondition !== 'all'
-      ? selectedDialGroup.rows.filter(row => {
-          const rowCondition = String(row.condition || 'Unspecified').trim().toLowerCase();
-          const normalizedRowCondition = rowCondition === 'unknown' ? 'unspecified' : rowCondition;
-          return normalizedRowCondition === normalizedRequestedCondition;
-        })
-      : selectedDialGroup.rows;
+    const selectedCondition = normalizeConditionFilter(requestedCondition);
+    const selection = { dial: selectedDialGroup.dial_color, condition: selectedCondition };
+    const selectedRows = selectedDialGroup.rows.filter(row => matchesSelection(row, selection));
     const selectedCohort = {
-      condition: normalizedRequestedCondition && normalizedRequestedCondition !== 'all'
-        ? (normalizedRequestedCondition === 'unspecified' ? 'Unspecified' : (selectedRows[0]?.condition || 'Unspecified'))
-        : 'All conditions',
+      condition: selectedCondition === 'All' ? 'All conditions' : selectedCondition,
       dial_color: selectedDialGroup.dial_color,
       rows: selectedRows,
       count: selectedRows.length,
     };
     const listedRows = selectedCohort.rows;
+    const currencyCorrections = listedRows.filter(row => row.price_normalization).length;
 
     // A deterministic safety floor runs before IQR. Otherwise a malformed low-
     // price cluster can make the IQR lower fence negative and contaminate every
@@ -384,7 +399,11 @@ module.exports = async function handler(req, res) {
     const {
       statisticalOutlierRows,
       allExcludedRows: outlierRows,
-    } = partitionExcludedEvidence(requiredFieldExclusions, repostRows, classifiedRows);
+    } = partitionExcludedEvidence(
+      requiredFieldExclusions.filter(row => matchesSelection(row, selection)),
+      repostRows.filter(row => matchesSelection(row, selection)),
+      classifiedRows
+    );
 
     // Monthly aggregation
     const monthlyMap = {};
@@ -409,7 +428,7 @@ module.exports = async function handler(req, res) {
     // must be selected so New, Used, and unstated inventory never share a
     // trend line. The helper also enforces sample, identity, recency, and
     // rolling-backtest gates before returning any future values.
-    const forecastCandidate = requestedCondition && requestedCondition !== 'all'
+    const forecastCandidate = selectedCondition !== 'All'
       ? buildMarketForecast(includedRows)
       : {
           ready: false,
@@ -417,20 +436,14 @@ module.exports = async function handler(req, res) {
           offer_count: includedRows.length,
           verified_dealer_count: new Set(includedRows.map(row => row.dealer_id).filter(Boolean)).size,
         };
-    const forecast = forecastCandidate.ready && process.env.ENABLE_PRICE_FORECASTS !== 'true'
-      ? {
-          ready: false,
-          reasons: ['FEATURE_NOT_RELEASED'],
-          offer_count: forecastCandidate.offer_count,
-          verified_dealer_count: forecastCandidate.verified_dealer_count,
-          backtest: forecastCandidate.backtest,
-          release_candidate: true,
-        }
-      : forecastCandidate;
+    const forecast = forecastCandidate;
 
     // ── Dial analysis: EVERY dial color found in real listings (rule: all must show) ──
     const dialMap = {};
-    marketRows.forEach(r => {
+    const dialAnalysisRows = selectedCondition === 'All'
+      ? marketRows
+      : marketRows.filter(row => normalizeConditionFilter(row.condition) === selectedCondition);
+    dialAnalysisRows.forEach(r => {
       const dial = r.dial_color || 'Unspecified';
       const key = String(dial).trim().toLowerCase();
       if (!dialMap[key]) dialMap[key] = { dial_color: String(dial).trim(), rows: [] };
@@ -454,8 +467,8 @@ module.exports = async function handler(req, res) {
 
     // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
     const model = catalogHit?.found ? (catalogHit.model || null) : lookupModel(targetRef, brand);
-    const demand = await lookupDemand(client, brand, referenceVariants, catalogHit);
-    const liquidity = await lookupLiquidity(client, targetRef, marketRows.length, demand);
+    const demand = await lookupDemand(client, brand, referenceVariants, catalogHit, selection);
+    const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
     const outlierEvidenceLimit = 100;
     const serializedOutliers = outlierRows.slice(0, outlierEvidenceLimit);
@@ -487,11 +500,12 @@ module.exports = async function handler(req, res) {
         unsplit_parent_excluded_count: bundleParentExcludedCount,
         status: bundleParentExcludedCount ? 'excluded_from_analytics' : 'clean',
       },
-      totalListings,
-      listing_count: marketRows.length,
-      eligible_observation_count: eligibleMarketRows.length,
-      unique_offer_count: marketRows.length,
-      repost_count: repostRows.length,
+      totalListings: listedRows.length,
+      reference_listing_count: totalListings,
+      listing_count: listedRows.length,
+      eligible_observation_count: listedRows.length,
+      unique_offer_count: listedRows.length,
+      repost_count: repostRows.filter(row => matchesSelection(row, selection)).length,
       sampledListings: rows.length,
       sampleCapped: baseSampleCount >= sampleLimit,
       count: prices.length,

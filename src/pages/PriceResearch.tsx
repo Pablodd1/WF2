@@ -245,8 +245,32 @@ function conditionLabel(condition: string) {
 }
 
 function dialChartColor(color: string) {
+  if (['white', 'white dial', 'silver', 'grey', 'gray', 'mother of pearl', 'mop'].includes(color.trim().toLowerCase())) return NAVY;
   const swatch = dialSwatch(color);
   return swatch.startsWith('#') ? swatch : '#9aa1aa';
+}
+
+function PriceHistoryTooltip({ active, label, payload }: {
+  active?: boolean;
+  label?: string;
+  payload?: Array<{ payload?: Record<string, number | string | null> }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0]?.payload || {};
+  const projected = Number(point.forecast) > 0;
+  const average = Number(projected ? point.forecast : point.avg);
+  const minimum = Number(projected ? point.forecastLower : point.min);
+  const maximum = Number(projected ? point.forecastUpper : point.max);
+  const count = Number(point.count || 0);
+  const money = (value: number) => `$${Math.round(value).toLocaleString()}`;
+  return (
+    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '10px 12px', fontSize: 12 }}>
+      <div style={{ color: NAVY, fontWeight: 700, marginBottom: 5 }}>{label}{projected ? ' (projected)' : ''}</div>
+      {Number.isFinite(average) && <div style={{ color: TEXT }}>{projected ? 'Projected average' : 'Average'}: <strong>{money(average)}</strong></div>}
+      {Number.isFinite(minimum) && Number.isFinite(maximum) && <div style={{ color: MUTED }}>Range: {money(minimum)} - {money(maximum)}</div>}
+      {!projected && <div style={{ color: MUTED }}>Listings: {count.toLocaleString()}</div>}
+    </div>
+  );
 }
 
 // ── Component ──────────────────────────────────────────────────
@@ -412,6 +436,10 @@ export default function PriceResearch() {
       }
     : null;
 
+  const activeDial = data?.selected_cohort.dial_color || '';
+  const activeCondition = conditionLabel(data?.selected_cohort.condition || 'All');
+  const selectedDialLine = activeDial ? dialChartColor(activeDial) : BLUE;
+  const priceHistoryTitle = `${activeDial || 'Selected'} Dial Price History - ${activeCondition === 'All' ? 'All Conditions' : activeCondition}`;
   const chartData: Array<Record<string, number | string | null>> = (data?.monthly || []).map(m => ({
     month: m.month,
     min: m.min_price,
@@ -629,7 +657,7 @@ export default function PriceResearch() {
                         key={group.dial_color}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => void fetchData(data.reference, '', group.dial_color, data.brand)}
+                        onClick={() => void fetchData(data.reference, activeCondition === 'All' ? '' : activeCondition, group.dial_color, data.brand)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 12px',
                           borderRadius: 8, cursor: 'pointer', backgroundColor: selected ? '#eef1f6' : WHITE,
@@ -888,13 +916,13 @@ export default function PriceResearch() {
             )}
 
             {/* ── Price Chart ───────────────────────────────── */}
-            {data.analytics_ready && chartData.length >= 1 && (
+            {chartData.length >= 1 ? (
               <>
                 <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Price History (Monthly)</h3>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{priceHistoryTitle}</h3>
                     <div className="flex gap-3">
-                      <span style={{ fontSize: 13, color: MUTED }}>Included observations only</span>
+                      <span style={{ fontSize: 13, color: MUTED }}>{data.analytics_ready ? 'Included observations only' : 'Observational evidence only'}</span>
                     </div>
                   </div>
 
@@ -903,18 +931,15 @@ export default function PriceResearch() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#dee2e6" />
                       <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
                       <YAxis stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                        formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                      />
-                      <Area type="monotone" dataKey="max" name="Maximum price" stroke="none" fill={RED} fillOpacity={0.05} />
+                      <Tooltip content={<PriceHistoryTooltip />} />
+                      <Area type="monotone" dataKey="max" name="Maximum price" stroke="none" fill={selectedDialLine} fillOpacity={0.14} />
                       <Area type="monotone" dataKey="min" name="Minimum price" stroke="none" fill={GREEN} fillOpacity={0.05} />
-                      <Area type="monotone" dataKey="forecastUpper" stroke="none" fill={GOLD} fillOpacity={0.10} connectNulls={false} />
+                      <Area type="monotone" dataKey="forecastUpper" stroke="none" fill={selectedDialLine} fillOpacity={0.09} connectNulls={false} />
                       <Area type="monotone" dataKey="forecastLower" stroke="none" fill={WHITE} fillOpacity={1} connectNulls={false} />
-                      <Line type="monotone" dataKey="max" name="Maximum price" stroke={RED} strokeWidth={1} dot={false} />
-                      <Line type="monotone" dataKey="avg" name="Average price" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: WHITE, strokeWidth: 2 }} />
-                      <Line type="monotone" dataKey="min" name="Minimum price" stroke={GREEN} strokeWidth={1} dot={false} />
-                      <Line type="monotone" dataKey="forecast" name="Three-month projection" stroke={GOLD} strokeWidth={2} strokeDasharray="6 5" dot={{ r: 4, fill: GOLD, stroke: WHITE, strokeWidth: 2 }} connectNulls />
+                      <Line type="monotone" dataKey="max" name="Maximum price" stroke={selectedDialLine} strokeOpacity={0.45} strokeWidth={1} dot={false} />
+                      <Line type="monotone" dataKey="avg" name="Average price" stroke={selectedDialLine} strokeWidth={3} dot={{ r: 4, fill: selectedDialLine, stroke: WHITE, strokeWidth: 2 }} />
+                      <Line type="monotone" dataKey="min" name="Minimum price" stroke={selectedDialLine} strokeOpacity={0.45} strokeWidth={1} dot={false} />
+                      <Line type="monotone" dataKey="forecast" name="Three-month projection" stroke={selectedDialLine} strokeWidth={2} strokeDasharray="6 5" dot={{ r: 4, fill: selectedDialLine, stroke: WHITE, strokeWidth: 2 }} connectNulls />
                     </ComposedChart>
                   </ResponsiveContainer>
 
@@ -924,13 +949,17 @@ export default function PriceResearch() {
                       ${stats?.min?.toLocaleString() || 'N/A'} MIN
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: BLUE, display: 'inline-block' }} />
+                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: selectedDialLine, display: 'inline-block' }} />
                       ${stats?.avg?.toLocaleString() || 'N/A'} AVERAGE
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: RED, display: 'inline-block' }} />
                       ${stats?.max?.toLocaleString() || 'N/A'} MAX
                     </span>
+                    {data.forecast?.ready && <span className="flex items-center gap-1.5">
+                      <span style={{ width: 18, borderTop: `2px dashed ${selectedDialLine}`, display: 'inline-block' }} />
+                      3-month projection
+                    </span>}
                   </div>
 
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
@@ -942,11 +971,18 @@ export default function PriceResearch() {
                     </div>
                   ) : (
                     <div className="mt-4 border-l-2 border-[#adb5bd] bg-white px-4 py-3 text-xs leading-6" style={{ color: MUTED }}>
-                      Three-month projection withheld: {forecastReason(data.forecast?.reasons?.[0])}. Historical observations remain available above.
+                      {activeCondition === 'All'
+                        ? 'Select New, Used, or Unspecified to view the three-month forecast.'
+                        : `Three-month projection withheld: ${forecastReason(data.forecast?.reasons?.[0])}. Historical observations remain available above.`}
                     </div>
                   )}
                 </div>
               </>
+            ) : (
+              <section aria-label="Insufficient price history evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Not enough comparable listings to display a reliable price history for this selection.</h3>
+                <p style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>Choose another condition or dial color to inspect its independent evidence.</p>
+              </section>
             )}
 
             {/* ── Listings Table ──────────────────────────────── */}

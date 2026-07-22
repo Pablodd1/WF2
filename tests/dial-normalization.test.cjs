@@ -10,7 +10,7 @@ const {
 } = require('../api/_lib/dial-normalization.cjs');
 
 test('turns placeholder dial values into audited unknown values', () => {
-  for (const value of [null, '', 'Unknown', 'N/A', 'none', '-']) {
+  for (const value of [null, '', 'Unknown', 'N/A', 'none', '-', 'UNKNOW', 'Unknow', 'No Color', 'unknown color']) {
     assert.equal(normalizeDialValue(value).value, null);
   }
 });
