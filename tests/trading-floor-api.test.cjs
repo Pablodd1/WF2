@@ -44,7 +44,7 @@ test('recent inventory excludes recycle rows and undated imports', async () => {
   assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
   assert.equal(url.searchParams.get('id'), 'not.like.preview_demo_*');
   assert.equal(url.searchParams.get('created_at'), 'not.is.null');
-  assert.equal(url.pathname, '/rest/v1/trading_floor_listings');
+  assert.equal(url.pathname, '/rest/v1/trading_floor_market_listings');
 });
 
 test('all inventory still excludes recycle rows but includes undated imports', async () => {
@@ -52,9 +52,10 @@ test('all inventory still excludes recycle rows but includes undated imports', a
   assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
   assert.equal(url.searchParams.get('id'), 'not.like.preview_demo_*');
   assert.equal(url.searchParams.has('created_at'), false);
+  assert.equal(url.pathname, '/rest/v1/trading_floor_listings');
 });
 
-test('reference search reaches dated and undated non-recycle inventory', async () => {
+test('reference search reaches dated and undated eligible market inventory', async () => {
   const url = await runQuery({ quality: 'market', q: '116500LN' });
   assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
   assert.equal(url.searchParams.get('id'), 'not.like.preview_demo_*');
@@ -71,6 +72,19 @@ test('WTB includes NTQ but excludes unsplit bundle parents', async () => {
 test('watch category and buyer intent can be combined', async () => {
   const url = await runQuery({ quality: 'market', item: 'watches', type: 'WTB' });
   assert.equal(url.searchParams.get('listing_type'), 'in.(WTB,NTQ)');
+  assert.equal(url.pathname, '/rest/v1/trading_floor_market_listings');
+});
+
+test('strict market view requires complete watch identity and a plausible WTS price', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260722120000_strict_market_publication_view.sql'), 'utf8');
+  assert.match(sql, /CREATE OR REPLACE VIEW public\.trading_floor_market_listings/);
+  assert.match(sql, /NULLIF\(trim\(brand\), ''\) IS NOT NULL/);
+  assert.match(sql, /NULLIF\(trim\(reference\), ''\) IS NOT NULL/);
+  assert.match(sql, /NULLIF\(trim\(dial_color\), ''\) IS NOT NULL/);
+  assert.match(sql, /listing_type IN \('WTB', 'NTQ'\)/);
+  assert.match(sql, /listing_type = 'WTS'[\s\S]*price_usd >= 1000/);
 });
 
 test('public inventory excludes multi, trade, and unrecognized listing types', async () => {

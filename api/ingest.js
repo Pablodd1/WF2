@@ -776,7 +776,12 @@ module.exports = async function handler(req, res) {
       const end = start + pageSize - (cursorMode ? 0 : 1);
       // Both server-key and publishable-key reads use the same customer-safe
       // database view so publication rules cannot drift by deployment mode.
-      const tableName = 'trading_floor_listings';
+      // Main inventory is intentionally stricter than the archive: incomplete
+      // watch identity and implausible WTS prices remain reviewable in the full
+      // archive but cannot consume customer-market page slots or totals.
+      const tableName = quality === 'archive'
+        ? 'trading_floor_listings'
+        : 'trading_floor_market_listings';
       const params = new URLSearchParams({
         // Keep this response marketplace-safe even when a server key is used.
         select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region',
