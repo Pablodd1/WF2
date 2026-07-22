@@ -221,6 +221,8 @@ async function scan() {
   const samples = [];
   const canaryCandidates = [];
   const counts = {
+    currencyStatus: {},
+    unprovenCurrencyRows: 0,
     mismatchRows: 0,
     bySeverity: {},
     byReason: {},
@@ -238,6 +240,9 @@ async function scan() {
     lastId = rows[rows.length - 1].id;
 
     for (const row of rows) {
+      const currencyStatus = normalizeMarketRow(row, row.reference).analytics_currency_status || 'UNKNOWN';
+      bump(counts.currencyStatus, currencyStatus);
+      if (currencyStatus !== 'VERIFIED') counts.unprovenCurrencyRows += 1;
       const finding = auditRow(row, { minDeltaPct });
       if (!finding) continue;
       counts.mismatchRows += 1;
