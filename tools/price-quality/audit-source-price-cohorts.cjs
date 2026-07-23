@@ -179,7 +179,7 @@ async function main() {
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
   const maxRows = bounded('SOURCE_PRICE_AUDIT_MAX_ROWS', 10_000, 1, 2_700_000);
   const pageSize = bounded('SOURCE_PRICE_AUDIT_PAGE_SIZE', 500, 50, 1_000);
-  const checkpointRows = bounded('SOURCE_PRICE_AUDIT_CHECKPOINT_ROWS', 10_000, pageSize, 100_000);
+  const checkpointRows = bounded('SOURCE_PRICE_AUDIT_CHECKPOINT_ROWS', 25_000, pageSize, 100_000);
   const sampleLimit = bounded('SOURCE_PRICE_AUDIT_SAMPLE_LIMIT', 100, 1, 1_000);
   const outputDir = path.resolve(process.env.SOURCE_PRICE_AUDIT_OUTPUT || 'audit-output/price-research/source-cohorts');
   const checkpointPath = path.join(outputDir, 'checkpoint.json');
