@@ -23,6 +23,24 @@ test('accepts a source-backed price recommendation', async () => {
   assert.equal(result.status, 'accepted_for_primary_review');
 });
 
+test('accepts an explicit currency token attached to a dealer shorthand amount', async () => {
+  const input = fixture('price.csv', [
+    'source_record_id,reference,raw_evidence_line,stored_price_usd,proposed_price_usd,source_currency_status,recommendation,reason,confidence,needs_human_review',
+    'row-hkd,124200,124200 Beige N10 hkd57k,57000,7296,VERIFIED,APPLY_CANDIDATE,explicit hkd57k,1,true',
+  ].join('\n'));
+  const result = await validate(input, { expectedRows: 1 });
+  assert.equal(result.status, 'accepted_for_primary_review');
+});
+
+test('accepts an explicit currency token joined to the preceding dealer text', async () => {
+  const input = fixture('price.csv', [
+    'source_record_id,reference,raw_evidence_line,stored_price_usd,proposed_price_usd,source_currency_status,recommendation,reason,confidence,needs_human_review',
+    'row-hkd-joined,26240OR,26240OR Full Gold 2025YHKD980K,980000,125440,VERIFIED,APPLY_CANDIDATE,explicit HKD980K,1,true',
+  ].join('\n'));
+  const result = await validate(input, { expectedRows: 1 });
+  assert.equal(result.status, 'accepted_for_primary_review');
+});
+
 test('blocks an apply recommendation based on a bare dollar price', async () => {
   const input = fixture('price.csv', [
     'source_record_id,reference,raw_evidence_line,stored_price_usd,proposed_price_usd,source_currency_status,recommendation,reason,confidence,needs_human_review',

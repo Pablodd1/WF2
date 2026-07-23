@@ -39,7 +39,9 @@ const ALLOWED = {
   bundle: new Set(['SINGLE_LISTING', 'SPLIT_REQUIRED', 'CHILD_LISTING', 'PARENT_ENVELOPE', 'UNVERIFIED']),
 };
 
-const explicitCurrency = /(?:\b(?:USD|USDT|HKD|HDK)\b|US\$|U\$|HK\$|港币)/iu;
+// Dealer messages commonly attach the ISO marker to the amount (for example, hkd57k).
+// Accept that explicit syntax while continuing to reject a bare "$".
+const explicitCurrency = /(?:\b(?:USD|USDT|HKD|HDK)\b|(?:USD|USDT|HKD|HDK)(?=\s*[$\d])|(?<=[\dKkMm])(?:USD|USDT|HKD|HDK)(?![A-Za-z])|US\$|U\$|HK\$|港币)/iu;
 const truthy = value => /^(?:true|1|yes)$/i.test(String(value || '').trim());
 const value = (row, key) => String(row[key] || '').trim();
 

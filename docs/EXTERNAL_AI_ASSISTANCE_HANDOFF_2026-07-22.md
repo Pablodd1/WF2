@@ -179,6 +179,27 @@ Before the primary CTO accepts external output:
 
 External AI output is never itself an approval or publication decision.
 
+## Corrected Kimi price handoff intake
+
+The corrected Kimi price handoff was independently validated on July 22. Its
+`105,818` price rows passed the repository schema, row-count, duplicate-key,
+explicit-currency, positive-price, and bare-dollar gates. Valid Hong Kong dealer
+forms with joined currency markers, such as `hkd57k` and `2025YHKD980K`, are
+explicit currency evidence; a bare `$` remains ambiguous.
+
+The handoff is accepted for primary review only. Its source IDs originate from
+the static `public/parsedWatches.json` export (`wa_*` / `pk_*`) and do not map
+to live `watch_records.id` values. A bounded Railway-backed read-only join found
+609 explicit-USD candidates and zero live source-ID matches. Do not stage or
+apply this file. Future external price work must start from a source-backed
+export that carries the immutable live `watch_records.id`, or include a verified
+source-ID mapping artifact.
+
+The existing live `price_remediation_review` ledger remains separate from this
+Kimi handoff. On July 22 it contained 194 rows: 94 already applied and 100
+pending. Its dry-run source recheck found 82 currently eligible and 18 blocked;
+that result is not a human approval to apply the 82 rows.
+
 ## Validate returned CSV files
 
 The repository includes a streaming, read-only intake validator. It supports
