@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { confirmCatalogCandidate } = require('../api/_lib/catalog-confirmation.cjs');
 const { buildPromotionDecision } = require('../tools/shadow-reprocess/promotion-policy.cjs');
 const { listCatalogBrands, listEquivalentReferences, lookupCatalog } = require('../api/_lib/catalog.js');
@@ -124,6 +126,13 @@ test('returns verified shorthand and canonical references as one market family',
     new Set(['5712/1R', '5712/1R-001']),
   );
   assert.deepEqual(listEquivalentReferences('116500LN', 'Rolex'), ['116500LN']);
+});
+
+test('price research normalizes every resolved reference variant', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
+  assert.match(source, /normalizeMarketRow\(row,\s*referenceVariants\)/);
+  assert.doesNotMatch(source, /normalizeMarketRow\(row,\s*\[rawRef,\s*targetRef\]\)/);
+  assert.match(source, /\.order\('created_at', \{ ascending: false \}\)\s*\.order\('id', \{ ascending: false \}\)/);
 });
 
 test('confirms a proposed dial only when it agrees with the exact catalog reference', () => {

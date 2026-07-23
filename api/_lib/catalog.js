@@ -325,7 +325,7 @@ function listEquivalentReferences(reference, expectedBrand = null) {
   }
 
   const match = lookupCatalog(reference, expectedBrand);
-  if (!match?.found) return [...references];
+  if (!match?.found) return [...references].sort();
 
   loadCuration();
   const canonical = normalizeRef(match.aliasOf || match.matchedRef || match.reference || reference);
@@ -337,7 +337,7 @@ function listEquivalentReferences(reference, expectedBrand = null) {
     if (normalizeRef(alias.canonical_reference) === canonical) references.add(normalizeRef(alias.alias));
   }
 
-  return [...references];
+  return [...references].sort();
 }
 
 function catalogStats() {

@@ -258,6 +258,7 @@ module.exports = async function handler(req, res) {
       .eq('listing_type', 'WTS')
       .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
       .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
       .range(from, to);
 
     // Avoid a filtered COUNT over the multi-million-row table. Fetch bounded,
@@ -327,6 +328,7 @@ module.exports = async function handler(req, res) {
         .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
         .ilike('dial_color', dial)
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .limit(1000)));
       const supplementalError = supplementalPages.find(page => page.error)?.error;
       if (supplementalError) throw supplementalError;
@@ -339,7 +341,7 @@ module.exports = async function handler(req, res) {
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
-        const normalized = normalizeMarketRow(row, [rawRef, targetRef]);
+        const normalized = normalizeMarketRow(row, referenceVariants);
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {
           ...normalized,
