@@ -143,6 +143,15 @@ _PP_
   assert.equal(candidates[2].prices[0].amount_original, 2540000);
 });
 
+test('splits emoji-bullet inventory lines before assigning prices', () => {
+  const candidates = segmentDealerMessage('🚀 5712/1R 5/2025 NEW HKD 1.73m 🚀 5303R 5/2025 NEW 1.05m usdt');
+  assert.equal(candidates.length, 2);
+  assert.equal(candidates[0].reference, '5712/1R');
+  assert.equal(candidates[0].prices[0].amount_original, 1_730_000);
+  assert.equal(candidates[1].reference, '5303R');
+  assert.equal(candidates[1].prices[0].amount_original, 1_050_000);
+});
+
 test('reference families override contradictory section context', () => {
   const candidates = segmentDealerMessage(`
 _PP_

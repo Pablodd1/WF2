@@ -1,6 +1,6 @@
 'use strict';
 
-const { parseNumber } = require('./normalization-v4.cjs');
+const { parseNumber, splitMessageLines } = require('./normalization-v4.cjs');
 
 function compact(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -22,12 +22,12 @@ function hasCurrencyToken(line, currencies) {
 function referenceLine(rawMessage, reference) {
   const refs = (Array.isArray(reference) ? reference : [reference]).map(compact).filter(Boolean);
   if (!refs.length) return null;
-  return String(rawMessage || '').split(/\r?\n|\\r\\n/).find(line => refs.some(ref => compact(line).includes(ref))) || null;
+  return splitMessageLines(rawMessage).find(line => refs.some(ref => compact(line).includes(ref))) || null;
 }
 
 function referenceBlock(rawMessage, reference) {
   const refs = (Array.isArray(reference) ? reference : [reference]).map(compact).filter(Boolean);
-  const lines = String(rawMessage || '').split(/\r?\n|\\r\\n/);
+  const lines = splitMessageLines(rawMessage);
   const index = lines.findIndex(line => refs.some(ref => compact(line).includes(ref)));
   if (index < 0) return null;
   const block = [lines[index]];
