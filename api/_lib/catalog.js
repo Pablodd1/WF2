@@ -308,6 +308,23 @@ function lookupCatalog(reference, expectedBrand = null) {
   return incompleteExact || empty;
 }
 
+function listEquivalentReferences(reference, expectedBrand = null) {
+  const match = lookupCatalog(reference, expectedBrand);
+  if (!match?.found) return [String(reference || '').trim()].filter(Boolean);
+
+  loadCuration();
+  const canonical = normalizeRef(match.aliasOf || match.matchedRef || match.reference || reference);
+  const brand = normalizeBrand(expectedBrand || match.brand);
+  const references = new Set([canonical]);
+
+  for (const alias of _curationAliases.values()) {
+    if (normalizeBrand(alias.brand) !== brand) continue;
+    if (normalizeRef(alias.canonical_reference) === canonical) references.add(normalizeRef(alias.alias));
+  }
+
+  return [...references];
+}
+
 function catalogStats() {
   loadCatalogs();
   return {
@@ -358,4 +375,12 @@ function listCatalogBrands() {
     .sort((a, b) => b.reference_count - a.reference_count || a.brand.localeCompare(b.brand));
 }
 
-module.exports = { lookupCatalog, inferBrand, normalizeRef, catalogStats, listCatalogReferences, listCatalogBrands };
+module.exports = {
+  lookupCatalog,
+  listEquivalentReferences,
+  inferBrand,
+  normalizeRef,
+  catalogStats,
+  listCatalogReferences,
+  listCatalogBrands,
+};

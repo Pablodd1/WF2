@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { confirmCatalogCandidate } = require('../api/_lib/catalog-confirmation.cjs');
 const { buildPromotionDecision } = require('../tools/shadow-reprocess/promotion-policy.cjs');
-const { listCatalogBrands, lookupCatalog } = require('../api/_lib/catalog.js');
+const { listCatalogBrands, listEquivalentReferences, lookupCatalog } = require('../api/_lib/catalog.js');
 
 test('confirms an exact catalog reference with matching brand', () => {
   const confirmation = confirmCatalogCandidate({ brand: 'Rolex', reference: '126610LN' });
@@ -108,6 +108,17 @@ test('resolves rose-gold Patek shorthand to the exact canonical reference', () =
   assert.equal(match.matchType, 'exact_alias');
   assert.equal(match.matchedRef, '5712/1R-001');
   assert.deepEqual(match.dialColors, ['Black']);
+});
+
+test('returns verified shorthand and canonical references as one market family', () => {
+  assert.deepEqual(
+    new Set(listEquivalentReferences('5712/1A', 'Patek Philippe')),
+    new Set(['5712/1A', '5712/1A-001']),
+  );
+  assert.deepEqual(
+    new Set(listEquivalentReferences('5712/1A-001', 'Patek Philippe')),
+    new Set(['5712/1A', '5712/1A-001']),
+  );
 });
 
 test('confirms a proposed dial only when it agrees with the exact catalog reference', () => {
