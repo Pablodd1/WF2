@@ -6,7 +6,7 @@
 
 **Working branch:** `codex/zero-hallucination-normalization`
 
-**Verified branch head:** `1fd413a`
+**Core implementation checkpoint:** `1fd413a` (handoff and intake-validator commits follow on the same branch)
 **Purpose:** safely divide evidence-review work across another capable AI environment without allowing it to guess market data or mutate production.
 
 ## Authority and safety boundary
@@ -178,3 +178,20 @@ Before the primary CTO accepts external output:
 7. Obtain explicit approval before any production expansion.
 
 External AI output is never itself an approval or publication decision.
+
+## Validate returned CSV files
+
+The repository includes a streaming, read-only intake validator. It supports
+the all-watch, price-only, image-lineage, and errors schemas in this handoff.
+
+```powershell
+$env:EXTERNAL_AUDIT_INPUT="C:\path\to\kimi-output.csv"
+$env:EXTERNAL_AUDIT_EXPECTED_ROWS="100000"
+$env:EXTERNAL_AUDIT_REPORT="audit-output\external-ai\batch-001-validation.json"
+npm run validate:external-audit
+```
+
+The command exits with code `2` when the file is structurally readable but
+contains unsafe recommendations or fails reconciliation. It never connects to
+Supabase or changes production data. A clean result means only that the file is
+accepted for primary human/CTO review; it is not permission to apply rows.
