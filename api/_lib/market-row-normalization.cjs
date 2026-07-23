@@ -14,6 +14,11 @@ function explicitAmount(line, currencies) {
   return match ? parseNumber(match[1], match[2]) : null;
 }
 
+function hasCurrencyToken(line, currencies) {
+  const labels = currencies.join('|');
+  return new RegExp(`(?:${labels})`, 'i').test(String(line || ''));
+}
+
 function referenceLine(rawMessage, reference) {
   const refs = (Array.isArray(reference) ? reference : [reference]).map(compact).filter(Boolean);
   if (!refs.length) return null;
@@ -46,18 +51,29 @@ function normalizeMarketRow(row, reference) {
   const parsedStored = Number(row.price_usd);
   const stored = Number.isFinite(parsedStored) && parsedStored > 0 ? parsedStored : null;
   const line = referenceBlock(row.raw_message, reference);
-  if (!line) return { ...row, analytics_price_usd: stored, price_normalization: null };
+  // Price Research is intentionally stricter than the Trading Floor. A stored
+  // number without reference-line currency proof can be displayed as a listing,
+  // but cannot influence market statistics.
+  if (!line) {
+    return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: stored ? 'CURRENCY_UNVERIFIED' : 'MISSING_PRICE' };
+  }
   const usd = explicitAmount(line, ['USDT', 'USD', 'US\\$', 'U\\$']);
   if (usd) {
     const converted = Math.round(usd);
-    return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_USD_FROM_REFERENCE_LINE' : null };
+    return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_USD_FROM_REFERENCE_LINE' : null, analytics_currency_status: 'VERIFIED' };
   }
   const hkd = explicitAmount(line, ['HKD', 'HDK', 'HK\\$']);
   if (hkd) {
     const converted = Math.round(hkd / 7.8);
-    return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_HKD_FROM_REFERENCE_LINE' : null };
+    return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_HKD_FROM_REFERENCE_LINE' : null, analytics_currency_status: 'VERIFIED' };
   }
-  return { ...row, analytics_price_usd: stored, price_normalization: null };
+  if (hasCurrencyToken(line, ['EUR', 'GBP', 'CHF', 'CNY', 'JPY', 'SGD'])) {
+    return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: 'CURRENCY_RATE_UNVERIFIED' };
+  }
+  if (/\$\s*\d/.test(line)) {
+    return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: 'CURRENCY_AMBIGUOUS' };
+  }
+  return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: stored ? 'CURRENCY_UNVERIFIED' : 'MISSING_PRICE' };
 }
 
-module.exports = { normalizeMarketRow, referenceBlock, referenceLine };
+module.exports = { explicitAmount, hasCurrencyToken, normalizeMarketRow, referenceBlock, referenceLine };

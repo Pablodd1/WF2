@@ -4,11 +4,13 @@ These instructions apply to the whole repository.
 
 ## Current Continuation Handoff
 
-Before continuing work after July 18, 2026, read
-`docs/RESET_HANDOFF_AND_CLIENT_EXECUTIVE_SUMMARY_2026-07-18.md`. It records the
-latest merged production state, verified counts, client deliverables, staged
-data operations, restart commands, and approval gates. Older dated rollout
-documents remain historical evidence and must not override the newer handoff.
+Before continuing work after July 22, 2026, read
+`docs/EXTERNAL_AI_ASSISTANCE_HANDOFF_2026-07-22.md`, then
+`docs/RESET_HANDOFF_AND_CLIENT_EXECUTIVE_SUMMARY_2026-07-18.md`. The July 22
+document records the latest verified Price Research, currency, human-review,
+featured-listing, and image-lineage state plus the safe external-assistance
+contract. Older dated rollout documents remain historical evidence and must
+not override newer verified findings.
 
 ## Mission
 

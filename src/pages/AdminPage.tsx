@@ -29,6 +29,7 @@ interface StatsData {
   countsEstimated: boolean;
   qualitySampleSize: number;
   lastUpdatedAt: string | null;
+  patek: { records: number; approvedWts: number; imageBacked: number; countsEstimated: boolean };
 }
 
 /* ------------------------------------------------------------------ */
@@ -127,6 +128,7 @@ export default function AdminPage() {
     missingRef: 0, missingPrice: 0, unknownBrand: 0, unknownDial: 0, missingYear: 0,
     avgConfidence: 0, typeCounts: { WTS: 0, WTB: 0, NTQ: 0, TRADE: 0, MULTI: 0, OTHER: 0 },
     countsEstimated: true, qualitySampleSize: 0, lastUpdatedAt: null,
+    patek: { records: 0, approvedWts: 0, imageBacked: 0, countsEstimated: true },
   };
   const totalDenominator = Math.max(1, statsMock.totalRecords);
   const qualityDenominator = Math.max(1, statsMock.qualitySampleSize);
@@ -154,6 +156,14 @@ export default function AdminPage() {
           <StatCard label="Human Review" value={statsMock.human.toLocaleString()} sub={`${Math.round((statsMock.human/totalDenominator)*100)}% est.`} icon={Users} color="text-amber-400" trend="neutral" />
           <StatCard label="Recycle" value={statsMock.recycle.toLocaleString()} sub={`${Math.round((statsMock.recycle/totalDenominator)*100)}% est.`} icon={Trash2} color="text-red-400" trend="down" />
           <StatCard label="Avg Confidence" value={`${statsMock.avgConfidence}%`} icon={Activity} color="text-purple-400" />
+        </div>
+
+        <div className="rounded-xl border border-gold-primary/20 bg-bg-card px-4 py-3 mb-8 flex flex-wrap items-center gap-x-6 gap-y-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-gold-primary">Patek rollout</span>
+          <span className="text-xs text-text-secondary"><b className="text-text-primary">{statsMock.patek.records.toLocaleString()}</b> records</span>
+          <span className="text-xs text-text-secondary"><b className="text-text-primary">{statsMock.patek.approvedWts.toLocaleString()}</b> approved WTS</span>
+          <span className="text-xs text-text-secondary"><b className="text-text-primary">{statsMock.patek.imageBacked.toLocaleString()}</b> image-backed</span>
+          <span className="text-[10px] text-text-muted">Counts are planned estimates; Price Research excludes unproven currency and outlier evidence.</span>
         </div>
 
         {/* ═══ MESSAGE BANNER ═══ */}

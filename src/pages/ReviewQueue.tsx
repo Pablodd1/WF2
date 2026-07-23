@@ -149,6 +149,20 @@ interface UnbundledQueueApiItem {
   field_confidence?: Record<string, unknown>;
 }
 
+interface PriceRemediationQueueApiItem {
+  id: number;
+  source_record_id: string;
+  normalization_version: string;
+  stored_price_usd: number;
+  proposed_price_usd: number;
+  normalization_reason: string;
+  evidence_line: string;
+  audit_flags?: string[];
+  review_status: string;
+  created_at?: string;
+  source?: Record<string, unknown> | null;
+}
+
 interface CorrectionDraft {
   brand: string;
   reference: string;
@@ -162,7 +176,7 @@ interface CorrectionDraft {
 }
 
 export default function ReviewQueue() {
-  const [lane, setLane] = useState<'shadow' | 'unbundled' | 'duplicates'>('unbundled');
+  const [lane, setLane] = useState<'shadow' | 'unbundled' | 'duplicates' | 'price'>('unbundled');
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [reasonFilter, setReasonFilter] = useState('');
@@ -249,6 +263,56 @@ export default function ReviewQueue() {
         })
         .catch(error => {
           if (active) setLoadError(error instanceof Error ? error.message : 'Duplicate review queue is unavailable');
+        });
+      return () => { active = false; };
+    }
+    if (lane === 'price') {
+      const params = new URLSearchParams({ limit: '50', page: '1' });
+      fetch(`/api/price-remediation-review?${params.toString()}`, { credentials: 'include' })
+        .then(async response => {
+          if (!response.ok) throw new Error('Price remediation queue is unavailable');
+          return response.json();
+        })
+        .then(data => {
+          if (!active) return;
+          setUnbundledTotal(Number(data.total || 0));
+          setItems(((data.items || []) as PriceRemediationQueueApiItem[]).map((item): ReviewItem => {
+            const source = item.source || {};
+            return {
+              id: String(item.id),
+              reference: String(source.reference || 'Unresolved'),
+              brand: String(source.brand || 'Unknown'),
+              model: String(source.model || 'Price-only correction'),
+              dial: String(source.dial_color || 'Unverified'),
+              price: Number(item.proposed_price_usd || 0),
+              currency: 'USD',
+              aiFields: [item.normalization_reason, ...(item.audit_flags || [])],
+              catalogFields: [],
+              catalog: null,
+              status: 'pending',
+              submittedAt: String(item.created_at || new Date(0).toISOString()),
+              listingTitle: `Stored $${Number(item.stored_price_usd).toLocaleString()} -> proposed $${Number(item.proposed_price_usd).toLocaleString()}`,
+              reviewReasons: [item.normalization_reason, ...(item.audit_flags || [])],
+              disposition: 'HUMAN_REVIEW',
+              priority: 100,
+              rawMessage: String(source.raw_message || ''),
+              reviewEvidence: {
+                source_record_id: item.source_record_id,
+                stored_price_usd: item.stored_price_usd,
+                proposed_price_usd: item.proposed_price_usd,
+                evidence_line: item.evidence_line,
+                front_image: source.thumbnail_url || null,
+              },
+              sellerName: String(source.seller_name || '') || null,
+              sellerPhone: String(source.seller_phone || '') || null,
+              originalPostedAt: String(source.listing_date || source.created_at || '') || null,
+              source: String(source.source || '') || null,
+              sourceType: String(source.source_type || '') || null,
+            };
+          }));
+        })
+        .catch(error => {
+          if (active) setLoadError(error instanceof Error ? error.message : 'Price remediation queue is unavailable');
         });
       return () => { active = false; };
     }
@@ -416,21 +480,30 @@ export default function ReviewQueue() {
   };
 
   const submitDecision = async (item: ReviewItem, decision: 'APPROVED' | 'REJECTED') => {
-    const reason = decision === 'REJECTED'
-      ? window.prompt('Reason for rejection (required for audit):')
-      : 'Catalog-confirmed human approval.';
-    if (decision === 'REJECTED' && !reason?.trim()) return;
+    const priceReview = lane === 'price';
+    const reason = priceReview
+      ? window.prompt(decision === 'APPROVED'
+        ? 'Confirm the preserved raw evidence supports this exact USD correction:'
+        : 'Reason for rejecting this price correction (required for audit):')
+      : decision === 'REJECTED'
+        ? window.prompt('Reason for rejection (required for audit):')
+        : 'Catalog-confirmed human approval.';
+    if (!reason?.trim()) return;
 
     setDecisionBusy(item.id);
     setDecisionError(null);
     try {
-      const response = await fetch(lane === 'unbundled' ? '/api/unbundled-review-decision' : '/api/shadow-review-decision', {
+      const response = await fetch(
+        lane === 'price' ? '/api/price-remediation-review-decision' : lane === 'unbundled' ? '/api/unbundled-review-decision' : '/api/shadow-review-decision',
+        {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(lane === 'unbundled'
-          ? { stagingId: item.id, decision, reason, duplicateReviewed: duplicateReviewed.has(item.id) }
-          : { sourceRecordId: item.id, decision, operatorId: null, reason }),
+          body: JSON.stringify(lane === 'price'
+            ? { reviewId: Number(item.id), decision: decision === 'APPROVED' ? 'APPLY' : 'REJECT', reason }
+            : lane === 'unbundled'
+              ? { stagingId: item.id, decision, reason, duplicateReviewed: duplicateReviewed.has(item.id) }
+              : { sourceRecordId: item.id, decision, operatorId: null, reason }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Review decision failed');
@@ -568,7 +641,13 @@ export default function ReviewQueue() {
           >
             Duplicate candidates
           </button>
-          {lane === 'unbundled' && (
+          <button
+            onClick={() => { setLane('price'); setSelected(null); }}
+            className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'price' ? 'bg-amber-400 text-black' : 'border border-border-default text-text-secondary'}`}
+          >
+            Price corrections
+          </button>
+          {(lane === 'unbundled' || lane === 'price') && (
             <span className="ml-auto text-xs text-text-muted">{unbundledTotal.toLocaleString()} pending in this lane</span>
           )}
         </div>
@@ -729,14 +808,14 @@ export default function ReviewQueue() {
                   >
                     <Eye size={14} className="text-text-muted" />
                   </button>
-                  {item.status === 'pending' && item.disposition === 'READY_FOR_HUMAN_APPROVAL' && (
+                  {item.status === 'pending' && (item.disposition === 'READY_FOR_HUMAN_APPROVAL' || lane === 'price') && (
                     <button
                       onClick={() => void submitDecision(item, 'APPROVED')}
                       disabled={decisionBusy === item.id || (lane === 'unbundled' && !duplicateReviewed.has(item.id))}
                       className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-emerald-500 text-black text-xs font-bold disabled:opacity-50"
                     >
                       {decisionBusy === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                      Approve & publish
+                      {lane === 'price' ? 'Apply price correction' : 'Approve & publish'}
                     </button>
                   )}
                   {item.status === 'pending' && lane !== 'duplicates' && (
@@ -858,6 +937,20 @@ export default function ReviewQueue() {
                     <MessageSquare size={12} className="text-text-muted" />
                     <span className="text-xs text-text-muted">Review reasons: {item.reviewReasons.join(', ') || 'Manual verification required'}</span>
                   </div>
+                  {lane === 'price' && (
+                    <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-text-secondary">
+                      <div className="font-bold text-amber-200">Price-only proposal</div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                        <span>Stored: <strong className="text-text-primary">${Number(item.reviewEvidence?.stored_price_usd || 0).toLocaleString()}</strong></span>
+                        <span>Proposed: <strong className="text-text-primary">${Number(item.reviewEvidence?.proposed_price_usd || 0).toLocaleString()}</strong></span>
+                        <span>Source record: <strong className="text-text-primary">{String(item.reviewEvidence?.source_record_id || 'Unknown')}</strong></span>
+                      </div>
+                      <div className="mt-2 rounded border border-border-default bg-bg-card p-2 whitespace-pre-wrap break-words">
+                        <strong className="text-text-primary">Exact raw price evidence:</strong>{'\n'}{String(item.reviewEvidence?.evidence_line || '[NULL]')}
+                      </div>
+                      <p className="mt-2 text-text-muted">Applying updates only the approved USD price, creates an immutable audit record, and does not alter the raw message or any other listing field.</p>
+                    </div>
+                  )}
                   {item.catalog && (
                     <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs">
                       <div className="font-bold text-emerald-300">Catalog evidence</div>

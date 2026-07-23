@@ -1,6 +1,6 @@
 # WatchFacts
 
-> Current CTO continuation guide: [`docs/CTO_HANDOFF_2026-07-16.md`](docs/CTO_HANDOFF_2026-07-16.md).
+> Current continuation and external-assistance guide: [`docs/EXTERNAL_AI_ASSISTANCE_HANDOFF_2026-07-22.md`](docs/EXTERNAL_AI_ASSISTANCE_HANDOFF_2026-07-22.md).
 > The user-facing product name is **Curated Luxury**; repository and legacy service
 > identifiers remain WatchFacts/wf unless a separate infrastructure migration is approved.
 

@@ -6,7 +6,8 @@ const csv = require('csv-parser');
 
 const CSV_PATH = process.env.MEDIA_INVENTORY_CSV || 'C:/Users/jasme/Downloads/thecollective-prod_inventory.csv';
 const PUBLIC_BASE = String(process.env.DO_PUBLIC_BASE_URL || 'https://thecollective-prod.nyc3.digitaloceanspaces.com/').replace(/\/+$/, '');
-const TARGET = Math.min(500, Math.max(1, Number(process.env.MEDIA_LINEAGE_LIMIT || 100)));
+const TARGET = Math.min(1000, Math.max(1, Number(process.env.MEDIA_LINEAGE_LIMIT || 100)));
+const REQUESTED_BRAND = String(process.env.MEDIA_BRAND || '').trim();
 const APPLY = String(process.env.APPLY_MEDIA_LINKS || '').toLowerCase() === 'true';
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -28,6 +29,10 @@ function validReference(value) {
 
 function normalizedIdentity(value) {
   return String(value || '').normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function requestedBrandMatches(value) {
+  return !REQUESTED_BRAND || normalizedIdentity(value) === normalizedIdentity(REQUESTED_BRAND);
 }
 
 function sourceIdentityAgrees(row, rawData) {
@@ -66,6 +71,7 @@ async function loadRawLineage() {
     const params = new URLSearchParams({ select: 'source_table,source_id,raw_data', order: 'id.asc' });
     const rows = await supabase(`raw_records?${params}`, { headers: { Range: `${offset}-${offset + pageSize - 1}` } });
     for (const row of rows || []) {
+      if (!requestedBrandMatches(row.raw_data?.brand)) continue;
       for (const field of IMAGE_FIELDS) {
         const filename = basename(row.raw_data?.[field]);
         if (!filename || !MIME.has(path.extname(filename).toLowerCase())) continue;
@@ -140,7 +146,7 @@ async function run() {
     const byId = new Map((watches || []).map(row => [row.id, row]));
     for (const item of batch) {
       const watch = byId.get(item.record_id);
-      if (!customerSafe(watch, item.raw_data) || !(await reachable(item.public_url))) continue;
+      if (!customerSafe(watch, item.raw_data) || !requestedBrandMatches(watch.brand) || !(await reachable(item.public_url))) continue;
       safe.push({ ...item, verification_status: 'url_reachable', watch });
       if (safe.length >= TARGET) break;
     }
@@ -162,6 +168,7 @@ async function run() {
     csv_rows_scanned: scanned,
     lineage_matches: candidates.length,
     customer_safe_matches: safe.length,
+    requested_brand: REQUESTED_BRAND || null,
     database_result: databaseResult,
     sample: safe.slice(0, 10).map(item => ({ record_id: item.record_id, brand: item.watch.brand, reference: item.watch.reference, url: item.public_url, source_identity_verified: true })),
   }, null, 2)}\n`);
@@ -175,4 +182,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { basename, customerSafe, normalizedIdentity, recordId, sourceIdentityAgrees, validReference };
+module.exports = { basename, customerSafe, normalizedIdentity, recordId, requestedBrandMatches, sourceIdentityAgrees, validReference };
