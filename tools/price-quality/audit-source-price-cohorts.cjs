@@ -45,11 +45,44 @@ function cohortKey(row) {
   const condition = ['NEW', 'USED'].includes(String(row.condition || '').trim().toUpperCase())
     ? String(row.condition).trim()
     : 'Unspecified';
-  return [row.brand || 'Unknown', row.reference || 'Unknown', dial.known ? dial.value : 'Unspecified', condition].join('|');
+  return [
+    compact(row.brand || 'Unknown'),
+    compact(row.reference || 'Unknown'),
+    comparisonKey(dial.known ? dial.value : 'Unspecified'),
+    condition.toUpperCase(),
+  ].join('|');
 }
 
 function increment(object, key) {
   object[key] = (object[key] || 0) + 1;
+}
+
+function mergeCounts(target, source) {
+  for (const [key, value] of Object.entries(source || {})) target[key] = (target[key] || 0) + Number(value || 0);
+}
+
+function normalizeCheckpointState(state) {
+  const normalized = { ...state, cohorts: {} };
+  for (const cohort of Object.values(state.cohorts || {})) {
+    const key = cohortKey(cohort);
+    const existing = normalized.cohorts[key];
+    if (!existing) {
+      normalized.cohorts[key] = {
+        ...cohort,
+        gate_counts: { ...(cohort.gate_counts || {}) },
+        currency_status_counts: { ...(cohort.currency_status_counts || {}) },
+        price_normalization_counts: { ...(cohort.price_normalization_counts || {}) },
+      };
+      continue;
+    }
+    existing.scanned += Number(cohort.scanned || 0);
+    existing.eligible += Number(cohort.eligible || 0);
+    existing.excluded += Number(cohort.excluded || 0);
+    mergeCounts(existing.gate_counts, cohort.gate_counts);
+    mergeCounts(existing.currency_status_counts, cohort.currency_status_counts);
+    mergeCounts(existing.price_normalization_counts, cohort.price_normalization_counts);
+  }
+  return normalized;
 }
 
 function evaluateSourceRow(row) {
@@ -146,15 +179,17 @@ async function main() {
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
   const maxRows = bounded('SOURCE_PRICE_AUDIT_MAX_ROWS', 10_000, 1, 2_700_000);
   const pageSize = bounded('SOURCE_PRICE_AUDIT_PAGE_SIZE', 500, 50, 1_000);
+  const checkpointRows = bounded('SOURCE_PRICE_AUDIT_CHECKPOINT_ROWS', 10_000, pageSize, 100_000);
   const sampleLimit = bounded('SOURCE_PRICE_AUDIT_SAMPLE_LIMIT', 100, 1, 1_000);
   const outputDir = path.resolve(process.env.SOURCE_PRICE_AUDIT_OUTPUT || 'audit-output/price-research/source-cohorts');
   const checkpointPath = path.join(outputDir, 'checkpoint.json');
   const reportPath = path.join(outputDir, 'report.json');
   const previous = fs.existsSync(checkpointPath) ? JSON.parse(fs.readFileSync(checkpointPath, 'utf8')) : null;
-  const state = previous?.state || { scanned: 0, eligible: 0, excluded: 0, currency_status_counts: {}, gate_counts: {}, cohorts: {}, samples: { eligible: [], excluded: [] } };
+  const state = normalizeCheckpointState(previous?.state || { scanned: 0, eligible: 0, excluded: 0, currency_status_counts: {}, gate_counts: {}, cohorts: {}, samples: { eligible: [], excluded: [] } });
   let lastId = previous?.last_id || String(process.env.SOURCE_PRICE_AUDIT_AFTER_ID || '');
   const startScanned = state.scanned;
   const targetScanned = startScanned + maxRows;
+  let lastCheckpointAt = startScanned;
 
   while (state.scanned < targetScanned) {
     const limit = Math.min(pageSize, targetScanned - state.scanned);
@@ -168,9 +203,12 @@ async function main() {
     if (!rows.length) break;
     for (const row of rows) addRow(state, row, evaluateSourceRow(row), sampleLimit);
     lastId = rows[rows.length - 1].id;
-    const checkpoint = { updated_at: new Date().toISOString(), last_id: lastId, state, watch_records_mutated: false };
-    atomicJson(checkpointPath, checkpoint);
-    process.stdout.write(`${JSON.stringify({ event: 'source_price_audit_page', scanned: state.scanned, eligible: state.eligible, excluded: state.excluded, lastId })}\n`);
+    if (state.scanned - lastCheckpointAt >= checkpointRows) {
+      const checkpoint = { updated_at: new Date().toISOString(), last_id: lastId, state, watch_records_mutated: false };
+      atomicJson(checkpointPath, checkpoint);
+      lastCheckpointAt = state.scanned;
+      process.stdout.write(`${JSON.stringify({ event: 'source_price_audit_checkpoint', scanned: state.scanned, eligible: state.eligible, excluded: state.excluded, lastId })}\n`);
+    }
   }
   const report = summarize(state, { last_id: lastId || null, scanned_this_run: state.scanned - startScanned });
   atomicJson(reportPath, report);
@@ -183,4 +221,4 @@ if (require.main === module) main().catch(error => {
   process.exitCode = 1;
 });
 
-module.exports = { addRow, evaluateSourceRow, cohortKey, matchesReference };
+module.exports = { addRow, evaluateSourceRow, cohortKey, matchesReference, normalizeCheckpointState };
