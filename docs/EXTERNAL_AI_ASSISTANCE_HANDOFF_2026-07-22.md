@@ -6,7 +6,7 @@
 
 **Working branch:** `codex/zero-hallucination-normalization`
 
-**Verified branch head:** `1fd413a`
+**Core implementation checkpoint:** `1fd413a` (handoff and intake-validator commits follow on the same branch)
 **Purpose:** safely divide evidence-review work across another capable AI environment without allowing it to guess market data or mutate production.
 
 ## Authority and safety boundary
