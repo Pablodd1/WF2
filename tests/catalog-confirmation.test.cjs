@@ -119,6 +119,11 @@ test('returns verified shorthand and canonical references as one market family',
     new Set(listEquivalentReferences('5712/1A-001', 'Patek Philippe')),
     new Set(['5712/1A', '5712/1A-001']),
   );
+  assert.deepEqual(
+    new Set(listEquivalentReferences('5712/1R-001', 'Patek Philippe')),
+    new Set(['5712/1R', '5712/1R-001']),
+  );
+  assert.deepEqual(listEquivalentReferences('116500LN', 'Rolex'), ['116500LN']);
 });
 
 test('confirms a proposed dial only when it agrees with the exact catalog reference', () => {

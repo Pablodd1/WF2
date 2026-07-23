@@ -309,16 +309,31 @@ function lookupCatalog(reference, expectedBrand = null) {
 }
 
 function listEquivalentReferences(reference, expectedBrand = null) {
+  const normalizedReference = normalizeRef(reference);
+  const references = new Set([normalizedReference].filter(Boolean));
+  const brand = normalizeBrand(expectedBrand);
+
+  // Patek dealers commonly omit the terminal -001 configuration suffix. Keep
+  // this deterministic pair available even when serverless file tracing omits
+  // the optional curation JSON from a deployed function bundle.
+  if (brand === 'PATEKPHILIPPE') {
+    const patekBase = normalizedReference.match(/^(\d{4}\/\d[A-Z])(?:-001)?$/)?.[1];
+    if (patekBase) {
+      references.add(patekBase);
+      references.add(`${patekBase}-001`);
+    }
+  }
+
   const match = lookupCatalog(reference, expectedBrand);
-  if (!match?.found) return [String(reference || '').trim()].filter(Boolean);
+  if (!match?.found) return [...references];
 
   loadCuration();
   const canonical = normalizeRef(match.aliasOf || match.matchedRef || match.reference || reference);
-  const brand = normalizeBrand(expectedBrand || match.brand);
-  const references = new Set([canonical]);
+  const matchedBrand = normalizeBrand(expectedBrand || match.brand);
+  references.add(canonical);
 
   for (const alias of _curationAliases.values()) {
-    if (normalizeBrand(alias.brand) !== brand) continue;
+    if (normalizeBrand(alias.brand) !== matchedBrand) continue;
     if (normalizeRef(alias.canonical_reference) === canonical) references.add(normalizeRef(alias.alias));
   }
 
