@@ -380,14 +380,21 @@ function inferCondition(line, inherited = null) {
   return inherited || null;
 }
 
+function splitMessageLines(rawMessage) {
+  // Dealers often use emoji as item bullets without newlines. Split both the
+  // valid emoji form and the common UTF-8 mojibake form before price extraction
+  // so a reference cannot borrow a later item's price.
+  return String(rawMessage || '')
+    .replace(/_x000D_/gi, '\n')
+    .split(/\r?\n|(?:\p{Extended_Pictographic}|ðŸ.{2})+/u)
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+
 function segmentDealerMessage(rawMessage) {
   const candidates = [];
   let context = {};
-  const lines = String(rawMessage || '')
-    .replace(/_x000D_/gi, '\n')
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(Boolean);
+  const lines = splitMessageLines(rawMessage);
 
   for (const line of lines) {
     const reference = extractReference(line);
@@ -426,4 +433,5 @@ module.exports = {
   inferBrandFromReference,
   parseNumber,
   segmentDealerMessage,
+  splitMessageLines,
 };

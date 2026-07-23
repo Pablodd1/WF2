@@ -85,6 +85,15 @@ test('does not treat a repeated reference after HKD as the HKD amount', () => {
   assert.equal(result.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
 });
 
+test('does not borrow a later emoji-bullet price from the same physical line', () => {
+  const result = normalizeMarketRow(
+    { price_usd: 480000, raw_message: '🚀 5712/1R 5/2025 NEW HKD 1.73m 🚀 5303R 5/2025 NEW 1.05m usdt' },
+    '5712/1R',
+  );
+  assert.equal(result.analytics_price_usd, 221795);
+  assert.equal(result.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
+});
+
 test('withholds bare-dollar and non-pegged currency records without a verified USD conversion', () => {
   const ambiguous = normalizeMarketRow({ price_usd: 25000, raw_message: '5712/1A blue $25k' }, '5712/1A');
   const eur = normalizeMarketRow({ price_usd: 27000, raw_message: '5712/1A blue EUR 25k' }, '5712/1A');
