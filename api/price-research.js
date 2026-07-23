@@ -6,7 +6,7 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
-const { lookupCatalog } = require('./_lib/catalog');
+const { listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const {
   buildComparableCohorts,
   buildDialGroups,
@@ -194,13 +194,16 @@ module.exports = async function handler(req, res) {
       // Resolve exact references case-insensitively first. Historical imports
       // contain casing variants (for example 116500LN and 116500ln); keep all
       // equivalent stored spellings so the market query aggregates them.
-      const { data: exactRefs, error: exactRefError } = await client
+      const equivalentReferences = listEquivalentReferences(rawRef, brand);
+      const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
         .from('watch_records')
         .select('reference')
         .eq('brand', brand)
         .eq('verdict', 'APPROVED')
-        .ilike('reference', rawRef)
-        .limit(50);
+        .ilike('reference', reference)
+        .limit(50)));
+      const exactRefError = exactRefResults.find(result => result.error)?.error || null;
+      const exactRefs = exactRefResults.flatMap(result => result.data || []);
 
       let refs = exactRefs;
       let refError = exactRefError;
@@ -218,7 +221,8 @@ module.exports = async function handler(req, res) {
 
       if (!refError && refs && refs.length > 0) {
         const foundRefs = [...new Set(refs.map(r => r.reference))];
-        const exactVariants = foundRefs.filter(r => normRef(r) === normRef(rawRef));
+        const equivalentKeys = new Set(equivalentReferences.map(normRef));
+        const exactVariants = foundRefs.filter(r => equivalentKeys.has(normRef(r)));
         const exact = exactVariants[0];
         if (exact) {
           const catalogHit = lookupCatalog(rawRef, brand || null);
