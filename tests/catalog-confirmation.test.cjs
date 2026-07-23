@@ -109,7 +109,12 @@ test('resolves rose-gold Patek shorthand to the exact canonical reference', () =
   assert.equal(match.model, 'Nautilus');
   assert.equal(match.matchType, 'exact_alias');
   assert.equal(match.matchedRef, '5712/1R-001');
-  assert.deepEqual(match.dialColors, ['Black']);
+  assert.deepEqual(match.dialColors, ['Brown']);
+});
+
+test('curates imported Patek dial labels from manufacturer evidence', () => {
+  assert.deepEqual(lookupCatalog('5712/1R-001', 'Patek Philippe').dialColors, ['Brown']);
+  assert.deepEqual(lookupCatalog('5711/1A-010', 'Patek Philippe').dialColors, ['Blue']);
 });
 
 test('returns verified shorthand and canonical references as one market family', () => {
@@ -132,6 +137,9 @@ test('price research normalizes every resolved reference variant', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
   assert.match(source, /normalizeMarketRow\(row,\s*referenceVariants\)/);
   assert.doesNotMatch(source, /normalizeMarketRow\(row,\s*\[rawRef,\s*targetRef\]\)/);
+  assert.match(source, /referenceVariants\s*=\s*equivalentReferences/);
+  assert.match(source, /referenceVariants\s*=\s*\[\.\.\.new Set\(\[\.\.\.equivalentReferences,\s*\.\.\.exactVariants\]\)\]/);
+  assert.match(source, /baseSampleCount\s*>=\s*sampleLimit\s*&&\s*observedDialCounts\.get/);
   assert.match(source, /\.order\('created_at', \{ ascending: false \}\)\s*\.order\('id', \{ ascending: false \}\)/);
 });
 
