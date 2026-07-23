@@ -11,6 +11,7 @@ const {
   inferBrandFromReference,
   parseNumber,
   segmentDealerMessage,
+  splitMessageLines,
 } = require('../api/_lib/normalization-v4.cjs');
 
 test('decodes standard keycap and full-width digits without changing other emoji', () => {
@@ -150,6 +151,12 @@ test('splits emoji-bullet inventory lines before assigning prices', () => {
   assert.equal(candidates[0].prices[0].amount_original, 1_730_000);
   assert.equal(candidates[1].reference, '5303R');
   assert.equal(candidates[1].prices[0].amount_original, 1_050_000);
+});
+
+test('preserves unresolved price emoji on the listing line', () => {
+  const raw = '126500LN White HKD 🔥💰';
+  assert.deepEqual(splitMessageLines(raw), [raw]);
+  assert.equal(segmentDealerMessage(raw)[0].emoji_price_ambiguous, true);
 });
 
 test('reference families override contradictory section context', () => {

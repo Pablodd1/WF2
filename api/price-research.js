@@ -195,6 +195,7 @@ module.exports = async function handler(req, res) {
       // contain casing variants (for example 116500LN and 116500ln); keep all
       // equivalent stored spellings so the market query aggregates them.
       const equivalentReferences = listEquivalentReferences(rawRef, brand);
+      referenceVariants = equivalentReferences;
       const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
         .from('watch_records')
         .select('reference')
@@ -202,8 +203,12 @@ module.exports = async function handler(req, res) {
         .eq('verdict', 'APPROVED')
         .ilike('reference', reference)
         .limit(50)));
-      const exactRefError = exactRefResults.find(result => result.error)?.error || null;
-      const exactRefs = exactRefResults.flatMap(result => result.data || []);
+      const exactRefError = exactRefResults.every(result => result.error)
+        ? exactRefResults.find(result => result.error)?.error || null
+        : null;
+      const exactRefs = exactRefResults
+        .filter(result => !result.error)
+        .flatMap(result => result.data || []);
 
       let refs = exactRefs;
       let refError = exactRefError;
@@ -227,7 +232,7 @@ module.exports = async function handler(req, res) {
         if (exact) {
           const catalogHit = lookupCatalog(rawRef, brand || null);
           targetRef = catalogHit?.found && catalogHit.reference ? catalogHit.reference : exact;
-          referenceVariants = exactVariants;
+          referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
         }
         else if (foundRefs.length === 1) {
           targetRef = foundRefs[0];
@@ -311,14 +316,20 @@ module.exports = async function handler(req, res) {
     // A newest-first cap can hide a valid dial when one high-volume variant
     // occupies all 5,000 sampled rows. Supplement only missing catalog dials
     // with a bounded query, then de-duplicate by immutable source ID.
-    const observedDialKeys = new Set(rows.map(row => normalizeDialValue(row.dial_color))
-      .filter(dial => dial.known).map(dial => dial.value.toLowerCase()));
-    const missingCatalogDials = (catalogHit?.dialColors || [])
+    const observedDialCounts = rows.reduce((counts, row) => {
+      const dial = normalizeDialValue(row.dial_color);
+      if (dial.known) counts.set(dial.value.toLowerCase(), (counts.get(dial.value.toLowerCase()) || 0) + 1);
+      return counts;
+    }, new Map());
+    const supplementalCatalogDials = (catalogHit?.dialColors || [])
       .map(value => normalizeDialValue(value))
-      .filter(dial => dial.known && !observedDialKeys.has(dial.value.toLowerCase()))
+      .filter(dial => dial.known && (
+        !observedDialCounts.has(dial.value.toLowerCase())
+        || (baseSampleCount >= sampleLimit && observedDialCounts.get(dial.value.toLowerCase()) < 1000)
+      ))
       .map(dial => dial.value);
-    if (missingCatalogDials.length) {
-      const supplementalPages = await Promise.all(missingCatalogDials.map(dial => client
+    if (supplementalCatalogDials.length) {
+      const supplementalPages = await Promise.all(supplementalCatalogDials.map(dial => client
         .from('watch_records')
         .select(columns)
         .eq('brand', brand)

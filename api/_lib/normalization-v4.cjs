@@ -381,12 +381,25 @@ function inferCondition(line, inherited = null) {
 }
 
 function splitMessageLines(rawMessage) {
-  // Dealers often use emoji as item bullets without newlines. Split both the
-  // valid emoji form and the common UTF-8 mojibake form before price extraction
-  // so a reference cannot borrow a later item's price.
+  // Split emoji only when they introduce another recognizable listing. Price
+  // code emoji must stay on their line so ambiguity detection can block them.
   return String(rawMessage || '')
     .replace(/_x000D_/gi, '\n')
-    .split(/\r?\n|(?:\p{Extended_Pictographic}|ðŸ.{2})+/u)
+    .split(/\r?\n/)
+    .flatMap(line => {
+      const parts = [];
+      let start = 0;
+      for (const match of line.matchAll(/(?:\p{Extended_Pictographic}\uFE0F?|\u200D|ðŸ.{2})+/gu)) {
+        const tail = line.slice(match.index + match[0].length);
+        if (!extractReference(tail)) continue;
+        const before = line.slice(start, match.index).trim();
+        if (before) parts.push(before);
+        start = match.index + match[0].length;
+      }
+      const remainder = line.slice(start).trim();
+      if (remainder) parts.push(remainder);
+      return parts;
+    })
     .map(line => line.trim())
     .filter(Boolean);
 }

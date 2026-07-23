@@ -5,6 +5,18 @@
       "reference": "5712/1A-001",
       "dial_colors": ["Blue"],
       "reason": "The source importer split a single black-blue dial description into Black and Blue variants. Curated market evidence treats this steel reference as Blue."
+    },
+    {
+      "brand": "Patek Philippe",
+      "reference": "5712/1R-001",
+      "dial_colors": ["Brown"],
+      "reason": "Patek Philippe describes this configuration as a brown sunburst dial with a black-gradient rim."
+    },
+    {
+      "brand": "Patek Philippe",
+      "reference": "5711/1A-010",
+      "dial_colors": ["Blue"],
+      "reason": "Patek Philippe describes this configuration as a blue dial with black gradation."
     }
   ],
   "aliases": [
