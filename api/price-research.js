@@ -445,14 +445,22 @@ module.exports = async function handler(req, res) {
     // must be selected so New, Used, and unstated inventory never share a
     // trend line. The helper also enforces sample, identity, recency, and
     // rolling-backtest gates before returning any future values.
-    const forecastCandidate = selectedCondition !== 'All'
-      ? buildMarketForecast(includedRows)
-      : {
+    const forecastsDisabled = process.env.ENABLE_PRICE_FORECASTS !== 'true';
+    const forecastCandidate = forecastsDisabled
+      ? {
           ready: false,
-          reasons: ['CONDITION_REQUIRED'],
+          reasons: ['FEATURE_NOT_RELEASED'],
           offer_count: includedRows.length,
           verified_dealer_count: new Set(includedRows.map(row => row.dealer_id).filter(Boolean)).size,
-        };
+        }
+      : selectedCondition !== 'All'
+        ? buildMarketForecast(includedRows)
+        : {
+            ready: false,
+            reasons: ['CONDITION_REQUIRED'],
+            offer_count: includedRows.length,
+            verified_dealer_count: new Set(includedRows.map(row => row.dealer_id).filter(Boolean)).size,
+          };
     const forecast = forecastCandidate;
 
     // ── Dial analysis: EVERY dial color found in real listings (rule: all must show) ──
