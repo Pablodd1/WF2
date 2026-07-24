@@ -6,16 +6,20 @@ This checkpoint covers the next safe rollout gates after the verified seller-lin
 
 ## Gate 1 - production migration ledger
 
-**Status:** BLOCKED on access, not on migration logic.
+**Status:** VERIFIED; migration replay remains blocked by ledger drift.
 
 Evidence:
 
 - `.github/workflows/supabase-migration-ledger-check.yml` is manual-only and requires `INSPECT_PRODUCTION_MIGRATION_LEDGER`.
 - The workflow runs `supabase migration list` and explicitly does not apply migrations.
-- Local `gh auth status` reports no authenticated GitHub host, so the Action could not be dispatched or inspected from this machine.
+- The successful GitHub Action run was `30112570920`, job `89550558421`.
+- The workflow reached the remote database and ran `supabase migration list` successfully.
+- The ledger contains **32 repository-only migrations** and **2 remote-only migrations**; no migration is marked applied on both sides in the output.
+- Remote-only migrations: `20260629194201`, `20260629224734`.
+- Repository-only entries include `20200101000000` and the 2026-07-12 through 2026-07-21 migration sequence.
 - No migration was replayed locally or remotely during this checkpoint.
 
-Required next action: authenticate `gh` with Actions/repository scope, dispatch the workflow with the exact confirmation string, and attach the ledger output before enabling any automatic migration path.
+Required next action: reconcile the two remote-only entries and the 32 repository-only entries with the migration history and deployment records. Do not run `supabase db push`, enable automatic migrations, or delete ledger rows until the owner confirms which side is authoritative.
 
 ## Gate 2 - seller-lineage canary handoff
 
