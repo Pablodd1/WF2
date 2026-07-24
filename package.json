@@ -30,6 +30,8 @@
     "audit:unbundled-csv": "node tools/multilisting/audit-unbundled-csv.cjs",
     "audit:unbundled-lineage": "node tools/multilisting/reconcile-unbundled-lineage.cjs",
     "audit:unbundled-collection": "node tools/multilisting/audit-unbundled-collection.cjs",
+    "audit:slash-date-references": "node tools/multilisting/audit-slash-date-references.cjs",
+    "audit:slash-date-lineage-canary": "node tools/multilisting/build-slash-date-lineage-canary.cjs",
     "stage:unbundled-canary": "node tools/multilisting/build-unbundled-canary.cjs",
     "normalize:unbundled-batch": "node tools/multilisting/normalize-unbundled-batch.cjs",
     "enrich:unbundled-sources": "node tools/multilisting/enrich-unbundled-source-lineage.cjs",
