@@ -51,3 +51,25 @@ Use only the generated `canary-100.jsonl` for the first Preview/private staging 
 Production writes: **0**.
 
 Public contact changes: **0**.
+
+## Local canary gate
+
+The prepared 100-row canary was validated locally through the same staging-row
+release gate used by the Preview writer:
+
+| Check | Result |
+|---|---:|
+| Rows requested | 100 |
+| Release-gate passes | 100 |
+| Release-gate failures | 0 |
+| Unique lineage keys | 100 |
+| Intent conflicts | 0 |
+| Missing original dates | 0 |
+| Missing images | 0 |
+| Missing seller names | 5 |
+| Dealer assignments | 0 |
+
+This proves the local canary is structurally safe for private staging. It does
+not prove that the Preview database has the required schema or that any dealer
+identity should be verified. The next step remains a bounded Preview write,
+followed by a read-back reconciliation.
