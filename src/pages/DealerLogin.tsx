@@ -30,6 +30,9 @@ export default function DealerLogin() {
   const location = useLocation();
   const requestedDestination = (location.state as { from?: string } | null)?.from;
   const destination = requestedDestination || '/dealer';
+  const betaSkipLabel = requestedDestination === '/price-research'
+    ? 'Continue without login to Price Research'
+    : 'Continue without login to Trading Floor';
   const betaDestinations = new Set(['/dealer', '/trading', '/price-research']);
   const protectedDestination = !betaDestinations.has(destination);
   const [email, setEmail] = useState('');
@@ -130,7 +133,7 @@ export default function DealerLogin() {
             </form>
             {betaSkipEnabled && (
               <div className="mt-5 border-t border-white/10 pt-5">
-                <button type="button" onClick={skipForBeta} disabled={checkingSession} className="h-10 w-full border border-white/20 text-xs font-semibold text-white/75 transition-colors hover:border-white/45 hover:text-white disabled:opacity-50">Continue without login to Trading Floor</button>
+                <button type="button" onClick={skipForBeta} disabled={checkingSession} className="h-10 w-full border border-white/20 text-xs font-semibold text-white/75 transition-colors hover:border-white/45 hover:text-white disabled:opacity-50">{betaSkipLabel}</button>
                 <p className="mt-2 text-center text-[11px] leading-5 text-amber-200/65">Marketplace browsing needs no password. Human Review and approvals require a secure reviewer or administrator session.</p>
               </div>
             )}
