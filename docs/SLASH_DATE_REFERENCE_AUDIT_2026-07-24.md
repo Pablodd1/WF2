@@ -82,3 +82,23 @@ but seller identity must be joined from the separate seller-lineage source.
 The next step is human review of the 49 correction candidates followed by a
 seller-lineage join. The remaining 51 rows stay blocked until their stated
 catalog, dial, price, currency, or intent defect is resolved.
+
+### Private seller-lineage coverage
+
+The 100 child rows belong to 44 unique source parents. A read-only Railway
+service-role check found:
+
+| Private staging check | Coverage |
+| --- | ---: |
+| Parent lineage matched | 1 / 44 |
+| Parent phone present | 1 / 44 |
+| Parent seller name present | 0 / 44 |
+| Parent source date present | 1 / 44 |
+| Child lineage matched | 0 / 44 |
+| Verified dealer matches | 0 / 44 |
+
+The private tables are reachable and correctly protected, but their data does
+not yet cover this canary. Customer pages must not show or infer dealer contact,
+reputation, or seller activity from these rows. The next lineage job must join
+the 43 unmatched parents to the source user export, stage exact matches
+privately, and rerun this same canary before contact information is eligible.
