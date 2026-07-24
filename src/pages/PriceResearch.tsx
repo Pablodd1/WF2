@@ -348,6 +348,7 @@ export default function PriceResearch() {
       const d = await r.json();
       if (d.success) {
         setData(d);
+        setQuery(d.resolvedRef || d.reference || normalizedReference);
         if (d.brand) setQueryBrand(d.brand);
       }
       else setError(d.error || 'No data for this reference');
