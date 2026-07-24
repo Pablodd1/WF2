@@ -17,10 +17,24 @@ Evidence:
 - The exact `origin/main` commit used by the Action is `08700ea`; it contains **39 migration files**.
 - The ledger contains **39 repository-side entries** and **2 remote-only migrations**; no migration is marked applied on both sides in the captured output.
 - Remote-only migrations: `20260629194201`, `20260629224734`.
+- Supabase identifies them as `reference_images_table` and `reprocessing_queue_table`.
+- The remote SQL was inspected read-only. It creates catalog-image/reference tables,
+  image-related listing columns, a reprocessing queue, and progress counters; it does
+  not delete or transform listing data.
+- The Supabase dashboard also reports that the project is exhausting multiple
+  resources. Large writes and queue workers remain paused until that is addressed.
 - Repository-side entries include `20200101000000` and the 2026-07-12 through 2026-07-22 migration sequence.
 - No migration was replayed locally or remotely during this checkpoint.
 
 Required next action: reconcile the two remote-only entries and the 39 repository-side entries with the migration history and deployment records. Do not run `supabase db push`, enable automatic migrations, or delete ledger rows until the owner confirms which side is authoritative.
+
+The two reconciled repository files are:
+
+- `supabase/migrations/20260629194201_reference_images_table.sql`
+- `supabase/migrations/20260629224734_reprocessing_queue_table.sql`
+
+They restore the original production versions for future ledger comparison; they
+were not executed against production by this change.
 
 ## Gate 2 - seller-lineage canary handoff
 
