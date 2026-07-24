@@ -52,13 +52,17 @@ jobs:
           set -euo pipefail
           first="supabase/migrations/20260720220000_seller_listing_lineage_staging.sql"
           second="supabase/migrations/20260721120000_seller_child_lineage_staging.sql"
+          third="supabase/migrations/20260724223000_reviewer_contact_access_audit.sql"
           test -f "$first"
           test -f "$second"
+          test -f "$third"
           {
             printf 'BEGIN;\n'
             cat "$first"
             printf '\n'
             cat "$second"
+            printf '\n'
+            cat "$third"
             printf '\nCOMMIT;\n'
           } > /tmp/private-lineage-schema.sql
 
@@ -90,27 +94,27 @@ jobs:
           result="$(psql "$db_url" \
             --set=ON_ERROR_STOP=1 \
             --tuples-only --no-align \
-            --command="SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging');")"
-          test "$result" = "2"
+            --command="SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging', 'reviewer_contact_access_audit');")"
+          test "$result" = "3"
 
           public_access="$(psql "$db_url" \
             --set=ON_ERROR_STOP=1 \
             --tuples-only --no-align \
-            --command="WITH tables(table_name) AS (VALUES ('seller_listing_lineage_staging'::text), ('seller_child_lineage_staging'::text)) SELECT count(*) FROM tables WHERE has_table_privilege('anon', format('public.%s', table_name), 'SELECT') OR has_table_privilege('authenticated', format('public.%s', table_name), 'SELECT');")"
+            --command="WITH tables(table_name) AS (VALUES ('seller_listing_lineage_staging'::text), ('seller_child_lineage_staging'::text), ('reviewer_contact_access_audit'::text)) SELECT count(*) FROM tables WHERE has_table_privilege('anon', format('public.%s', table_name), 'SELECT') OR has_table_privilege('authenticated', format('public.%s', table_name), 'SELECT');")"
           test "$public_access" = "0"
 
           rls_disabled="$(psql "$db_url" \
             --set=ON_ERROR_STOP=1 \
             --tuples-only --no-align \
-            --command="SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging') AND c.relrowsecurity IS NOT TRUE;")"
+            --command="SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging', 'reviewer_contact_access_audit') AND c.relrowsecurity IS NOT TRUE;")"
           test "$rls_disabled" = "0"
 
           service_role_select="$(psql "$db_url" \
             --set=ON_ERROR_STOP=1 \
             --tuples-only --no-align \
-            --command="WITH tables(table_name) AS (VALUES ('seller_listing_lineage_staging'::text), ('seller_child_lineage_staging'::text)) SELECT count(*) FROM tables WHERE has_table_privilege('service_role', format('public.%s', table_name), 'SELECT');")"
-          test "$service_role_select" = "2"
+            --command="WITH tables(table_name) AS (VALUES ('seller_listing_lineage_staging'::text), ('seller_child_lineage_staging'::text), ('reviewer_contact_access_audit'::text)) SELECT count(*) FROM tables WHERE has_table_privilege('service_role', format('public.%s', table_name), 'SELECT');")"
+          test "$service_role_select" = "3"
 
           psql "$db_url" \
             --set=ON_ERROR_STOP=1 \
-            --command="SELECT table_name, grantee, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging') ORDER BY table_name, grantee, privilege_type;"
+            --command="SELECT table_name, grantee, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging', 'reviewer_contact_access_audit') ORDER BY table_name, grantee, privilege_type;"
