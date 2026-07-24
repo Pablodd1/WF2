@@ -23,6 +23,8 @@ Evidence:
   not delete or transform listing data.
 - The Supabase dashboard also reports that the project is exhausting multiple
   resources. Large writes and queue workers remain paused until that is addressed.
+- Infrastructure evidence: Micro compute, 2 CPU cores, 1 GB RAM, 87 Mbps baseline
+  disk I/O, 2,085 Mbps burst ceiling, and a 30-minute daily burst budget.
 - Repository-side entries include `20200101000000` and the 2026-07-12 through 2026-07-22 migration sequence.
 - No migration was replayed locally or remotely during this checkpoint.
 
