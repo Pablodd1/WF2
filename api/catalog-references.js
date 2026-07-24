@@ -92,8 +92,10 @@ module.exports = async function handler(req, res) {
       LOOKUP_CONCURRENCY,
       entry => loadReferenceEvidence(client, brand, entry)
     );
+    // Keep every reference with real approved evidence searchable. The five-row
+    // gate belongs to analytics publication, not reference discovery.
     const out = evidence
-      .filter(item => item && item.listing_count >= MINIMUM_ANALYTICS_SAMPLE)
+      .filter(item => item && item.listing_count > 0)
       .sort((a, b) => b.listing_count - a.listing_count);
 
     const payload = {
