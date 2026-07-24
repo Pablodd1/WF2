@@ -98,3 +98,22 @@ Priority: review the 263 `WTB -> WTS` rows first. These are buyer-request
 classification conflicts and must not be published as sale inventory until the
 raw message is reviewed. The 21 `WTS -> WTB` rows and four unspecified cases
 remain blocked under the same rule.
+
+## Preview staging result
+
+After the schema check and dry run passed, the bounded canary was written to
+the private `seller_listing_lineage_staging` table and read back:
+
+- persisted: **100**;
+- matched on read-back: **100**;
+- unmatched: **0**;
+- conflicting: **0**;
+- orphaned: **0**;
+- field mismatches across seller, intent, date, linkage, title hash, and image: **0**;
+- matched dealer IDs: **0**;
+- public contact published: **0**;
+- public listing rows mutated: **0**.
+
+The canary is structurally reconciled, but it remains private and blocked from
+publication pending human review, verified dealer mapping, and explicit
+contact consent. Expansion beyond 100 rows is not approved by this result.
