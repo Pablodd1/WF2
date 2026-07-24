@@ -8,7 +8,7 @@ interface ProfilePayload {
     id: string; display_name: string | null; company_name: string | null; country_code: string | null; city: string | null;
     rating: number | null; review_count: number; whatsapp_group_count: number; avatar_url: string | null; profile_summary: string | null;
   };
-  stats: { total_posts: number; wts_posts: number; wtb_posts: number; active_listings: number; dated_posts: number; undated_posts: number; first_post_at: string | null; last_post_at: string | null; posting_years: number } | null;
+  stats: { total_posts: number | null; wts_posts: number | null; wtb_posts: number | null; active_listings: number | null; dated_posts: number | null; undated_posts: number | null; first_post_at: string | null; last_post_at: string | null; posting_years: number | null } | null;
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; listing_type: string; listing_date: string | null; created_at: string; raw_message?: string }>;
   raw_message_access: boolean;
 }
@@ -31,6 +31,8 @@ export default function DealerProfile() {
   if (!payload) return <main className="min-h-screen bg-[#08080c] text-white"><MarketNav /><div className="mx-auto max-w-5xl px-5 py-16 text-white/45">Loading dealer profile...</div></main>;
   const { dealer, stats, listings } = payload;
   const name = dealer.display_name || dealer.company_name || 'Verified dealer';
+  const count = (value: number | null | undefined) => value == null ? 'Not available' : Number(value).toLocaleString();
+  const date = (value: string | null | undefined) => value ? value.slice(0, 10) : 'Original date unavailable';
 
   return (
     <main className="min-h-screen bg-[#08080c] text-white">
@@ -51,24 +53,27 @@ export default function DealerProfile() {
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-white/60">
               <span className="flex items-center gap-2"><Star size={15} className="text-[#c9a96e]" /> {dealer.rating == null ? 'Unrated' : Number(dealer.rating).toFixed(2)} · {dealer.review_count} reviews</span>
-              <span className="flex items-center gap-2"><Users size={15} /> {dealer.whatsapp_group_count} WhatsApp groups</span>
+              <span className="flex items-center gap-2"><Users size={15} /> {dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} WhatsApp groups` : 'WhatsApp groups not published'}</span>
             </div>
           </div>
         </div>
       </section>
 
       <section className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-12">
-        <div className="grid gap-px bg-white/10 sm:grid-cols-4">
-          <ProfileMetric label="Active listings" value={stats?.active_listings || 0} />
-          <ProfileMetric label="For sale posts" value={stats?.wts_posts || 0} />
-          <ProfileMetric label="Looking for posts" value={stats?.wtb_posts || 0} />
-          <ProfileMetric label="Posting years" value={stats?.posting_years || 0} />
+        <div className="grid gap-px bg-white/10 sm:grid-cols-2 lg:grid-cols-6">
+          <ProfileMetric label="Total linked posts" value={count(stats?.total_posts)} />
+          <ProfileMetric label="Active listings" value={count(stats?.active_listings)} />
+          <ProfileMetric label="For sale posts" value={count(stats?.wts_posts)} />
+          <ProfileMetric label="Looking for posts" value={count(stats?.wtb_posts)} />
+          <ProfileMetric label="Posting years" value={count(stats?.posting_years)} />
+          <ProfileMetric label="Dated / undated" value={`${count(stats?.dated_posts)} / ${count(stats?.undated_posts)}`} />
         </div>
+        <p className="mt-5 text-xs text-white/40">Original posting range: {date(stats?.first_post_at)} to {date(stats?.last_post_at)}. Import timestamps are never substituted for missing source dates.</p>
         {dealer.profile_summary && <p className="mt-8 max-w-3xl text-sm leading-7 text-white/55">{dealer.profile_summary}</p>}
 
         <div className="mt-10 flex items-center justify-between border-b border-white/10 pb-4">
           <h2 className="text-xl font-semibold">Recent market activity</h2>
-          <span className="text-xs text-white/35">Latest {listings.length} linked posts</span>
+          <span className="text-xs text-white/35">Up to {listings.length} linked posts shown</span>
         </div>
         <div className="divide-y divide-white/10">
           {listings.map(listing => (
@@ -96,6 +101,6 @@ export default function DealerProfile() {
   );
 }
 
-function ProfileMetric({ label, value }: { label: string; value: number }) {
-  return <div className="bg-[#111118] px-5 py-6"><div className="font-mono text-2xl text-white">{Number(value).toLocaleString()}</div><div className="mt-2 text-[10px] uppercase tracking-wider text-white/35">{label}</div></div>;
+function ProfileMetric({ label, value }: { label: string; value: string }) {
+  return <div className="bg-[#111118] px-4 py-5"><div className="font-mono text-lg text-white sm:text-xl">{value}</div><div className="mt-2 text-[10px] uppercase tracking-wider text-white/35">{label}</div></div>;
 }
