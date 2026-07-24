@@ -104,10 +104,11 @@ export default function DealerDirectory() {
                 <p className="mt-1 text-xs text-white/42">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
                 <div className="mt-5 flex items-center gap-4 text-xs text-white/60">
                   <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? 'Unrated' : Number(dealer.rating).toFixed(2)}</span>
-                  <span>{dealer.review_count.toLocaleString()} reviews</span>
-                  <span className="flex items-center gap-1"><Users size={13} /> {dealer.whatsapp_group_count.toLocaleString()} groups</span>
+                  <span>{dealer.review_count.toLocaleString()} feedback reviews</span>
+                  <span className="flex items-center gap-1"><Users size={13} /> {dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} groups` : 'Groups not published'}</span>
                 </div>
-                <div className="mt-7 grid grid-cols-3 border-t border-white/10 pt-5 text-center">
+                <div className="mt-7 grid grid-cols-2 border-t border-white/10 pt-5 text-center sm:grid-cols-4">
+                  <Metric label="Posts" value={stats?.total_posts ?? null} />
                   <Metric label="For sale" value={stats?.wts_posts || 0} />
                   <Metric label="Looking for" value={stats?.wtb_posts || 0} />
                   <Metric label="Active" value={stats?.active_listings || 0} />
@@ -125,6 +126,6 @@ export default function DealerDirectory() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return <div><div className="font-mono text-base text-white">{Number(value).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-white/35">{label}</div></div>;
+function Metric({ label, value }: { label: string; value: number | null }) {
+  return <div><div className="font-mono text-base text-white">{value == null ? '—' : Number(value).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-white/35">{label}</div></div>;
 }
