@@ -24,6 +24,7 @@ test('only customer-safe watch rows qualify for the showcase', () => {
   assert.equal(customerSafe({ brand: 'Unknown', reference: '2023Y', listing_type: 'WTS', verdict: 'HUMAN' }, source), false);
   assert.equal(customerSafe({ brand: 'Rolex', reference: '116500LN', listing_type: 'MULTI', verdict: 'HUMAN' }, source), false);
   assert.equal(customerSafe({ brand: 'Patek Philippe', reference: '5712/1A', listing_type: 'WTS', verdict: 'HUMAN', has_images: true }, source), false);
+  assert.equal(customerSafe({ brand: 'Patek Philippe', reference: '5712/1A', listing_type: 'WTS', verdict: 'MULTI_WATCH_STOCK_LIST', has_images: false }, source), false);
   assert.deepEqual(customerSafeReasons(null, source), ['WATCH_RECORD_NOT_FOUND']);
   assert.deepEqual(
     customerSafeReasons({ brand: 'Rolex', reference: '116500LN', listing_type: 'MULTI', verdict: 'HUMAN', has_images: true }, source),

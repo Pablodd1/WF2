@@ -53,7 +53,9 @@ function customerSafeReasons(row, rawData) {
   if (!validReference(row.reference)) reasons.push('REFERENCE_INVALID');
   if (!sourceIdentityAgrees(row, rawData)) reasons.push('SOURCE_IDENTITY_DISAGREES');
   if (row.has_images || (Array.isArray(row.image_urls) && row.image_urls.length)) reasons.push('ALREADY_HAS_IMAGES');
-  if (String(row.verdict || '').toUpperCase() === 'RECYCLE') reasons.push('RECYCLE');
+  const verdict = String(row.verdict || '').toUpperCase();
+  if (verdict === 'RECYCLE') reasons.push('RECYCLE');
+  if (/MULTI|BUNDLE/.test(verdict)) reasons.push('MULTI_OR_BUNDLE_VERDICT');
   if (['MULTI', 'OTHER'].includes(String(row.listing_type || '').toUpperCase())) reasons.push('DISALLOWED_LISTING_TYPE');
   return reasons;
 }
