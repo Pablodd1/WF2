@@ -8,6 +8,7 @@ const CSV_PATH = process.env.MEDIA_INVENTORY_CSV || 'C:/Users/jasme/Downloads/th
 const PUBLIC_BASE = String(process.env.DO_PUBLIC_BASE_URL || 'https://thecollective-prod.nyc3.digitaloceanspaces.com/').replace(/\/+$/, '');
 const TARGET = Math.min(1000, Math.max(1, Number(process.env.MEDIA_LINEAGE_LIMIT || 100)));
 const REQUESTED_BRAND = String(process.env.MEDIA_BRAND || '').trim();
+const LEDGER_OUTPUT = String(process.env.MEDIA_LEDGER_OUTPUT || '').trim();
 const APPLY = String(process.env.APPLY_MEDIA_LINKS || '').toLowerCase() === 'true';
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -59,6 +60,19 @@ function customerSafeReasons(row, rawData) {
 
 function customerSafe(row, rawData) {
   return customerSafeReasons(row, rawData).length === 0;
+}
+
+function ledgerRow(item) {
+  return {
+    record_id: item.record_id,
+    source_object_key: item.source_object_key,
+    public_url: item.public_url,
+    brand: item.watch.brand,
+    reference: item.watch.reference,
+    listing_type: item.watch.listing_type,
+    verdict: item.watch.verdict,
+    source_identity_verified: true,
+  };
 }
 
 async function supabase(pathname, options = {}) {
@@ -171,6 +185,17 @@ async function run() {
   }
 
   let databaseResult = null;
+  let ledgerOutput = null;
+  if (LEDGER_OUTPUT) {
+    ledgerOutput = path.resolve(LEDGER_OUTPUT);
+    fs.mkdirSync(path.dirname(ledgerOutput), { recursive: true });
+    fs.writeFileSync(ledgerOutput, `${JSON.stringify({
+      generated_at: new Date().toISOString(),
+      mode: APPLY ? 'apply' : 'dry_run',
+      requested_brand: REQUESTED_BRAND || null,
+      rows: safe.map(ledgerRow),
+    }, null, 2)}\n`);
+  }
   if (APPLY && safe.length) {
     databaseResult = await supabase('rpc/attach_listing_media_batch', {
       method: 'POST',
@@ -188,9 +213,10 @@ async function run() {
     watch_rows_found,
     rejection_counts,
     customer_safe_matches: safe.length,
+    ledger_output: ledgerOutput,
     requested_brand: REQUESTED_BRAND || null,
     database_result: databaseResult,
-    sample: safe.slice(0, 10).map(item => ({ record_id: item.record_id, brand: item.watch.brand, reference: item.watch.reference, url: item.public_url, source_identity_verified: true })),
+    sample: safe.slice(0, 10).map(ledgerRow),
   }, null, 2)}\n`);
   if (!safe.length) process.exitCode = 2;
 }
@@ -202,4 +228,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { basename, customerSafe, customerSafeReasons, normalizedIdentity, recordId, requestedBrandMatches, sourceIdentityAgrees, validReference };
+module.exports = { basename, customerSafe, customerSafeReasons, ledgerRow, normalizedIdentity, recordId, requestedBrandMatches, sourceIdentityAgrees, validReference };

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { basename, customerSafe, customerSafeReasons, recordId, requestedBrandMatches, sourceIdentityAgrees, validReference } = require('../tools/mission-images/link-images-from-raw-lineage.cjs');
+const { basename, customerSafe, customerSafeReasons, ledgerRow, recordId, requestedBrandMatches, sourceIdentityAgrees, validReference } = require('../tools/mission-images/link-images-from-raw-lineage.cjs');
 
 test('maps a raw source row to its imported watch record id', () => {
   assert.equal(recordId('auction_watches', 'abc-123'), 'mysql_auction_watches_abc-123');
@@ -41,4 +41,17 @@ test('requires exact structured source brand and reference agreement', () => {
 
 test('does not constrain image lineage unless a brand filter is requested', () => {
   assert.equal(requestedBrandMatches('Patek Philippe'), true);
+});
+
+test('candidate ledger contains evidence identifiers but no raw seller data', () => {
+  const row = ledgerRow({
+    record_id: 'mysql_auction_watches_1',
+    source_object_key: 'listings/full/1.jpg',
+    public_url: 'https://cdn.example/1.jpg',
+    watch: { brand: 'Audemars Piguet', reference: '16202ST', listing_type: 'WTS', verdict: 'HUMAN' },
+  });
+  assert.equal(row.reference, '16202ST');
+  assert.equal(row.source_identity_verified, true);
+  assert.equal(Object.hasOwn(row, 'raw_data'), false);
+  assert.equal(Object.hasOwn(row, 'seller_phone'), false);
 });
