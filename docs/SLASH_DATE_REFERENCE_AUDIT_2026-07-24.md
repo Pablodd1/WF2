@@ -90,15 +90,48 @@ service-role check found:
 
 | Private staging check | Coverage |
 | --- | ---: |
-| Parent lineage matched | 1 / 44 |
-| Parent phone present | 1 / 44 |
-| Parent seller name present | 0 / 44 |
-| Parent source date present | 1 / 44 |
+| Parent lineage matched | 2 / 44 |
+| Parent phone present | 2 / 44 |
+| Parent seller name present | 1 / 44 |
+| Parent source date present | 2 / 44 |
 | Child lineage matched | 0 / 44 |
 | Verified dealer matches | 0 / 44 |
 
 The private tables are reachable and correctly protected, but their data does
 not yet cover this canary. Customer pages must not show or infer dealer contact,
 reputation, or seller activity from these rows. The next lineage job must join
-the 43 unmatched parents to the source user export, stage exact matches
+the 42 unmatched parents to the source user export, stage exact matches
 privately, and rerun this same canary before contact information is eligible.
+
+The two exact source-user matches passed dry-run and were upserted into the
+private parent-lineage table. Immediate read-back returned two matches, no
+unmatched/conflicting/orphaned rows, and zero mismatches across phone, name,
+intent, original date, listing linkage, title hash, and image evidence. No
+dealer was assigned, consent remains ungranted, and no public record changed.
+
+### Human-review package
+
+The 100-row canary was split into two local, untracked review files:
+
+- `human-review-49.csv`: correction candidates with blank decision and notes
+  columns, exact child raw text, parent ID, original date, proposed/exported
+  identity, and price/currency evidence;
+- `held-51.csv`: deterministically blocked rows premarked `DEFER`.
+
+Validation found 49/49 review rows with raw evidence and parent IDs, zero
+preapproved decisions, and 51/51 blocked rows deferred. Raw-message evidence
+and private lineage were not committed to GitHub.
+
+### Remaining seller exceptions
+
+Of the 42 unmatched parents:
+
+- 35 have no exact seller-lineage evidence in the supplied user export;
+- seven share a message hash with eight seller candidates but fail the exact
+  timestamp gate.
+
+The eight hash-only candidates are not timezone-level drift. Their timestamps
+differ from the parent by approximately 150 to 310 days, and one candidate
+also disagrees on WTS/WTB intent. The exact-time gate remains unchanged and
+all seven parents remain unresolved. A local `seller-timestamp-review-7.csv`
+contains pseudonymized identities and no raw phone numbers.
