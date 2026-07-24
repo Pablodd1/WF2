@@ -45,6 +45,21 @@ The profile and directory UI now distinguish unavailable evidence from a real ze
 
 ## Safe next step
 
-Export the authenticated directory through an approved, reproducible source path and load it into `dealer_directory_import_staging`. Compare by stable source ID first, then by reviewed identity evidence. Only after review should a record become `VERIFIED`, receive `dealer_id` links, or expose contact information.
+Export the authenticated directory through an approved, reproducible source path and run the new dry-run importer:
+
+```powershell
+$env:DIRECTORY_EXPORT_PATH = 'C:\path\rated-dealers.csv'
+npm run dealers:stage-directory
+```
+
+Review `audit-output/dealer-lineage/rated-dealers-import-preview.json`. Only after the export is reviewed may a controlled staging write be enabled:
+
+```powershell
+$env:DIRECTORY_IMPORT_APPLY = 'true'
+$env:DIRECTORY_IMPORT_APPROVED = 'I_HAVE_REVIEWED_EXPORT'
+npm run dealers:stage-directory
+```
+
+The importer writes only to `dealer_directory_import_staging`. It never verifies a dealer, changes `watch_records`, links listings, or exposes contact information. Compare by stable source ID first, then by reviewed identity evidence. Only after review should a record become `VERIFIED`, receive `dealer_id` links, or expose contact information.
 
 No external directory rows, credentials, phone numbers, or production data were committed by this review.
