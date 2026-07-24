@@ -4,6 +4,7 @@ const { lookupCatalog } = require('./_lib/catalog');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
+const { sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -22,7 +23,11 @@ module.exports = async function handler(req, res) {
 
     const candidates = (data || []).map(row => {
       const normalized = normalizeMarketRow(row, row.reference);
-      return { ...row, price_usd: normalized.analytics_price_usd, analytics_currency_status: normalized.analytics_currency_status };
+      return sanitizeTradingRecord({
+        ...row,
+        price_usd: normalized.analytics_price_usd,
+        analytics_currency_status: normalized.analytics_currency_status,
+      });
     }).filter(row => {
       const catalog = lookupCatalog(row.reference, row.brand);
       return !classifyResearchEligibility(row, catalog)

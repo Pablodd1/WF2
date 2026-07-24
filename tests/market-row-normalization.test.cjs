@@ -18,6 +18,16 @@ test('prefers an explicit USD equivalent on the exact reference line', () => {
   assert.equal(result.analytics_currency_status, 'VERIFIED');
 });
 
+test('does not parse a trailing production year as the USD price', () => {
+  const result = normalizeMarketRow({
+    price_usd: 2025,
+    raw_message: '7118/1200a blue 84000 USD 2025 rdy now',
+  }, '7118/1200A');
+  assert.equal(result.analytics_price_usd, 84000);
+  assert.equal(result.price_normalization, 'EXPLICIT_USD_FROM_REFERENCE_LINE');
+  assert.equal(result.analytics_currency_status, 'VERIFIED');
+});
+
 test('does not borrow a price from a different reference in the bundle', () => {
   const result = normalizeMarketRow({ price_usd: 26000, raw_message: '52506 Ice Blue price on request\n52508 Black HKD 296k' }, '52506');
   assert.equal(result.analytics_price_usd, 26000);

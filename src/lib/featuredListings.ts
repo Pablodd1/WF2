@@ -31,6 +31,7 @@ export function isCustomerSafeFeaturedListing(listing: FeaturedListing) {
     Number.isFinite(price) &&
     price >= 1_000 &&
     price <= 2_500_000 &&
+    !(Number.isInteger(price) && price >= 1900 && price <= new Date().getUTCFullYear() + 2) &&
     Number.isFinite(confidence) &&
     confidence >= 85 &&
     confidence <= 100

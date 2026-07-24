@@ -10,8 +10,11 @@ function explicitAmount(line, currencies) {
   const labels = currencies.join('|');
   const before = new RegExp(`(?:${labels})\\s*[:=$-]?\\s*([\\d][\\d.,]*)\\s*(K|M|MN|W|\\u4E07)?(?![\\dA-Z])`, 'i');
   const after = new RegExp(`([\\d][\\d.,]*)\\s*(K|M|MN|W|\\u4E07)?\\s*(?:${labels})`, 'i');
-  const match = line.match(before) || line.match(after);
-  return match ? parseNumber(match[1], match[2]) : null;
+  const currentYear = new Date().getUTCFullYear();
+  return [line.match(before), line.match(after)]
+    .filter(Boolean)
+    .map(match => parseNumber(match[1], match[2]))
+    .find(amount => amount && !(Number.isInteger(amount) && amount >= 1900 && amount <= currentYear + 2)) || null;
 }
 
 function hasCurrencyToken(line, currencies) {
