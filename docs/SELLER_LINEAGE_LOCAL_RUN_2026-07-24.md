@@ -73,3 +73,28 @@ This proves the local canary is structurally safe for private staging. It does
 not prove that the Preview database has the required schema or that any dealer
 identity should be verified. The next step remains a bounded Preview write,
 followed by a read-back reconciliation.
+
+## Intent-conflict review
+
+The 288 review-required rows were inspected locally without changing them:
+
+| Source intent | Normalized intent | Rows |
+|---|---|---:|
+| WTB | WTS | 263 |
+| WTS | WTB | 21 |
+| WTS | Unspecified | 4 |
+
+Additional evidence:
+
+- 288 unique source records;
+- 288/288 preserve exact raw-message evidence;
+- 288/288 preserve exact timestamp evidence;
+- 288/288 have an original posting date;
+- 288/288 have an image reference;
+- 276/288 have a seller name;
+- 0 duplicate source records in this conflict file.
+
+Priority: review the 263 `WTB -> WTS` rows first. These are buyer-request
+classification conflicts and must not be published as sale inventory until the
+raw message is reviewed. The 21 `WTS -> WTB` rows and four unspecified cases
+remain blocked under the same rule.
