@@ -67,3 +67,23 @@ SUPABASE_SERVICE_ROLE_KEY=...
 MEDIA_MANIFEST_LIMIT=100
 ```
 
+## Child-lineage audit
+
+For unbundled exports, run `npm run audit:child-image-lineage` before any
+attachment write. The report permits only a single child whose brand and
+reference exactly match the source parent. Shared parent images remain
+review-only because an image attached to a multi-listing message cannot be
+assigned to one child without additional evidence.
+
+Patek audit evidence (2026-07-24):
+
+- 418 source parents contain image filenames.
+- 46 parents occur in the unbundled mappings.
+- All 46 mapped parents contain multiple child listings (2 to 139 children;
+  average 23.2).
+- 372 image parents have no child mapping in the supplied export set.
+- Zero child images qualify for automatic attachment.
+- Sampled children include dates parsed as references (`2024/5`, `2025/6`)
+  and mixed-brand parent messages. These remain review-only and must not enter
+  customer image inventory or Price Research as exact-reference evidence.
+
