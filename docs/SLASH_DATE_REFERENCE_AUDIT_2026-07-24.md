@@ -58,10 +58,27 @@ Supabase client and no write path.
 
 ## Next Safe Canary
 
-1. Select 100 catalog-confirmed candidates across Patek Philippe, Rolex, and
-   other brands.
-2. Rejoin each child to its preserved parent raw message.
-3. Validate seller, original posting date, WTS/WTB intent, currency, price,
-   dial, and duplicate status.
-4. Stage approved corrections in a private review table.
-5. Apply nothing until the 100-row review has zero lineage or price defects.
+The first 100-row canary is complete:
+
+| Result | Rows |
+| --- | ---: |
+| Parent matched | 100 |
+| Exact child raw-line lineage | 100 |
+| Original source date present | 100 |
+| Seller name present | 0 |
+| Seller phone present | 0 |
+| Requires human correction | 49 |
+| Blocked by price/currency | 33 |
+| Blocked by catalog/dial | 17 |
+| Blocked by lineage/intent | 1 |
+
+The canary contained 40 Patek Philippe, 54 Rolex, four unknown-brand, and two
+Cartier rows. Review flags included 33 price-parse and currency-ambiguity
+blocks, 25 catalog dial conflicts, nine raw-price conflicts, seven USD-price
+conflicts, and three currency conflicts.
+
+No row is approved automatically. Parent lineage and source dates are strong,
+but seller identity must be joined from the separate seller-lineage source.
+The next step is human review of the 49 correction candidates followed by a
+seller-lineage join. The remaining 51 rows stay blocked until their stated
+catalog, dial, price, currency, or intent defect is resolved.

@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { classifyRow } = require('../tools/multilisting/audit-slash-date-references.cjs');
+const { selectCanary } = require('../tools/multilisting/build-slash-date-lineage-canary.cjs');
 
 test('finds the Patek reference and price but keeps an unconfirmed catalog row in review', () => {
   const result = classifyRow({
@@ -41,4 +42,26 @@ test('keeps a date-only row out of automatic correction', () => {
   });
   assert.equal(result.decision, 'NO_RECOVERABLE_REFERENCE');
   assert.equal(result.proposed_reference, null);
+});
+
+test('selects a bounded priority-brand canary without duplicate rows', () => {
+  const rows = [
+    ...Array.from({ length: 45 }, (_, index) => ({
+      decision: 'CATALOG_CONFIRMED_CANDIDATE', brand: 'Patek Philippe',
+      input_file: 'batch.csv', listing_id: `p-${index}`,
+    })),
+    ...Array.from({ length: 45 }, (_, index) => ({
+      decision: 'CATALOG_CONFIRMED_CANDIDATE', brand: 'Rolex',
+      input_file: 'batch.csv', listing_id: `r-${index}`,
+    })),
+    ...Array.from({ length: 20 }, (_, index) => ({
+      decision: 'CATALOG_CONFIRMED_CANDIDATE', brand: 'Cartier',
+      input_file: 'batch.csv', listing_id: `c-${index}`,
+    })),
+  ];
+  const selected = selectCanary(rows, 100);
+  assert.equal(selected.length, 100);
+  assert.equal(new Set(selected.map(row => row.listing_id)).size, 100);
+  assert.equal(selected.filter(row => row.brand === 'Patek Philippe').length, 40);
+  assert.equal(selected.filter(row => row.brand === 'Rolex').length, 40);
 });
