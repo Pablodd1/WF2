@@ -147,6 +147,11 @@ interface UnbundledQueueApiItem {
   catalogConfirmed?: boolean;
   exactRawLineage?: boolean;
   field_confidence?: Record<string, unknown>;
+  seller_name?: string | null;
+  seller_phone?: string | null;
+  original_posted_at?: string | null;
+  front_image?: string | null;
+  seller_lineage_status?: string | null;
 }
 
 interface PriceRemediationQueueApiItem {
@@ -351,10 +356,15 @@ export default function ReviewQueue() {
               disposition: ready ? 'READY_FOR_HUMAN_APPROVAL' : 'HUMAN_REVIEW',
               priority: ready ? 30 : 90,
               rawMessage: item.raw_message || undefined,
-              reviewEvidence: item.field_confidence,
-              sellerName: String(item.field_confidence?.seller_name || '') || null,
-              sellerPhone: String(item.field_confidence?.seller_phone || '') || null,
-              originalPostedAt: item.created_at || null,
+              reviewEvidence: {
+                ...(item.field_confidence || {}),
+                ...(item.seller_lineage_status ? { seller_lineage_status: item.seller_lineage_status } : {}),
+                ...(item.front_image ? { front_image: item.front_image } : {}),
+              },
+              sellerName: item.seller_name || String(item.field_confidence?.seller_name || '') || null,
+              sellerPhone: item.seller_phone || String(item.field_confidence?.seller_phone || '') || null,
+              originalPostedAt: item.original_posted_at || item.created_at || null,
+              imageUrl: item.front_image || undefined,
               source: String(item.source || '') || null,
             };
           }));

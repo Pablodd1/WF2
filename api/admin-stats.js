@@ -9,6 +9,35 @@ async function plannedCount(client, configure) {
   return count || 0;
 }
 
+async function lineageStats(client) {
+  async function lineageCount(configure) {
+    let query = client.from('seller_listing_lineage_staging').select('id', { count: 'planned', head: true });
+    if (configure) query = configure(query);
+    const { count, error } = await query;
+    if (error) throw error;
+    return count || 0;
+  }
+  const filters = [
+    ['total', null],
+    ['matchReady', query => query.eq('match_status', 'MATCH_READY')],
+    ['reviewRequired', query => query.eq('match_status', 'REVIEW_REQUIRED')],
+    ['applied', query => query.eq('match_status', 'APPLIED')],
+    ['withName', query => query.not('observed_name', 'is', null)],
+    ['withPhone', query => query.not('source_identity', 'is', null)],
+    ['withOriginalDate', query => query.not('source_posted_at', 'is', null)],
+    ['withImage', query => query.not('front_image', 'is', null)],
+  ];
+  try {
+    const results = await Promise.all(filters.map(async ([key, configure]) => [
+      key,
+      await lineageCount(configure),
+    ]));
+    return { available: true, ...Object.fromEntries(results) };
+  } catch {
+    return { available: false, total: 0, matchReady: 0, reviewRequired: 0, applied: 0, withName: 0, withPhone: 0, withOriginalDate: 0, withImage: 0 };
+  }
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -19,7 +48,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const types = ['WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'OTHER'];
-    const [totalRecords, approved, human, recycle, typeEstimates, sampleResult, patekRecords, patekWts, patekImages] = await Promise.all([
+    const [totalRecords, approved, human, recycle, typeEstimates, sampleResult, patekRecords, patekWts, patekImages, sellerLineage] = await Promise.all([
       plannedCount(client),
       plannedCount(client, query => query.eq('verdict', 'APPROVED')),
       plannedCount(client, query => query.eq('verdict', 'HUMAN')),
@@ -32,6 +61,7 @@ module.exports = async function handler(req, res) {
       plannedCount(client, query => query.eq('brand', 'Patek Philippe')),
       plannedCount(client, query => query.eq('brand', 'Patek Philippe').eq('verdict', 'APPROVED').eq('listing_type', 'WTS')),
       plannedCount(client, query => query.eq('brand', 'Patek Philippe').eq('has_images', true)),
+      lineageStats(client),
     ]);
     if (sampleResult.error) throw sampleResult.error;
 
@@ -59,6 +89,7 @@ module.exports = async function handler(req, res) {
       recycle,
       typeCounts,
       patek: { records: patekRecords, approvedWts: patekWts, imageBacked: patekImages, countsEstimated: true },
+      sellerLineage,
       qualitySampleSize: sample.length,
       missingRef: sample.filter(row => missing(row.reference)).length,
       missingPrice: sample.filter(row => !Number.isFinite(Number(row.price_usd)) || Number(row.price_usd) <= 0).length,

@@ -30,6 +30,17 @@ interface StatsData {
   qualitySampleSize: number;
   lastUpdatedAt: string | null;
   patek: { records: number; approvedWts: number; imageBacked: number; countsEstimated: boolean };
+  sellerLineage: {
+    available: boolean;
+    total: number;
+    matchReady: number;
+    reviewRequired: number;
+    applied: number;
+    withName: number;
+    withPhone: number;
+    withOriginalDate: number;
+    withImage: number;
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -129,6 +140,7 @@ export default function AdminPage() {
     avgConfidence: 0, typeCounts: { WTS: 0, WTB: 0, NTQ: 0, TRADE: 0, MULTI: 0, OTHER: 0 },
     countsEstimated: true, qualitySampleSize: 0, lastUpdatedAt: null,
     patek: { records: 0, approvedWts: 0, imageBacked: 0, countsEstimated: true },
+    sellerLineage: { available: false, total: 0, matchReady: 0, reviewRequired: 0, applied: 0, withName: 0, withPhone: 0, withOriginalDate: 0, withImage: 0 },
   };
   const totalDenominator = Math.max(1, statsMock.totalRecords);
   const qualityDenominator = Math.max(1, statsMock.qualitySampleSize);
@@ -167,6 +179,35 @@ export default function AdminPage() {
         </div>
 
         {/* ═══ MESSAGE BANNER ═══ */}
+        <div className="rounded-xl border border-border-default bg-bg-card px-4 py-4 mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-gold-primary">Seller lineage coverage</span>
+            <button type="button" onClick={() => navigate('/review-queue')} className="text-xs font-semibold text-text-secondary hover:text-gold-primary">Open human review</button>
+          </div>
+          {statsMock.sellerLineage.available ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+              {[
+                ['Staged', statsMock.sellerLineage.total],
+                ['Match ready', statsMock.sellerLineage.matchReady],
+                ['Review', statsMock.sellerLineage.reviewRequired],
+                ['Applied', statsMock.sellerLineage.applied],
+                ['Names', statsMock.sellerLineage.withName],
+                ['Phones', statsMock.sellerLineage.withPhone],
+                ['Original dates', statsMock.sellerLineage.withOriginalDate],
+                ['Images', statsMock.sellerLineage.withImage],
+              ].map(([label, value]) => (
+                <div key={String(label)}>
+                  <div className="text-lg font-bold text-text-primary">{Number(value).toLocaleString()}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-text-muted">{label}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-text-muted">Private seller-lineage staging is not available in this deployment. No contact fields are inferred or published.</div>
+          )}
+          <div className="text-[10px] text-text-muted mt-3">Names, phones, original dates, and image filenames are review evidence only until an authorized reviewer approves the lineage.</div>
+        </div>
+
         {message && (
           <div className={`rounded-lg border px-4 py-3 text-sm mb-6 flex items-center gap-2 ${
             message.startsWith('Error') ? 'border-red-500/30 bg-red-500/10 text-red-400' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'

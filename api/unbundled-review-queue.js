@@ -14,6 +14,20 @@ async function rest(baseUrl, key, path) {
   };
 }
 
+async function loadSellerLineage(baseUrl, key, rows) {
+  const sourceIds = [...new Set(rows
+    .map(row => String(row.field_confidence?.source_record_id || '').trim())
+    .filter(value => /^[A-Za-z0-9_-]+$/.test(value)))];
+  if (!sourceIds.length) return new Map();
+  const params = new URLSearchParams({
+    select: 'source_record_id,source_identity,observed_name,source_posted_at,front_image,match_status,match_evidence',
+    source_record_id: `in.(${sourceIds.join(',')})`,
+    limit: String(sourceIds.length),
+  });
+  const lineageRows = await rest(baseUrl, key, `seller_listing_lineage_staging?${params.toString()}`);
+  return new Map(lineageRows.map(row => [String(row.source_record_id), row]));
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   const dealerAuth = await authorizeDealer(req, res, new Set(['reviewer', 'admin']));
@@ -43,6 +57,7 @@ module.exports = async function handler(req, res) {
     params.set('field_confidence->>review_bucket', `eq.${bucket}`);
     if (search) params.set('or', `(brand.ilike.*${search}*,reference.ilike.*${search}*,raw_message.ilike.*${search}*)`);
     const result = await rest(baseUrl, key, `watch_staging?${params.toString()}`);
+    const sellerLineage = await loadSellerLineage(baseUrl, key, result.rows);
     const items = result.rows.map(row => ({
       ...row,
       batchId: row.batch_id,
@@ -52,6 +67,11 @@ module.exports = async function handler(req, res) {
       sourceChildId: row.field_confidence?.source_child_id || null,
       catalogConfirmed: row.field_confidence?.catalog_confirmed === true,
       exactRawLineage: row.field_confidence?.exact_raw_lineage === true,
+      seller_name: sellerLineage.get(String(row.field_confidence?.source_record_id || ''))?.observed_name || null,
+      seller_phone: sellerLineage.get(String(row.field_confidence?.source_record_id || ''))?.source_identity || null,
+      original_posted_at: sellerLineage.get(String(row.field_confidence?.source_record_id || ''))?.source_posted_at || null,
+      front_image: sellerLineage.get(String(row.field_confidence?.source_record_id || ''))?.front_image || null,
+      seller_lineage_status: sellerLineage.get(String(row.field_confidence?.source_record_id || ''))?.match_status || null,
     }));
     return res.status(200).json({ status: 'ok', batchId: batchId || null, page, limit, total: result.total, bucket, items });
   } catch (error) {
