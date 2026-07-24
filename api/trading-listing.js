@@ -20,7 +20,7 @@ module.exports = async function handler(req, res) {
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
 
     const { data, error } = await client.from('watch_records')
-      .select('id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,listing_type,verdict,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,image_urls,region,item_category,raw_message')
+      .select('id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,listing_type,verdict,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,image_urls,region,raw_message')
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
@@ -50,7 +50,6 @@ module.exports = async function handler(req, res) {
         thumbnail_url: data.thumbnail_url,
         image_urls: data.image_urls,
         region: data.region,
-        item_category: data.item_category,
         source_message_is_redacted: true,
       },
     });
