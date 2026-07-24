@@ -50,8 +50,6 @@ async function loadReferenceEvidence(client, brand, entry) {
     brand,
     bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds),
   }, catalog));
-  if (qualified.length < MINIMUM_ANALYTICS_SAMPLE) return null;
-
   const dials = new Map();
   let sum = 0;
   for (const row of qualified) {
@@ -62,8 +60,9 @@ async function loadReferenceEvidence(client, brand, entry) {
   return {
     reference: entry.reference,
     listing_count: qualified.length,
+    analytics_ready: qualified.length >= MINIMUM_ANALYTICS_SAMPLE,
     sample_capped: data.length >= REFERENCE_SAMPLE_LIMIT,
-    avg_price: Math.round(sum / qualified.length),
+    avg_price: qualified.length >= MINIMUM_ANALYTICS_SAMPLE ? Math.round(sum / qualified.length) : null,
     dial_colors: [...dials.entries()]
       .map(([dial_color, count]) => ({ dial_color, count }))
       .sort((a, b) => b.count - a.count),

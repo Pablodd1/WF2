@@ -299,7 +299,7 @@ export default function PriceResearch() {
   const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
   const [pModel, setPModel] = useState('');
-  const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; sample_capped?: boolean; avg_price: number }[]>([]);
+  const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; analytics_ready?: boolean; sample_capped?: boolean; avg_price: number | null }[]>([]);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
 
   const loadModels = useCallback(async (brand: string) => {
@@ -439,7 +439,8 @@ export default function PriceResearch() {
   const activeDial = data?.selected_cohort.dial_color || '';
   const activeCondition = conditionLabel(data?.selected_cohort.condition || 'All');
   const selectedDialLine = activeDial ? dialChartColor(activeDial) : BLUE;
-  const priceHistoryTitle = `${activeDial || 'Selected'} Dial Price History - ${activeCondition === 'All' ? 'All Conditions' : activeCondition}`;
+  const datedHistory = (data?.monthly || []).length > 0;
+  const priceHistoryTitle = `${activeDial || 'Selected'} Dial ${datedHistory ? 'Price History' : 'Current Comparable Range'} - ${activeCondition === 'All' ? 'All Conditions' : activeCondition}`;
   const chartData: Array<Record<string, number | string | null>> = (data?.monthly || []).map(m => ({
     month: m.month,
     min: m.min_price,
@@ -450,6 +451,18 @@ export default function PriceResearch() {
     forecastLower: null,
     forecastUpper: null,
   }));
+  if (!chartData.length && data?.stats) {
+    chartData.push({
+      month: 'Current',
+      min: data.stats.min,
+      avg: data.stats.avg,
+      max: data.stats.max,
+      count: data.count,
+      forecast: null,
+      forecastLower: null,
+      forecastUpper: null,
+    });
+  }
   if (data?.forecast?.ready && data.forecast.points?.length) {
     const lastHistory = chartData.at(-1);
     if (lastHistory) lastHistory.forecast = Number(lastHistory.avg);
@@ -537,7 +550,7 @@ export default function PriceResearch() {
           )}
           <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${pBrand} model` : 'Choose a brand'}</h3>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-            Search every cataloged brand and model. References appear only when backed by real listing evidence; any approved reference can also be searched directly below.
+            Every reference shown here has real approved listing evidence. Five comparable observations are required before price analytics are published.
           </div>
 
           {/* Brand chips */}
@@ -590,7 +603,7 @@ export default function PriceResearch() {
 
           {pLoading === 'refs' && <div style={{ fontSize: 13, color: MUTED }}>Loading references…</div>}
           {pBrand && pModel && pLoading !== 'refs' && pRefs.length === 0 && (
-            <div style={{ fontSize: 13, color: MUTED }}>No listing-backed references were returned for this model.</div>
+            <div style={{ fontSize: 13, color: MUTED }}>No approved listing evidence was returned for this model.</div>
           )}
 
           {/* Reference cards */}
@@ -603,7 +616,9 @@ export default function PriceResearch() {
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,
                   }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</div>
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} observations · avg ${r.avg_price.toLocaleString()}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
+                    {r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} observations · {r.avg_price == null ? 'analytics pending (minimum 5)' : `avg $${r.avg_price.toLocaleString()}`}
+                  </div>
                 </button>
               ))}
             </div>
@@ -964,6 +979,7 @@ export default function PriceResearch() {
 
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
                     Based on {data.count} comparable WTS listings | standard 1.5 x IQR fences applied.
+                    {!datedHistory && ' Original posting dates are unavailable for a reliable time series, so this is a current range only.'}
                   </div>
                   {data.forecast?.ready ? (
                     <div className="mt-4 border-l-2 border-[#c9a03a] bg-[#c9a03a]/10 px-4 py-3 text-xs leading-6" style={{ color: NAVY }}>
