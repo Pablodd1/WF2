@@ -11,6 +11,7 @@
     "shadow:progress": "node tools/shadow-reprocess/shadow-progress-report.cjs",
     "media:pilot": "node tools/mission-images/pilot-link-images.cjs",
     "media:lineage-pilot": "node tools/mission-images/link-images-from-raw-lineage.cjs",
+    "media:apply-ledger": "node tools/mission-images/apply-image-ledger.cjs",
     "media:seed-manifest": "node tools/mission-images/seed-media-manifest.cjs",
     "audit:child-image-lineage": "node tools/mission-images/audit-child-image-lineage.cjs",
     "media:publish-other-pilot": "node tools/mission-images/publish-other-pilot.cjs",

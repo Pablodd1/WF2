@@ -16,6 +16,7 @@
 const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normalization-contract.cjs');
 const { consumeAiQuota, rejectForQuota } = require('./_lib/ai-quota.cjs');
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
+const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 
 const REVIEW_SCHEMA = {
   type: 'OBJECT',
@@ -47,7 +48,7 @@ module.exports = async function handler(req, res) {
   }
 
   const { rawMessage, currentGuess } = req.body || {};
-  const boundedRawMessage = String(rawMessage || '').trim().slice(0, 12_000);
+  const boundedRawMessage = redactPublicSource(String(rawMessage || '').trim()).slice(0, 12_000);
   if (!boundedRawMessage) {
     return res.status(400).json({ error: 'rawMessage required' });
   }

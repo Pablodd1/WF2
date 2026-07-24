@@ -155,6 +155,7 @@ interface UnbundledQueueApiItem {
   field_confidence?: Record<string, unknown>;
   seller_name?: string | null;
   seller_phone?: string | null;
+  seller_contact_available?: boolean;
   original_posted_at?: string | null;
   front_image?: string | null;
   seller_lineage_status?: string | null;
@@ -206,6 +207,8 @@ export default function ReviewQueue() {
   const [duplicateReviewed, setDuplicateReviewed] = useState<Set<string>>(new Set());
   const [reviewerSession, setReviewerSession] = useState<{ email?: string; role?: string } | null>(null);
   const [correctionDrafts, setCorrectionDrafts] = useState<Record<string, CorrectionDraft>>({});
+  const [contactRevealBusy, setContactRevealBusy] = useState<string | null>(null);
+  const [contactRevealErrors, setContactRevealErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -365,6 +368,7 @@ export default function ReviewQueue() {
               reviewEvidence: {
                 ...(item.field_confidence || {}),
                 ...(item.seller_lineage_status ? { seller_lineage_status: item.seller_lineage_status } : {}),
+                ...(item.seller_contact_available ? { seller_contact_available: true } : {}),
                 ...(item.front_image ? { front_image: item.front_image } : {}),
               },
               sellerName: item.seller_name || String(item.field_confidence?.seller_name || '') || null,
@@ -611,6 +615,37 @@ export default function ReviewQueue() {
       setDecisionError(error instanceof Error ? error.message : 'Human review action failed');
     } finally {
       setDecisionBusy(null);
+    }
+  };
+
+  const revealContact = async (item: ReviewItem) => {
+    setContactRevealBusy(item.id);
+    setContactRevealErrors(current => ({ ...current, [item.id]: '' }));
+    try {
+      const response = await fetch('/api/reviewer-contact-reveal', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stagingId: item.id,
+          reason: 'Reviewer opened contact while auditing exact raw listing lineage.',
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Contact reveal failed');
+      setItems(current => current.map(candidate => candidate.id === item.id ? {
+        ...candidate,
+        sellerName: data.contact?.seller_name || candidate.sellerName,
+        sellerPhone: data.contact?.seller_phone || candidate.sellerPhone,
+        originalPostedAt: data.contact?.original_posted_at || candidate.originalPostedAt,
+      } : candidate));
+    } catch (error) {
+      setContactRevealErrors(current => ({
+        ...current,
+        [item.id]: error instanceof Error ? error.message : 'Contact reveal failed',
+      }));
+    } finally {
+      setContactRevealBusy(null);
     }
   };
 
@@ -895,6 +930,19 @@ export default function ReviewQueue() {
                         <span>Source: <strong className="text-text-primary">{String(item.source || item.sourceType || 'Not identified')}</strong></span>
                         <span>Image: <strong className="text-text-primary">{String(item.reviewEvidence?.front_image || 'Not lineage-confirmed')}</strong></span>
                       </div>
+                      {lane === 'unbundled' && Boolean((item.reviewEvidence as Record<string, unknown>)?.seller_contact_available) && (
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <button
+                            onClick={() => void revealContact(item)}
+                            disabled={contactRevealBusy === item.id}
+                            className="inline-flex items-center gap-2 rounded-lg border border-gold-primary/40 px-3 py-2 text-xs font-bold text-gold-primary disabled:opacity-50"
+                          >
+                            {contactRevealBusy === item.id ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
+                            Reveal audited contact
+                          </button>
+                          {contactRevealErrors[item.id] && <span className="text-xs text-red-400">{contactRevealErrors[item.id]}</span>}
+                        </div>
+                      )}
                       <div className="mt-3 rounded border border-border-default bg-bg-card p-3 text-xs text-text-secondary whitespace-pre-wrap break-words">
                         {item.rawMessage || 'Raw child listing unavailable. Do not approve until the parent/source message is recovered.'}
                       </div>

@@ -2,6 +2,16 @@
 
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 
+function maskName(value) {
+  return String(value || '').trim().split(/\s+/).filter(Boolean)
+    .map(part => `${part[0]}***`).join(' ') || null;
+}
+
+function maskPhone(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits ? `***${digits.slice(-4)}` : null;
+}
+
 async function rest(baseUrl, key, path) {
   const response = await fetch(`${baseUrl}/rest/v1/${path}`, {
     headers: { apikey: key, Authorization: `Bearer ${key}`, Prefer: 'count=exact' },
@@ -29,6 +39,8 @@ async function loadSellerLineage(baseUrl, key, rows) {
 }
 
 module.exports = async function handler(req, res) {
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Vary', 'Cookie');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   const dealerAuth = await authorizeDealer(req, res, new Set(['reviewer', 'admin']));
   if (dealerAuth.error) return res.status(dealerAuth.status).json({ error: dealerAuth.error });
@@ -58,24 +70,31 @@ module.exports = async function handler(req, res) {
     if (search) params.set('or', `(brand.ilike.*${search}*,reference.ilike.*${search}*,raw_message.ilike.*${search}*)`);
     const result = await rest(baseUrl, key, `watch_staging?${params.toString()}`);
     const sellerLineage = await loadSellerLineage(baseUrl, key, result.rows);
-    const items = result.rows.map(row => ({
-      ...row,
-      batchId: row.batch_id,
-      reviewBucket: row.field_confidence?.review_bucket || null,
-      dealerAttributionMissing: !row.field_confidence?.dealer_id && !row.field_confidence?.seller_phone,
-      sourceRecordId: row.field_confidence?.source_record_id || null,
-      sourceChildId: row.field_confidence?.source_child_id || null,
-      catalogConfirmed: row.field_confidence?.catalog_confirmed === true,
-      exactRawLineage: row.field_confidence?.exact_raw_lineage === true,
-      seller_name: sellerLineage.get(String(row.field_confidence?.source_record_id || ''))?.observed_name || null,
-      seller_phone: sellerLineage.get(String(row.field_confidence?.source_record_id || ''))?.source_identity || null,
-      original_posted_at: sellerLineage.get(String(row.field_confidence?.source_record_id || ''))?.source_posted_at || null,
-      front_image: sellerLineage.get(String(row.field_confidence?.source_record_id || ''))?.front_image || null,
-      seller_lineage_status: sellerLineage.get(String(row.field_confidence?.source_record_id || ''))?.match_status || null,
-    }));
+    const items = result.rows.map(row => {
+      const seller = sellerLineage.get(String(row.field_confidence?.source_record_id || ''));
+      return {
+        ...row,
+        batchId: row.batch_id,
+        reviewBucket: row.field_confidence?.review_bucket || null,
+        dealerAttributionMissing: !seller,
+        sourceRecordId: row.field_confidence?.source_record_id || null,
+        sourceChildId: row.field_confidence?.source_child_id || null,
+        catalogConfirmed: row.field_confidence?.catalog_confirmed === true,
+        exactRawLineage: row.field_confidence?.exact_raw_lineage === true,
+        seller_name: maskName(seller?.observed_name),
+        seller_phone: maskPhone(seller?.source_identity),
+        seller_contact_available: Boolean(seller?.source_identity),
+        original_posted_at: seller?.source_posted_at || null,
+        front_image: seller?.front_image || null,
+        seller_lineage_status: seller?.match_status || null,
+      };
+    });
     return res.status(200).json({ status: 'ok', batchId: batchId || null, page, limit, total: result.total, bucket, items });
   } catch (error) {
     console.error('[unbundled-review-queue]', error);
     return res.status(500).json({ status: 'unavailable', error: 'Unbundled review queue is unavailable', items: [] });
   }
 };
+
+module.exports.maskName = maskName;
+module.exports.maskPhone = maskPhone;
