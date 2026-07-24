@@ -14,12 +14,13 @@ Evidence:
 - The workflow runs `supabase migration list` and explicitly does not apply migrations.
 - The successful GitHub Action run was `30112570920`, job `89550558421`.
 - The workflow reached the remote database and ran `supabase migration list` successfully.
-- The ledger contains **32 repository-only migrations** and **2 remote-only migrations**; no migration is marked applied on both sides in the output.
+- The exact `origin/main` commit used by the Action is `08700ea`; it contains **39 migration files**.
+- The ledger contains **39 repository-side entries** and **2 remote-only migrations**; no migration is marked applied on both sides in the captured output.
 - Remote-only migrations: `20260629194201`, `20260629224734`.
-- Repository-only entries include `20200101000000` and the 2026-07-12 through 2026-07-21 migration sequence.
+- Repository-side entries include `20200101000000` and the 2026-07-12 through 2026-07-22 migration sequence.
 - No migration was replayed locally or remotely during this checkpoint.
 
-Required next action: reconcile the two remote-only entries and the 32 repository-only entries with the migration history and deployment records. Do not run `supabase db push`, enable automatic migrations, or delete ledger rows until the owner confirms which side is authoritative.
+Required next action: reconcile the two remote-only entries and the 39 repository-side entries with the migration history and deployment records. Do not run `supabase db push`, enable automatic migrations, or delete ledger rows until the owner confirms which side is authoritative.
 
 ## Gate 2 - seller-lineage canary handoff
 
