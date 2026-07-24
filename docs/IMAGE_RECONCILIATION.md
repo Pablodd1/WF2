@@ -87,3 +87,8 @@ Patek audit evidence (2026-07-24):
   and mixed-brand parent messages. These remain review-only and must not enter
   customer image inventory or Price Research as exact-reference evidence.
 
+The shared parser now rejects slash dates as references and recognizes attached
+Patek shorthand such as `PP5269R`. A read-only batch-004 canary corrected
+`2024/5 / 5 HKD / 1 USD` to `5269R / 449,000 HKD / 57,564 USD`. The row remains
+blocked from publication because its catalog result is only a partial match.
+

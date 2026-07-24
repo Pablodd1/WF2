@@ -142,3 +142,28 @@ test('uses explicit HKD price evidence while preserving exported values for audi
   assert.ok(row.review_reasons.includes('PRICE_RAW_SOURCE_CONFLICT'));
   assert.ok(row.review_reasons.includes('CURRENCY_RAW_SOURCE_CONFLICT'));
 });
+
+test('repairs a slash date exported as the Patek reference and price', () => {
+  const row = buildCanaryRow({
+    listing_id: 'source-patek_000',
+    source_record_id: 'source-patek',
+    candidate_index: '0',
+    raw_line: 'NEW PP5269R Blue 2024/5 HKD449k',
+    brand: 'Patek Philippe',
+    reference: '2024/5',
+    listing_type: 'WTS',
+    dial_color: 'Salmon',
+    price_raw: '5',
+    price_currency: 'HKD',
+    price_usd: '1',
+  }, {
+    raw_message: 'PP HK NEW\nNEW PP5269R Blue 2024/5 HKD449k',
+    listing_type: 'WTS',
+  });
+  assert.equal(row.reference, '5269R');
+  assert.equal(row.reference_exported, '2024/5');
+  assert.equal(row.price_raw, 449000);
+  assert.equal(row.price_currency, 'HKD');
+  assert.ok(row.review_reasons.includes('REFERENCE_CORRECTION_AVAILABLE'));
+  assert.ok(row.review_reasons.includes('PRICE_RAW_SOURCE_CONFLICT'));
+});

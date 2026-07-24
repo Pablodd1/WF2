@@ -14,6 +14,15 @@ const {
   splitMessageLines,
 } = require('../api/_lib/normalization-v4.cjs');
 
+test('does not use a slash date as a Patek reference', () => {
+  const raw = 'NEW PP5269R Blue 2024/5 HKD449k';
+  const candidates = segmentDealerMessage(raw);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].reference, '5269R');
+  assert.equal(candidates[0].prices[0].amount_original, 449000);
+  assert.equal(candidates[0].prices[0].currency_original, 'HKD');
+});
+
 test('decodes standard keycap and full-width digits without changing other emoji', () => {
   assert.equal(decodeNumericUnicode('HKD 1\uFE0F\u20E32\uFE0F\u20E35\uFE0F\u20E3K \u{1F525}'), 'HKD 125K \u{1F525}');
   assert.equal(decodeNumericUnicode('HKD \uFF11\uFF12\uFF15K'), 'HKD 125K');
