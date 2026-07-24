@@ -32,7 +32,7 @@ async function audit(batchId) {
   const baseUrl = required('SUPABASE_URL');
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
-  const verdicts = ['PENDING', 'APPROVED', 'REJECTED', 'BLOCKED_RENORMALIZATION'];
+  const verdicts = ['PENDING', 'REVIEW', 'APPROVED', 'REJECTED', 'BLOCKED_RENORMALIZATION'];
   const counts = Object.fromEntries(await Promise.all(
     verdicts.map(async verdict => [verdict, await exactCount(baseUrl, key, batchId, verdict)]),
   ));
