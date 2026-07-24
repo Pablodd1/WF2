@@ -56,6 +56,11 @@ interface ReviewItem {
   originalPostedAt?: string | null;
   source?: string | null;
   sourceType?: string | null;
+  condition?: string | null;
+  year?: number | null;
+  priceRaw?: number | null;
+  priceUsd?: number | null;
+  listingType?: string | null;
   duplicate?: {
     candidateId: string;
     canonical?: Record<string, unknown> | null;
@@ -135,6 +140,7 @@ interface UnbundledQueueApiItem {
   reference?: string | null;
   dial_color?: string | null;
   condition?: string | null;
+  year?: number | null;
   price_raw?: number | null;
   price_usd?: number | null;
   currency?: string | null;
@@ -366,6 +372,11 @@ export default function ReviewQueue() {
               originalPostedAt: item.original_posted_at || item.created_at || null,
               imageUrl: item.front_image || undefined,
               source: String(item.source || '') || null,
+              condition: item.condition || null,
+              year: item.year ?? null,
+              priceRaw: item.price_raw ?? null,
+              priceUsd: item.price_usd ?? null,
+              listingType: item.listing_type || null,
             };
           }));
         })
@@ -563,12 +574,12 @@ export default function ReviewQueue() {
     brand: item.brand === 'Unknown' ? '' : item.brand,
     reference: item.reference === 'Unresolved' ? '' : item.reference,
     dial_color: item.dial === 'Unverified' ? '' : item.dial,
-    condition: '',
-    year: '',
-    price_raw: item.price ? String(item.price) : '',
-    price_usd: item.price ? String(item.price) : '',
+    condition: item.condition || '',
+    year: item.year == null ? '' : String(item.year),
+    price_raw: item.priceRaw == null ? '' : String(item.priceRaw),
+    price_usd: item.priceUsd == null ? '' : String(item.priceUsd),
     currency: item.currency === 'Unknown' ? '' : item.currency,
-    listing_type: 'WTS',
+    listing_type: item.listingType || 'OTHER',
   };
 
   const submitHumanAction = async (item: ReviewItem, action: 'SAVE' | 'DEFER' | 'RECYCLE') => {
