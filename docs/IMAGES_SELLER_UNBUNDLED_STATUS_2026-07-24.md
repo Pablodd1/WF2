@@ -7,7 +7,7 @@ ready for customer publication.
 
 | Stream | Current decision | Verified result |
 | --- | --- | ---: |
-| Listing images | Partially live | 1,282 watch images linked; 100 reachable objects still unlinked |
+| Listing images | Partially live | 1,365 watch images linked; 100 reachable objects still unlinked |
 | Seller/contact lineage | Private review only | 16,094 exact candidates staged; 0 public contacts |
 | Unbundled listings | Human review only | 70,194 staged; 0 approved or published |
 
@@ -20,18 +20,34 @@ Live production readback:
 
 | Check | Rows |
 | --- | ---: |
-| `watch_records` with images | 1,290 |
-| `media_manifest` total | 1,382 |
-| Linked manifest objects | 1,282 |
+| `watch_records` with images | 1,373 |
+| `media_manifest` total | 1,465 |
+| Linked manifest objects | 1,365 |
 | Discovered, not linked | 100 |
 | Matched but not linked | 0 |
 | Orphaned | 0 |
 | Failed | 0 |
-| URL reachable | 1,382 |
+| URL reachable | 1,465 |
 
-The difference between 1,290 image-backed records and 1,282 linked watch
+The difference between 1,373 image-backed records and 1,365 linked watch
 manifest rows includes the separate non-watch luxury pilot. A reachable URL is
 not sufficient evidence that an image belongs to a listing.
+
+An additional 83-image canary was attached after scanning 5,000 exact filename
+lineage candidates. Every attached row passed structured raw/listing
+brand-reference agreement, was a non-bundle and non-recycled listing, had no
+existing image, and returned a reachable object URL. The audited RPC reported
+83 linked and 0 unchanged.
+
+The rejected candidate counts overlap because one row may fail several gates:
+
+- 4,204 source/listing identity disagreements;
+- 1,127 invalid references;
+- 1,031 missing or unknown brands;
+- 789 listings that already had images;
+- 754 recycled listings.
+
+No rejected image was forced onto a listing.
 
 The Patek child-image audit contains 418 candidates:
 
@@ -82,9 +98,12 @@ Customer publication remains blocked because production currently has:
 - 0 dealer contact-consent records;
 - 0 public listings linked to a dealer.
 
-The admin review API already returns raw message, seller name, phone, original
+The admin review API returns raw message, masked seller contact, original
 posting date, and front-image filename when exact source lineage exists. Its
-authorization is restricted to reviewer/admin roles.
+authorization is restricted to reviewer/admin roles. Full contact requires an
+explicit reveal action; the action is denied unless its audit record can be
+written. Queue responses use private no-store caching, and raw text is
+contact-redacted before external AI review.
 
 ## Unbundled collection
 

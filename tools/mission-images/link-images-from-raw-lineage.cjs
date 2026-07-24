@@ -45,11 +45,20 @@ function sourceIdentityAgrees(row, rawData) {
   return Boolean(brand && sourceBrand && brand === sourceBrand && reference && sourceReferences.includes(reference));
 }
 
+function customerSafeReasons(row, rawData) {
+  if (!row) return ['WATCH_RECORD_NOT_FOUND'];
+  const reasons = [];
+  if (!row.brand || /^unknown$/i.test(row.brand)) reasons.push('BRAND_MISSING_OR_UNKNOWN');
+  if (!validReference(row.reference)) reasons.push('REFERENCE_INVALID');
+  if (!sourceIdentityAgrees(row, rawData)) reasons.push('SOURCE_IDENTITY_DISAGREES');
+  if (row.has_images || (Array.isArray(row.image_urls) && row.image_urls.length)) reasons.push('ALREADY_HAS_IMAGES');
+  if (String(row.verdict || '').toUpperCase() === 'RECYCLE') reasons.push('RECYCLE');
+  if (['MULTI', 'OTHER'].includes(String(row.listing_type || '').toUpperCase())) reasons.push('DISALLOWED_LISTING_TYPE');
+  return reasons;
+}
+
 function customerSafe(row, rawData) {
-  return row && row.brand && !/^unknown$/i.test(row.brand) && validReference(row.reference) &&
-    sourceIdentityAgrees(row, rawData) && !row.has_images && !(Array.isArray(row.image_urls) && row.image_urls.length) &&
-    !['RECYCLE'].includes(String(row.verdict || '').toUpperCase()) &&
-    !['MULTI', 'OTHER'].includes(String(row.listing_type || '').toUpperCase());
+  return customerSafeReasons(row, rawData).length === 0;
 }
 
 async function supabase(pathname, options = {}) {
@@ -140,13 +149,22 @@ async function run() {
 
   const candidates = [...foundByRecord.values()];
   const safe = [];
+  const rejection_counts = {};
+  let watch_rows_found = 0;
   for (let index = 0; index < candidates.length && safe.length < TARGET; index += 50) {
     const batch = candidates.slice(index, index + 50);
     const watches = await fetchWatchRows(batch.map(item => item.record_id));
     const byId = new Map((watches || []).map(row => [row.id, row]));
+    watch_rows_found += byId.size;
     for (const item of batch) {
       const watch = byId.get(item.record_id);
-      if (!customerSafe(watch, item.raw_data) || !requestedBrandMatches(watch.brand) || !(await reachable(item.public_url))) continue;
+      const reasons = customerSafeReasons(watch, item.raw_data);
+      if (watch && !requestedBrandMatches(watch.brand)) reasons.push('REQUESTED_BRAND_DISAGREES');
+      if (!reasons.length && !(await reachable(item.public_url))) reasons.push('URL_UNREACHABLE');
+      if (reasons.length) {
+        for (const reason of reasons) rejection_counts[reason] = (rejection_counts[reason] || 0) + 1;
+        continue;
+      }
       safe.push({ ...item, verification_status: 'url_reachable', watch });
       if (safe.length >= TARGET) break;
     }
@@ -167,6 +185,8 @@ async function run() {
     ambiguous_image_filenames: ambiguousFilenames.size,
     csv_rows_scanned: scanned,
     lineage_matches: candidates.length,
+    watch_rows_found,
+    rejection_counts,
     customer_safe_matches: safe.length,
     requested_brand: REQUESTED_BRAND || null,
     database_result: databaseResult,
@@ -182,4 +202,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { basename, customerSafe, normalizedIdentity, recordId, requestedBrandMatches, sourceIdentityAgrees, validReference };
+module.exports = { basename, customerSafe, customerSafeReasons, normalizedIdentity, recordId, requestedBrandMatches, sourceIdentityAgrees, validReference };
