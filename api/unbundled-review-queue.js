@@ -25,7 +25,7 @@ async function loadSellerLineage(baseUrl, key, rows) {
     limit: String(sourceIds.length),
   });
   const lineageRows = await rest(baseUrl, key, `seller_listing_lineage_staging?${params.toString()}`);
-  return new Map(lineageRows.map(row => [String(row.source_record_id), row]));
+  return new Map(lineageRows.rows.map(row => [String(row.source_record_id), row]));
 }
 
 module.exports = async function handler(req, res) {
