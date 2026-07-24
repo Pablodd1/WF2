@@ -110,10 +110,14 @@ test('withholds punctuation-only fields and a deterministic year-as-price artifa
   assert.deepEqual(result.data_quality_issues, ['YEAR_TOKEN_AS_PRICE']);
 });
 
-test('keeps a low four-digit price when another field makes the value plausible', () => {
-  const result = sanitizeTradingRecord({ brand: 'Panerai', reference: null, price_usd: 2023, condition: 'Used' });
-  assert.equal(result.price_usd, 2023);
-  assert.deepEqual(result.data_quality_issues, []);
+test('withholds a year-like stored price even when the listing identity is complete', () => {
+  const result = sanitizeTradingRecord({
+    brand: 'Patek Philippe', reference: '7118/1200A', price_raw: 2025, price_usd: 2025,
+    year: 2025, condition: 'Unknown',
+  });
+  assert.equal(result.price_raw, null);
+  assert.equal(result.price_usd, null);
+  assert.deepEqual(result.data_quality_issues, ['YEAR_TOKEN_AS_PRICE']);
 });
 
 test('withholds sub-thousand reference prices from the customer Trading Floor', () => {

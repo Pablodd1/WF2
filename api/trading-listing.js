@@ -1,7 +1,9 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
+const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
+const { sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
@@ -25,14 +27,19 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Listing not found' });
+    const normalized = normalizeMarketRow(data, data.reference);
+    const listing = sanitizeTradingRecord(data);
+    if (normalized.analytics_currency_status === 'VERIFIED') {
+      listing.price_usd = normalized.analytics_price_usd;
+    }
     return res.status(200).json({
       success: true,
       listing: {
         id: data.id,
         brand: data.brand,
         reference: data.reference,
-        price_usd: data.price_usd,
-        price_raw: data.price_raw,
+        price_usd: listing.price_usd,
+        price_raw: listing.price_raw,
         currency: data.currency,
         dial_color: data.dial_color,
         condition: data.condition,
@@ -50,6 +57,7 @@ module.exports = async function handler(req, res) {
         thumbnail_url: data.thumbnail_url,
         image_urls: data.image_urls,
         region: data.region,
+        data_quality_issues: listing.data_quality_issues,
         source_message_is_redacted: true,
       },
     });

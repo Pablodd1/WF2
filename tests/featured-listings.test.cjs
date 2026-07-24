@@ -24,6 +24,7 @@ test('accepts a complete approved image-backed WTS listing', () => {
 
 test('rejects implausible prices, incomplete identity, and review records', () => {
   assert.equal(isCustomerSafeFeaturedListing({ ...valid, price_usd: 244 }), false);
+  assert.equal(isCustomerSafeFeaturedListing({ ...valid, price_usd: 2025 }), false);
   assert.equal(isCustomerSafeFeaturedListing({ ...valid, dial_color: 'Unknown' }), false);
   assert.equal(isCustomerSafeFeaturedListing({ ...valid, brand: 'N/A' }), false);
   assert.equal(isCustomerSafeFeaturedListing({ ...valid, verdict: 'HUMAN' }), false);

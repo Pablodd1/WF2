@@ -42,11 +42,7 @@ function isLikelyYearAsPrice(record) {
   const currentYear = new Date().getUTCFullYear();
   return Number.isInteger(price)
     && price >= 1900
-    && price <= currentYear + 2
-    && record?.price_raw == null
-    && cleanText(record?.reference) == null
-    && record?.year == null
-    && cleanText(record?.condition) == null;
+    && price <= currentYear + 2;
 }
 
 function deriveItemCategory(record) {
@@ -117,6 +113,7 @@ function sanitizeTradingRecord(record) {
 
   if (isLikelyYearAsPrice(record)) {
     sanitized.price_usd = null;
+    if (Number(record.price_raw) === price) sanitized.price_raw = null;
     issues.push('YEAR_TOKEN_AS_PRICE');
   }
 
