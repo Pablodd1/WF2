@@ -304,6 +304,10 @@ function isPriceLikeReferenceToken(text, matchIndex, rawToken) {
   return followsPriceLabel || hasCurrencySuffix || precedesCurrencyWord || hasDirectDollarSuffix;
 }
 
+function isDateLikeReferenceToken(rawToken) {
+  return /^(?:19|20)\d{2}\/(?:0?[1-9]|1[0-2])$/i.test(String(rawToken || '').trim());
+}
+
 function extractReference(line) {
   const text = String(line);
   const patterns = [
@@ -320,6 +324,7 @@ function extractReference(line) {
     /\b([245678]\d{3}[VH]\/[A-Z0-9-]+)\b/i,
     /\b(WSSA\d{4})\b/i,
     /\b(\d{3}\.[A-Z]{2}\.\d{4}\.[A-Z]{2}\.\d{4})\b/i,
+    /\b(?:PP|PATEK)\s*([345678]\d{3}[A-Z]?(?:\/\d[A-Z0-9]*)?(?:-\d{3})?)\b/i,
     /\b(\d{4}\/\d[A-Z0-9-]*)\b/i,
     /\b([345678]\d{3}[A-Z](?:-\d{3})?)\b/i,
     /\b(PAM\s*\d{3,5})\b/i,
@@ -327,7 +332,9 @@ function extractReference(line) {
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);
-    if (match && !isPriceLikeReferenceToken(text, match.index, match[1])) {
+    if (match
+      && !isDateLikeReferenceToken(match[1])
+      && !isPriceLikeReferenceToken(text, match.index, match[1])) {
       return match[1].replace(/\s/g, '').toUpperCase();
     }
   }
