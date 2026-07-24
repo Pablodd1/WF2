@@ -7,7 +7,7 @@ ready for customer publication.
 
 | Stream | Current decision | Verified result |
 | --- | --- | ---: |
-| Listing images | Partially live | 1,365 watch images linked; 100 reachable objects still unlinked |
+| Listing images | Partially live | 1,465 watch images linked; 100 reachable objects still unlinked |
 | Seller/contact lineage | Private review only | 16,094 exact candidates staged; 0 public contacts |
 | Unbundled listings | Human review only | 70,194 staged; 0 approved or published |
 
@@ -20,16 +20,16 @@ Live production readback:
 
 | Check | Rows |
 | --- | ---: |
-| `watch_records` with images | 1,373 |
-| `media_manifest` total | 1,465 |
-| Linked manifest objects | 1,365 |
+| `watch_records` with images | 1,473 |
+| `media_manifest` total | 1,565 |
+| Linked manifest objects | 1,465 |
 | Discovered, not linked | 100 |
 | Matched but not linked | 0 |
 | Orphaned | 0 |
 | Failed | 0 |
-| URL reachable | 1,465 |
+| URL reachable | 1,565 |
 
-The difference between 1,373 image-backed records and 1,365 linked watch
+The difference between 1,473 image-backed records and 1,465 linked watch
 manifest rows includes the separate non-watch luxury pilot. A reachable URL is
 not sufficient evidence that an image belongs to a listing.
 
@@ -38,6 +38,15 @@ lineage candidates. Every attached row passed structured raw/listing
 brand-reference agreement, was a non-bundle and non-recycled listing, had no
 existing image, and returned a reachable object URL. The audited RPC reported
 83 linked and 0 unchanged.
+
+A second 100-image Audemars Piguet batch was applied from a fixed candidate
+ledger. Its SHA-256 was
+`382c060b58d6ca18727b4d07cfffca1988541445c8844a56a8cc20a18267609f`.
+Ten samples distributed from the beginning through the end of the ledger were
+visually reviewed. A production dry run then revalidated all 100 current watch
+rows and all 100 object URLs before the write. The audited RPC reported 100
+linked and 0 unchanged; independent readback confirmed 100 exact listing
+matches and 100 exact manifest matches.
 
 The rejected candidate counts overlap because one row may fail several gates:
 

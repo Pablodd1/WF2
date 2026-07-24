@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { basename, customerSafe, customerSafeReasons, ledgerRow, recordId, requestedBrandMatches, sourceIdentityAgrees, validReference } = require('../tools/mission-images/link-images-from-raw-lineage.cjs');
+const { expectedUrl, sha256, sourceId, validateLedger } = require('../tools/mission-images/apply-image-ledger.cjs');
 
 test('maps a raw source row to its imported watch record id', () => {
   assert.equal(recordId('auction_watches', 'abc-123'), 'mysql_auction_watches_abc-123');
@@ -55,4 +56,22 @@ test('candidate ledger contains evidence identifiers but no raw seller data', ()
   assert.equal(row.source_identity_verified, true);
   assert.equal(Object.hasOwn(row, 'raw_data'), false);
   assert.equal(Object.hasOwn(row, 'seller_phone'), false);
+});
+
+test('requires an exact signed ledger before applying images', () => {
+  const row = {
+    record_id: 'mysql_auction_watches_1',
+    source_object_key: 'listings/full/1.jpg',
+    public_url: expectedUrl('listings/full/1.jpg'),
+    brand: 'Audemars Piguet',
+    reference: '16202ST',
+    listing_type: 'WTS',
+    verdict: 'APPROVED',
+    source_identity_verified: true,
+  };
+  const buffer = Buffer.from(JSON.stringify({ rows: [row] }));
+  const hash = sha256(buffer);
+  assert.deepEqual(validateLedger({ rows: [row] }, hash, hash), []);
+  assert.deepEqual(validateLedger({ rows: [row] }, 'wrong', hash), ['LEDGER_SHA256_MISMATCH']);
+  assert.equal(sourceId(row.record_id), '1');
 });
