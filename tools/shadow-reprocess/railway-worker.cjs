@@ -13,6 +13,7 @@ const batchSize = Math.max(100, Math.min(Number(process.env.SHADOW_BATCH_SIZE ||
 const rowsPerLease = Math.max(batchSize, Number(process.env.SHADOW_ROWS_PER_LEASE || 10000));
 const idleDelayMs = Math.max(1000, Number(process.env.SHADOW_IDLE_DELAY_MS || 15000));
 const workerMode = String(process.env.SHADOW_WORKER_MODE || 'cursor').trim().toLowerCase();
+const useGlobalLease = workerMode === 'cursor';
 const exitOnCompleteValue = String(process.env.SHADOW_EXIT_ON_COMPLETE || '').trim().toLowerCase();
 const exitOnComplete = exitOnCompleteValue
   ? exitOnCompleteValue === 'true'
@@ -168,11 +169,13 @@ async function runLease() {
 }
 
 async function main() {
-  console.log(JSON.stringify({ event: 'worker_started', jobName, workerMode, batchSize, rowsPerLease, exitOnComplete, holder }));
+  console.log(JSON.stringify({ event: 'worker_started', jobName, workerMode, useGlobalLease, batchSize, rowsPerLease, exitOnComplete, holder }));
   do {
     let shouldStop = false;
     try {
-      const acquired = await acquireLease();
+      // Queue claims already use FOR UPDATE SKIP LOCKED. The global lease is
+      // retained only for the legacy cursor, where parallel scans are unsafe.
+      const acquired = useGlobalLease ? await acquireLease() : true;
       if (!acquired) {
         console.log(JSON.stringify({ event: 'lease_busy', jobName }));
         await sleep(idleDelayMs);
@@ -184,7 +187,7 @@ async function main() {
         shouldStop = result.complete && exitOnComplete;
         if (!shouldStop) await sleep(result.complete ? idleDelayMs : 250);
       } finally {
-        await releaseLease();
+        if (useGlobalLease) await releaseLease();
       }
     } catch (error) {
       console.error(JSON.stringify({ event: 'worker_error', jobName, error: error.message }));
