@@ -817,9 +817,12 @@ module.exports = async function handler(req, res) {
       // Main inventory is intentionally stricter than the archive: incomplete
       // watch identity and implausible WTS prices remain reviewable in the full
       // archive but cannot consume customer-market page slots or totals.
+      const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
       const tableName = quality === 'archive'
         ? 'trading_floor_listings'
-        : 'trading_floor_market_listings';
+        : strictVerifiedPublication
+          ? 'trading_floor_verified_listings'
+          : 'trading_floor_market_listings';
       const params = new URLSearchParams({
         // Keep this response marketplace-safe even when a server key is used.
         select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region',

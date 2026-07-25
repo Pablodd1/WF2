@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
   try {
     const client = getClient();
     const { data: publicListing, error: publicError } = await client
-      .from('trading_floor_listings').select('id').eq('id', id).maybeSingle();
+      .from('trading_floor_verified_listings').select('id').eq('id', id).maybeSingle();
     if (publicError) throw publicError;
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
 
@@ -31,7 +31,7 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ success: true, contact_available: false, reason: 'CONTACT_NOT_VERIFIED' });
     }
 
-    const { data: profileStats } = await client.from('dealer_profile_stats').select('total_posts,active_listings,wts_posts,wtb_posts,first_post_at,last_post_at,posting_years').eq('dealer_id', dealer.id).maybeSingle();
+    const { data: profileStats } = await client.from('verified_dealer_profile_stats').select('total_posts,active_listings,wts_posts,wtb_posts,first_post_at,last_post_at,posting_years').eq('dealer_id', dealer.id).maybeSingle();
     const profile = {
       dealer_id: dealer.id,
       dealer_name: dealer.display_name || 'Verified dealer',
