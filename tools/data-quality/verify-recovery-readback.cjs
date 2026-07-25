@@ -3,6 +3,50 @@
 const path = require('node:path');
 const { supabaseFetch, writeJson } = require('./recovery-control.cjs');
 
+function chunks(values, size = 100) {
+  return Array.from(
+    { length: Math.ceil(values.length / size) },
+    (_, index) => values.slice(index * size, (index + 1) * size),
+  );
+}
+
+async function fetchByIds(table, select, ids) {
+  const pages = [];
+  for (const group of chunks(ids)) {
+    const query = new URLSearchParams({
+      select,
+      id: `in.(${group.join(',')})`,
+    });
+    pages.push(...await supabaseFetch(`/rest/v1/${table}?${query}`));
+  }
+  return pages;
+}
+
+async function fetchReviews(ids) {
+  const pages = [];
+  for (const group of chunks(ids)) {
+    const query = new URLSearchParams({
+      select: 'record_id,status',
+      record_id: `in.(${group.join(',')})`,
+    });
+    pages.push(...await supabaseFetch(`/rest/v1/listing_identity_reviews?${query}`));
+  }
+  return pages;
+}
+
+async function fetchImageReviews(ids) {
+  const pages = [];
+  for (const group of chunks(ids)) {
+    const query = new URLSearchParams({
+      select: 'record_id,status',
+      record_id: `in.(${group.join(',')})`,
+      status: 'eq.VISUALLY_VERIFIED',
+    });
+    pages.push(...await supabaseFetch(`/rest/v1/listing_image_reviews?${query}`));
+  }
+  return pages;
+}
+
 async function run() {
   const jobName = String(process.env.RECOVERY_JOB_NAME || 'identity-stage:rm_conflicts');
   const checkpoints = await supabaseFetch(`/rest/v1/data_quality_remediation_checkpoints?${new URLSearchParams({
@@ -15,29 +59,20 @@ async function run() {
   if (!checkpoint || !Array.isArray(ids) || ids.length === 0) {
     throw new Error(`No bounded canary IDs found for ${jobName}`);
   }
-  const reviews = await supabaseFetch(`/rest/v1/listing_identity_reviews?${new URLSearchParams({
-    select: 'record_id,status',
-    record_id: `in.(${ids.join(',')})`,
-  })}`);
+  const reviews = await fetchReviews(ids);
   const statusById = new Map(reviews.map(row => [row.record_id, row.status]));
   const missingIdentityRows = ids.filter(id => !statusById.has(id));
-  const query = new URLSearchParams({
-    select: 'id,brand,model,reference,dial_color,listing_type,has_images,thumbnail_url',
-    id: `in.(${ids.join(',')})`,
-  });
-  const sample = await supabaseFetch(`/rest/v1/trading_floor_verified_listings?${query}`);
+  const sample = await fetchByIds(
+    'trading_floor_verified_listings',
+    'id,brand,model,reference,dial_color,listing_type,has_images,thumbnail_url',
+    ids,
+  );
   const identityLeaks = sample.filter(row => !['CATALOG_CONFIRMED', 'HUMAN_APPROVED'].includes(statusById.get(row.id)));
   const conflictRowsPublished = reviews
     .filter(row => row.status === 'CONFLICT' && sample.some(item => item.id === row.record_id))
     .map(row => row.record_id);
   const imageIds = sample.filter(row => row.has_images || row.thumbnail_url).map(row => row.id);
-  const imageReviews = imageIds.length
-    ? await supabaseFetch(`/rest/v1/listing_image_reviews?${new URLSearchParams({
-      select: 'record_id,status',
-      record_id: `in.(${imageIds.join(',')})`,
-      status: 'eq.VISUALLY_VERIFIED',
-    })}`)
-    : [];
+  const imageReviews = imageIds.length ? await fetchImageReviews(imageIds) : [];
   const verifiedImageIds = new Set(imageReviews.map(row => row.record_id));
   const imageLeaks = sample.filter(row => (row.has_images || row.thumbnail_url) && !verifiedImageIds.has(row.id));
   const result = {
@@ -75,3 +110,5 @@ if (require.main === module) {
     process.exitCode = 1;
   });
 }
+
+module.exports = { chunks };
