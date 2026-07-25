@@ -12,9 +12,13 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
+    const publicTable = strictVerifiedPublication
+      ? 'trading_floor_verified_listings'
+      : 'trading_floor_listings';
     const { data: publicListing, error: publicError } = await client
-      .from('trading_floor_listings')
-      .select('id')
+      .from(publicTable)
+      .select('id,brand,model,reference,dial_color,has_images,thumbnail_url,image_urls')
       .eq('id', id)
       .maybeSingle();
     if (publicError) throw publicError;
@@ -27,6 +31,14 @@ module.exports = async function handler(req, res) {
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Listing not found' });
     if (!isCustomerIdentitySafe(data)) return res.status(404).json({ error: 'Listing under identity review' });
+    if (strictVerifiedPublication) {
+      data.brand = publicListing.brand;
+      data.reference = publicListing.reference;
+      data.dial_color = publicListing.dial_color;
+      data.has_images = publicListing.has_images;
+      data.thumbnail_url = publicListing.thumbnail_url;
+      data.image_urls = publicListing.image_urls;
+    }
     const normalized = normalizeMarketRow(data, data.reference);
     const listing = sanitizeTradingRecord(data);
     if (normalized.analytics_currency_status === 'VERIFIED') {

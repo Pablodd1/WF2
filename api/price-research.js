@@ -253,9 +253,12 @@ module.exports = async function handler(req, res) {
     // reference does not produce a chart made only from its newest day.
     const pageSize = 1000;
     const sampleLimit = 5000;
+    const sourceTable = process.env.STRICT_VERIFIED_PUBLICATION === 'true'
+      ? 'price_research_verified_source'
+      : 'watch_records';
     const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id';
     const buildRowsQuery = (from, to) => client
-      .from('watch_records')
+      .from(sourceTable)
       .select(columns)
       .eq('brand', brand)
       .in('reference', referenceVariants)

@@ -4,26 +4,32 @@ const path = require('node:path');
 const { supabaseFetch, writeJson } = require('./recovery-control.cjs');
 
 async function run() {
-  const report = await supabaseFetch('/rest/v1/rpc/global_data_quality_blocker_counts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-  });
+  const jobName = String(process.env.RECOVERY_JOB_NAME || 'identity-stage:rm_conflicts');
+  const checkpoints = await supabaseFetch(`/rest/v1/data_quality_remediation_checkpoints?${new URLSearchParams({
+    select: 'job_name,last_record_id,rows_scanned,rows_written,metadata',
+    job_name: `eq.${jobName}`,
+    limit: '1',
+  })}`);
+  const checkpoint = checkpoints?.[0];
+  const ids = checkpoint?.metadata?.last_batch_ids || [];
+  if (!checkpoint || !Array.isArray(ids) || ids.length === 0) {
+    throw new Error(`No bounded canary IDs found for ${jobName}`);
+  }
+  const reviews = await supabaseFetch(`/rest/v1/listing_identity_reviews?${new URLSearchParams({
+    select: 'record_id,status',
+    record_id: `in.(${ids.join(',')})`,
+  })}`);
+  const statusById = new Map(reviews.map(row => [row.record_id, row.status]));
+  const missingIdentityRows = ids.filter(id => !statusById.has(id));
   const query = new URLSearchParams({
-    select: 'id,brand,reference,dial_color,listing_type,has_images,thumbnail_url',
-    order: 'created_at.desc,id.desc',
-    limit: '100',
+    select: 'id,brand,model,reference,dial_color,listing_type,has_images,thumbnail_url',
+    id: `in.(${ids.join(',')})`,
   });
   const sample = await supabaseFetch(`/rest/v1/trading_floor_verified_listings?${query}`);
-  const ids = sample.map(row => row.id);
-  const reviews = ids.length
-    ? await supabaseFetch(`/rest/v1/listing_identity_reviews?${new URLSearchParams({
-      select: 'record_id,status',
-      record_id: `in.(${ids.join(',')})`,
-    })}`)
-    : [];
-  const statusById = new Map(reviews.map(row => [row.record_id, row.status]));
   const identityLeaks = sample.filter(row => !['CATALOG_CONFIRMED', 'HUMAN_APPROVED'].includes(statusById.get(row.id)));
+  const conflictRowsPublished = reviews
+    .filter(row => row.status === 'CONFLICT' && sample.some(item => item.id === row.record_id))
+    .map(row => row.record_id);
   const imageIds = sample.filter(row => row.has_images || row.thumbnail_url).map(row => row.id);
   const imageReviews = imageIds.length
     ? await supabaseFetch(`/rest/v1/listing_image_reviews?${new URLSearchParams({
@@ -36,11 +42,18 @@ async function run() {
   const imageLeaks = sample.filter(row => (row.has_images || row.thumbnail_url) && !verifiedImageIds.has(row.id));
   const result = {
     generated_at: new Date().toISOString(),
-    blocker_report: report,
+    checkpoint,
+    expected_canary_rows: ids.length,
+    identity_rows_found: reviews.length,
+    missing_identity_rows: missingIdentityRows,
+    conflict_rows_published: conflictRowsPublished,
     verified_sample_rows: sample.length,
     identity_leaks: identityLeaks.map(row => row.id),
     image_leaks: imageLeaks.map(row => row.id),
-    passed: identityLeaks.length === 0 && imageLeaks.length === 0,
+    passed: missingIdentityRows.length === 0
+      && identityLeaks.length === 0
+      && conflictRowsPublished.length === 0
+      && imageLeaks.length === 0,
   };
   const output = process.env.RECOVERY_READBACK_OUTPUT
     || path.join('audit-output', 'data-quality', `recovery-readback-${new Date().toISOString().slice(0, 10)}.json`);

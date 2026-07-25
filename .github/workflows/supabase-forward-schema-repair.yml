@@ -59,11 +59,14 @@ jobs:
           set -euo pipefail
           migration="supabase/migrations/20260725010000_harden_staging_and_market_contract.sql"
           recovery="supabase/migrations/20260725023000_identity_image_publication_control.sql"
+          hardening="supabase/migrations/20260725033000_harden_verified_publication_gates.sql"
           test -f "$migration"
           test -f "$recovery"
+          test -f "$hardening"
           db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
           psql "$db_url" --set=ON_ERROR_STOP=1 --file="$migration"
           psql "$db_url" --set=ON_ERROR_STOP=1 --file="$recovery"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$hardening"
 
       - name: Verify private staging and public market contract
         shell: bash
@@ -89,6 +92,8 @@ jobs:
             END IF;
             IF to_regclass('public.listing_identity_reviews') IS NULL
               OR to_regclass('public.listing_image_reviews') IS NULL
+              OR to_regclass('public.listing_identity_review_events') IS NULL
+              OR to_regclass('public.listing_image_review_events') IS NULL
               OR to_regclass('public.trading_floor_verified_listings') IS NULL THEN
               RAISE EXCEPTION 'data recovery control plane is incomplete';
             END IF;

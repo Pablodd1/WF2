@@ -12,6 +12,10 @@ const migration = fs.readFileSync(
   path.join(__dirname, '..', 'supabase', 'migrations', '20260725023000_identity_image_publication_control.sql'),
   'utf8',
 );
+const hardening = fs.readFileSync(
+  path.join(__dirname, '..', 'supabase', 'migrations', '20260725033000_harden_verified_publication_gates.sql'),
+  'utf8',
+);
 
 test('classifies confirmed, conflicting, and unknown identities without human approval', () => {
   assert.equal(classifyIdentity({
@@ -65,7 +69,27 @@ test('image canary requires explicit reviewer evidence', () => {
     operator_id: 'reviewer',
     reason: 'Compared against raw listing',
     evidence: { visual_match: 'MATCH' },
+    identity_snapshot: {
+      brand: 'Patek Philippe',
+      model: 'Nautilus',
+      reference: '5712/1A',
+      dial_color: 'Blue',
+    },
   }]));
+  assert.throws(() => validateLedger([{
+    source_object_key: 'a',
+    record_id: '1',
+    decision: 'VISUALLY_VERIFIED',
+    operator_id: 'reviewer',
+    reason: 'Bad evidence',
+    evidence: { visual_match: 'false' },
+    identity_snapshot: {
+      brand: 'Patek Philippe',
+      model: 'Nautilus',
+      reference: '5712/1A',
+      dial_color: 'Blue',
+    },
+  }]), /human review evidence/);
 });
 
 test('database control plane is private, fail closed, and bundle ordered', () => {
@@ -91,7 +115,29 @@ test('dealer contact and profiles use verified identity and consent boundaries',
   assert.match(contact, /from\('trading_floor_verified_listings'\)/);
   assert.match(contact, /dealer\.status !== 'VERIFIED'/);
   assert.match(contact, /!dealer\.contact_consent/);
+  assert.match(contact, /SELLER_LINEAGE_UNVERIFIED/);
   assert.match(contact, /from\('verified_dealer_profile_stats'\)/);
   assert.match(profile, /from\('listing_identity_reviews'\)/);
   assert.match(profile, /verifiedIds\.has\(listing\.id\)/);
+});
+
+test('forward hardening renders canonical identity and preserves reviewed decisions', () => {
+  assert.match(hardening, /COALESCE\(NULLIF\(r\.canonical_brand, ''\), w\.brand\) AS brand/);
+  assert.match(hardening, /Human approval requires canonical brand, model, reference, and dial_color/);
+  assert.match(hardening, /reviewer_id IS NOT NULL OR reviewed_at IS NOT NULL/);
+  assert.match(hardening, /visual_match must be MATCH for approval or NO_MATCH for rejection/);
+  assert.match(hardening, /Image identity snapshot does not match the current verified listing identity/);
+  assert.match(hardening, /match_status = 'APPLIED'/);
+  assert.match(hardening, /'BUNDLE_SPLIT_REQUIRED' = ANY/);
+});
+
+test('strict publication covers floor, archive, price research, featured, and details', () => {
+  const ingest = fs.readFileSync(path.join(__dirname, '..', 'api', 'ingest.js'), 'utf8');
+  const price = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
+  const featured = fs.readFileSync(path.join(__dirname, '..', 'api', 'featured-listings.js'), 'utf8');
+  const detail = fs.readFileSync(path.join(__dirname, '..', 'api', 'trading-listing.js'), 'utf8');
+  assert.match(ingest, /strictVerifiedPublication[\s\S]*\? 'trading_floor_verified_listings'[\s\S]*quality === 'archive'/);
+  assert.match(price, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
+  assert.match(featured, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
+  assert.match(detail, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*trading_floor_verified_listings/);
 });

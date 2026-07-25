@@ -118,7 +118,9 @@ test('public listing evidence is withheld and public dealer profiles omit raw me
   assert.match(listingRoute, /raw_message: null/);
   assert.doesNotMatch(listingRoute, /redactPublicSource/);
   assert.doesNotMatch(listingRoute, /authorizeDealer/);
-  assert.match(listingRoute, /from\('trading_floor_listings'\)/);
+  assert.match(listingRoute, /trading_floor_verified_listings/);
+  assert.match(listingRoute, /trading_floor_listings/);
+  assert.match(listingRoute, /\.from\(publicTable\)/);
   assert.doesNotMatch(profileRoute, /select\([^)]*raw_message/);
 });
 

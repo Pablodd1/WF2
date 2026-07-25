@@ -23,6 +23,18 @@ module.exports = async function handler(req, res) {
     if (listingError) throw listingError;
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     if (!listing.dealer_id) return res.status(200).json({ success: true, contact_available: false, reason: 'DEALER_UNRESOLVED' });
+    const { data: lineage, error: lineageError } = await client
+      .from('seller_listing_lineage_staging')
+      .select('id')
+      .eq('source_record_id', listing.id)
+      .eq('matched_dealer_id', listing.dealer_id)
+      .eq('match_status', 'APPLIED')
+      .limit(1)
+      .maybeSingle();
+    if (lineageError) throw lineageError;
+    if (!lineage) {
+      return res.status(200).json({ success: true, contact_available: false, reason: 'SELLER_LINEAGE_UNVERIFIED' });
+    }
 
     const { data: dealer, error: dealerError } = await client
       .from('dealers').select('id,slug,display_name,company_name,country_code,city,status,contact_consent,rating,review_count,whatsapp_group_count,avatar_url,profile_summary').eq('id', listing.dealer_id).maybeSingle();
