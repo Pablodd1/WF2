@@ -818,10 +818,10 @@ module.exports = async function handler(req, res) {
       // watch identity and implausible WTS prices remain reviewable in the full
       // archive but cannot consume customer-market page slots or totals.
       const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
-      const tableName = quality === 'archive'
-        ? 'trading_floor_listings'
-        : strictVerifiedPublication
-          ? 'trading_floor_verified_listings'
+      const tableName = strictVerifiedPublication
+        ? 'trading_floor_verified_listings'
+        : quality === 'archive'
+          ? 'trading_floor_listings'
           : 'trading_floor_market_listings';
       const params = new URLSearchParams({
         // Keep this response marketplace-safe even when a server key is used.

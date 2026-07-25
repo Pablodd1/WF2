@@ -10,8 +10,11 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   const limit = Math.max(1, Math.min(Number(req.query.limit || 18), 36));
   try {
+    const sourceTable = process.env.STRICT_VERIFIED_PUBLICATION === 'true'
+      ? 'price_research_verified_source'
+      : 'watch_records';
     const { data, error } = await getClient()
-      .from('watch_records')
+      .from(sourceTable)
       .select('id,brand,reference,dial_color,condition,price_usd,currency,raw_message,flags,created_at,listing_date,year,confidence,thumbnail_url,image_urls,has_images,listing_type,verdict,listing_status')
       .eq('verdict', 'APPROVED')
       .eq('listing_type', 'WTS')

@@ -12,13 +12,24 @@ const MAX_ROWS = boundedInt(process.env.IMAGE_REVIEW_MAX_ROWS, 50, 1, 100);
 function validateLedger(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('Review ledger must contain rows');
   if (rows.length > MAX_ROWS) throw new Error(`Review ledger exceeds ${MAX_ROWS}-row canary limit`);
+  const keys = new Set();
   for (const [index, row] of rows.entries()) {
     if (!row.source_object_key || !row.record_id) throw new Error(`Row ${index + 1} lacks image ownership`);
+    if (keys.has(row.source_object_key)) throw new Error(`Row ${index + 1} duplicates an image object key`);
+    keys.add(row.source_object_key);
     if (!['VISUALLY_VERIFIED', 'REJECTED'].includes(row.decision)) {
       throw new Error(`Row ${index + 1} has unsupported decision`);
     }
-    if (!row.operator_id || !row.reason || !row.evidence?.visual_match) {
+    const expectedMatch = row.decision === 'VISUALLY_VERIFIED' ? 'MATCH' : 'NO_MATCH';
+    if (!row.operator_id || !row.reason || row.evidence?.visual_match !== expectedMatch) {
       throw new Error(`Row ${index + 1} lacks human review evidence`);
+    }
+    if (row.decision === 'VISUALLY_VERIFIED') {
+      for (const field of ['brand', 'model', 'reference', 'dial_color']) {
+        if (!String(row.identity_snapshot?.[field] || '').trim()) {
+          throw new Error(`Row ${index + 1} lacks ${field} identity evidence`);
+        }
+      }
     }
   }
 }
