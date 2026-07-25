@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-const { classifyIdentity } = require('../tools/data-quality/stage-identity-review.cjs');
+const { classifyIdentity, scopeSource } = require('../tools/data-quality/stage-identity-review.cjs');
 const { auditImageRows } = require('../tools/data-quality/audit-image-backed-listings.cjs');
 const { validateLedger } = require('../tools/data-quality/apply-image-review-canary.cjs');
 const { chunks } = require('../tools/data-quality/verify-recovery-readback.cjs');
@@ -157,4 +157,14 @@ test('recovery readback keeps PostgREST ID filters bounded', () => {
   const groups = chunks(Array.from({ length: 1000 }, (_, index) => `id-${index}`));
   assert.equal(groups.length, 10);
   assert.ok(groups.every(group => group.length <= 100));
+});
+
+test('image identity recovery is bounded to listings with image evidence', () => {
+  assert.deepEqual(scopeSource('IMAGE_BACKED'), {
+    table: 'watch_records',
+    idColumn: 'id',
+    select: 'id,brand,model,reference,dial_color',
+    imageFilter: '(has_images.eq.true,thumbnail_url.not.is.null)',
+  });
+  assert.equal(scopeSource('ALL').imageFilter, null);
 });
