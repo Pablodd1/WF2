@@ -18,7 +18,7 @@ const {
 } = require('./_lib/normalization-v4.cjs');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { requireServiceToken } = require('./_lib/require-service-token.cjs');
-const { sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
+const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { confirmCatalogCandidate } = require('./_lib/catalog-confirmation.cjs');
 const { decodeTradingCursor, encodeTradingCursor, tradingCursorFilter } = require('./_lib/trading-cursor.cjs');
 
@@ -914,7 +914,9 @@ module.exports = async function handler(req, res) {
       const records = await resp.json();
       const hasMore = cursorMode && Array.isArray(records) && records.length > pageSize;
       const visibleRecords = Array.isArray(records) ? records.slice(0, pageSize) : [];
-      const customerRecords = visibleRecords.map(sanitizeTradingRecord);
+      const customerRecords = visibleRecords
+        .filter(isCustomerIdentitySafe)
+        .map(sanitizeTradingRecord);
       const nextCursor = hasMore ? encodeTradingCursor(visibleRecords[visibleRecords.length - 1]) : null;
       const contentRange = resp.headers.get('content-range') || '';
       const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;

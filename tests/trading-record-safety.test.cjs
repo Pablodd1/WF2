@@ -2,7 +2,15 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { deriveItemCategory, isLikelyYearAsPrice, isPriceLike, isReferencePriceCollision, sanitizeTradingRecord } = require('../api/_lib/trading-record-safety.cjs');
+const {
+  catalogIdentityIssue,
+  deriveItemCategory,
+  isCustomerIdentitySafe,
+  isLikelyYearAsPrice,
+  isPriceLike,
+  isReferencePriceCollision,
+  sanitizeTradingRecord,
+} = require('../api/_lib/trading-record-safety.cjs');
 
 test('derives luxury category only from source-backed record evidence', () => {
   assert.equal(deriveItemCategory({ listing_type: 'WTS', source_type: 'jewelry_archive' }), 'JEWELRY');
@@ -127,4 +135,26 @@ test('withholds sub-thousand reference prices from the customer Trading Floor', 
   assert.equal(result.price_raw, null);
   assert.equal(result.price_usd, null);
   assert.deepEqual(result.data_quality_issues, ['PRICE_BELOW_PLAUSIBILITY_FLOOR']);
+});
+
+test('quarantines cross-brand catalog contradictions', () => {
+  const conflict = { brand: 'Audemars Piguet', reference: 'RM 17-01', dial_color: 'Skeleton' };
+  assert.equal(catalogIdentityIssue(conflict), 'CATALOG_BRAND_CONFLICT');
+  assert.equal(isCustomerIdentitySafe(conflict), false);
+  assert.equal(isCustomerIdentitySafe({ brand: 'Richard Mille', reference: 'RM 17-01', dial_color: 'Skeleton' }), true);
+});
+
+test('suppresses listing images until visual identity is durably verified', () => {
+  const result = sanitizeTradingRecord({
+    brand: 'Patek Philippe',
+    reference: '5712/1A',
+    dial_color: 'Blue',
+    has_images: true,
+    thumbnail_url: 'https://example.com/wrong-watch.jpg',
+    image_urls: ['https://example.com/wrong-watch.jpg'],
+  });
+  assert.equal(result.has_images, false);
+  assert.equal(result.thumbnail_url, null);
+  assert.deepEqual(result.image_urls, []);
+  assert.match(result.data_quality_issues.join(','), /IMAGE_VISUAL_VERIFICATION_REQUIRED/);
 });

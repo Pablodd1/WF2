@@ -110,22 +110,24 @@ test('dealer login does not redirect unauthorized roles into protected review ro
   assert.match(page, /Review Queue accepts reviewer or admin/);
 });
 
-test('public listing evidence is redacted and public dealer profiles omit raw messages', () => {
+test('public listing evidence is withheld and public dealer profiles omit raw messages', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const listingRoute = fs.readFileSync(path.join(__dirname, '..', 'api', 'trading-listing.js'), 'utf8');
   const profileRoute = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealer-profile.js'), 'utf8');
-  assert.match(listingRoute, /redactPublicSource/);
+  assert.match(listingRoute, /raw_message: null/);
+  assert.doesNotMatch(listingRoute, /redactPublicSource/);
   assert.doesNotMatch(listingRoute, /authorizeDealer/);
   assert.match(listingRoute, /from\('trading_floor_listings'\)/);
   assert.doesNotMatch(profileRoute, /select\([^)]*raw_message/);
 });
 
-test('Price Research shows redacted source evidence and verified seller activity on click', () => {
+test('Price Research keeps source evidence reviewer-only and shows verified seller activity on click', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
-  assert.match(page, /Preserved source message/);
+  assert.match(page, /Source evidence/);
+  assert.match(page, /authenticated review workflow/);
   assert.match(page, /Seller and market activity/);
   assert.match(page, /api\/listing-contact/);
   assert.doesNotMatch(page, /title\.startsWith\('Raw source'\)/);

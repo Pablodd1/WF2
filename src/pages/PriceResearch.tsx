@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, ImageOff, Loader2, MessageCircle, Search, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -56,7 +56,7 @@ interface ListingDetailData {
   stored_price_usd?: number | null;
   price_normalization?: string | null;
   currency: string | null;
-  raw_message: string;
+  raw_message: string | null;
   raw_message_scope: 'original_post' | 'stored_source_message' | 'unavailable';
   raw_message_lineage_id: string | null;
   created_at: string;
@@ -288,6 +288,10 @@ export default function PriceResearch() {
   const [listingSeller, setListingSeller] = useState<ListingSellerData | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const listingRequestRef = useRef<{ sequence: number; controller: AbortController | null }>({
+    sequence: 0,
+    controller: null,
+  });
   const [showAllBrands, setShowAllBrands] = useState(false);
   const [viewerRole, setViewerRole] = useState('public');
 
@@ -377,6 +381,10 @@ export default function PriceResearch() {
   }, []);
 
   const openListing = useCallback(async (row: RowData) => {
+    listingRequestRef.current.controller?.abort();
+    const controller = new AbortController();
+    const sequence = listingRequestRef.current.sequence + 1;
+    listingRequestRef.current = { sequence, controller };
     setSelectedRow(row);
     setListingDetail(null);
     setListingSeller(null);
@@ -384,26 +392,36 @@ export default function PriceResearch() {
     setDetailLoading(true);
     try {
       const [response, contactResponse] = await Promise.all([
-        fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`),
-        fetch(`/api/listing-contact?id=${encodeURIComponent(row.id)}`),
+        fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`, { signal: controller.signal }),
+        fetch(`/api/listing-contact?id=${encodeURIComponent(row.id)}`, { signal: controller.signal }),
       ]);
       const [payload, contactPayload] = await Promise.all([response.json(), contactResponse.json()]);
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Listing detail is unavailable');
+      if (listingRequestRef.current.sequence !== sequence || payload.listing?.id !== row.id) return;
       setListingDetail(payload.listing);
       if (contactResponse.ok && contactPayload.success) setListingSeller(contactPayload);
     } catch (requestError) {
+      if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
+      if (listingRequestRef.current.sequence !== sequence) return;
       setDetailError(requestError instanceof Error ? requestError.message : 'Listing detail is unavailable');
     } finally {
-      setDetailLoading(false);
+      if (listingRequestRef.current.sequence === sequence) setDetailLoading(false);
     }
   }, []);
 
   const closeListing = useCallback(() => {
+    listingRequestRef.current.controller?.abort();
+    listingRequestRef.current = {
+      sequence: listingRequestRef.current.sequence + 1,
+      controller: null,
+    };
     setSelectedRow(null);
     setListingDetail(null);
     setListingSeller(null);
     setDetailError('');
   }, []);
+
+  useEffect(() => () => listingRequestRef.current.controller?.abort(), []);
 
   useEffect(() => {
     if (!selectedRow) return;
@@ -1167,6 +1185,7 @@ export default function PriceResearch() {
 
       {selectedRow && (
         <ListingDetailModal
+          key={selectedRow.id}
           summary={selectedRow}
           detail={listingDetail}
           seller={listingSeller}
@@ -1324,7 +1343,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                 )}
               </DetailCard>
 
-              <DetailCard title="Preserved source message" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy source message'}</button> : undefined}>
+              <DetailCard title="Source evidence" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy source message'}</button> : undefined}>
                 <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
                   <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>SOURCE TEXT / CONTACT REDACTED</span>
                   <span style={{ color: MUTED, fontSize: 12 }}>
@@ -1332,10 +1351,10 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                       ? 'Complete post recovered from immutable ingestion lineage; direct contact tokens are redacted in this public view.'
                       : detail.raw_message_scope === 'stored_source_message'
                         ? 'Stored source text for this historical listing; direct contact tokens are redacted and full-post lineage is unavailable.'
-                        : 'No source text is stored for this listing.'}
+                        : 'Source evidence is preserved for authenticated reviewers and is not exposed in the public marketplace.'}
                   </span>
                 </div>
-                {detail.raw_message ? <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>{detail.raw_message}</pre> : <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>No raw source message is stored for this record.</div>}
+                {detail.raw_message ? <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>{detail.raw_message}</pre> : <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>Source evidence is available only in the authenticated review workflow.</div>}
                 {detail.raw_message_lineage_id && <div style={{ marginTop: 8, color: MUTED, fontSize: 10, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>Raw lineage ID: {detail.raw_message_lineage_id}</div>}
               </DetailCard>
 

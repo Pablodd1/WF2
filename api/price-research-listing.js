@@ -5,24 +5,7 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
-const { redactPublicSource } = require('./_lib/source-redaction.cjs');
-
-function collectUrls(value, found = []) {
-  if (Array.isArray(value)) {
-    value.forEach(item => collectUrls(item, found));
-    return found;
-  }
-  if (value && typeof value === 'object') {
-    ['url', 'src', 'image_url', 'thumbnail_url'].forEach(key => collectUrls(value[key], found));
-    return found;
-  }
-  if (typeof value !== 'string') return found;
-  try {
-    const url = new URL(value.trim());
-    if (url.protocol === 'https:') found.push(url.toString());
-  } catch { /* Ignore malformed or non-URL media values. */ }
-  return found;
-}
+const { isCustomerIdentitySafe } = require('./_lib/trading-record-safety.cjs');
 
 function normalizeAccessories(value) {
   if (!value) return [];
@@ -72,17 +55,12 @@ module.exports = async function handler(req, res) {
 
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Listing not found' });
+    if (!isCustomerIdentitySafe(data)) return res.status(404).json({ error: 'Listing under identity review' });
     const rawSource = await resolveRawSource(client, data);
     const normalized = normalizeMarketRow(
       { ...data, raw_message: rawSource.text },
       data.reference,
     );
-
-    const imageUrls = [...new Set([
-      ...collectUrls(data.thumbnail_url),
-      ...collectUrls(data.image_urls),
-      ...collectUrls(data.dealer_photos),
-    ])].slice(0, 20);
 
     return res.status(200).json({
       success: true,
@@ -95,9 +73,10 @@ module.exports = async function handler(req, res) {
         stored_price_usd: data.price_usd,
         price_normalization: normalized.price_normalization,
         currency: data.currency,
-        raw_message: redactPublicSource(rawSource.text),
-        raw_message_scope: rawSource.scope,
-        raw_message_lineage_id: rawSource.lineage_id,
+        raw_message: null,
+        raw_message_scope: 'unavailable',
+        raw_message_lineage_id: null,
+        source_message_available_to_reviewers: Boolean(rawSource.text),
         created_at: data.created_at,
         listing_date: data.listing_date,
         condition: data.condition,
@@ -106,8 +85,8 @@ module.exports = async function handler(req, res) {
         year: data.year,
         listing_type: data.listing_type,
         accessories: normalizeAccessories(data.accessories),
-        image_urls: imageUrls,
-        has_images: imageUrls.length > 0,
+        image_urls: [],
+        has_images: false,
         region: data.region,
         source_type: data.source_type,
         listing_status: data.listing_status,

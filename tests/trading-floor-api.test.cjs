@@ -39,6 +39,25 @@ async function runQuery(query) {
   }
 }
 
+test('customer inventory quarantines catalog-proven cross-brand rows', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify([
+    { id: 'bad', brand: 'Audemars Piguet', reference: 'RM 17-01', dial_color: 'Skeleton' },
+    { id: 'good', brand: 'Richard Mille', reference: 'RM 17-01', dial_color: 'Skeleton' },
+  ]), {
+    status: 200,
+    headers: { 'content-range': '0-1/2', 'content-type': 'application/json' },
+  });
+  try {
+    const res = responseRecorder();
+    await handler({ method: 'GET', query: { quality: 'market' } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.records.map(row => row.id), ['good']);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('recent inventory excludes recycle rows and undated imports', async () => {
   const url = await runQuery({ quality: 'market' });
   assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
