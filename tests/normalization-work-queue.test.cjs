@@ -25,6 +25,9 @@ test('normalization work queue claims rows with SKIP LOCKED rather than source I
 
 test('Railway worker can opt into queue mode while retaining a safe legacy default', () => {
   assert.match(worker, /SHADOW_WORKER_MODE.*cursor/);
+  assert.match(worker, /useGlobalLease = workerMode === 'cursor'/);
+  assert.match(worker, /useGlobalLease \? await acquireLease\(\) : true/);
+  assert.match(worker, /if \(useGlobalLease\) await releaseLease\(\)/);
   assert.match(worker, /workerMode === 'queue' \? await runQueueLease\(\) : await runLease\(\)/);
   assert.match(worker, /claim_normalization_shadow_work/);
   assert.match(worker, /releaseQueueWork/);
