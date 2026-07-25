@@ -141,3 +141,13 @@ test('strict publication covers floor, archive, price research, featured, and de
   assert.match(featured, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
   assert.match(detail, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*trading_floor_verified_listings/);
 });
+
+test('forward repair verifies prerequisites without replaying deployed migrations', () => {
+  const workflow = fs.readFileSync(
+    path.join(__dirname, '..', '.github', 'workflows', 'supabase-forward-schema-repair.yml'),
+    'utf8',
+  );
+  assert.match(workflow, /Base recovery migrations must be applied before hardening/);
+  assert.match(workflow, /--file="\$hardening"/);
+  assert.doesNotMatch(workflow, /--file="\$(migration|recovery)"/);
+});

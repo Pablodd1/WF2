@@ -64,8 +64,17 @@ jobs:
           test -f "$recovery"
           test -f "$hardening"
           db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
-          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$migration"
-          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$recovery"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF to_regclass('public.trading_floor_market_listings') IS NULL
+              OR to_regclass('public.listing_identity_reviews') IS NULL
+              OR to_regclass('public.listing_image_reviews') IS NULL THEN
+              RAISE EXCEPTION 'Base recovery migrations must be applied before hardening';
+            END IF;
+          END
+          $$;
+          SQL
           psql "$db_url" --set=ON_ERROR_STOP=1 --file="$hardening"
 
       - name: Verify private staging and public market contract
