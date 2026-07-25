@@ -7,7 +7,7 @@ ready for customer publication.
 
 | Stream | Current decision | Verified result |
 | --- | --- | ---: |
-| Listing images | Partially live | 1,465 watch images linked; 100 reachable objects still unlinked |
+| Listing images | Partially live | 1,523 manifest objects linked; 100 reachable objects still unlinked |
 | Seller/contact lineage | Private review only | 16,094 exact candidates staged; 0 public contacts |
 | Unbundled listings | Human review only | 70,194 staged; 0 approved or published |
 
@@ -20,16 +20,16 @@ Live production readback:
 
 | Check | Rows |
 | --- | ---: |
-| `watch_records` with images | 1,473 |
-| `media_manifest` total | 1,565 |
-| Linked manifest objects | 1,465 |
+| `watch_records` with images | 1,531 |
+| `media_manifest` total | 1,623 |
+| Linked manifest objects | 1,523 |
 | Discovered, not linked | 100 |
 | Matched but not linked | 0 |
 | Orphaned | 0 |
 | Failed | 0 |
-| URL reachable | 1,565 |
+| URL reachable | 1,623 |
 
-The difference between 1,473 image-backed records and 1,465 linked watch
+The difference between 1,531 image-backed records and 1,523 linked watch
 manifest rows includes the separate non-watch luxury pilot. A reachable URL is
 not sufficient evidence that an image belongs to a listing.
 
@@ -47,6 +47,19 @@ visually reviewed. A production dry run then revalidated all 100 current watch
 rows and all 100 object URLs before the write. The audited RPC reported 100
 linked and 0 unchanged; independent readback confirmed 100 exact listing
 matches and 100 exact manifest matches.
+
+A final residual scan found 63 structurally exact candidates. All 63 source
+objects were downloaded and reviewed on four contact sheets. Five were
+rejected: one definite brand mismatch, two multi-watch collages, one
+product-page screenshot, and one unusably low-resolution image. The remaining
+58 were applied from the immutable ledger
+`outputs/image-lineage/visually-approved-residual-58-ledger.json`, SHA-256
+`599a6631c85ab028119bdc6b304594ddc8274a5e75ac2abb3d3555563020d1dd`.
+The audited RPC reported 58 linked and 0 unchanged. Independent readback
+confirmed 58 exact watch-row matches and 58 exact manifest-row matches with
+zero failures. The public Trading Floor API returned the exact linked image
+for AP reference `26252OR`, the object returned HTTP 200 as JPEG, and the image
+URL was present in the rendered production marketplace DOM.
 
 The rejected candidate counts overlap because one row may fail several gates:
 
@@ -99,6 +112,16 @@ The complete 16,094-row match-ready manifest was written to the private
 The 15,657 rows with name, phone, and original date are available to the
 authenticated admin/reviewer workflow. The remaining 437 have phone and date
 evidence but no seller name and must not be filled by inference.
+
+A separate child-lineage canary was also staged privately. The current private
+child table contains 190 pending rows: today's signed 95-row cohort plus a
+distinct prior 95-row cohort. All 190 have zero public-contact permission, zero
+public-image permission, and zero dealer assignment. In today's cohort, 67
+rows are review-ready and 28 require human correction; 58 are WTS and 37 are
+WTB. Seller name, phone, source posting date, parent image evidence, and
+parent-child linkage were present on all 95. `source_posted_at` is the
+authoritative original date; the auxiliary child creation timestamp must not
+be substituted.
 
 Customer publication remains blocked because production currently has:
 
@@ -162,6 +185,10 @@ publication function can write a child to `watch_records`.
    and duplicate review is complete.
 5. Expand images only when one exact listing maps to one exact source image.
    Never reuse a parent image across multiple children without evidence.
+6. Repair the eight unresolved migration-ledger entries with forward-only
+   schema repairs. Do not replay the historical migration directory.
+7. Prove that the strict market view enforces `catalog_confirmed IS TRUE` and
+   that `watch_staging` is private under RLS before expanding publication.
 
 ## Reproducible evidence
 
@@ -177,6 +204,8 @@ publication function can write a child to `watch_records`.
   `supabase/migrations/20260720220000_seller_listing_lineage_staging.sql`
 - Admin review endpoint:
   `api/unbundled-review-queue.js`
+- Residual image readback verifier:
+  `tools/mission-images/verify-image-ledger-readback.cjs`
 
 All live counts in this report were read through the Railway production
 environment on 2026-07-24 using service-role access. The report contains
