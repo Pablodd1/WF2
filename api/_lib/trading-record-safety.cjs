@@ -1,5 +1,7 @@
 'use strict';
 
+const { confirmCatalogCandidate } = require('./catalog-confirmation.cjs');
+
 function cleanText(value) {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
@@ -55,9 +57,30 @@ function deriveItemCategory(record) {
   return 'OTHER';
 }
 
+function catalogIdentityIssue(record) {
+  const confirmation = confirmCatalogCandidate(record);
+  if (confirmation.reason === 'CATALOG_BRAND_CONFLICT') return 'CATALOG_BRAND_CONFLICT';
+  if (confirmation.confirmed && confirmation.dialConfirmed === false) return 'CATALOG_DIAL_CONFLICT';
+  return null;
+}
+
+function isCustomerIdentitySafe(record) {
+  return catalogIdentityIssue(record) === null;
+}
+
+function suppressUnverifiedImages(record) {
+  return {
+    ...record,
+    has_images: false,
+    thumbnail_url: null,
+    image_urls: [],
+    dealer_photos: [],
+  };
+}
+
 function sanitizeTradingRecord(record) {
   const issues = [];
-  const sanitized = { ...record };
+  const sanitized = suppressUnverifiedImages(record);
   const brand = cleanText(record.brand);
   const reference = cleanText(record.reference);
   const dial = cleanText(record.dial_color);
@@ -117,6 +140,12 @@ function sanitizeTradingRecord(record) {
     issues.push('YEAR_TOKEN_AS_PRICE');
   }
 
+  const identityIssue = catalogIdentityIssue(record);
+  if (identityIssue) issues.push(identityIssue);
+  if (record.has_images || record.thumbnail_url || record.image_urls?.length) {
+    issues.push('IMAGE_VISUAL_VERIFICATION_REQUIRED');
+  }
+
   const usdPrice = Number(sanitized.price_usd);
   if (sanitized.reference && Number.isFinite(usdPrice) && usdPrice > 0 && usdPrice < 1000) {
     sanitized.price_usd = null;
@@ -132,4 +161,13 @@ function sanitizeTradingRecord(record) {
   };
 }
 
-module.exports = { deriveItemCategory, isLikelyYearAsPrice, isPriceLike, isReferencePriceCollision, sanitizeTradingRecord };
+module.exports = {
+  catalogIdentityIssue,
+  deriveItemCategory,
+  isCustomerIdentitySafe,
+  isLikelyYearAsPrice,
+  isPriceLike,
+  isReferencePriceCollision,
+  sanitizeTradingRecord,
+  suppressUnverifiedImages,
+};
