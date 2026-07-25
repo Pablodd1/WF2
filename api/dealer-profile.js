@@ -19,7 +19,7 @@ module.exports = async function handler(req, res) {
     if (!dealer || dealer.status !== 'VERIFIED') return res.status(404).json({ error: 'Verified dealer profile not found' });
 
     const [statsResult, listingsResult] = await Promise.all([
-      client.from('dealer_profile_stats').select('*').eq('dealer_id', dealer.id).maybeSingle(),
+      client.from('verified_dealer_profile_stats').select('*').eq('dealer_id', dealer.id).maybeSingle(),
       client.from('watch_records')
         .select('id,brand,reference,dial_color,condition,price_usd,currency,listing_type,listing_date,created_at,listing_status,verdict')
         .eq('dealer_id', dealer.id)
@@ -39,12 +39,20 @@ module.exports = async function handler(req, res) {
       ? await client.from('normalization_shadow_v4').select('source_record_id').in('source_record_id', listingIds).gt('candidate_count', 1)
       : { data: [], error: null };
     if (bundleError) throw bundleError;
+    const { data: verifiedIdentities, error: identityError } = listingIds.length
+      ? await client.from('listing_identity_reviews')
+        .select('record_id')
+        .in('record_id', listingIds)
+        .in('status', ['CATALOG_CONFIRMED', 'HUMAN_APPROVED'])
+      : { data: [], error: null };
+    if (identityError) throw identityError;
     const excludedIds = new Set((bundleParents || []).map(row => row.source_record_id));
+    const verifiedIds = new Set((verifiedIdentities || []).map(row => row.record_id));
     return res.status(200).json({
       success: true,
       dealer,
       stats: statsResult.data || null,
-      listings: listingRows.filter(listing => !excludedIds.has(listing.id)),
+      listings: listingRows.filter(listing => verifiedIds.has(listing.id) && !excludedIds.has(listing.id)),
       raw_message_access: false,
     });
   } catch (error) {

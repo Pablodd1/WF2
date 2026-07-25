@@ -58,9 +58,12 @@ jobs:
         run: |
           set -euo pipefail
           migration="supabase/migrations/20260725010000_harden_staging_and_market_contract.sql"
+          recovery="supabase/migrations/20260725023000_identity_image_publication_control.sql"
           test -f "$migration"
+          test -f "$recovery"
           db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
           psql "$db_url" --set=ON_ERROR_STOP=1 --file="$migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$recovery"
 
       - name: Verify private staging and public market contract
         shell: bash
@@ -83,6 +86,15 @@ jobs:
             END IF;
             IF to_regclass('public.trading_floor_market_listings') IS NULL THEN
               RAISE EXCEPTION 'market view is missing';
+            END IF;
+            IF to_regclass('public.listing_identity_reviews') IS NULL
+              OR to_regclass('public.listing_image_reviews') IS NULL
+              OR to_regclass('public.trading_floor_verified_listings') IS NULL THEN
+              RAISE EXCEPTION 'data recovery control plane is incomplete';
+            END IF;
+            IF has_table_privilege('anon', 'public.listing_identity_reviews', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.listing_image_reviews', 'SELECT') THEN
+              RAISE EXCEPTION 'private recovery ledgers are publicly readable';
             END IF;
           END
           $$;
