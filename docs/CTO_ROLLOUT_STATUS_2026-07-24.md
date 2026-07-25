@@ -69,12 +69,20 @@ failures. Five visually unsafe candidates were excluded.
 | Exact parent seller candidates staged privately | 16,094 |
 | Pending child seller rows | 190 |
 | Source-company candidates awaiting dealer reconciliation | 1,580 |
+| Authenticated directory profiles staged privately | 12 |
+| Listings with exact normalized-phone support | 86 |
+| Unique phone identities supporting review | 4 |
 | Verified dealers | 0 |
 | Verified contact-consent records | 0 |
 | Public listings attributed to a dealer | 0 |
 
 No seller name or phone is authorized for customer publication. Full contact
 may be revealed only to authenticated reviewers through the audited endpoint.
+The 12-profile directory canary found zero immutable source-ID matches. Exact
+normalized-phone overlap supplies review evidence for 86 listings across four
+identities, but it does not verify a dealer, establish consent, or authorize an
+automatic link. The generated 86-row review manifest contains record IDs and
+evidence labels only; it contains no phone values.
 
 ### Unbundled inventory
 
@@ -93,7 +101,8 @@ cannot be published in bulk.
 
 ## Release blockers
 
-1. Reconcile the 1,580 source-company candidates to real dealer entities.
+1. Human-review the four phone-supported dealer identity groups, then continue
+   reconciling the remaining 1,580 source-company candidates.
 2. Record dealer verification and explicit contact consent before exposing
    phone or WhatsApp details.
 3. Review the 28 human-correction rows in the current 95-row seller child
@@ -110,7 +119,8 @@ cannot be published in bulk.
 
 ## Next execution order
 
-1. Reconcile dealer identities and consent in a 100-row private canary.
+1. Decide the four phone-supported dealer identity groups and record consent
+   separately from identity verification.
 2. Complete human decisions for the current seller child canary.
 3. Review and publish a bounded unbundled child batch, then suppress parents
    only after duplicate review.
@@ -128,4 +138,5 @@ cannot be published in bulk.
 - GitHub Actions run `30136164612`: 22/22 migration predicates verified.
 - GitHub Actions run `30136203508`: 22 repaired, 0 unresolved.
 - `tools/mission-images/verify-image-ledger-readback.cjs`
+- `tools/dealer-lineage/audit-directory-source-overlap.cjs`
 - `docs/IMAGES_SELLER_UNBUNDLED_STATUS_2026-07-24.md`
