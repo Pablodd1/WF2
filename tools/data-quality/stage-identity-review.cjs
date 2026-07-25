@@ -5,8 +5,8 @@ const { boundedInt, supabaseFetch } = require('./recovery-control.cjs');
 
 const APPLY = process.env.APPLY_IDENTITY_STAGE === 'true';
 const SCOPE = String(process.env.IDENTITY_SCOPE || 'RM_CONFLICTS').toUpperCase();
-if (!['RM_CONFLICTS', 'ALL'].includes(SCOPE)) {
-  throw new Error('IDENTITY_SCOPE must be RM_CONFLICTS or ALL');
+if (!['RM_CONFLICTS', 'IMAGE_BACKED', 'ALL'].includes(SCOPE)) {
+  throw new Error('IDENTITY_SCOPE must be RM_CONFLICTS, IMAGE_BACKED, or ALL');
 }
 const LIMIT = boundedInt(process.env.IDENTITY_BATCH_SIZE, 100, 1, 1000);
 const MAX_BATCHES = boundedInt(process.env.IDENTITY_MAX_BATCHES, 1, 1, 100);
@@ -49,18 +49,32 @@ async function checkpoint() {
   return rows?.[0] || { last_record_id: null, rows_scanned: 0, rows_written: 0 };
 }
 
+function scopeSource(scope) {
+  if (scope === 'RM_CONFLICTS') {
+    return {
+      table: 'rm_identity_review_queue',
+      idColumn: 'record_id',
+      select: 'record_id,brand,model,reference,dial_color',
+    };
+  }
+  return {
+    table: 'watch_records',
+    idColumn: 'id',
+    select: 'id,brand,model,reference,dial_color',
+    imageFilter: scope === 'IMAGE_BACKED' ? '(has_images.eq.true,thumbnail_url.not.is.null)' : null,
+  };
+}
+
 async function sourceRows(lastRecordId) {
-  const table = SCOPE === 'RM_CONFLICTS' ? 'rm_identity_review_queue' : 'watch_records';
-  const select = SCOPE === 'RM_CONFLICTS'
-    ? 'record_id,brand,model,reference,dial_color'
-    : 'id,brand,model,reference,dial_color';
+  const source = scopeSource(SCOPE);
   const query = new URLSearchParams({
-    select,
-    order: SCOPE === 'RM_CONFLICTS' ? 'record_id.asc' : 'id.asc',
+    select: source.select,
+    order: `${source.idColumn}.asc`,
     limit: String(LIMIT),
   });
-  if (lastRecordId) query.set(SCOPE === 'RM_CONFLICTS' ? 'record_id' : 'id', `gt.${lastRecordId}`);
-  return supabaseFetch(`/rest/v1/${table}?${query}`);
+  if (lastRecordId) query.set(source.idColumn, `gt.${lastRecordId}`);
+  if (source.imageFilter) query.set('or', source.imageFilter);
+  return supabaseFetch(`/rest/v1/${source.table}?${query}`);
 }
 
 async function applyRows(rows, previous) {
@@ -145,4 +159,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { classifyIdentity };
+module.exports = { classifyIdentity, scopeSource };
