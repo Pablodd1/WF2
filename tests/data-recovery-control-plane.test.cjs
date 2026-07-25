@@ -7,6 +7,7 @@ const test = require('node:test');
 const { classifyIdentity } = require('../tools/data-quality/stage-identity-review.cjs');
 const { auditImageRows } = require('../tools/data-quality/audit-image-backed-listings.cjs');
 const { validateLedger } = require('../tools/data-quality/apply-image-review-canary.cjs');
+const { chunks } = require('../tools/data-quality/verify-recovery-readback.cjs');
 
 const migration = fs.readFileSync(
   path.join(__dirname, '..', 'supabase', 'migrations', '20260725023000_identity_image_publication_control.sql'),
@@ -150,4 +151,10 @@ test('forward repair verifies prerequisites without replaying deployed migration
   assert.match(workflow, /Base recovery migrations must be applied before hardening/);
   assert.match(workflow, /--file="\$hardening"/);
   assert.doesNotMatch(workflow, /--file="\$(migration|recovery)"/);
+});
+
+test('recovery readback keeps PostgREST ID filters bounded', () => {
+  const groups = chunks(Array.from({ length: 1000 }, (_, index) => `id-${index}`));
+  assert.equal(groups.length, 10);
+  assert.ok(groups.every(group => group.length <= 100));
 });
