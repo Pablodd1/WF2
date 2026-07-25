@@ -185,10 +185,11 @@ publication function can write a child to `watch_records`.
    and duplicate review is complete.
 5. Expand images only when one exact listing maps to one exact source image.
    Never reuse a parent image across multiple children without evidence.
-6. Repair the eight unresolved migration-ledger entries with forward-only
-   schema repairs. Do not replay the historical migration directory.
-7. Prove that the strict market view enforces `catalog_confirmed IS TRUE` and
-   that `watch_staging` is private under RLS before expanding publication.
+6. Keep future schema changes forward-only. Production now verifies all 22
+   audited migration contracts and reports zero unresolved ledger versions.
+7. Preserve the ownership boundary: Trading Floor uses the customer-safe
+   inventory view; Price Research applies catalog model and dial confirmation
+   in `classifyResearchEligibility`. `watch_staging` is private under RLS.
 
 ## Reproducible evidence
 
@@ -210,3 +211,10 @@ publication function can write a child to `watch_records`.
 All live counts in this report were read through the Railway production
 environment on 2026-07-24 using service-role access. The report contains
 counts only; it does not contain seller names, phone numbers, or credentials.
+
+Production schema evidence:
+
+- Forward repair: GitHub Actions run `30136124476`, successful.
+- Post-repair ledger inspection: run `30136164612`, 22/22 predicates verified.
+- Ledger reconciliation: run `30136203508`, 22 verified versions repaired and
+  0 unresolved; no historical schema SQL was replayed.
