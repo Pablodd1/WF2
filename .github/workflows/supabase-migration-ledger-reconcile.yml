@@ -151,7 +151,15 @@ jobs:
                   AND to_regprocedure(
                     'public.apply_unbundled_staging_review_decision(uuid,text,text,text,boolean)') IS NOT NULL
                   AND COALESCE((SELECT relrowsecurity FROM pg_class
-                       WHERE oid = to_regclass('public.unbundled_staging_review_audit')), false),
+                       WHERE oid = to_regclass('public.unbundled_staging_review_audit')), false)
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                       WHERE oid = to_regclass('public.watch_staging')), false)
+                  AND NOT has_table_privilege('anon',
+                    to_regclass('public.watch_staging'), 'SELECT')
+                  AND NOT has_table_privilege('authenticated',
+                    to_regclass('public.watch_staging'), 'SELECT')
+                  AND has_table_privilege('service_role',
+                    to_regclass('public.watch_staging'), 'SELECT'),
                 'unbundled staging tables, indexes, review function, and RLS'),
               ('20260720220000',
                 to_regclass('public.seller_listing_lineage_staging') IS NOT NULL
@@ -217,11 +225,15 @@ jobs:
               ('20260722120000',
                 to_regclass('public.trading_floor_market_listings') IS NOT NULL
                   AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
-                    ILIKE '%catalog_confirmed%'
-                  AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
                     ILIKE '%price_usd%'
                   AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
-                    ILIKE '%listing_type%',
+                    ILIKE '%listing_type%'
+                  AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
+                    ILIKE '%brand%'
+                  AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
+                    ILIKE '%reference%'
+                  AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
+                    ILIKE '%dial_color%',
                 'strict publication view and identity/price/intent gates'),
               ('20260722143000',
                 (SELECT count(*) = 3 FROM information_schema.columns
