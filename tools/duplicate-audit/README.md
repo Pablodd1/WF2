@@ -32,6 +32,12 @@ without rebuilding previous pages. Set `DUPLICATE_AUDIT_CHECKPOINT_PAGES` to
 change that interval. Set `DUPLICATE_AUDIT_RESET=true` only when intentionally
 starting a fresh report.
 
+Audit format v2 selects the canonical observation from a valid immutable
+`listing_date`; `created_at` is used only when the source date is unavailable
+and is labeled `CREATED_AT_FALLBACK` in the CSV. Because older checkpoint state
+does not contain `listing_date`, it must be restarted once with
+`DUPLICATE_AUDIT_RESET=true` rather than mixed into a v2 report.
+
 ## Interpretation
 
 - `suppress_from_analytics=true` is a proposal, not an applied production decision.
@@ -39,3 +45,10 @@ starting a fresh report.
 - Matches involving a split candidate are always review-only until lineage is approved.
 - Price updates remain in historical Price Research.
 - Matching inventory from different dealers is never auto-collapsed.
+- Customer analytics become unavailable when the reviewed-suppression lookup
+  fails; they never silently re-admit a suppressed row. Before the batch RPC is
+  deployed, the fallback queries only current cohort IDs in batches of 100.
+- Only an administrator may restore `SUPPRESSED` to `KEEP_BOTH`. The restore RPC
+  writes an immutable private event containing the prior decision evidence
+  before changing the reversible ledger status. It never deletes or updates
+  `watch_records`.
