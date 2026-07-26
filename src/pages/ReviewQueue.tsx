@@ -187,8 +187,476 @@ interface CorrectionDraft {
   listing_type: string;
 }
 
+interface ReviewPacketSummary {
+  id: string;
+  reason: string;
+  itemCount: number;
+  normalizationVersion: string | null;
+  status: string;
+}
+
+interface ReviewPacketCompactItem {
+  id: string;
+  ordinal: number;
+  sourceRecordId: string;
+  normalizationVersion: string;
+  status: string;
+  summary: string;
+  correctionProposed: boolean;
+}
+
+interface ReviewPacketEvidence {
+  id: string;
+  packetId: string;
+  sourceRecordId: string;
+  reason: string;
+  reviewEvidenceExcerpt: string;
+  rawEvidenceHash: string;
+  proposalHash: string;
+  normalizationVersion: string | null;
+  evidenceFresh: boolean;
+  sellerNameMasked: string | null;
+  sellerPhoneMasked: string | null;
+  fields: CorrectionDraft;
+}
+
+const packetReasons = [
+  'DETERMINISTIC_CHANGE_REVIEW',
+  'EMOJI_PRICE_AMBIGUOUS',
+] as const;
+
+const emptyCorrectionDraft = (): CorrectionDraft => ({
+  brand: '',
+  reference: '',
+  dial_color: '',
+  condition: '',
+  year: '',
+  price_raw: '',
+  price_usd: '',
+  currency: '',
+  listing_type: '',
+});
+
+const packetItemSummary = (summary: Record<string, unknown>) => [
+  summary.brand,
+  summary.reference,
+  summary.dialColor,
+  summary.condition,
+  summary.priceRaw && `${summary.priceRaw} ${summary.currency || ''}`.trim(),
+].filter(Boolean).map(String).join(' · ') || 'Evidence summary unavailable';
+
+function PacketReviewLane({ openUnbundled }: { openUnbundled: () => void }) {
+  const pageSize = 25;
+  const [refresh, setRefresh] = useState(0);
+  const [packets, setPackets] = useState<ReviewPacketSummary[]>([]);
+  const [summaryAfter, setSummaryAfter] = useState('');
+  const [summaryHistory, setSummaryHistory] = useState<string[]>([]);
+  const [nextSummaryCursor, setNextSummaryCursor] = useState<string | null>(null);
+  const [selectedPacket, setSelectedPacket] = useState<ReviewPacketSummary | null>(null);
+  const [packetItems, setPacketItems] = useState<ReviewPacketCompactItem[]>([]);
+  const [afterOrdinal, setAfterOrdinal] = useState(0);
+  const [nextOrdinal, setNextOrdinal] = useState<number | null>(null);
+  const [item, setItem] = useState<ReviewPacketEvidence | null>(null);
+  const [draft, setDraft] = useState<CorrectionDraft>(emptyCorrectionDraft);
+  const [rationale, setRationale] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ limit: String(pageSize) });
+    if (summaryAfter) params.set('after', summaryAfter);
+    setError(null);
+    fetch(`/api/review-packets?${params.toString()}`, {
+      credentials: 'include',
+      signal: controller.signal,
+    })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Review packets are unavailable');
+        return data;
+      })
+      .then(data => {
+        const rows = (data.items || []) as Record<string, unknown>[];
+        setPackets(rows.map(row => ({
+          id: String(row.id),
+          reason: String(row.reason),
+          itemCount: Number(row.itemCount || 0),
+          normalizationVersion: String(row.normalizationVersion || '') || null,
+          status: String(row.status || 'OPEN'),
+        })));
+        setNextSummaryCursor(String(data.nextCursor || '') || null);
+      })
+      .catch(fetchError => {
+        if (fetchError?.name !== 'AbortError') {
+          setError(fetchError instanceof Error ? fetchError.message : 'Review packets are unavailable');
+        }
+      });
+    return () => controller.abort();
+  }, [summaryAfter, refresh]);
+
+  useEffect(() => {
+    if (!selectedPacket) {
+      setPacketItems([]);
+      setNextOrdinal(null);
+      return;
+    }
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      packetId: selectedPacket.id,
+      limit: String(pageSize),
+      afterOrdinal: String(afterOrdinal),
+    });
+    setError(null);
+    fetch(`/api/review-packets?${params.toString()}`, {
+      credentials: 'include',
+      signal: controller.signal,
+    })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Packet items are unavailable');
+        return data;
+      })
+      .then(data => {
+        const rows = (data.items || []) as Record<string, unknown>[];
+        setPacketItems(rows.map(row => {
+          const summary = (row.summary || {}) as Record<string, unknown>;
+          return {
+            id: String(row.id),
+            ordinal: Number(row.ordinal || 0),
+            sourceRecordId: String(row.sourceRecordId || ''),
+            normalizationVersion: String(row.normalizationVersion || ''),
+            status: String(row.status || 'PENDING'),
+            summary: packetItemSummary(summary),
+            correctionProposed: Boolean(row.correctionProposed),
+          };
+        }));
+        setNextOrdinal(data.nextOrdinal == null ? null : Number(data.nextOrdinal));
+      })
+      .catch(fetchError => {
+        if (fetchError?.name !== 'AbortError') {
+          setError(fetchError instanceof Error ? fetchError.message : 'Packet items are unavailable');
+        }
+      });
+    return () => controller.abort();
+  }, [afterOrdinal, refresh, selectedPacket]);
+
+  const openPacket = (packet: ReviewPacketSummary) => {
+    setSelectedPacket(packet);
+    setAfterOrdinal(0);
+    setItem(null);
+  };
+
+  const openItem = async (compactItem: ReviewPacketCompactItem) => {
+    setBusy(compactItem.id);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ itemId: compactItem.id });
+      const response = await fetch(`/api/review-packet-item?${params.toString()}`, {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Packet evidence is unavailable');
+      const row = (data.item || data) as Record<string, unknown>;
+      const sourceEvidence = (row.sourceEvidence || {}) as Record<string, unknown>;
+      const frozenProposal = (row.proposal || {}) as Record<string, unknown>;
+      const proposedCandidates = Array.isArray(frozenProposal.proposed_candidates)
+        ? frozenProposal.proposed_candidates as Record<string, unknown>[]
+        : [];
+      const proposal = (proposedCandidates[0] || frozenProposal.candidate || frozenProposal) as Record<string, unknown>;
+      const contact = (row.contact || {}) as Record<string, unknown>;
+      const fields = { ...emptyCorrectionDraft() };
+      for (const field of Object.keys(fields) as (keyof CorrectionDraft)[]) {
+        const value = proposal[field];
+        if (value != null) fields[field] = String(value);
+      }
+      const evidence: ReviewPacketEvidence = {
+        id: String(row.id),
+        packetId: String(row.packetId),
+        sourceRecordId: compactItem.sourceRecordId,
+        reason: String(row.reason || selectedPacket?.reason || ''),
+        reviewEvidenceExcerpt: String(sourceEvidence.rawMessage || ''),
+        rawEvidenceHash: String(row.rawEvidenceHash || ''),
+        proposalHash: String(row.proposalHash || ''),
+        normalizationVersion: String(row.normalizationVersion || '') || null,
+        evidenceFresh: row.evidenceFresh === true,
+        sellerNameMasked: String(contact.sellerNameMasked || '') || null,
+        sellerPhoneMasked: String(contact.sellerPhoneMasked || '') || null,
+        fields,
+      };
+      setItem(evidence);
+      setDraft(fields);
+      setRationale('');
+    } catch (openError) {
+      setError(openError instanceof Error ? openError.message : 'Packet evidence is unavailable');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const submitCorrection = async () => {
+    if (!item || !item.evidenceFresh || rationale.trim().length < 10 || !item.reviewEvidenceExcerpt || !item.rawEvidenceHash || !item.proposalHash) return;
+    const fields: Record<string, string | number | null> = {};
+    for (const [field, value] of Object.entries(draft)) {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        fields[field] = null;
+        continue;
+      }
+      if (field === 'year' || field === 'price_raw' || field === 'price_usd') {
+        const numeric = Number(trimmed);
+        const invalidYear = field === 'year' && (!Number.isInteger(numeric) || numeric < 1000 || numeric > new Date().getUTCFullYear() + 1);
+        if (!Number.isFinite(numeric) || invalidYear || (field !== 'year' && numeric <= 0)) {
+          setError(`${field.replace('_', ' ')} must be a valid ${field === 'year' ? 'year' : 'positive number'}.`);
+          return;
+        }
+        fields[field] = numeric;
+        continue;
+      }
+      fields[field] = trimmed;
+    }
+    setBusy(item.id);
+    setError(null);
+    try {
+      const response = await fetch('/api/review-packet-decision', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemId: item.id,
+          decision: 'CORRECTION_PROPOSED',
+          fields,
+          rationale: rationale.trim(),
+          expectedRawSha256: item.rawEvidenceHash,
+          expectedProposalSha256: item.proposalHash,
+          evidenceHashes: [item.rawEvidenceHash, item.proposalHash],
+        }),
+      });
+      const data = await response.json();
+      if (response.status === 409 || data.stale === true || data.code === 'STALE_EVIDENCE') {
+        setItem(null);
+        setError(data.error || 'Evidence changed after this item opened. Reopen it before proposing a correction.');
+        return;
+      }
+      if (!response.ok) throw new Error(data.error || 'Correction proposal failed');
+      setItem(null);
+      setRefresh(value => value + 1);
+    } catch (decisionFailure) {
+      setError(decisionFailure instanceof Error ? decisionFailure.message : 'Correction proposal failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const isBundle = (reviewReason: string) => reviewReason === 'BUNDLE_SPLIT_REQUIRED';
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-border-default bg-bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-text-primary">Normalization reason packets</h2>
+            <p className="mt-1 text-xs text-text-muted">
+              Compact summaries only. Evidence opens one item at a time; AI remains advisory and cannot submit decisions.
+            </p>
+          </div>
+          <span className="text-xs text-text-muted">{packets.length.toLocaleString()} packet summaries loaded</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-wide text-text-muted">
+          {packetReasons.map(packetReason => (
+            <span key={packetReason} className="rounded border border-border-default px-2 py-1">
+              {packetReason}
+            </span>
+          ))}
+        </div>
+        {error && <p className="mt-3 text-xs text-red-400" role="alert">{error}</p>}
+      </div>
+
+      <div className="space-y-2">
+        {packets.map(packet => (
+          <div key={packet.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border-default bg-bg-card p-4">
+            <AlertTriangle size={17} className="text-amber-400" />
+            <div className="min-w-0 flex-1">
+              <div className="break-all text-xs font-bold text-text-primary">{packet.reason}</div>
+              <div className="mt-1 text-[11px] text-text-muted">
+                {packet.itemCount.toLocaleString()} compact items · {packet.status}
+                {packet.normalizationVersion ? ` · ${packet.normalizationVersion}` : ''}
+              </div>
+            </div>
+            {isBundle(packet.reason) ? (
+              <button onClick={openUnbundled} className="rounded-lg border border-gold-primary/40 px-3 py-2 text-xs font-bold text-gold-primary">
+                Open unbundled workflow
+              </button>
+            ) : (
+              <button
+                onClick={() => openPacket(packet)}
+                className="rounded-lg border border-gold-primary/40 px-3 py-2 text-xs font-bold text-gold-primary disabled:opacity-50"
+              >
+                Review compact items
+              </button>
+            )}
+          </div>
+        ))}
+        {!packets.length && !error && <p className="py-8 text-center text-sm text-text-muted">No packets on this page.</p>}
+      </div>
+
+      {(summaryHistory.length > 0 || nextSummaryCursor) && (
+        <div className="flex items-center justify-between text-xs text-text-muted">
+          <button
+            disabled={!summaryHistory.length}
+            onClick={() => setSummaryHistory(history => {
+              const previous = history.at(-1) || '';
+              setSummaryAfter(previous);
+              return history.slice(0, -1);
+            })}
+            className="rounded border border-border-default px-3 py-2 disabled:opacity-40"
+          >
+            Previous packets
+          </button>
+          <button
+            disabled={!nextSummaryCursor}
+            onClick={() => {
+              setSummaryHistory(history => [...history, summaryAfter]);
+              setSummaryAfter(nextSummaryCursor || '');
+            }}
+            className="rounded border border-border-default px-3 py-2 disabled:opacity-40"
+          >
+            Next packets
+          </button>
+        </div>
+      )}
+
+      {selectedPacket && (
+        <div className="rounded-xl border border-border-default bg-bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-text-primary">{selectedPacket.reason}</h3>
+              <p className="mt-1 text-[11px] text-text-muted">Compact rows only; raw evidence remains unloaded until opened.</p>
+            </div>
+            <button onClick={() => { setSelectedPacket(null); setItem(null); }} className="rounded border border-border-default px-3 py-2 text-xs text-text-secondary">Close packet</button>
+          </div>
+          <div className="mt-3 space-y-2">
+            {packetItems.map(compactItem => (
+              <div key={compactItem.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-border-default bg-bg-elevated/40 p-3">
+                <span className="text-[10px] font-bold text-text-muted">#{compactItem.ordinal}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs text-text-primary">{compactItem.summary}</div>
+                  <div className="mt-1 text-[10px] text-text-muted">
+                    Source {compactItem.sourceRecordId} · {compactItem.status}{compactItem.correctionProposed ? ' · correction proposed' : ''}
+                  </div>
+                </div>
+                <button
+                  onClick={() => void openItem(compactItem)}
+                  disabled={busy === compactItem.id}
+                  className="rounded border border-gold-primary/40 px-3 py-2 text-xs font-bold text-gold-primary disabled:opacity-50"
+                >
+                  {busy === compactItem.id ? 'Opening…' : 'Open evidence'}
+                </button>
+              </div>
+            ))}
+            {!packetItems.length && !error && <p className="py-5 text-center text-xs text-text-muted">No compact items on this page.</p>}
+          </div>
+          {(afterOrdinal > 0 || nextOrdinal != null) && (
+            <div className="mt-3 flex items-center justify-between text-xs text-text-muted">
+              <button
+                disabled={afterOrdinal === 0}
+                onClick={() => setAfterOrdinal(value => Math.max(0, value - pageSize))}
+                className="rounded border border-border-default px-3 py-2 disabled:opacity-40"
+              >
+                Previous items
+              </button>
+              <button
+                disabled={nextOrdinal == null}
+                onClick={() => setAfterOrdinal(nextOrdinal || 0)}
+                className="rounded border border-border-default px-3 py-2 disabled:opacity-40"
+              >
+                Next items
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {item && (
+        <div className="rounded-xl border border-gold-primary/30 bg-bg-card p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold text-gold-primary">{item.reason}</div>
+              <div className="mt-1 text-[11px] text-text-muted">
+                Source {item.sourceRecordId} · {item.normalizationVersion || 'version unavailable'}
+              </div>
+            </div>
+            <button onClick={() => setItem(null)} className="rounded border border-border-default px-3 py-2 text-xs text-text-secondary">Close</button>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border-default bg-bg-elevated/40 p-3 text-xs">
+            <div className="font-bold text-text-primary">Review evidence excerpt (contact redacted)</div>
+            <div className="mt-2 whitespace-pre-wrap break-words text-text-secondary">{item.reviewEvidenceExcerpt || 'Review evidence is unavailable.'}</div>
+            <div className="mt-2 text-[10px] text-text-muted">The raw evidence hash below identifies the exact immutable source message.</div>
+            <div className="mt-2 break-all text-[10px] text-text-muted">Raw evidence hash: {item.rawEvidenceHash || 'Unavailable — correction is blocked'}</div>
+            <div className="mt-1 break-all text-[10px] text-text-muted">Proposal hash: {item.proposalHash || 'Unavailable — correction is blocked'}</div>
+          </div>
+
+          <div className="mt-3 grid gap-2 text-xs text-text-muted sm:grid-cols-2">
+            <span>Seller: <strong className="text-text-secondary">{item.sellerNameMasked || 'Masked'}</strong></span>
+            <span>Contact: <strong className="text-text-secondary">{item.sellerPhoneMasked || 'Masked'}</strong></span>
+          </div>
+
+          {!item.evidenceFresh && (
+            <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-300">
+              Evidence is stale. Close and reopen this item before proposing a correction.
+            </p>
+          )}
+
+          {isBundle(item.reason) ? (
+            <div className="mt-4 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-text-secondary">
+              Bundle parents cannot be corrected here. <button onClick={openUnbundled} className="font-bold text-gold-primary underline">Open the existing unbundled workflow.</button>
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {(Object.keys(draft) as (keyof CorrectionDraft)[]).map(field => (
+                  <label key={field} className="text-[10px] uppercase tracking-wide text-text-muted">
+                    {field.replace('_', ' ')}
+                    <input
+                      type={field === 'year' || field === 'price_raw' || field === 'price_usd' ? 'number' : 'text'}
+                      value={draft[field]}
+                      onChange={event => setDraft(current => ({ ...current, [field]: event.target.value }))}
+                      className="mt-1 w-full rounded border border-border-default bg-bg-elevated px-2 py-2 text-xs normal-case text-text-primary"
+                    />
+                  </label>
+                ))}
+              </div>
+              <label className="mt-4 block text-xs font-bold text-text-primary">
+                Reviewer rationale <span className="text-red-400">*</span>
+                <textarea
+                  required
+                  value={rationale}
+                  onChange={event => setRationale(event.target.value)}
+                  placeholder="At least 10 characters. Cite the exact excerpt and explain only the supported correction."
+                  className="mt-2 min-h-24 w-full rounded-lg border border-border-default bg-bg-elevated p-3 text-xs font-normal text-text-primary"
+                />
+              </label>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-[11px] text-text-muted">Proposal only. Catalog, duplicate, and publication gates still revalidate it.</p>
+                <button
+                  onClick={() => void submitCorrection()}
+                  disabled={Boolean(busy) || !item.evidenceFresh || rationale.trim().length < 10 || !item.reviewEvidenceExcerpt || !item.rawEvidenceHash || !item.proposalHash}
+                  className="rounded-lg bg-gold-primary px-4 py-2 text-xs font-bold text-black disabled:opacity-40"
+                >
+                  Propose correction
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ReviewQueue() {
-  const [lane, setLane] = useState<'shadow' | 'unbundled' | 'duplicates' | 'price'>('unbundled');
+  const [lane, setLane] = useState<'shadow' | 'unbundled' | 'duplicates' | 'price' | 'packets'>('unbundled');
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [reasonFilter, setReasonFilter] = useState('');
@@ -703,10 +1171,20 @@ export default function ReviewQueue() {
           >
             Price corrections
           </button>
+          <button
+            onClick={() => { setLane('packets'); setSelected(null); }}
+            className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'packets' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
+          >
+            Reason packets
+          </button>
           {(lane === 'unbundled' || lane === 'price') && (
             <span className="ml-auto text-xs text-text-muted">{unbundledTotal.toLocaleString()} pending in this lane</span>
           )}
         </div>
+
+        {lane === 'packets' && (
+          <PacketReviewLane openUnbundled={() => { setLane('unbundled'); setSelected(null); }} />
+        )}
 
         {lane === 'shadow' && progress && (
           <div className="mb-6 border border-border-default bg-bg-card px-4 py-3 rounded-xl flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
@@ -726,7 +1204,7 @@ export default function ReviewQueue() {
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        {lane !== 'packets' && <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           {[
             { label: 'Loaded for review', count: items.filter(i => i.status === 'pending').length, color: 'text-amber-400' },
             { label: 'Catalog-confirmed', count: items.filter(i => i.disposition === 'READY_FOR_HUMAN_APPROVAL').length, color: 'text-emerald-400' },
@@ -738,10 +1216,10 @@ export default function ReviewQueue() {
               <div className="text-[10px] uppercase tracking-wider text-text-muted mt-1">{stat.label}</div>
             </div>
           ))}
-        </div>
+        </div>}
 
         {/* Filters */}
-        <div className="flex items-center gap-3 mb-6">
+        {lane !== 'packets' && <div className="flex items-center gap-3 mb-6">
           <div className="flex items-center gap-2 bg-bg-card border border-border-default rounded-lg px-3 py-2">
             <Search size={14} className="text-text-muted" />
             <input
@@ -790,10 +1268,10 @@ export default function ReviewQueue() {
               </button>
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* Queue List */}
-        <div className="space-y-3">
+        {lane !== 'packets' && <div className="space-y-3">
           {filtered.map(item => (
             <div
               key={item.id}
@@ -1129,7 +1607,7 @@ export default function ReviewQueue() {
               )}
             </div>
           ))}
-        </div>
+        </div>}
         {lane === 'unbundled' && unbundledTotal > 50 && (
           <div className="mt-6 flex items-center justify-between border-t border-border-default pt-4 text-xs text-text-muted">
             <button
