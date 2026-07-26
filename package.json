@@ -20,6 +20,7 @@
     "apply:image-review-canary": "node tools/data-quality/apply-image-review-canary.cjs",
     "verify:data-recovery": "node tools/data-quality/verify-recovery-readback.cjs",
     "benchmark:normalization-100k": "node tools/normalization-benchmark/benchmark-100k.cjs",
+    "snapshot:review-packets": "node tools/review-packets/snapshot-local.cjs",
     "media:publish-other-pilot": "node tools/mission-images/publish-other-pilot.cjs",
     "audit:duplicates": "node tools/duplicate-audit/audit-brand.cjs",
     "stage:duplicate-review": "node tools/duplicate-audit/stage-review-candidates.cjs",
