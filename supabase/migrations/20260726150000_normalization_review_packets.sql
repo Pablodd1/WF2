@@ -238,14 +238,21 @@ BEGIN
     RAISE EXCEPTION 'INVALID_EVIDENCE_HASHES';
   END IF;
 
-  SELECT item, source.raw_message
-  INTO v_item, v_raw_message
+  SELECT item.*
+  INTO v_item
   FROM public.normalization_review_packet_items AS item
-  JOIN public.watch_records AS source ON source.id = item.source_record_id
   WHERE item.id = p_packet_item_id
-  FOR SHARE OF item, source;
+  FOR SHARE OF item;
 
   IF NOT FOUND THEN RAISE EXCEPTION 'PACKET_ITEM_NOT_FOUND'; END IF;
+
+  SELECT source.raw_message
+  INTO v_raw_message
+  FROM public.watch_records AS source
+  WHERE source.id = v_item.source_record_id
+  FOR SHARE OF source;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'PACKET_SOURCE_NOT_FOUND'; END IF;
   IF v_item.status <> 'PENDING'
     OR v_item.raw_message_sha256 <> p_expected_raw_sha256
     OR v_item.proposal_sha256 <> p_expected_proposal_sha256 THEN

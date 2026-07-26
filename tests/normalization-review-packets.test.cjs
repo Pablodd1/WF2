@@ -213,6 +213,9 @@ test('packet schema is immutable, service-only, stale-aware, and has no watch_re
   assert.match(sql, /REVOKE ALL ON public\.normalization_review_packet_items FROM PUBLIC, anon, authenticated/i);
   assert.match(sql, /GRANT SELECT, INSERT ON public\.normalization_review_packet_items TO service_role/i);
   assert.match(sql, /SECURITY DEFINER[\s\S]*SET search_path = ''/i);
+  assert.match(sql, /SELECT item\.\*[\s\S]*INTO v_item[\s\S]*FOR SHARE OF item/i);
+  assert.match(sql, /SELECT source\.raw_message[\s\S]*INTO v_raw_message[\s\S]*FOR SHARE OF source/i);
+  assert.doesNotMatch(sql, /SELECT item,\s*source\.raw_message[\s\S]*INTO v_item,\s*v_raw_message/i);
   assert.match(sql, /STALE_PACKET_ITEM|STALE_SOURCE_EVIDENCE/);
   assert.match(sql, /CORRECTION_PROPOSED/);
   assert.doesNotMatch(sql, /(?:UPDATE|INSERT INTO|DELETE FROM)\s+public\.watch_records/i);
