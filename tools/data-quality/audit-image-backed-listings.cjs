@@ -1,9 +1,9 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const path = require('node:path');
 const { confirmCatalogCandidate } = require('../../api/_lib/catalog-confirmation.cjs');
 const {
-  supabaseCount,
   supabaseFetch,
   writeCsv,
   writeJson,
@@ -164,35 +164,96 @@ function auditImageRowsReconciled(records, manifest) {
   return { audited, errors, reconciliation: reconcileAudit(records, audited, errors) };
 }
 
-function countRoute(table, key, filters) {
-  return `/rest/v1/${table}?${new URLSearchParams({ select: key, ...filters })}`;
+function keySequenceHash(keys) {
+  const hash = crypto.createHash('sha256');
+  for (const key of keys) hash.update(`${key}\n`);
+  return hash.digest('hex');
 }
 
-async function exactKeysetScan(spec, countRows = supabaseCount) {
-  const route = countRoute(spec.table, spec.key, spec.filters || {});
-  const exactBefore = await countRows(route);
-  const rows = await keysetPaged(spec);
-  const exactAfter = await countRows(route);
-  const unique = new Set(rows.map(row => row[spec.key])).size;
+async function authoritativeImageCounts(fetchCounts = supabaseFetch) {
+  const result = await fetchCounts('/rest/v1/rpc/global_data_quality_blocker_counts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  const records = Number(result?.watch_records?.image_backed);
+  const manifest = Number(result?.images?.manifest_linked);
+  if (
+    result?.exact !== true
+    || !Number.isSafeInteger(records)
+    || records < 0
+    || !Number.isSafeInteger(manifest)
+    || manifest < 0
+  ) {
+    throw new Error('Authoritative exact image counts are unavailable');
+  }
+  return { exact: true, records, manifest };
+}
+
+function reconcileAuthoritativeCounts(before, after, recordScan, manifestScan) {
+  const reconciled = (
+    before.exact === true
+    && after.exact === true
+    && before.records === after.records
+    && before.manifest === after.manifest
+    && before.records === recordScan.first_scan_rows
+    && before.records === recordScan.second_scan_rows
+    && before.manifest === manifestScan.first_scan_rows
+    && before.manifest === manifestScan.second_scan_rows
+  );
   return {
-    rows,
+    reconciled,
+    before,
+    after,
+    snapshot_completeness_proof: (
+      'has_images=true is a subset of (has_images=true OR thumbnail_url IS NOT NULL); '
+      + 'equality with the exact RPC image_backed count proves no thumbnail-only rows were omitted'
+    ),
+  };
+}
+
+async function exactKeysetScan(spec) {
+  const firstRows = await keysetPaged(spec);
+  const secondRows = await keysetPaged(spec);
+  const firstKeys = firstRows.map(row => String(row[spec.key] || ''));
+  const secondKeys = secondRows.map(row => String(row[spec.key] || ''));
+  const firstUnique = new Set(firstKeys).size;
+  const secondUnique = new Set(secondKeys).size;
+  const firstHash = keySequenceHash(firstKeys);
+  const secondHash = keySequenceHash(secondKeys);
+  const orderedKeysIdentical = (
+    firstKeys.length === secondKeys.length
+    && firstKeys.every((key, index) => key === secondKeys[index])
+  );
+  return {
+    rows: firstRows,
     reconciliation: {
-      reconciled: exactBefore === exactAfter && exactBefore === rows.length && unique === rows.length,
-      exact_count_before: exactBefore,
-      fetched_rows: rows.length,
-      unique_keys: unique,
-      exact_count_after: exactAfter,
+      reconciled: (
+        orderedKeysIdentical
+        && firstUnique === firstRows.length
+        && secondUnique === secondRows.length
+        && firstHash === secondHash
+      ),
+      first_scan_rows: firstRows.length,
+      first_scan_unique_keys: firstUnique,
+      first_scan_sha256: firstHash,
+      second_scan_rows: secondRows.length,
+      second_scan_unique_keys: secondUnique,
+      second_scan_sha256: secondHash,
+      ordered_keys_identical: orderedKeysIdentical,
+      canonicalization: 'UTF-8 key plus LF, PostgreSQL keyset order ascending',
     },
   };
 }
 
 async function run() {
+  const authoritativeBefore = await authoritativeImageCounts();
   const [recordScan, manifestScan] = await Promise.all([
     exactKeysetScan({
       table: 'watch_records',
       select: 'id,brand,model,reference,dial_color,has_images,thumbnail_url',
       key: 'id',
-      filters: { or: '(has_images.eq.true,thumbnail_url.not.is.null)' },
+      filters: { has_images: 'eq.true' },
     }),
     exactKeysetScan({
       table: 'media_manifest',
@@ -201,6 +262,13 @@ async function run() {
       filters: { matched_record_id: 'not.is.null' },
     }),
   ]);
+  const authoritativeAfter = await authoritativeImageCounts();
+  const authoritative = reconcileAuthoritativeCounts(
+    authoritativeBefore,
+    authoritativeAfter,
+    recordScan.reconciliation,
+    manifestScan.reconciliation,
+  );
   const { audited, errors, reconciliation } = auditImageRowsReconciled(
     recordScan.rows,
     manifestScan.rows,
@@ -218,6 +286,7 @@ async function run() {
   const accepted = (
     recordScan.reconciliation.reconciled
     && manifestScan.reconciliation.reconciled
+    && authoritative.reconciled
     && reconciliation.reconciled
     && errors.length === 0
   );
@@ -225,6 +294,7 @@ async function run() {
     accepted,
     records: recordScan.reconciliation,
     manifest: manifestScan.reconciliation,
+    authoritative,
     output: reconciliation,
   };
   writeJson(path.join(folder, 'summary.json'), {
@@ -233,6 +303,7 @@ async function run() {
     accepted,
     records_scanned: recordScan.rows.length,
     manifest_rows_scanned: manifestScan.rows.length,
+    authoritative,
     counts,
     important: 'VISUAL_REVIEW_REQUIRED is not visual verification.',
   });
@@ -268,7 +339,9 @@ if (require.main === module) {
 module.exports = {
   auditImageRows,
   auditImageRowsReconciled,
+  authoritativeImageCounts,
   exactKeysetScan,
   keysetPaged,
+  reconcileAuthoritativeCounts,
   reconcileAudit,
 };

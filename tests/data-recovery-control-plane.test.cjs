@@ -8,8 +8,10 @@ const { classifyIdentity, scopeSource } = require('../tools/data-quality/stage-i
 const {
   auditImageRows,
   auditImageRowsReconciled,
+  authoritativeImageCounts,
   exactKeysetScan,
   keysetPaged,
+  reconcileAuthoritativeCounts,
 } = require('../tools/data-quality/audit-image-backed-listings.cjs');
 const { validateLedger } = require('../tools/data-quality/apply-image-review-canary.cjs');
 const { chunks } = require('../tools/data-quality/verify-recovery-readback.cjs');
@@ -81,10 +83,17 @@ test('image audit keyset pagination reconciles more than 1000 rows under changin
     select: 'id',
     key: 'id',
     fetchPage,
-  }, async () => source.length);
+  });
   assert.equal(scan.reconciliation.reconciled, true);
   assert.equal(scan.rows.length, 1505);
   assert.equal(new Set(scan.rows.map(row => row.id)).size, 1505);
+  assert.equal(scan.reconciliation.first_scan_rows, 1505);
+  assert.equal(scan.reconciliation.second_scan_rows, 1505);
+  assert.equal(scan.reconciliation.ordered_keys_identical, true);
+  assert.equal(
+    scan.reconciliation.first_scan_sha256,
+    scan.reconciliation.second_scan_sha256,
+  );
 });
 
 test('image audit keyset pagination fails closed on duplicate keys', async () => {
@@ -99,20 +108,76 @@ test('image audit keyset pagination fails closed on duplicate keys', async () =>
   );
 });
 
-test('image audit exact counts fail closed when the source changes during a scan', async () => {
-  const counts = [1505, 1506];
-  const scan = await exactKeysetScan({
+test('image audit double keyset fails closed when keys drift between scans', async () => {
+  let fetchCalls = 0;
+  const result = await exactKeysetScan({
     table: 'watch_records',
     select: 'id',
     key: 'id',
     pageSize: 2000,
-    fetchPage: async () => Array.from({ length: 1505 }, (_, index) => ({
-      id: `record-${String(index).padStart(4, '0')}`,
-    })),
-  }, async () => counts.shift());
-  assert.equal(scan.reconciliation.reconciled, false);
-  assert.equal(scan.reconciliation.exact_count_before, 1505);
-  assert.equal(scan.reconciliation.exact_count_after, 1506);
+    fetchPage: async () => {
+      fetchCalls += 1;
+      return Array.from({ length: fetchCalls === 1 ? 1505 : 1506 }, (_, index) => ({
+        id: `record-${String(index).padStart(4, '0')}`,
+      }));
+    },
+  });
+  assert.equal(result.reconciliation.reconciled, false);
+  assert.equal(result.reconciliation.first_scan_rows, 1505);
+  assert.equal(result.reconciliation.second_scan_rows, 1506);
+  assert.equal(result.reconciliation.ordered_keys_identical, false);
+});
+
+test('image audit stable double keyset is independent of exact-count failures', async () => {
+  const source = Array.from({ length: 3 }, (_, index) => ({
+    id: `record-${index}`,
+  }));
+  let countCalled = false;
+  const scan = await exactKeysetScan({
+    table: 'watch_records',
+    select: 'id',
+    key: 'id',
+    pageSize: 10,
+    fetchPage: async () => source,
+  }, async () => {
+    countCalled = true;
+    throw new Error('Supabase count 500');
+  });
+  assert.equal(countCalled, false);
+  assert.equal(scan.reconciliation.reconciled, true);
+  assert.equal(scan.reconciliation.first_scan_rows, 3);
+  assert.equal(scan.reconciliation.second_scan_rows, 3);
+  assert.equal(scan.reconciliation.first_scan_unique_keys, 3);
+  assert.equal(scan.reconciliation.second_scan_unique_keys, 3);
+  assert.equal(scan.reconciliation.ordered_keys_identical, true);
+});
+
+test('image audit exact RPC counts prove indexed snapshot completeness', async () => {
+  const counts = await authoritativeImageCounts(async (route, options) => {
+    assert.equal(route, '/rest/v1/rpc/global_data_quality_blocker_counts');
+    assert.equal(options.method, 'POST');
+    return {
+      exact: true,
+      watch_records: { image_backed: 1531 },
+      images: { manifest_linked: 1523 },
+    };
+  });
+  const stable = reconcileAuthoritativeCounts(
+    counts,
+    counts,
+    { first_scan_rows: 1531, second_scan_rows: 1531 },
+    { first_scan_rows: 1523, second_scan_rows: 1523 },
+  );
+  assert.equal(stable.reconciled, true);
+  assert.match(stable.snapshot_completeness_proof, /no thumbnail-only rows were omitted/);
+
+  const incomplete = reconcileAuthoritativeCounts(
+    counts,
+    counts,
+    { first_scan_rows: 1530, second_scan_rows: 1530 },
+    { first_scan_rows: 1523, second_scan_rows: 1523 },
+  );
+  assert.equal(incomplete.reconciled, false);
 });
 
 test('image audit reconciles every input row to output or a bounded error', () => {
