@@ -175,6 +175,47 @@ interface PriceRemediationQueueApiItem {
   source?: Record<string, unknown> | null;
 }
 
+interface ImageReviewQueueApiItem {
+  source_object_key: string;
+  public_url?: string | null;
+  record_id: string;
+  brand?: string | null;
+  model?: string | null;
+  reference?: string | null;
+  dial_color?: string | null;
+  raw_message?: string | null;
+  image_status?: string | null;
+  identity_status?: string | null;
+  review_blocked?: boolean;
+  review_blockers?: string[];
+  evidence?: Record<string, unknown> | null;
+}
+
+interface SellerLineageReviewQueueApiItem {
+  lineage_id: string;
+  record_id?: string | null;
+  source_record_id?: string | null;
+  observed_name?: string | null;
+  source_identity?: string | null;
+  source_identity_masked?: string | null;
+  source_system?: string | null;
+  source_listing_type?: string | null;
+  source_posted_at?: string | null;
+  front_image?: string | null;
+  raw_message?: string | null;
+  match_status?: string | null;
+  match_evidence?: Record<string, unknown> | null;
+  dealer_id?: string | null;
+  dealer_name?: string | null;
+  dealer_company?: string | null;
+  proposed_dealer?: {
+    id?: string | null;
+    display_name?: string | null;
+    company_name?: string | null;
+    status?: string | null;
+  } | null;
+}
+
 interface CorrectionDraft {
   brand: string;
   reference: string;
@@ -655,8 +696,333 @@ function PacketReviewLane({ openUnbundled }: { openUnbundled: () => void }) {
   );
 }
 
+function ImageReviewLane() {
+  const [items, setItems] = useState<ImageReviewQueueApiItem[]>([]);
+  const [choices, setChoices] = useState<Record<string, 'MATCH' | 'NO_MATCH' | undefined>>({});
+  const [inspected, setInspected] = useState<Record<string, boolean>>({});
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setError(null);
+    fetch('/api/image-review-queue', { credentials: 'include', signal: controller.signal })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Image review queue is unavailable');
+        return data;
+      })
+      .then(data => setItems((data.items || []) as ImageReviewQueueApiItem[]))
+      .catch(fetchError => {
+        if (fetchError?.name !== 'AbortError') {
+          setError(fetchError instanceof Error ? fetchError.message : 'Image review queue is unavailable');
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  const submit = async (item: ImageReviewQueueApiItem) => {
+    const visualMatch = choices[item.source_object_key];
+    const reason = reasons[item.source_object_key]?.trim() || '';
+    if (item.review_blocked || !item.public_url || !visualMatch || !inspected[item.source_object_key] || reason.length < 12) return;
+
+    setBusy(item.source_object_key);
+    setError(null);
+    try {
+      const response = await fetch('/api/image-review-decision', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceObjectKey: item.source_object_key,
+          recordId: item.record_id,
+          visualMatch,
+          reason,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Image review decision failed');
+      setItems(current => current.filter(candidate => candidate.source_object_key !== item.source_object_key));
+    } catch (decisionError) {
+      setError(decisionError instanceof Error ? decisionError.message : 'Image review decision failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-border-default bg-bg-card p-4">
+        <h2 className="text-sm font-bold text-text-primary">Exact image-to-listing review</h2>
+        <p className="mt-1 text-xs text-text-muted">
+          Compare the actual source image with the preserved raw listing. No image is attached until a reviewer makes an explicit decision.
+        </p>
+        {error && <p className="mt-3 text-xs text-red-400" role="alert">{error}</p>}
+      </div>
+
+      {items.map(item => {
+        const key = item.source_object_key;
+        const choice = choices[key];
+        const reason = reasons[key] || '';
+        return (
+          <article key={key} className="rounded-xl border border-border-default bg-bg-card p-4">
+            <div className="grid gap-4 lg:grid-cols-[minmax(240px,360px)_1fr]">
+              <div className="overflow-hidden rounded-lg border border-border-default bg-bg-elevated">
+                {item.public_url ? (
+                  <img
+                    src={item.public_url}
+                    alt={`Source candidate for ${item.brand || 'watch'} ${item.reference || item.record_id}`}
+                    className="h-80 w-full object-contain"
+                  />
+                ) : (
+                  <div className="flex h-80 items-center justify-center p-6 text-center text-xs text-red-300">
+                    Reachable source image unavailable. This item cannot be approved.
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 space-y-4">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Current listing identity</div>
+                  <div className="mt-2 grid gap-2 text-xs text-text-secondary sm:grid-cols-2">
+                    <span>Brand: <strong className="text-text-primary">{item.brand || 'Unresolved'}</strong></span>
+                    <span>Model: <strong className="text-text-primary">{item.model || 'Unresolved'}</strong></span>
+                    <span>Reference: <strong className="text-text-primary">{item.reference || 'Unresolved'}</strong></span>
+                    <span>Dial: <strong className="text-text-primary">{item.dial_color || 'Unresolved'}</strong></span>
+                    <span>Record: <strong className="break-all text-text-primary">{item.record_id}</strong></span>
+                    <span>Image status: <strong className="text-text-primary">{item.image_status || 'Pending'}</strong></span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Preserved raw listing</div>
+                  <div className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border-default bg-bg-elevated p-3 text-xs text-text-secondary">
+                    {item.raw_message || String(item.evidence?.raw_message || '') || 'Raw listing unavailable. Do not approve.'}
+                  </div>
+                </div>
+
+                {item.review_blocked && (
+                  <p className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-300">
+                    Review blocked: {item.review_blockers?.join(', ') || 'the exact image or listing evidence is incomplete'}.
+                  </p>
+                )}
+
+                <label className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(inspected[key])}
+                    onChange={event => setInspected(current => ({ ...current, [key]: event.target.checked }))}
+                    className="mt-0.5"
+                  />
+                  <span>I inspected this exact image beside this exact raw listing.</span>
+                </label>
+
+                <fieldset>
+                  <legend className="text-xs font-bold text-text-primary">Visual decision (required)</legend>
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {(['MATCH', 'NO_MATCH'] as const).map(value => (
+                      <label key={value} className="flex items-center gap-2 rounded-lg border border-border-default px-3 py-2 text-xs text-text-secondary">
+                        <input
+                          type="radio"
+                          name={`image-decision-${key}`}
+                          checked={choice === value}
+                          onChange={() => setChoices(current => ({ ...current, [key]: value }))}
+                        />
+                        {value === 'MATCH' ? 'MATCH — attach to this listing' : 'NO MATCH — keep unattached'}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <label className="block text-xs font-bold text-text-primary">
+                  Reviewer reason <span className="text-red-400">*</span>
+                  <textarea
+                    value={reason}
+                    onChange={event => setReasons(current => ({ ...current, [key]: event.target.value }))}
+                    minLength={12}
+                    placeholder="At least 12 characters citing the visual and listing evidence."
+                    className="mt-2 min-h-20 w-full rounded-lg border border-border-default bg-bg-elevated p-3 text-xs font-normal text-text-primary"
+                  />
+                </label>
+
+                <button
+                  onClick={() => void submit(item)}
+                  disabled={busy === key || item.review_blocked || !item.public_url || !inspected[key] || !choice || reason.trim().length < 12}
+                  className="rounded-lg bg-gold-primary px-4 py-2 text-xs font-bold text-black disabled:opacity-40"
+                >
+                  {busy === key ? 'Saving decision…' : 'Submit image decision'}
+                </button>
+              </div>
+            </div>
+          </article>
+        );
+      })}
+
+      {!error && items.length === 0 && (
+        <div className="rounded-xl border border-border-default bg-bg-card p-6 text-center text-sm text-text-muted">
+          No pending image matches were returned.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SellerLineageReviewLane() {
+  const [items, setItems] = useState<SellerLineageReviewQueueApiItem[]>([]);
+  const [exactMatches, setExactMatches] = useState<Record<string, boolean>>({});
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setError(null);
+    fetch('/api/seller-lineage-review-queue?limit=50', {
+      credentials: 'include',
+      signal: controller.signal,
+    })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Seller lineage queue is unavailable');
+        return data;
+      })
+      .then(data => setItems((data.items || []) as SellerLineageReviewQueueApiItem[]))
+      .catch(fetchError => {
+        if (fetchError?.name !== 'AbortError') {
+          setError(fetchError instanceof Error ? fetchError.message : 'Seller lineage queue is unavailable');
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  const submit = async (item: SellerLineageReviewQueueApiItem, decision: 'APPROVE' | 'REJECT') => {
+    const reason = reasons[item.lineage_id]?.trim() || '';
+    const dealerId = item.proposed_dealer?.id || item.dealer_id || '';
+    const recordId = item.record_id || item.source_record_id || '';
+    if (reason.length < 12 || !recordId || (decision === 'APPROVE' && (!exactMatches[item.lineage_id] || !dealerId))) return;
+
+    setBusy(item.lineage_id);
+    setError(null);
+    try {
+      const response = await fetch('/api/seller-lineage-review-decision', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lineageId: item.lineage_id,
+          recordId,
+          dealerId: dealerId || null,
+          decision,
+          reason,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Seller lineage decision failed');
+      setItems(current => current.filter(candidate => candidate.lineage_id !== item.lineage_id));
+    } catch (decisionError) {
+      setError(decisionError instanceof Error ? decisionError.message : 'Seller lineage decision failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-border-default bg-bg-card p-4">
+        <h2 className="text-sm font-bold text-text-primary">Exact seller-to-listing review</h2>
+        <p className="mt-1 text-xs text-text-muted">
+          Approve only when the preserved listing identity maps exactly to the proposed verified dealer. Contact details remain private.
+        </p>
+        {error && <p className="mt-3 text-xs text-red-400" role="alert">{error}</p>}
+      </div>
+
+      {items.map(item => {
+        const proposedDealer = item.proposed_dealer;
+        const dealerId = proposedDealer?.id || item.dealer_id || '';
+        const reason = reasons[item.lineage_id] || '';
+        const rawMessage = item.raw_message || String(item.match_evidence?.raw_message || '');
+        return (
+          <article key={item.lineage_id} className="rounded-xl border border-border-default bg-bg-card p-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Observed private source evidence</div>
+                <div className="grid gap-2 text-xs text-text-secondary sm:grid-cols-2">
+                  <span>Seller name: <strong className="text-text-primary">{item.observed_name || 'Not present'}</strong></span>
+                  <span>Masked identity: <strong className="text-text-primary">{item.source_identity_masked || item.source_identity || 'Unavailable'}</strong></span>
+                  <span>Source: <strong className="text-text-primary">{item.source_system || 'Unknown'}</strong></span>
+                  <span>Listing type: <strong className="text-text-primary">{item.source_listing_type || 'Unknown'}</strong></span>
+                  <span>Posted: <strong className="text-text-primary">{item.source_posted_at ? new Date(item.source_posted_at).toLocaleString() : 'Not preserved'}</strong></span>
+                  <span>Record: <strong className="break-all text-text-primary">{item.record_id || item.source_record_id || 'Not linked'}</strong></span>
+                </div>
+                <div className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border-default bg-bg-elevated p-3 text-xs text-text-secondary">
+                  {rawMessage || 'Raw listing unavailable. Do not approve.'}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Proposed verified dealer</div>
+                <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-3 text-xs text-text-secondary">
+                  <div>Dealer: <strong className="text-text-primary">{proposedDealer?.display_name || item.dealer_name || 'Unresolved'}</strong></div>
+                  <div className="mt-2">Company: <strong className="text-text-primary">{proposedDealer?.company_name || item.dealer_company || 'Unresolved'}</strong></div>
+                  <div className="mt-2">Verified dealer ID: <strong className="break-all text-text-primary">{dealerId || 'Unresolved'}</strong></div>
+                  <div className="mt-2">Status: <strong className="text-text-primary">{proposedDealer?.status || item.match_status || 'Pending'}</strong></div>
+                </div>
+
+                <label className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exactMatches[item.lineage_id])}
+                    onChange={event => setExactMatches(current => ({ ...current, [item.lineage_id]: event.target.checked }))}
+                    className="mt-0.5"
+                  />
+                  <span>I confirm the source seller, this exact listing, and the proposed verified dealer are the same identity.</span>
+                </label>
+
+                <label className="block text-xs font-bold text-text-primary">
+                  Reviewer reason <span className="text-red-400">*</span>
+                  <textarea
+                    value={reason}
+                    onChange={event => setReasons(current => ({ ...current, [item.lineage_id]: event.target.value }))}
+                    minLength={12}
+                    placeholder="At least 12 characters citing the exact identity evidence."
+                    className="mt-2 min-h-20 w-full rounded-lg border border-border-default bg-bg-elevated p-3 text-xs font-normal text-text-primary"
+                  />
+                </label>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => void submit(item, 'APPROVE')}
+                    disabled={busy === item.lineage_id || !dealerId || !exactMatches[item.lineage_id] || reason.trim().length < 12 || !rawMessage}
+                    className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-black disabled:opacity-40"
+                  >
+                    Approve exact seller link
+                  </button>
+                  <button
+                    onClick={() => void submit(item, 'REJECT')}
+                    disabled={busy === item.lineage_id || reason.trim().length < 12}
+                    className="rounded-lg border border-red-500/40 px-4 py-2 text-xs font-bold text-red-300 disabled:opacity-40"
+                  >
+                    Reject proposed link
+                  </button>
+                </div>
+              </div>
+            </div>
+          </article>
+        );
+      })}
+
+      {!error && items.length === 0 && (
+        <div className="rounded-xl border border-border-default bg-bg-card p-6 text-center text-sm text-text-muted">
+          No pending seller matches were returned.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ReviewQueue() {
-  const [lane, setLane] = useState<'shadow' | 'unbundled' | 'duplicates' | 'price' | 'packets'>('unbundled');
+  const [lane, setLane] = useState<'shadow' | 'unbundled' | 'duplicates' | 'price' | 'packets' | 'images' | 'sellers'>('unbundled');
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [reasonFilter, setReasonFilter] = useState('');
@@ -855,6 +1221,10 @@ export default function ReviewQueue() {
         .catch(error => {
           if (active) setLoadError(error instanceof Error ? error.message : 'Unbundled review queue is unavailable');
         });
+      return () => { active = false; };
+    }
+    if (lane === 'images' || lane === 'sellers' || lane === 'packets') {
+      setItems([]);
       return () => { active = false; };
     }
     const params = new URLSearchParams({ limit: '100', sort: reasonFilter ? 'recent' : 'priority' });
@@ -1117,6 +1487,8 @@ export default function ReviewQueue() {
     }
   };
 
+  const dedicatedLane = lane === 'packets' || lane === 'images' || lane === 'sellers';
+
   return (
     <Layout>
       <TabNav />
@@ -1177,6 +1549,18 @@ export default function ReviewQueue() {
           >
             Reason packets
           </button>
+          <button
+            onClick={() => { setLane('images'); setSelected(null); }}
+            className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'images' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
+          >
+            Images
+          </button>
+          <button
+            onClick={() => { setLane('sellers'); setSelected(null); }}
+            className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'sellers' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
+          >
+            Sellers
+          </button>
           {(lane === 'unbundled' || lane === 'price') && (
             <span className="ml-auto text-xs text-text-muted">{unbundledTotal.toLocaleString()} pending in this lane</span>
           )}
@@ -1185,6 +1569,8 @@ export default function ReviewQueue() {
         {lane === 'packets' && (
           <PacketReviewLane openUnbundled={() => { setLane('unbundled'); setSelected(null); }} />
         )}
+        {lane === 'images' && <ImageReviewLane />}
+        {lane === 'sellers' && <SellerLineageReviewLane />}
 
         {lane === 'shadow' && progress && (
           <div className="mb-6 border border-border-default bg-bg-card px-4 py-3 rounded-xl flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
@@ -1204,7 +1590,7 @@ export default function ReviewQueue() {
         )}
 
         {/* Stats */}
-        {lane !== 'packets' && <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        {!dedicatedLane && <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           {[
             { label: 'Loaded for review', count: items.filter(i => i.status === 'pending').length, color: 'text-amber-400' },
             { label: 'Catalog-confirmed', count: items.filter(i => i.disposition === 'READY_FOR_HUMAN_APPROVAL').length, color: 'text-emerald-400' },
@@ -1219,7 +1605,7 @@ export default function ReviewQueue() {
         </div>}
 
         {/* Filters */}
-        {lane !== 'packets' && <div className="flex items-center gap-3 mb-6">
+        {!dedicatedLane && <div className="flex items-center gap-3 mb-6">
           <div className="flex items-center gap-2 bg-bg-card border border-border-default rounded-lg px-3 py-2">
             <Search size={14} className="text-text-muted" />
             <input
@@ -1271,7 +1657,7 @@ export default function ReviewQueue() {
         </div>}
 
         {/* Queue List */}
-        {lane !== 'packets' && <div className="space-y-3">
+        {!dedicatedLane && <div className="space-y-3">
           {filtered.map(item => (
             <div
               key={item.id}
