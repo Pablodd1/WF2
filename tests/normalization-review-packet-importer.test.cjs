@@ -233,7 +233,9 @@ test('database importer is service-only, atomic, exact-retry-only, and cannot wr
   assert.match(sql, /PROPOSAL_HASH_MISMATCH/);
   assert.match(sql, /PACKET_ITEM_ID_MISMATCH/);
   assert.match(sql, /PACKET_REASON_MISMATCH/);
+  assert.match(sql, /CANDIDATE_COUNT_REASON_MISMATCH/);
   assert.match(sql, /STALE_SOURCE_EVIDENCE/);
+  assert.match(sql, /FOR SHARE OF source/i);
   assert.match(sql, /PACKET_RETRY_CONTENT_MISMATCH/);
   assert.match(sql, /GRANT EXECUTE[\s\S]*TO service_role/i);
   assert.match(sql, /INSERT INTO public\.normalization_review_packets/i);
