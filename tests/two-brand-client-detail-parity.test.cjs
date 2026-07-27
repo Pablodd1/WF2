@@ -64,3 +64,9 @@ test('customer detail prices require exact raw-line currency evidence', () => {
   assert.match(trading, /Price under review/);
   assert.match(trading, /detailListing\.price_usd/);
 });
+
+test('Price Research never fabricates brand buttons outside the API catalog', () => {
+  assert.match(research, /useState<\{ brand: string; model_count\?: number; reference_count\?: number \}\[]>\(\[]\)/);
+  assert.match(research, /pBrands\.filter\(item => POPULAR_BRANDS\.includes\(item\.brand\)\)/);
+  assert.doesNotMatch(research, /pBrands\.find\(item => item\.brand === brand\) \|\| \{ brand \}/);
+});

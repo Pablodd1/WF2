@@ -214,7 +214,6 @@ const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
 const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Cartier', 'Omega'];
-const DEFAULT_BRANDS = [...POPULAR_BRANDS, 'Richard Mille', 'Vacheron Constantin', 'Tudor', 'IWC'];
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
@@ -296,9 +295,7 @@ export default function PriceResearch() {
   const [viewerRole, setViewerRole] = useState('public');
 
   // ── Drill-down picker state (brand → model → reference) ──
-  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number }[]>(
-    DEFAULT_BRANDS.map(brand => ({ brand }))
-  );
+  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number }[]>([]);
   const [pBrand, setPBrand] = useState('');
   const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
@@ -499,7 +496,7 @@ export default function PriceResearch() {
   const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
   const visibleBrands = showAllBrands
     ? pBrands
-    : POPULAR_BRANDS.map(brand => pBrands.find(item => item.brand === brand) || { brand });
+    : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
   const canReviewExcludedEvidence = viewerRole === 'admin' || viewerRole === 'reviewer';
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
