@@ -17,18 +17,34 @@ interface CatalogEvidence {
   matchType?: string | null;
 }
 
+interface CopilotSuggestion {
+  field: 'brand' | 'model' | 'reference' | 'dialColor' | 'condition' | 'year' | 'price' | 'currency' | 'listingType';
+  value: string | null;
+  status: 'RAW_SUPPORTED' | 'CATALOG_SUPPORTED' | 'NEEDS_REVIEW' | 'AMBIGUOUS' | 'MISSING';
+  support: 'RAW_MESSAGE' | 'CATALOG';
+  evidenceQuote: string | null;
+  reason: string;
+  applicable: boolean;
+}
+
 interface CopilotResult {
   brand: string | null;
+  model: string | null;
   reference: string | null;
   dialColor: string | null;
   condition: string | null;
-  year: number | null;
-  price: number | null;
+  year: string | null;
+  price: string | null;
   currency: string | null;
+  listingType: string | null;
   confidence: number;
   interpretations: string[];
   ambiguities: string[];
-  reasoning: string;
+  summary: string;
+  suggestions: CopilotSuggestion[];
+  fillableFields: string[];
+  unresolvedFields: string[];
+  catalogEvidence?: CatalogEvidence | null;
 }
 
 interface ReviewItem {
@@ -217,6 +233,47 @@ interface IdentityDraft {
   reference: string;
   dial_color: string;
 }
+
+const identitySuggestionField = (field: CopilotSuggestion['field']): keyof IdentityDraft | null => {
+  if (field === 'dialColor') return 'dial_color';
+  if (field === 'brand' || field === 'model' || field === 'reference') return field;
+  return null;
+};
+
+const correctionSuggestionField = (field: CopilotSuggestion['field']): keyof CorrectionDraft | null => {
+  const fields: Partial<Record<CopilotSuggestion['field'], keyof CorrectionDraft>> = {
+    brand: 'brand',
+    reference: 'reference',
+    dialColor: 'dial_color',
+    condition: 'condition',
+    year: 'year',
+    price: 'price_raw',
+    currency: 'currency',
+    listingType: 'listing_type',
+  };
+  return fields[field] || null;
+};
+
+const suggestionCanPopulateDraft = (suggestion: CopilotSuggestion) => {
+  if (!suggestion.applicable || !suggestion.value) return false;
+  if (suggestion.field === 'price') return false;
+  return true;
+};
+
+const preferredSuggestions = (suggestions: CopilotSuggestion[]) => {
+  const priority = (suggestion: CopilotSuggestion) => {
+    if (suggestion.applicable && suggestion.support === 'RAW_MESSAGE') return 4;
+    if (suggestion.applicable && suggestion.support === 'CATALOG') return 3;
+    if (suggestion.status === 'NEEDS_REVIEW' || suggestion.status === 'AMBIGUOUS') return 2;
+    return 1;
+  };
+  const best = new Map<CopilotSuggestion['field'], CopilotSuggestion>();
+  for (const suggestion of suggestions) {
+    const current = best.get(suggestion.field);
+    if (!current || priority(suggestion) > priority(current)) best.set(suggestion.field, suggestion);
+  }
+  return [...best.values()].filter(suggestion => suggestion.status !== 'MISSING');
+};
 
 interface SellerLineageReviewQueueApiItem {
   lineage_id: string;
@@ -726,6 +783,8 @@ function PacketReviewLane({ openUnbundled }: { openUnbundled: () => void }) {
 function IdentityReviewLane() {
   const [items, setItems] = useState<IdentityReviewQueueApiItem[]>([]);
   const [drafts, setDrafts] = useState<Record<string, IdentityDraft>>({});
+  const [assistResults, setAssistResults] = useState<Record<string, CopilotResult>>({});
+  const [assistErrors, setAssistErrors] = useState<Record<string, string>>({});
   const [inspected, setInspected] = useState<Record<string, boolean>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [brand, setBrand] = useState('');
@@ -770,6 +829,52 @@ function IdentityReviewLane() {
       });
     return () => controller.abort();
   }, [brand, cursor]);
+
+  const requestAssist = async (item: IdentityReviewQueueApiItem) => {
+    const draft = drafts[item.record_id] || { brand: '', model: '', reference: '', dial_color: '' };
+    setBusy(`assist:${item.record_id}`);
+    setAssistErrors(current => ({ ...current, [item.record_id]: '' }));
+    try {
+      const response = await fetch('/api/co-pilot', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawMessage: item.raw_message,
+          currentGuess: {
+            brand: draft.brand,
+            model: draft.model,
+            reference: draft.reference,
+            dialColor: draft.dial_color,
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'AI review assistance failed');
+      setAssistResults(current => ({ ...current, [item.record_id]: data.copilot as CopilotResult }));
+    } catch (assistError) {
+      setAssistErrors(current => ({
+        ...current,
+        [item.record_id]: assistError instanceof Error ? assistError.message : 'AI review assistance failed',
+      }));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const applyIdentitySuggestions = (item: IdentityReviewQueueApiItem, onlyMissing: boolean, selected?: CopilotSuggestion) => {
+    const result = assistResults[item.record_id];
+    if (!result) return;
+    const currentDraft = drafts[item.record_id] || { brand: '', model: '', reference: '', dial_color: '' };
+    const suggestions = selected ? [selected] : result.suggestions;
+    const nextDraft = { ...currentDraft };
+    for (const suggestion of suggestions) {
+      const field = identitySuggestionField(suggestion.field);
+      if (!field || !suggestionCanPopulateDraft(suggestion) || (onlyMissing && nextDraft[field].trim())) continue;
+      nextDraft[field] = suggestion.value || '';
+    }
+    setDrafts(current => ({ ...current, [item.record_id]: nextDraft }));
+  };
 
   const submit = async (item: IdentityReviewQueueApiItem, decision: 'APPROVE' | 'CONFLICT') => {
     const reason = reasons[item.record_id]?.trim() || '';
@@ -839,6 +944,9 @@ function IdentityReviewLane() {
 
       {items.map(item => {
         const draft = drafts[item.record_id] || { brand: '', model: '', reference: '', dial_color: '' };
+        const assistance = assistResults[item.record_id];
+        const identitySuggestions = preferredSuggestions(assistance?.suggestions || [])
+          .filter(suggestion => identitySuggestionField(suggestion.field));
         const reason = reasons[item.record_id] || '';
         const candidateImage = item.thumbnail_url || item.image_urls?.[0] || null;
         const approvalReady = Boolean(
@@ -863,6 +971,90 @@ function IdentityReviewLane() {
                   <div className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border-default bg-bg-elevated p-3 text-xs text-text-secondary">
                     {item.raw_message || 'Raw evidence missing. Approval is blocked.'}
                   </div>
+                </div>
+                <div className="rounded-lg border border-gold-primary/25 bg-gold-primary/5 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 text-xs font-bold text-text-primary">
+                        <Sparkles size={13} className="text-gold-primary" />
+                        Missing-field assistant
+                      </div>
+                      <p className="mt-1 text-[11px] text-text-muted">
+                        Finds exact raw-message evidence and exact-reference catalog identity. Suggestions only fill this draft; you still inspect and approve.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void requestAssist(item)}
+                      disabled={busy === `assist:${item.record_id}` || !item.raw_message}
+                      className="inline-flex items-center gap-2 rounded-lg border border-gold-primary/40 px-3 py-2 text-xs font-bold text-gold-primary disabled:opacity-40"
+                    >
+                      {busy === `assist:${item.record_id}` ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                      Complete supported fields
+                    </button>
+                  </div>
+                  {assistErrors[item.record_id] && <p className="mt-3 text-xs text-red-400">{assistErrors[item.record_id]}</p>}
+                  {assistance && (
+                    <div className="mt-3 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded border border-border-default px-2 py-1 text-[10px] font-bold text-text-secondary">
+                          {assistance.fillableFields.filter(field => identitySuggestionField(field as CopilotSuggestion['field'])).length} missing fields supported
+                        </span>
+                        <span className="rounded border border-border-default px-2 py-1 text-[10px] text-text-muted">
+                          AI confidence {Math.max(0, Math.min(100, assistance.confidence || 0))}% — advisory only
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => applyIdentitySuggestions(item, true)}
+                          disabled={!identitySuggestions.some(suggestion => {
+                            const field = identitySuggestionField(suggestion.field);
+                            return field && !draft[field].trim() && suggestionCanPopulateDraft(suggestion);
+                          })}
+                          className="ml-auto rounded border border-emerald-500/40 px-2 py-1 text-[10px] font-bold text-emerald-300 disabled:opacity-40"
+                        >
+                          Fill supported blanks
+                        </button>
+                      </div>
+                      <p className="text-xs text-text-secondary">{assistance.summary}</p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {identitySuggestions.map((suggestion, index) => {
+                          const field = identitySuggestionField(suggestion.field);
+                          const canUse = Boolean(field && suggestionCanPopulateDraft(suggestion));
+                          return (
+                            <div key={`${suggestion.field}:${suggestion.support}:${index}`} className="rounded border border-border-default bg-bg-elevated p-2 text-[11px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-bold uppercase tracking-wide text-text-muted">{suggestion.field}</span>
+                                <span className={suggestion.support === 'CATALOG' ? 'text-blue-300' : canUse ? 'text-emerald-300' : 'text-amber-300'}>
+                                  {suggestion.status.replaceAll('_', ' ')}
+                                </span>
+                              </div>
+                              <div className="mt-1 break-words font-bold text-text-primary">{suggestion.value || 'No supported value'}</div>
+                              <div className="mt-1 break-words text-text-muted">{suggestion.evidenceQuote || suggestion.reason}</div>
+                              {canUse && (
+                                <button
+                                  type="button"
+                                  onClick={() => applyIdentitySuggestions(item, false, suggestion)}
+                                  className="mt-2 rounded border border-gold-primary/40 px-2 py-1 font-bold text-gold-primary"
+                                >
+                                  Use in draft
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {assistance.unresolvedFields.some(field => identitySuggestionField(field as CopilotSuggestion['field'])) && (
+                        <p className="rounded border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200">
+                          Still requires human evidence: {assistance.unresolvedFields.filter(field => identitySuggestionField(field as CopilotSuggestion['field'])).join(', ')}. These remain blank instead of being guessed.
+                        </p>
+                      )}
+                      {assistance.ambiguities.length > 0 && (
+                        <p className="text-[11px] text-amber-200">
+                          Check manually: {assistance.ambiguities.join('; ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {(Object.keys(draft) as (keyof IdentityDraft)[]).map(field => (
@@ -1696,13 +1888,17 @@ export default function ReviewQueue() {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          rawMessage: item.listingTitle,
+          rawMessage: item.rawMessage || item.listingTitle,
           currentGuess: {
             brand: item.brand,
+            model: item.model,
             reference: item.reference,
             dialColor: item.dial,
+            condition: item.condition,
+            year: item.year,
             price: item.price || null,
             currency: item.currency,
+            listingType: item.listingType,
           },
         }),
       });
@@ -1717,6 +1913,20 @@ export default function ReviewQueue() {
     } finally {
       setAiBusy(null);
     }
+  };
+
+  const applyCorrectionSuggestions = (item: ReviewItem, selected?: CopilotSuggestion) => {
+    const result = aiResults[item.id];
+    if (!result) return;
+    const draft = draftFor(item);
+    const nextDraft = { ...draft };
+    const suggestions = selected ? [selected] : result.suggestions;
+    for (const suggestion of suggestions) {
+      const field = correctionSuggestionField(suggestion.field);
+      if (!field || nextDraft[field].trim() || !suggestionCanPopulateDraft(suggestion)) continue;
+      nextDraft[field] = suggestion.value || '';
+    }
+    setCorrectionDrafts(current => ({ ...current, [item.id]: nextDraft }));
   };
 
   const submitDecision = async (item: ReviewItem, decision: 'APPROVED' | 'REJECTED') => {
@@ -2362,13 +2572,55 @@ export default function ReviewQueue() {
                     {aiErrors[item.id] && <div className="mt-3 text-xs text-red-400">{aiErrors[item.id]}</div>}
                     {aiResults[item.id] && (
                       <div className="mt-3 space-y-3 text-xs">
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-text-secondary">
-                          <span>Brand: <strong className="text-text-primary">{aiResults[item.id].brand || '[NULL]'}</strong></span>
-                          <span>Reference: <strong className="text-text-primary">{aiResults[item.id].reference || '[NULL]'}</strong></span>
-                          <span>Dial: <strong className="text-text-primary">{aiResults[item.id].dialColor || '[NULL]'}</strong></span>
-                          <span>Ask: <strong className="text-text-primary">{aiResults[item.id].price ?? '[NULL]'} {aiResults[item.id].currency || ''}</strong></span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded border border-border-default px-2 py-1 text-[10px] font-bold text-emerald-300">
+                            {aiResults[item.id].fillableFields.length} missing fields supported
+                          </span>
+                          {lane === 'unbundled' && (
+                            <button
+                              type="button"
+                              onClick={() => applyCorrectionSuggestions(item)}
+                              disabled={!aiResults[item.id].suggestions.some(suggestion => {
+                                const field = correctionSuggestionField(suggestion.field);
+                                return field && !draftFor(item)[field].trim() && suggestionCanPopulateDraft(suggestion);
+                              })}
+                              className="ml-auto rounded border border-emerald-500/40 px-2 py-1 text-[10px] font-bold text-emerald-300 disabled:opacity-40"
+                            >
+                              Fill supported blanks
+                            </button>
+                          )}
                         </div>
-                        <div className="text-text-secondary"><strong className="text-text-primary">Raw-evidence reasoning:</strong> {aiResults[item.id].reasoning}</div>
+                        <div className="text-text-secondary"><strong className="text-text-primary">Reviewer guidance:</strong> {aiResults[item.id].summary}</div>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {preferredSuggestions(aiResults[item.id].suggestions).map((suggestion, index) => {
+                            const correctionField = correctionSuggestionField(suggestion.field);
+                            const canUse = lane === 'unbundled' && Boolean(correctionField && suggestionCanPopulateDraft(suggestion));
+                            return (
+                              <div key={`${suggestion.field}:${suggestion.support}:${index}`} className="rounded border border-border-default bg-bg-card p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <strong className="uppercase tracking-wide text-text-muted">{suggestion.field}</strong>
+                                  <span className={suggestion.status === 'RAW_SUPPORTED' || suggestion.status === 'CATALOG_SUPPORTED' ? 'text-emerald-300' : 'text-amber-300'}>
+                                    {suggestion.status.replaceAll('_', ' ')}
+                                  </span>
+                                </div>
+                                <div className="mt-1 break-words font-bold text-text-primary">{suggestion.value || 'Leave blank'}</div>
+                                <div className="mt-1 break-words text-text-muted">{suggestion.evidenceQuote || suggestion.reason}</div>
+                                {canUse && (
+                                  <button
+                                    type="button"
+                                    onClick={() => applyCorrectionSuggestions(item, suggestion)}
+                                    className="mt-2 rounded border border-gold-primary/40 px-2 py-1 text-[10px] font-bold text-gold-primary"
+                                  >
+                                    Use in draft
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {aiResults[item.id].unresolvedFields.length > 0 && (
+                          <div className="text-amber-300"><strong>Still missing:</strong> {aiResults[item.id].unresolvedFields.join(', ')}. No value was guessed.</div>
+                        )}
                         <div className="text-amber-300"><strong>Ambiguities:</strong> {aiResults[item.id].ambiguities.join('; ') || 'None reported'}</div>
                       </div>
                     )}

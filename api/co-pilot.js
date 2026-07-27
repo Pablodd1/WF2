@@ -17,24 +17,37 @@ const { ZERO_HALLUCINATION_NORMALIZATION_CONTRACT } = require('./_lib/ai-normali
 const { consumeAiQuota, rejectForQuota } = require('./_lib/ai-quota.cjs');
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
+const { REVIEW_FIELDS, summarizeAssistance } = require('./_lib/review-assistant.cjs');
 
 const REVIEW_SCHEMA = {
   type: 'OBJECT',
   properties: {
-    brand: { type: 'STRING', nullable: true },
-    reference: { type: 'STRING', nullable: true },
-    dialColor: { type: 'STRING', nullable: true },
-    condition: { type: 'STRING', nullable: true },
-    year: { type: 'INTEGER', nullable: true },
-    price: { type: 'NUMBER', nullable: true },
-    currency: { type: 'STRING', nullable: true },
     confidence: { type: 'INTEGER' },
     interpretations: { type: 'ARRAY', items: { type: 'STRING' } },
     ambiguities: { type: 'ARRAY', items: { type: 'STRING' } },
-    reasoning: { type: 'STRING' },
+    summary: { type: 'STRING' },
+    fieldSuggestions: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          field: { type: 'STRING', enum: REVIEW_FIELDS },
+          value: { type: 'STRING', nullable: true },
+          evidenceQuote: { type: 'STRING', nullable: true },
+          reason: { type: 'STRING' },
+        },
+        required: ['field', 'value', 'evidenceQuote', 'reason'],
+      },
+    },
   },
-  required: ['brand', 'reference', 'dialColor', 'condition', 'year', 'price', 'currency', 'confidence', 'interpretations', 'ambiguities', 'reasoning'],
+  required: ['confidence', 'interpretations', 'ambiguities', 'summary', 'fieldSuggestions'],
 };
+
+function boundedGuessValue(value, maxLength = 160) {
+  if (value == null) return null;
+  const normalized = String(value).trim().slice(0, maxLength);
+  return normalized || null;
+}
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -70,31 +83,46 @@ Your job:
    - VC 336xxx Overseas
    - Common emoji: 🔵 Patek, 🔴 AP, 🟢 Rolex, ⚫ Submariner
 
+Return exactly one suggestion object for each of these fields:
+brand, model, reference, dialColor, condition, year, price, currency, listingType.
+
+For every field:
+- value must be a string copied from the evidence, or null
+- evidenceQuote must be an exact contiguous quote from the raw message, or null
+- do not paraphrase evidenceQuote
+- if the value requires interpretation, expansion, typo repair, or is absent, use null
+- price must preserve the dealer's numeric form; do not expand K or M
+- currency requires an explicit marker; bare $ is ambiguous
+
 Return JSON with:
 {
-  "brand": "most likely brand",
-  "reference": "most likely canonical reference",
-  "dialColor": "most likely dial color",
-  "condition": "New/Used/Like New",
-  "year": number or null,
-  "price": number or null,
-  "currency": "USD/HKD/etc." or null,
   "confidence": 0-100,
   "interpretations": ["interpretation 1", "interpretation 2", "interpretation 3"],
   "ambiguities": ["thing to double-check 1", "thing 2"],
-  "reasoning": "cite the exact raw evidence; identify unsupported fields"
+  "summary": "short reviewer guidance",
+  "fieldSuggestions": [
+    {
+      "field": "reference",
+      "value": "exact supported value or null",
+      "evidenceQuote": "exact contiguous raw-message quote or null",
+      "reason": "why this is supported or unresolved"
+    }
+  ]
 }
 
 ${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}`;
 
   const boundedGuess = currentGuess && typeof currentGuess === 'object'
     ? {
-        brand: currentGuess.brand || null,
-        reference: currentGuess.reference || null,
-        dialColor: currentGuess.dialColor || null,
-        condition: currentGuess.condition || null,
-        price: currentGuess.price || null,
-        currency: currentGuess.currency || null,
+        brand: boundedGuessValue(currentGuess.brand, 80),
+        reference: boundedGuessValue(currentGuess.reference, 80),
+        model: boundedGuessValue(currentGuess.model),
+        dialColor: boundedGuessValue(currentGuess.dialColor, 80),
+        condition: boundedGuessValue(currentGuess.condition, 80),
+        year: boundedGuessValue(currentGuess.year, 12),
+        price: boundedGuessValue(currentGuess.price, 80),
+        currency: boundedGuessValue(currentGuess.currency, 12),
+        listingType: boundedGuessValue(currentGuess.listingType, 20),
       }
     : null;
   const userPrompt = boundedGuess
@@ -129,12 +157,37 @@ ${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}`;
     const data = await aiResp.json();
     const content = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || '{}';
     const parsed = JSON.parse(content);
+    const assistance = summarizeAssistance(
+      boundedRawMessage,
+      boundedGuess || {},
+      parsed.fieldSuggestions,
+    );
+    const bestValue = field => assistance.suggestions.find(
+      suggestion => suggestion.field === field && suggestion.applicable,
+    )?.value || null;
 
     return res.status(200).json({
       success: true,
-      copilot: parsed,
+      copilot: {
+        confidence: Number(parsed.confidence || 0),
+        interpretations: Array.isArray(parsed.interpretations) ? parsed.interpretations.map(String).slice(0, 3) : [],
+        ambiguities: Array.isArray(parsed.ambiguities) ? parsed.ambiguities.map(String).slice(0, 12) : [],
+        summary: String(parsed.summary || 'Review the field-level evidence before applying any suggestion.').slice(0, 1000),
+        ...assistance,
+        // Backward-compatible summary values for older review clients.
+        brand: bestValue('brand'),
+        model: bestValue('model'),
+        reference: bestValue('reference'),
+        dialColor: bestValue('dialColor'),
+        condition: bestValue('condition'),
+        year: bestValue('year'),
+        price: bestValue('price'),
+        currency: bestValue('currency'),
+        listingType: bestValue('listingType'),
+      },
       tokens: data.usageMetadata?.totalTokenCount || 0,
       model,
+      policy: 'AI suggestions only populate a reviewer draft. They never approve, publish, or write watch_records.',
     });
   } catch (e) {
     return res.status(500).json({
