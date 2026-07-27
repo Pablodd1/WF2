@@ -11,7 +11,7 @@ const source = fs.readFileSync(
 );
 const packetLane = source.slice(
   source.indexOf('function PacketReviewLane'),
-  source.indexOf('export default function ReviewQueue'),
+  source.indexOf('function IdentityReviewLane'),
 );
 
 test('reason packets stay bounded and load evidence lazily', () => {
