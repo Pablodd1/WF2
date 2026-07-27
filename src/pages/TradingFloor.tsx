@@ -12,6 +12,17 @@ import {
   Search,
   X,
 } from 'lucide-react';
+import {
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ReferenceLine,
+  ResponsiveContainer,
+  Scatter,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
@@ -100,7 +111,18 @@ interface ListingBenchmark {
   loading: boolean;
   count: number;
   stats: { avg: number; median: number; min: number; max: number } | null;
+  monthly: Array<{ month: string; count: number; avg_price: number; min_price: number; max_price: number }>;
   rating: MarketPriceRating;
+}
+
+interface ListingEvidence {
+  id: string;
+  brand: string;
+  reference: string;
+  raw_message: string | null;
+  raw_message_scope?: 'original_post' | 'stored_source_message' | 'unavailable';
+  raw_message_truncated?: boolean;
+  image_urls?: string[];
 }
 
 type ViewMode = 'grid' | 'list';
@@ -714,13 +736,43 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const canLoadBenchmark = Boolean(listing.reference && listing.brand && listing.listing_type === 'WTS');
   const [contact, setContact] = useState<ListingContact | null>(null);
-  const [rawMessage, setRawMessage] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState<ListingEvidence | null>(null);
+  const [evidenceError, setEvidenceError] = useState('');
+  const [activeImage, setActiveImage] = useState(0);
   const [benchmark, setBenchmark] = useState<ListingBenchmark>({
     loading: canLoadBenchmark,
     count: 0,
     stats: null,
+    monthly: [],
     rating: rateMarketPrice(listing.price_usd, null, 0),
   });
+  const images = useMemo(() => {
+    return (evidence?.image_urls || []).map(value => String(value || '').trim()).filter(Boolean);
+  }, [evidence]);
+  const priceTimeline = useMemo(() => {
+    const postedAt = listing.listing_date || listing.created_at;
+    const observedDate = postedAt?.split('T')[0] || null;
+    const observedMonth = observedDate?.slice(0, 7) || '';
+    const rows: Array<{ month: string; avg_price: number | null; count: number; selected_price: number | null; observed_date: string | null }> =
+      benchmark.monthly.map(point => ({
+        month: point.month,
+        avg_price: point.avg_price,
+        count: point.count,
+        selected_price: point.month === observedMonth ? listing.price_usd : null,
+        observed_date: point.month === observedMonth ? observedDate : null,
+      }));
+    if (observedMonth && listing.price_usd && !rows.some(point => point.month === observedMonth)) {
+      rows.push({
+        month: observedMonth,
+        avg_price: null,
+        count: 0,
+        selected_price: listing.price_usd,
+        observed_date: observedDate,
+      });
+      rows.sort((left, right) => left.month.localeCompare(right.month));
+    }
+    return { rows, observedMonth };
+  }, [benchmark.monthly, listing.created_at, listing.listing_date, listing.price_usd]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -728,10 +780,37 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       .then(response => response.json())
       .then(payload => setContact(payload))
       .catch(error => { if (error?.name !== 'AbortError') setContact({ contact_available: false, reason: 'CONTACT_UNAVAILABLE' }); });
-    fetch(`/api/trading-listing?id=${encodeURIComponent(listing.id)}`, { credentials: 'include', signal: controller.signal })
-      .then(async response => response.ok ? response.json() : null)
-      .then(payload => setRawMessage(payload?.listing?.raw_message || null))
-      .catch(error => { if (error?.name !== 'AbortError') setRawMessage(null); });
+
+    const tradingDetail = fetch(`/api/trading-listing?id=${encodeURIComponent(listing.id)}`, {
+      credentials: 'include',
+      signal: controller.signal,
+    }).then(async response => response.ok ? response.json() : null);
+    const publicEvidence = canLoadBenchmark
+      ? fetch(`/api/price-research-listing?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
+        .then(async response => response.ok ? response.json() : null)
+      : Promise.resolve(null);
+    Promise.all([tradingDetail, publicEvidence])
+      .then(([tradingPayload, evidencePayload]) => {
+        const tradingListing = tradingPayload?.listing || {};
+        const publicListing = evidencePayload?.listing || {};
+        if (publicListing.id && publicListing.id !== listing.id) {
+          setEvidenceError('Listing evidence did not match the selected record.');
+          return;
+        }
+        const imageUrls = Array.isArray(publicListing.image_urls) ? publicListing.image_urls : [];
+        setEvidence({
+          ...tradingListing,
+          ...publicListing,
+          id: listing.id,
+          brand: publicListing.brand || tradingListing.brand || listing.brand,
+          reference: publicListing.reference || tradingListing.reference || listing.reference || '',
+          raw_message: publicListing.raw_message || null,
+          image_urls: imageUrls,
+        });
+      })
+      .catch(error => {
+        if (error?.name !== 'AbortError') setEvidenceError('Listing evidence is unavailable.');
+      });
 
     if (!canLoadBenchmark) return () => controller.abort();
     const reference = listing.reference as string;
@@ -743,10 +822,24 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       .then(payload => {
         const count = Number(payload?.count || 0);
         const stats = payload?.analytics_ready && payload?.stats ? payload.stats : null;
-        setBenchmark({ loading: false, count, stats, rating: rateMarketPrice(listing.price_usd, stats, count) });
+        setBenchmark({
+          loading: false,
+          count,
+          stats,
+          monthly: Array.isArray(payload?.monthly) ? payload.monthly : [],
+          rating: rateMarketPrice(listing.price_usd, stats, count),
+        });
       })
       .catch(error => {
-        if (error?.name !== 'AbortError') setBenchmark({ loading: false, count: 0, stats: null, rating: rateMarketPrice(listing.price_usd, null, 0) });
+        if (error?.name !== 'AbortError') {
+          setBenchmark({
+            loading: false,
+            count: 0,
+            stats: null,
+            monthly: [],
+            rating: rateMarketPrice(listing.price_usd, null, 0),
+          });
+        }
       });
     return () => controller.abort();
   }, [canLoadBenchmark, listing]);
@@ -763,7 +856,31 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       </button>
 
       <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
-        <ListingImage listing={listing} className="h-[648px] w-full" large />
+        {images[activeImage] ? (
+          <img
+            src={images[activeImage]}
+            alt={`${meta.title} listing`}
+            className="h-[648px] w-full rounded-sm object-contain"
+          />
+        ) : (
+          <ListingImage listing={{ ...listing, thumbnail_url: null }} className="h-[648px] w-full" large />
+        )}
+        {images.length > 1 && (
+          <div className="mt-2 flex gap-2 overflow-x-auto">
+            {images.map((url, index) => (
+              <button
+                type="button"
+                key={url}
+                onClick={() => setActiveImage(index)}
+                aria-label={`Show listing image ${index + 1}`}
+                className="h-16 w-16 shrink-0 overflow-hidden rounded-sm border p-0.5"
+                style={{ borderColor: index === activeImage ? GOLD : BORDER, background: PANEL }}
+              >
+                <img src={url} alt="" className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="space-y-8">
@@ -845,11 +962,23 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
 
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Raw source message</h2>
-          {rawMessage ? (
-            <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{rawMessage}</pre>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Original listing</h2>
+          <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
+            Raw source message · contact redacted
+          </div>
+          {evidence?.raw_message ? (
+            <>
+              <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{evidence.raw_message}</pre>
+              {evidence.raw_message_truncated && (
+                <p className="mt-3 text-xs leading-5" style={{ color: MUTED }}>
+                  Long source text is shortened in this customer view; the immutable original remains preserved for review.
+                </p>
+              )}
+            </>
           ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Source evidence is unavailable for this record.</p>
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+              {evidenceError || 'Contact-redacted source evidence is unavailable for this record.'}
+            </p>
           )}
         </div>
 
@@ -870,6 +999,32 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </div>
           )}
           <div className="mt-4 text-xs" style={{ color: MUTED }}>{benchmark.count.toLocaleString()} outlier-clean comparable offers</div>
+          {priceTimeline.rows.length > 0 && priceTimeline.observedMonth && (
+            <div className="mt-6 border-t pt-5" style={{ borderColor: BORDER }}>
+              <h3 className="text-[15px] font-medium" style={{ color: INK }}>Price when posted</h3>
+              <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>
+                Selected listing versus monthly averages for the exact {displayDial(listing.dial_color) || 'unspecified dial'} / {cleanValue(listing.condition) || 'unspecified condition'} cohort.
+              </p>
+              <div className="mt-4 h-64 w-full" role="img" aria-label={`Selected listing price compared with monthly average prices for ${meta.title}`}>
+                <ResponsiveContainer>
+                  <ComposedChart data={priceTimeline.rows} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
+                    <CartesianGrid stroke="rgba(156,163,175,0.18)" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="month" stroke={MUTED} fontSize={10} tickFormatter={month => String(month).replace(/^(\d{4})-(\d{2})$/, '$2/$1')} />
+                    <YAxis stroke={MUTED} fontSize={10} width={52} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} />
+                    <Tooltip />
+                    {benchmark.stats?.avg && <ReferenceLine y={benchmark.stats.avg} stroke={MUTED} strokeDasharray="5 4" />}
+                    <Line type="monotone" dataKey="avg_price" name="Monthly cohort average" stroke={GOLD_BRIGHT} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                    <Scatter dataKey="selected_price" name="Selected listing" fill={INK} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-[11px]" style={{ color: MUTED }}>
+                <span>Gold line: monthly cohort average</span>
+                <span>White point: selected listing</span>
+                {benchmark.stats?.avg && <span>Dashed line: full cohort average ${Math.round(benchmark.stats.avg).toLocaleString()}</span>}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </section>
