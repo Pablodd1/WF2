@@ -6,6 +6,7 @@ const { classifyResearchEligibility } = require('./_lib/price-research-eligibili
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { isPublicationBrandAllowed, publicationBrands } = require('./_lib/publication-brands.cjs');
+const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -16,20 +17,22 @@ module.exports = async function handler(req, res) {
   }
   try {
     const client = getClient();
-    let mediaQuery = client
-      .from('trading_floor_verified_listings')
-      .select('id,brand,reference,dial_color,condition,thumbnail_url,image_urls,has_images,listing_type,verdict,listing_status,created_at')
-      .eq('verdict', 'APPROVED')
-      .eq('listing_type', 'WTS')
-      .eq('has_images', true)
-      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
-      .order('created_at', { ascending: false })
+    const reviewedImages = await client
+      .from('listing_image_reviews')
+      .select('record_id,reviewed_at')
+      .eq('status', 'VISUALLY_VERIFIED')
+      .order('reviewed_at', { ascending: false })
       .limit(500);
-    if (requestedBrand) mediaQuery = mediaQuery.eq('brand', requestedBrand);
-    else if (publicationBrands().length) mediaQuery = mediaQuery.in('brand', publicationBrands());
-    const mediaResult = await mediaQuery;
-    if (mediaResult.error) throw mediaResult.error;
-    const verifiedMedia = mediaResult.data || [];
+    if (reviewedImages.error) throw reviewedImages.error;
+    const verifiedById = await loadVerifiedListingRows(
+      client,
+      (reviewedImages.data || []).map(row => row.record_id),
+    );
+    const allowedBrands = publicationBrands();
+    const verifiedMedia = [...verifiedById.values()].filter(row =>
+      row.has_images
+      && (!requestedBrand || row.brand === requestedBrand)
+      && (!allowedBrands.length || isPublicationBrandAllowed(row.brand)));
     if (!verifiedMedia.length) {
       return res.status(200).json({ status: 'ok', records: [], source: 'visually_verified_currency_evidence' });
     }

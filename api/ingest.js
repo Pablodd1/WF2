@@ -849,9 +849,11 @@ module.exports = async function handler(req, res) {
         : quality === 'archive'
           ? 'trading_floor_listings'
           : 'trading_floor_market_listings';
+      const selectColumns = 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region'
+        + (tableName === 'trading_floor_verified_listings' ? ',image_urls' : '');
       const params = new URLSearchParams({
         // Keep this response marketplace-safe even when a server key is used.
-        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,image_urls,region',
+        select: selectColumns,
         // This matches the production created_at DESC index. NULLS LAST needs a
         // dedicated index before it can be enabled safely on millions of rows.
         order: cursorMode ? 'created_at.desc,id.desc' : 'created_at.desc',
