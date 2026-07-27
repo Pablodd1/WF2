@@ -141,8 +141,13 @@ brand:
 - visually verified image rows;
 - human-approved identity rows;
 - deterministic catalog-confirmed rows; and
-- unresolved identity rows by status; and
-- actionable identity rows where the identity decision is the final blocker.
+- unresolved identity rows by status.
+
+Do not synchronously recompute a global disposition count across the unresolved
+universe. It exceeds the 120-second production audit budget. The reviewer API
+evaluates `READY_FOR_IDENTITY_REVIEW` only through bounded 50-row pages and
+reports `hasMore`; a checkpointed queue snapshot may add a durable global count
+later without blocking reviewers or customer reads.
 
 Do not copy older two-brand or three-reference counts into this section. Use the
 new workflow summary because it measures the actual deployed view.
