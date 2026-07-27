@@ -44,8 +44,26 @@ test('Price Research labels excluded HKD evidence in its source currency', () =>
 
 test('Listing detail uses reference aliases and preserves exact source currency', () => {
   const detail = fs.readFileSync(path.join(root, 'api', 'price-research-listing.js'), 'utf8');
+  const tradingDetail = fs.readFileSync(path.join(root, 'api', 'trading-listing.js'), 'utf8');
 
   assert.match(detail, /listEquivalentReferences\(resolvedData\.reference,\s*resolvedData\.brand\)/);
   assert.match(detail, /price_raw:\s*normalized\.source_price_amount/);
   assert.match(detail, /currency:\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
+  assert.match(tradingDetail, /listEquivalentReferences\(resolvedData\.reference,\s*resolvedData\.brand\)/);
+  assert.match(tradingDetail, /listing\.price_raw\s*=\s*normalized\.source_price_amount/);
+  assert.match(tradingDetail, /listing\.currency\s*=\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
+});
+
+test('all customer price surfaces use equivalent reference evidence', () => {
+  for (const relativePath of [
+    'api/featured-listings.js',
+    'api/catalog-references.js',
+    'api/export-excel.js',
+  ]) {
+    assert.match(
+      fs.readFileSync(path.join(root, relativePath), 'utf8'),
+      /listEquivalentReferences\(/,
+      relativePath,
+    );
+  }
 });

@@ -1,6 +1,6 @@
 /** Customer-safe featured inventory with reference-line currency proof. */
 const { getClient } = require('./_lib/supabase');
-const { lookupCatalog } = require('./_lib/catalog');
+const { listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
@@ -62,10 +62,17 @@ module.exports = async function handler(req, res) {
         thumbnail_url: media.thumbnail_url,
         image_urls: media.image_urls,
       };
-      const normalized = normalizeMarketRow(resolved, resolved.reference);
+      const normalized = normalizeMarketRow(
+        resolved,
+        listEquivalentReferences(resolved.reference, resolved.brand),
+      );
       return sanitizeTradingRecord({
         ...resolved,
         price_usd: normalized.analytics_price_usd,
+        price_raw: normalized.source_price_amount || null,
+        currency: normalized.analytics_currency_status === 'VERIFIED'
+          ? 'USD'
+          : normalized.source_currency || null,
         analytics_currency_status: normalized.analytics_currency_status,
       }, { verifiedImages: true });
     }).filter(row => {

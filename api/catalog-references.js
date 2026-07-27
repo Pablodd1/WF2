@@ -6,7 +6,7 @@
  * avoiding the former full-brand scan over millions of production rows.
  */
 const { getClient } = require('./_lib/supabase');
-const { listCatalogReferences, lookupCatalog } = require('./_lib/catalog');
+const { listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
@@ -55,7 +55,10 @@ async function loadReferenceEvidence(client, brand, entry) {
   const eligible = data
     .filter(row => isReleaseListingEligible(row))
     .map(row => {
-      const normalized = normalizeMarketRow(row, entry.reference);
+      const normalized = normalizeMarketRow(
+        row,
+        listEquivalentReferences(entry.reference, brand),
+      );
       return {
         ...normalized,
         price_usd: normalized.analytics_price_usd,
