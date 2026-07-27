@@ -183,7 +183,9 @@ async function sourceRows(lastRecordId) {
     if (!SNAPSHOT_AT || !Number.isFinite(Date.parse(SNAPSHOT_AT))) {
       throw new Error('IDENTITY_SNAPSHOT_AT must be a valid timestamp for TWO_BRANDS');
     }
-    query.set('created_at', `lte.${SNAPSHOT_AT}`);
+    // Historical imports legitimately have no created_at value. They are still
+    // immutable source evidence and must not disappear from the frozen release.
+    query.set('or', `(created_at.is.null,created_at.lte.${SNAPSHOT_AT})`);
   }
   if (source.imageFilter) query.set('or', source.imageFilter);
   return supabaseFetch(`/rest/v1/${source.table}?${query}`);

@@ -261,7 +261,10 @@ jobs:
           SELECT count(*)
           FROM public.watch_records
           WHERE brand IN ('Rolex', 'Patek Philippe')
-            AND created_at <= :'snapshot_at'::timestamptz;
+            AND (
+              created_at IS NULL
+              OR created_at <= :'snapshot_at'::timestamptz
+            );
           SQL
           )"
           source_rows="$(echo "$source_rows" | tail -n 1 | tr -d '[:space:]')"

@@ -20,6 +20,10 @@ const migration = fs.readFileSync(
   path.join(root, 'supabase', 'migrations', '20260727220000_atomic_two_brand_catalog_staging.sql'),
   'utf8',
 );
+const worker = fs.readFileSync(
+  path.join(root, 'tools', 'data-quality', 'stage-identity-review.cjs'),
+  'utf8',
+);
 
 test('auto-confirms only raw-backed exact reference, model, and catalog dial matches', () => {
   const patek = classifyTwoBrandIdentity({
@@ -99,6 +103,8 @@ test('two-brand source is bounded, sharded, and carries immutable raw evidence',
     select: 'id,brand,model,reference,dial_color,raw_message',
     brandFilter: 'in.("Rolex","Patek Philippe")',
   });
+  assert.match(worker, /created_at\.is\.null,created_at\.lte\.\$\{SNAPSHOT_AT\}/);
+  assert.match(workflow, /created_at IS NULL[\s\S]*created_at <= :'snapshot_at'/);
 });
 
 test('atomic RPC preserves reviewed decisions and checkpoints the batch transactionally', () => {
