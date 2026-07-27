@@ -9,6 +9,7 @@ const {
   classifyTwoBrandIdentity,
   parseShard,
   scopeSource,
+  twoBrandSourceFilter,
 } = require('../tools/data-quality/stage-identity-review.cjs');
 
 const root = path.join(__dirname, '..');
@@ -90,10 +91,10 @@ test('partial reference tokens and non-exact catalog matches fail closed', () =>
 
 test('two-brand source is bounded, sharded, and carries immutable raw evidence', () => {
   assert.deepEqual(ID_SHARDS, [
-    { lower: null, upper: '4' },
-    { lower: '4', upper: '8' },
-    { lower: '8', upper: 'c' },
-    { lower: 'c', upper: null },
+    { segments: [{ lower: null, upper: '4' }, { lower: 'mysql_auction_watches_', upper: 'mysql_auction_watches_4' }] },
+    { segments: [{ lower: '4', upper: '8' }, { lower: 'mysql_auction_watches_4', upper: 'mysql_auction_watches_8' }] },
+    { segments: [{ lower: '8', upper: 'c' }, { lower: 'mysql_auction_watches_8', upper: 'mysql_auction_watches_c' }] },
+    { segments: [{ lower: 'c', upper: 'mysql_auction_watches_' }, { lower: 'mysql_auction_watches_c', upper: null }] },
   ]);
   assert.equal(parseShard('3'), 3);
   assert.throws(() => parseShard('4'), /0 through 3/);
@@ -103,8 +104,13 @@ test('two-brand source is bounded, sharded, and carries immutable raw evidence',
     select: 'id,brand,model,reference,dial_color,raw_message',
     brandFilter: 'in.("Rolex","Patek Philippe")',
   });
-  assert.match(worker, /created_at\.is\.null,created_at\.lte\.\$\{SNAPSHOT_AT\}/);
+  assert.match(worker, /created_at\.is\.null,created_at\.lte\.\$\{snapshotAt\}/);
   assert.match(workflow, /created_at IS NULL[\s\S]*created_at <= :'snapshot_at'/);
+  const snapshot = '2026-07-27T18:50:00Z';
+  assert.equal(twoBrandSourceFilter('id', 0, snapshot),
+    '(or(id.lt.4,and(id.gte.mysql_auction_watches_,id.lt.mysql_auction_watches_4)),or(created_at.is.null,created_at.lte.2026-07-27T18:50:00Z))');
+  assert.equal(twoBrandSourceFilter('id', 3, snapshot),
+    '(or(and(id.gte.c,id.lt.mysql_auction_watches_),id.gte.mysql_auction_watches_c),or(created_at.is.null,created_at.lte.2026-07-27T18:50:00Z))');
 });
 
 test('atomic RPC preserves reviewed decisions and checkpoints the batch transactionally', () => {
