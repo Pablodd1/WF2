@@ -129,8 +129,10 @@ jobs:
           user="${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}"
           port="${SUPABASE_DB_PORT:-5432}"
           db_url="host=${host} port=${port} dbname=postgres user=${user} sslmode=require"
+          release_migration="supabase/migrations/20260727260000_include_unpriced_two_brand_trading.sql"
           atomic_migration="supabase/migrations/20260727220000_atomic_two_brand_catalog_staging.sql"
           cache_migration="supabase/migrations/20260727230000_materialized_two_brand_release.sql"
+          test -f "$release_migration"
           test -f "$atomic_migration"
           test -f "$cache_migration"
           psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
@@ -144,6 +146,7 @@ jobs:
           END
           $$;
           SQL
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$release_migration"
           psql "$db_url" --set=ON_ERROR_STOP=1 --file="$atomic_migration"
           psql "$db_url" --set=ON_ERROR_STOP=1 --file="$cache_migration"
 
