@@ -18,7 +18,8 @@ test('strict browsing verifies and globally deduplicates the bounded reviewed re
   assert.match(ingestSource, /Range: `0-\$\{limit\}`/);
   assert.match(ingestSource, /hasMore: Array\.isArray\(rows\) && rows\.length > limit/);
   assert.match(ingestSource, /if \(identityPage\.hasMore\)[\s\S]*999-row global repost-deduplication window/);
-  assert.match(ingestSource, /sortTradingItems\(matched\)/);
+  assert.match(ingestSource, /sortTradingItems\(deduplicateTradingItems\(mediaResolved\)\)/);
+  assert.match(ingestSource, /item\.resolved\?\.has_images && !current\.resolved\?\.has_images/);
   assert.match(ingestSource, /listingIsAfterCursor/);
   assert.match(ingestSource, /rest\/v1\/trading_floor_verified_listings/);
   assert.match(ingestSource, /verdict: 'eq\.APPROVED'/);

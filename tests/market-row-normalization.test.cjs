@@ -12,6 +12,8 @@ test('repairs HKD stored as USD using the exact reference line', () => {
   assert.equal(result.analytics_fx_rate, 7.8);
   assert.equal(result.analytics_fx_source, 'LEGACY_FIXED_RATE_REVIEW_ONLY');
   assert.equal(result.analytics_fx_date, null);
+  assert.equal(result.source_price_amount, 325000);
+  assert.equal(result.source_currency, 'HKD');
 });
 
 test('prefers an explicit USD equivalent on the exact reference line', () => {
@@ -19,6 +21,8 @@ test('prefers an explicit USD equivalent on the exact reference line', () => {
   assert.equal(result.analytics_price_usd, 40500);
   assert.equal(result.price_normalization, 'EXPLICIT_USD_FROM_REFERENCE_LINE');
   assert.equal(result.analytics_currency_status, 'VERIFIED');
+  assert.equal(result.source_price_amount, 40500);
+  assert.equal(result.source_currency, 'USD');
 });
 
 test('does not parse a trailing production year as the USD price', () => {
