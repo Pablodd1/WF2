@@ -18,6 +18,7 @@ const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf
 
 test('full-brand Trading Floor uses a service-only deduplicated keyset source', () => {
   const migration = read('supabase/migrations/20260727190000_full_rolex_patek_release.sql');
+  const unpricedTradingMigration = read('supabase/migrations/20260727260000_include_unpriced_two_brand_trading.sql');
   const cacheMigration = read('supabase/migrations/20260727230000_materialized_two_brand_release.sql');
   const ingest = read('api/ingest.js');
 
@@ -27,6 +28,11 @@ test('full-brand Trading Floor uses a service-only deduplicated keyset source', 
   assert.match(migration, /w\.verdict = 'APPROVED'/);
   assert.match(migration, /w\.confidence >= 90/);
   assert.match(migration, /w\.price_usd >= 1000/);
+  assert.doesNotMatch(unpricedTradingMigration, /w\.price_usd >= 1000/);
+  assert.match(unpricedTradingMigration, /WTS price is optional on Trading Floor and remains mandatory for Price Research/);
+  assert.match(unpricedTradingMigration, /CREATE OR REPLACE VIEW public\.two_brand_verified_trading_release/);
+  assert.match(unpricedTradingMigration, /REVOKE ALL ON public\.two_brand_verified_trading_release[\s\S]*PUBLIC, anon, authenticated/);
+  assert.match(unpricedTradingMigration, /GRANT SELECT ON public\.two_brand_verified_trading_release TO service_role/);
   assert.match(migration, /duplicate\.status = 'SUPPRESSED'/);
   assert.match(migration, /shadow\.candidate_count > 1/);
   assert.doesNotMatch(migration, /public\.is_listing_duplicate_eligible\(w\.id\)/);
@@ -92,7 +98,8 @@ test('bounded identity pages apply every non-identity static publication gate', 
   assert.equal(passesStaticReleaseGates({ ...ready, raw_message: '' }), false);
   assert.equal(passesStaticReleaseGates({ ...ready, confidence: 89 }), false);
   assert.equal(passesStaticReleaseGates({ ...ready, listing_type: 'MULTI' }), false);
-  assert.equal(passesStaticReleaseGates({ ...ready, price_usd: 999 }), false);
+  assert.equal(passesStaticReleaseGates({ ...ready, price_usd: 999 }), true);
+  assert.equal(passesStaticReleaseGates({ ...ready, price_usd: null }), true);
   assert.equal(passesStaticReleaseGates({ ...ready, flags: ['BUNDLE_SPLIT_REQUIRED'] }), false);
   assert.equal(passesStaticReleaseGates({
     ...ready,

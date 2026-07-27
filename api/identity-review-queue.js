@@ -51,10 +51,6 @@ function passesStaticReleaseGates(row) {
   if (!Number.isFinite(confidence) || confidence < 90) return false;
   const listingType = String(row?.listing_type || '').toUpperCase();
   if (!['WTS', 'WTB', 'NTQ'].includes(listingType)) return false;
-  if (listingType === 'WTS') {
-    const priceUsd = Number(row?.price_usd);
-    if (!Number.isFinite(priceUsd) || priceUsd < 1000) return false;
-  }
   if (normalizedFlags(row?.flags).includes('BUNDLE_SPLIT_REQUIRED')) return false;
   if (String(row?.record_id || '').startsWith('preview_demo_')) return false;
   return true;
