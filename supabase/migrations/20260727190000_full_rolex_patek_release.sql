@@ -5,7 +5,10 @@
 -- longer has to load the complete reviewed population into application memory.
 
 BEGIN;
-SET LOCAL lock_timeout = '5s';
+-- Supabase Preview may hold a short schema-cache lock while integrations apply
+-- the same branch. Wait long enough for that bounded lock instead of failing a
+-- data-less preview; the 120-second statement timeout remains the hard stop.
+SET LOCAL lock_timeout = '30s';
 SET LOCAL statement_timeout = '120s';
 
 CREATE INDEX IF NOT EXISTS idx_listing_identity_release_brand_status_record

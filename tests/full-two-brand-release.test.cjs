@@ -21,6 +21,7 @@ test('full-brand Trading Floor uses a service-only deduplicated keyset source', 
   assert.match(migration, /ORDER BY has_images DESC, created_at DESC NULLS LAST, id DESC/);
   assert.match(migration, /m\.verdict = 'APPROVED'/);
   assert.match(migration, /m\.confidence >= 90/);
+  assert.match(migration, /SET LOCAL lock_timeout = '30s'/);
   assert.match(migration, /r\.status IN \('CATALOG_CONFIRMED', 'HUMAN_APPROVED'\)/);
   assert.match(migration, /REVOKE ALL ON public\.two_brand_verified_trading_release[\s\S]*PUBLIC, anon, authenticated/);
   assert.match(migration, /GRANT SELECT ON public\.two_brand_verified_trading_release TO service_role/);
