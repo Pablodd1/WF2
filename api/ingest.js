@@ -102,26 +102,54 @@ async function loadVerifiedPublicListings(supabaseUrl, readKey, ids) {
   for (let index = 0; index < verifiedIds.length; index += 50) {
     mediaBatches.push(verifiedIds.slice(index, index + 50));
   }
-  const mediaResults = await Promise.all(mediaBatches.map(async batch => {
-    const params = new URLSearchParams({
-      select: 'id,has_images,thumbnail_url,image_urls',
-      id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
-    });
-    try {
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/trading_floor_verified_listings?${params.toString()}`,
-        { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
-      );
-      if (!response.ok) throw new Error(`verified media read returned ${response.status}`);
-      return response.json();
-    } catch (error) {
-      console.warn(`[Trading Floor] Verified media batch unavailable; images remain withheld: ${error.message}`);
-      return [];
-    }
-  }));
+  const [mediaResults, evidenceResults] = await Promise.all([
+    Promise.all(mediaBatches.map(async batch => {
+      const params = new URLSearchParams({
+        select: 'id,has_images,thumbnail_url,image_urls',
+        id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+      });
+      try {
+        const response = await fetch(
+          `${supabaseUrl}/rest/v1/trading_floor_verified_listings?${params.toString()}`,
+          { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+        );
+        if (!response.ok) throw new Error(`verified media read returned ${response.status}`);
+        return response.json();
+      } catch (error) {
+        console.warn(`[Trading Floor] Verified media batch unavailable; images remain withheld: ${error.message}`);
+        return [];
+      }
+    })),
+    Promise.all(mediaBatches.map(async batch => {
+      const params = new URLSearchParams({
+        select: 'id,raw_message',
+        id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+      });
+      try {
+        const response = await fetch(
+          `${supabaseUrl}/rest/v1/watch_records?${params.toString()}`,
+          { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+        );
+        if (!response.ok) throw new Error(`raw price evidence read returned ${response.status}`);
+        return response.json();
+      } catch (error) {
+        console.warn(`[Trading Floor] Raw price evidence unavailable; price remains withheld: ${error.message}`);
+        return [];
+      }
+    })),
+  ]);
   for (const media of mediaResults.flat()) {
     const current = verified.get(String(media.id));
     if (current) verified.set(String(media.id), { ...current, ...media });
+  }
+  for (const evidence of evidenceResults.flat()) {
+    const current = verified.get(String(evidence.id));
+    if (current) {
+      verified.set(String(evidence.id), {
+        ...current,
+        raw_message: evidence.raw_message || null,
+      });
+    }
   }
   return verified;
 }
@@ -370,8 +398,12 @@ async function loadFullReviewedBrandCursorPage({
     })
     .filter(Boolean);
   const records = current.map(resolved => {
+    const verified = verifiedById.get(String(resolved.id));
     const normalized = normalizeMarketRow(
-      resolved,
+      {
+        ...resolved,
+        raw_message: verified?.raw_message || null,
+      },
       listEquivalentReferences(resolved.reference, resolved.brand),
     );
     const priceVerified = resolved.listing_type === 'WTS'
