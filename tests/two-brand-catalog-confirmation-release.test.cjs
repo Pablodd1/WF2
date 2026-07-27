@@ -112,6 +112,11 @@ test('two-brand source is bounded, sharded, and carries immutable raw evidence',
 });
 
 test('atomic RPC preserves reviewed decisions and checkpoints the batch transactionally', () => {
+  assert.match(
+    migration,
+    /\^identity-stage:two_brands:v4:snapshot-\[a-f0-9\]\{12\}:partition-\[0-7\]\$/,
+  );
+  assert.match(worker, /:v4:snapshot-\$\{SNAPSHOT_KEY\}:partition-\$\{SHARD\}/);
   assert.match(migration, /pg_advisory_xact_lock/);
   assert.match(migration, /v_checkpoint\.last_record_id IS DISTINCT FROM p_expected_last_record_id/);
   assert.match(migration, /reviewer_id IS NOT NULL OR r\.reviewed_at IS NOT NULL/);
