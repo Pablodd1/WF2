@@ -7,6 +7,7 @@
  * are never presented as model names.
  */
 const { listCatalogReferences } = require('./_lib/catalog');
+const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
@@ -18,6 +19,9 @@ module.exports = async function handler(req, res) {
 
   const brand = (req.query.brand || '').trim();
   if (!brand) return res.status(400).json({ error: 'brand required' });
+  if (!isPublicationBrandAllowed(brand)) {
+    return res.status(404).json({ error: 'Brand is not included in this release' });
+  }
 
   const cached = _cache.get(brand);
   if (cached && Date.now() - cached.at < CACHE_TTL) {

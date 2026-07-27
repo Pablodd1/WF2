@@ -21,6 +21,11 @@ const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { confirmCatalogCandidate } = require('./_lib/catalog-confirmation.cjs');
 const { decodeTradingCursor, encodeTradingCursor, tradingCursorFilter } = require('./_lib/trading-cursor.cjs');
+const {
+  isPublicationBrandAllowed,
+  publicationBrandPostgrestFilter,
+  publicationBrands,
+} = require('./_lib/publication-brands.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -45,6 +50,240 @@ const CONDITIONS = loadJsonSafe('conditions.json', { conditions: {}, set_status:
 const CURRENCIES = loadJsonSafe('currencies.json', { currencies: {}, price_multipliers: {} });
 const MATERIALS = loadJsonSafe('materials.json', { materials: {}, bracelets: {}, bezels: {} });
 const MASTER_CATALOG = loadJsonSafe('master_catalog.json', {});
+
+async function loadVerifiedPublicListings(supabaseUrl, readKey, ids) {
+  if (!ids.length) return new Map();
+  const batches = [];
+  for (let index = 0; index < ids.length; index += 50) {
+    batches.push(ids.slice(index, index + 50));
+  }
+
+  const identityResults = await Promise.all(batches.map(async batch => {
+    const params = new URLSearchParams({
+      select: 'record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status',
+      record_id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+      status: 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)',
+    });
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/listing_identity_reviews?${params.toString()}`,
+        { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+      );
+      if (!response.ok) throw new Error(`identity review read returned ${response.status}`);
+      return response.json();
+    } catch (error) {
+      console.warn(`[Trading Floor] Identity verification batch withheld: ${error.message}`);
+      return [];
+    }
+  }));
+  const verified = new Map(identityResults.flat().map(row => [String(row.record_id), {
+    id: row.record_id,
+    brand: row.canonical_brand,
+    model: row.canonical_model,
+    reference: row.canonical_reference,
+    dial_color: row.canonical_dial_color,
+    has_images: false,
+    thumbnail_url: null,
+    image_urls: [],
+  }]));
+  const verifiedIds = [...verified.keys()];
+  if (!verifiedIds.length) return verified;
+
+  const mediaBatches = [];
+  for (let index = 0; index < verifiedIds.length; index += 50) {
+    mediaBatches.push(verifiedIds.slice(index, index + 50));
+  }
+  const mediaResults = await Promise.all(mediaBatches.map(async batch => {
+    const params = new URLSearchParams({
+      select: 'id,has_images,thumbnail_url,image_urls',
+      id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+    });
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/trading_floor_verified_listings?${params.toString()}`,
+        { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+      );
+      if (!response.ok) throw new Error(`verified media read returned ${response.status}`);
+      return response.json();
+    } catch (error) {
+      console.warn(`[Trading Floor] Verified media batch unavailable; images remain withheld: ${error.message}`);
+      return [];
+    }
+  }));
+  for (const media of mediaResults.flat()) {
+    const current = verified.get(String(media.id));
+    if (current) verified.set(String(media.id), { ...current, ...media });
+  }
+  return verified;
+}
+
+async function loadStrictIdentityCandidates(supabaseUrl, readKey, cursor, limit = 500) {
+  const params = new URLSearchParams({
+    select: 'record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status,updated_at',
+    status: 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)',
+    order: 'updated_at.desc,record_id.desc',
+  });
+  if (cursor?.createdAt) {
+    params.set('or', `(updated_at.lt.${cursor.createdAt},and(updated_at.eq.${cursor.createdAt},record_id.lt.${cursor.id}))`);
+  }
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/listing_identity_reviews?${params.toString()}`,
+    {
+      headers: {
+        apikey: readKey,
+        Authorization: `Bearer ${readKey}`,
+        'Range-Unit': 'items',
+        Range: `0-${limit}`,
+        Prefer: 'return=representation',
+      },
+    },
+  );
+  if (!response.ok) throw new Error(`identity candidate read returned ${response.status}`);
+  const rows = await response.json();
+  return {
+    rows: Array.isArray(rows) ? rows.slice(0, limit) : [],
+    hasMore: Array.isArray(rows) && rows.length > limit,
+  };
+}
+
+async function loadMarketRowsById(supabaseUrl, readKey, ids) {
+  const batches = [];
+  for (let index = 0; index < ids.length; index += 50) {
+    batches.push(ids.slice(index, index + 50));
+  }
+  const results = await Promise.all(batches.map(async batch => {
+    const params = new URLSearchParams({
+      select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,region',
+      id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+    });
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/trading_floor_market_listings?${params.toString()}`,
+      { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+    );
+    if (!response.ok) throw new Error(`market listing batch returned ${response.status}`);
+    return response.json();
+  }));
+  return new Map(results.flat().map(row => [String(row.id), row]));
+}
+
+function matchesStrictReleaseFilters(record, {
+  listingType,
+  itemType,
+  requestedBrand,
+  condition,
+  region,
+  search,
+}) {
+  if (!record || !isPublicationBrandAllowed(record.brand)) return false;
+  if (requestedBrand && String(record.brand).toLowerCase() !== requestedBrand.toLowerCase()) return false;
+  if (itemType && !['all', 'watches'].includes(itemType)) return false;
+  if (listingType === 'WTB' && !['WTB', 'NTQ'].includes(record.listing_type)) return false;
+  if (listingType && listingType !== 'WTB' && record.listing_type !== listingType) return false;
+  if (!listingType && !['WTS', 'WTB', 'NTQ', 'OTHER'].includes(record.listing_type)) return false;
+  if (String(record.verdict || '').toUpperCase() === 'RECYCLE') return false;
+  if (String(record.id || '').startsWith('preview_demo_')) return false;
+  if (condition && String(record.condition || '').toLowerCase() !== condition.toLowerCase()) return false;
+  if (region && !String(record.region || '').toLowerCase().includes(region.toLowerCase())) return false;
+  if (search) {
+    const parsed = parseTradingSearch(search);
+    if (parsed.reference && String(record.reference || '').toUpperCase() !== parsed.reference.toUpperCase()) return false;
+    if (parsed.brand && String(record.brand || '').toLowerCase() !== parsed.brand.toLowerCase()) return false;
+    if (parsed.dial && String(record.dial_color || '').toLowerCase() !== parsed.dial.toLowerCase()) return false;
+  }
+  return isCustomerIdentitySafe(record);
+}
+
+async function loadStrictCursorPage({
+  supabaseUrl,
+  readKey,
+  cursor,
+  page,
+  pageSize,
+  listingType,
+  itemType,
+  requestedBrand,
+  condition,
+  region,
+  search,
+}) {
+  const identityPage = await loadStrictIdentityCandidates(supabaseUrl, readKey, cursor);
+  const marketById = await loadMarketRowsById(
+    supabaseUrl,
+    readKey,
+    identityPage.rows.map(row => row.record_id),
+  );
+  const matched = identityPage.rows
+    .map(identity => {
+      const market = marketById.get(String(identity.record_id));
+      if (!market) return null;
+      const resolved = {
+        ...market,
+        brand: identity.canonical_brand || market.brand,
+        reference: identity.canonical_reference || market.reference,
+        dial_color: identity.canonical_dial_color || market.dial_color,
+      };
+      return matchesStrictReleaseFilters(resolved, {
+        listingType,
+        itemType,
+        requestedBrand,
+        condition,
+        region,
+        search,
+      }) ? { identity, resolved } : null;
+    })
+    .filter(Boolean);
+  const selected = matched.slice(0, pageSize);
+  const verifiedById = await loadVerifiedPublicListings(
+    supabaseUrl,
+    readKey,
+    selected.map(item => item.resolved.id),
+  );
+  const records = selected.map(({ resolved }) => {
+    const verified = verifiedById.get(String(resolved.id));
+    const safe = sanitizeTradingRecord({
+      ...resolved,
+      brand: verified?.brand || resolved.brand,
+      reference: verified?.reference || resolved.reference,
+      dial_color: verified?.dial_color || resolved.dial_color,
+      has_images: Boolean(verified?.has_images),
+      thumbnail_url: verified?.thumbnail_url || null,
+      image_urls: verified?.image_urls || [],
+      price_usd: null,
+      price_raw: null,
+      currency: null,
+    }, { verifiedImages: Boolean(verified?.has_images) });
+    if (resolved.listing_type !== 'WTS') return safe;
+    return {
+      ...safe,
+      data_quality_issues: [...new Set([
+        ...(safe.data_quality_issues || []),
+        'PRICE_EVIDENCE_LOAD_REQUIRED',
+      ])],
+      data_quality_review_required: true,
+    };
+  });
+  const matchedHasMore = matched.length > pageSize;
+  const hasMore = matchedHasMore || identityPage.hasMore;
+  const cursorIdentity = matchedHasMore
+    ? matched[pageSize - 1]?.identity
+    : identityPage.rows[identityPage.rows.length - 1];
+  const nextCursor = hasMore && cursorIdentity
+    ? encodeTradingCursor({ id: cursorIdentity.record_id, created_at: cursorIdentity.updated_at })
+    : null;
+  return {
+    count: records.length,
+    total: null,
+    page,
+    pageSize,
+    totalIsEstimate: false,
+    nextCursor,
+    hasMore,
+    records,
+    status: 'ok',
+    publicationBrands: publicationBrands(),
+    accessMode: 'server_key',
+  };
+}
 
 // Standard USD exchange rates
 const RATES = {
@@ -807,25 +1046,36 @@ module.exports = async function handler(req, res) {
       if (cursorValue && !cursor) return res.status(400).json({ error: 'Invalid pagination cursor' });
       const condition = String(req.query?.condition || '').trim().slice(0, 30).replace(/[(),.%*]/g, ' ');
       const region = String(req.query?.region || '').trim().slice(0, 50).replace(/[(),.%*]/g, ' ');
+      const requestedBrand = String(req.query?.brand || '').trim().slice(0, 80).replace(/[(),.%*]/g, ' ');
       const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
       const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'OTHER']);
       const allowedItems = new Set(['all', 'watches', 'jewelry', 'handbags', 'accessories', 'other', 'luxury']);
-      const start = cursorMode ? 0 : (page - 1) * pageSize;
-      const end = start + pageSize - (cursorMode ? 0 : 1);
       // Both server-key and publishable-key reads use the same customer-safe
       // database view so publication rules cannot drift by deployment mode.
       // Main inventory is intentionally stricter than the archive: incomplete
       // watch identity and implausible WTS prices remain reviewable in the full
       // archive but cannot consume customer-market page slots or totals.
       const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
+      const candidatePageSize = strictVerifiedPublication && cursorMode
+        ? Math.min(pageSize * 10, 500)
+        : pageSize;
+      const start = cursorMode ? 0 : (page - 1) * candidatePageSize;
+      const end = start + candidatePageSize - (cursorMode ? 0 : 1);
       const tableName = strictVerifiedPublication
-        ? 'trading_floor_verified_listings'
-        : quality === 'archive'
+        ? quality === 'archive'
+          ? 'trading_floor_listings'
+          : 'trading_floor_market_listings'
+        : imagesOnly
+          ? 'trading_floor_verified_listings'
+          : quality === 'archive'
           ? 'trading_floor_listings'
           : 'trading_floor_market_listings';
       const params = new URLSearchParams({
         // Keep this response marketplace-safe even when a server key is used.
-        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region',
+        // Media is loaded separately for only the visible IDs. Projecting the
+        // verified-thumbnail functions across an ordered/count query makes the
+        // strict view evaluate media for thousands of rows before LIMIT.
+        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,region',
         // This matches the production created_at DESC index. NULLS LAST needs a
         // dedicated index before it can be enabled safely on millions of rows.
         order: cursorMode ? 'created_at.desc,id.desc' : 'created_at.desc',
@@ -839,6 +1089,28 @@ module.exports = async function handler(req, res) {
       }
       if (itemType && !['all', 'watches'].includes(itemType) && listingType) {
         return res.status(400).json({ error: 'Intent filtering is unavailable for unnormalized luxury records' });
+      }
+      if (requestedBrand && !isPublicationBrandAllowed(requestedBrand)) {
+        return res.status(400).json({ error: 'Brand is not included in this release' });
+      }
+      if (strictVerifiedPublication && cursorMode) {
+        if (!serviceKey) {
+          return res.status(503).json({ error: 'Strict publication requires server-side verification' });
+        }
+        const strictPage = await loadStrictCursorPage({
+          supabaseUrl,
+          readKey: serviceKey,
+          cursor,
+          page,
+          pageSize,
+          listingType,
+          itemType,
+          requestedBrand,
+          condition,
+          region,
+          search,
+        });
+        return res.status(200).json(strictPage);
       }
 
       // NTQ is historical buyer-intent shorthand. Customer-facing WTB must
@@ -869,6 +1141,11 @@ module.exports = async function handler(req, res) {
       if (imagesOnly) params.set('has_images', 'eq.true');
       if (condition) params.set('condition', `ilike.${condition}`);
       if (region) params.set('region', `ilike.*${region}*`);
+      if (requestedBrand) params.set('brand', `eq.${requestedBrand}`);
+      else {
+        const releaseBrandFilter = publicationBrandPostgrestFilter();
+        if (releaseBrandFilter) params.set('brand', releaseBrandFilter);
+      }
       // Customer-facing inventory never includes RECYCLE records. The recent
       // view avoids letting undated legacy imports dominate page one, while the
       // all-inventory view and every explicit search still include those rows.
@@ -892,7 +1169,12 @@ module.exports = async function handler(req, res) {
           // indexed search service/RPC.
           const parsedSearch = parseTradingSearch(search);
           if (parsedSearch.reference) params.set('reference', `eq.${parsedSearch.reference}`);
-          if (parsedSearch.brand) params.set('brand', `ilike.${parsedSearch.brand}`);
+          if (parsedSearch.brand && !requestedBrand) {
+            if (!isPublicationBrandAllowed(parsedSearch.brand)) {
+              return res.status(400).json({ error: 'Brand is not included in this release' });
+            }
+            params.set('brand', `ilike.${parsedSearch.brand}`);
+          }
           if (parsedSearch.dial) params.set('dial_color', `ilike.${parsedSearch.dial}`);
         }
       }
@@ -906,33 +1188,86 @@ module.exports = async function handler(req, res) {
             'Authorization': `Bearer ${readKey}`,
             'Range-Unit': 'items',
             'Range': `${start}-${end}`,
-            // Estimated counts avoid a full-table count for a multi-million-row archive.
-            // Estimated counts may fall back to an exact scan for filtered
-            // cohorts. Reference search only needs a fast approximate total.
-            'Prefer': search ? 'count=planned' : 'count=estimated',
+            // Cursor pagination needs only the bounded rows plus one lookahead.
+            // Do not count the full verified view on every client page request.
+            'Prefer': cursorMode
+              ? 'return=representation'
+              : search
+                ? 'count=planned'
+                : 'count=estimated',
           },
         }
       );
       if (!resp.ok) throw new Error(`Supabase returned ${resp.status}`);
       const records = await resp.json();
-      const hasMore = cursorMode && Array.isArray(records) && records.length > pageSize;
-      const visibleRecords = Array.isArray(records) ? records.slice(0, pageSize) : [];
-      const customerRecords = visibleRecords
-        .filter(isCustomerIdentitySafe)
-        .map(sanitizeTradingRecord);
-      const nextCursor = hasMore ? encodeTradingCursor(visibleRecords[visibleRecords.length - 1]) : null;
+      const candidateHasMore = cursorMode && Array.isArray(records) && records.length > candidatePageSize;
+      const candidateRecords = Array.isArray(records) ? records.slice(0, candidatePageSize) : [];
+      const verifiedById = await loadVerifiedPublicListings(
+        supabaseUrl,
+        readKey,
+        candidateRecords.map(row => row.id),
+      );
+      const customerCandidates = candidateRecords
+        .map(record => {
+          const verified = verifiedById.get(String(record.id));
+          const resolved = verified
+            ? {
+                ...record,
+                brand: verified.brand || record.brand,
+                reference: verified.reference || record.reference,
+                dial_color: verified.dial_color || record.dial_color,
+                has_images: verified.has_images,
+                thumbnail_url: verified.thumbnail_url,
+                image_urls: verified.image_urls,
+              }
+            : record;
+          const customerResolved = strictVerifiedPublication
+            ? { ...resolved, price_usd: null, price_raw: null, currency: null }
+            : resolved;
+          return {
+            resolved: customerResolved,
+            verified,
+            verifiedImages: Boolean(verified?.has_images),
+            priceEvidenceRequired: strictVerifiedPublication && resolved.listing_type === 'WTS',
+          };
+        })
+        .filter(({ resolved, verified }) =>
+          (!strictVerifiedPublication || Boolean(verified))
+          && isCustomerIdentitySafe(resolved))
+        .map(({ resolved, verifiedImages, priceEvidenceRequired }) => {
+          const customerRecord = sanitizeTradingRecord(resolved, { verifiedImages });
+          if (!priceEvidenceRequired) return customerRecord;
+          return {
+            ...customerRecord,
+            data_quality_issues: [...new Set([
+              ...(customerRecord.data_quality_issues || []),
+              'PRICE_EVIDENCE_LOAD_REQUIRED',
+            ])],
+            data_quality_review_required: true,
+          };
+        });
+      const customerRecords = customerCandidates.slice(0, pageSize);
+      const verifiedHasMore = customerCandidates.length > pageSize;
+      const hasMore = cursorMode && (verifiedHasMore || candidateHasMore);
+      const cursorRecord = verifiedHasMore
+        ? customerCandidates[pageSize - 1]
+        : candidateRecords[candidateRecords.length - 1];
+      const nextCursor = hasMore && cursorRecord ? encodeTradingCursor(cursorRecord) : null;
       const contentRange = resp.headers.get('content-range') || '';
-      const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
+      const total = cursorMode
+        ? null
+        : Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
       return res.status(200).json({
         count: customerRecords.length,
         total,
         page,
         pageSize,
-        totalIsEstimate: true,
+        totalIsEstimate: !cursorMode,
         nextCursor,
         hasMore,
         records: customerRecords,
         status: 'ok',
+        publicationBrands: publicationBrands(),
         accessMode: serviceKey ? 'server_key' : 'publishable_read_only',
       });
     } catch (e) {

@@ -6,7 +6,16 @@
 const { getClient } = require('./_lib/supabase');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
-const { isCustomerIdentitySafe } = require('./_lib/trading-record-safety.cjs');
+const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
+const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
+const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
+
+function normalizeAccessories(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean).slice(0, 20);
+  if (typeof value === 'string') return value.split(/[,;|]/).map(item => item.trim()).filter(Boolean).slice(0, 20);
+  return [];
+}
 
 async function resolveRawSource(client, listing) {
   const flags = listing.flags && !Array.isArray(listing.flags) ? listing.flags : {};
@@ -37,11 +46,17 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-    const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
-    const sourceTable = strictVerifiedPublication
-      ? 'price_research_verified_source'
-      : 'watch_records';
-    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,dial_color,listing_type,listing_status';
+    if (process.env.STRICT_VERIFIED_PUBLICATION === 'true') {
+      const strictGate = await client
+        .from('price_research_verified_source')
+        .select('id')
+        .eq('id', id)
+        .maybeSingle();
+      if (strictGate.error) throw strictGate.error;
+      if (!strictGate.data) return res.status(404).json({ error: 'Listing not found' });
+    }
+    const sourceTable = 'watch_records';
+    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,accessories,image_urls,thumbnail_url,has_images,dealer_photos,region,source_type,listing_status,confidence';
     const { data, error } = await client
       .from(sourceTable)
       .select(columns)
@@ -53,40 +68,74 @@ module.exports = async function handler(req, res) {
 
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Listing not found' });
-    if (!isCustomerIdentitySafe(data)) return res.status(404).json({ error: 'Listing under identity review' });
-    const [rawSource, verifiedMediaResult] = await Promise.all([
-      resolveRawSource(client, data),
-      client
-        .from('trading_floor_verified_listings')
-        .select('has_images,image_urls,thumbnail_url')
-        .eq('id', id)
-        .maybeSingle(),
-    ]);
+    let verifiedById = new Map();
+    try {
+      verifiedById = await loadVerifiedListingRows(client, [id]);
+    } catch (verifiedError) {
+      console.warn('[price-research-listing] verified media unavailable; image withheld:', verifiedError.message);
+    }
+    const verified = verifiedById.get(id);
+    const resolvedData = verified
+      ? {
+          ...data,
+          brand: verified.brand,
+          reference: verified.reference,
+          dial_color: verified.dial_color,
+          has_images: verified.has_images,
+          thumbnail_url: verified.thumbnail_url,
+          image_urls: verified.image_urls,
+        }
+      : data;
+    if (!isPublicationBrandAllowed(resolvedData.brand)) {
+      return res.status(404).json({ error: 'Listing not included in this release' });
+    }
+    if (!isCustomerIdentitySafe(resolvedData)) return res.status(404).json({ error: 'Listing under identity review' });
+    const customerListing = sanitizeTradingRecord(resolvedData, { verifiedImages: Boolean(verified?.has_images) });
+    const rawSource = await resolveRawSource(client, data);
     const normalized = normalizeMarketRow(
-      { ...data, raw_message: rawSource.text },
-      data.reference,
+      { ...customerListing, raw_message: rawSource.text },
+      customerListing.reference,
     );
+    const priceVerified = normalized.analytics_currency_status === 'VERIFIED'
+      && Number.isFinite(Number(normalized.analytics_price_usd))
+      && Number(normalized.analytics_price_usd) > 0;
+    const priceIssues = priceVerified
+      ? customerListing.data_quality_issues
+      : [...new Set([...(customerListing.data_quality_issues || []), normalized.analytics_currency_status])];
     const redactedSource = redactPublicSource(rawSource.text).trim();
     const publicSource = redactedSource.slice(0, 12_000);
-    const verifiedMedia = verifiedMediaResult.error ? null : verifiedMediaResult.data;
-    const verifiedImages = Array.isArray(verifiedMedia?.image_urls)
-      ? verifiedMedia.image_urls.map(value => String(value || '').trim()).filter(Boolean).slice(0, 10)
-      : [];
 
     return res.status(200).json({
       success: true,
       listing: {
-        id: data.id,
-        brand: data.brand,
-        reference: data.reference,
-        price_usd: normalized.analytics_price_usd,
+        id: customerListing.id,
+        brand: customerListing.brand,
+        reference: customerListing.reference,
+        price_raw: null,
+        price_usd: priceVerified ? normalized.analytics_price_usd : null,
+        price_normalization: normalized.price_normalization,
+        price_evidence_status: normalized.analytics_currency_status,
+        currency: priceVerified ? 'USD' : null,
         raw_message: publicSource || null,
         raw_message_scope: publicSource ? rawSource.scope : 'unavailable',
         raw_message_truncated: redactedSource.length > publicSource.length,
-        created_at: data.created_at,
-        listing_date: data.listing_date,
-        image_urls: verifiedImages,
-        has_images: Boolean(verifiedMedia?.has_images && verifiedImages.length),
+        source_message_available_to_reviewers: Boolean(rawSource.text),
+        created_at: customerListing.created_at,
+        listing_date: customerListing.listing_date,
+        condition: customerListing.condition,
+        source: customerListing.source,
+        dial_color: customerListing.dial_color,
+        year: customerListing.year,
+        listing_type: customerListing.listing_type,
+        accessories: normalizeAccessories(customerListing.accessories),
+        image_urls: customerListing.image_urls,
+        has_images: customerListing.has_images,
+        region: customerListing.region,
+        source_type: customerListing.source_type,
+        listing_status: customerListing.listing_status,
+        confidence: customerListing.confidence,
+        data_quality_issues: priceIssues,
+        data_quality_review_required: priceIssues.length > 0,
       },
     });
   } catch (error) {

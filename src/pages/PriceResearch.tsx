@@ -50,14 +50,28 @@ interface ListingDetailData {
   id: string;
   brand: string;
   reference: string;
-  price_usd: number;
+  price_raw: number | string | null;
+  price_usd: number | null;
+  price_normalization?: string | null;
+  price_evidence_status?: string | null;
+  currency: string | null;
   raw_message: string | null;
   raw_message_scope: 'original_post' | 'stored_source_message' | 'unavailable';
   raw_message_truncated?: boolean;
   created_at: string;
   listing_date?: string | null;
+  condition: string | null;
+  source: string | null;
+  dial_color: string | null;
+  year: number | null;
+  listing_type: string | null;
+  accessories: string[];
   image_urls: string[];
   has_images: boolean;
+  region: string | null;
+  source_type: string | null;
+  listing_status: string | null;
+  confidence: number | null;
 }
 
 interface ListingSellerData {
@@ -199,7 +213,6 @@ const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
 const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Cartier', 'Omega'];
-const DEFAULT_BRANDS = [...POPULAR_BRANDS, 'Richard Mille', 'Vacheron Constantin', 'Tudor', 'IWC'];
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
@@ -302,9 +315,7 @@ export default function PriceResearch() {
   const [viewerRole, setViewerRole] = useState('public');
 
   // ── Drill-down picker state (brand → model → reference) ──
-  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number }[]>(
-    DEFAULT_BRANDS.map(brand => ({ brand }))
-  );
+  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number }[]>([]);
   const [pBrand, setPBrand] = useState('');
   const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
@@ -505,7 +516,7 @@ export default function PriceResearch() {
   const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
   const visibleBrands = showAllBrands
     ? pBrands
-    : POPULAR_BRANDS.map(brand => pBrands.find(item => item.brand === brand) || { brand });
+    : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
   const canReviewExcludedEvidence = viewerRole === 'admin' || viewerRole === 'reviewer';
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
@@ -1430,6 +1441,18 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                 {detail.raw_message_truncated && <div style={{ marginTop: 8, color: MUTED, fontSize: 11 }}>Long source text is shortened in this customer view; the immutable original remains preserved for review.</div>}
               </DetailCard>
 
+              <DetailCard title="Watch details">
+                <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
+                  <DetailField label="Observed" value={observedDate} />
+                  <DetailField label="Asking price as posted" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
+                  <DetailField label="Condition" value={detail.condition} />
+                  <DetailField label="Dial" value={detail.dial_color} />
+                  <DetailField label="Year" value={detail.year} />
+                  <DetailField label="Region" value={detail.region} />
+                </div>
+                {detail.accessories.length > 0 && <div style={{ marginTop: 20 }}><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Accessories stated in source</div><div className="flex flex-wrap gap-2">{detail.accessories.map(item => <span key={item} style={{ background: LIGHT_GRAY, border: `1px solid ${BORDER}`, padding: '5px 9px', borderRadius: 5, fontSize: 12 }}>{item}</span>)}</div></div>}
+              </DetailCard>
+
             </section>
           </div>
         )}
@@ -1444,6 +1467,11 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function DetailCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 20, marginBottom: 20 }}><div className="flex items-center justify-between gap-3" style={{ marginBottom: 18 }}><h2 style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{title}</h2>{action}</div>{children}</div>;
+}
+
+function DetailField({ label, value }: { label: string; value: string | number | null | undefined }) {
+  const missing = value == null || value === '';
+  return <div><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>{label}</div><div style={{ color: missing ? MUTED : TEXT, fontSize: 13, overflowWrap: 'anywhere' }}>{missing ? 'Not provided' : value}</div></div>;
 }
 
 function forecastReason(reason?: string) {

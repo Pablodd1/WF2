@@ -281,11 +281,12 @@ test('strict publication covers floor, archive, price research, featured, and de
   const featured = fs.readFileSync(path.join(__dirname, '..', 'api', 'featured-listings.js'), 'utf8');
   const detail = fs.readFileSync(path.join(__dirname, '..', 'api', 'trading-listing.js'), 'utf8');
   assert.match(ingest, /strictVerifiedPublication[\s\S]*\? 'trading_floor_verified_listings'[\s\S]*quality === 'archive'/);
-  assert.match(price, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
+  assert.match(price, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*const sourceTable = 'watch_records'/);
+  assert.match(price, /retainVerifiedIdentityRows[\s\S]*listing_identity_reviews[\s\S]*CATALOG_CONFIRMED[\s\S]*HUMAN_APPROVED/);
   assert.match(priceDetail, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
   assert.match(price, /lookupDemand\(client, sourceTable,/);
-  assert.doesNotMatch(price, /\.from\('watch_records'\)/);
-  assert.match(featured, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
+  assert.doesNotMatch(price, /\.from\('price_research_verified_source'\)/);
+  assert.match(featured, /from\('listing_image_reviews'\)[\s\S]*VISUALLY_VERIFIED[\s\S]*loadVerifiedListingRows[\s\S]*from\('price_research_verified_source'\)/);
   assert.match(detail, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*trading_floor_verified_listings/);
 });
 

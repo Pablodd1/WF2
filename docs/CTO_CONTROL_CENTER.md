@@ -1,7 +1,7 @@
 # WatchFacts CTO Control Center
 
-**Control date:** July 26, 2026
-**Assignment mode:** final shadow-normalization control readback
+**Control date:** July 27, 2026
+**Assignment mode:** bounded two-brand implementation after final shadow-normalization control readback
 **Current release decision:** do not bulk-promote normalization, bundles, images,
 sellers, or duplicates.
 
@@ -15,6 +15,16 @@ This is the single navigation and decision index for the current project state.
 It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
+
+## July 27 two-brand client release
+
+The current deadline release is limited to Rolex and Patek Philippe. The exact
+scope, counts, controls, UI behavior, image gate, seller gate, timing, and
+rollback are in
+[`TWO_BRAND_CLIENT_RELEASE_2026-07-27.md`](TWO_BRAND_CLIENT_RELEASE_2026-07-27.md).
+This release changes application reads and presentation only. It does not
+approve images, assign dealers, promote normalization proposals, or write
+production records.
 
 ## Authority order
 
@@ -204,6 +214,7 @@ Current release controls:
 | Stable-key image audit ([PR #138](https://github.com/Pablodd1/wf/pull/138)) | Merged to `main` at `f309fde` | Complete |
 | Count-independent image audit ([PR #142](https://github.com/Pablodd1/wf/pull/142)) | Merged to `main` at `2f38615` | Exact 1,531-row audit accepted; visual decisions remain local |
 | WatchFacts groups footer ([PR #145](https://github.com/Pablodd1/wf/pull/145)) | Merged and deployed at `e7cc59c` | Production Trading Floor and Price Research smoke passed |
+| Two-brand client release ([PR #151](https://github.com/Pablodd1/wf/pull/151)) | Ready for review after conflict resolution | Rolex and Patek only; exact image and seller gates remain fail closed |
 | Worker observability and reversible duplicate controls ([PR #132](https://github.com/Pablodd1/wf/pull/132)) | Draft | Query-plan, fail-closed API, restore-idempotency, and rollback canaries |
 | Immutable review packets and Review Queue lane ([PR #133](https://github.com/Pablodd1/wf/pull/133)) | Draft; preview checks passed | No production migration/import |
 | Bounded packet exporter/importer ([PR #134](https://github.com/Pablodd1/wf/pull/134)) | Draft, stacked on #133 | Preview-specific RPC canary and rollback |

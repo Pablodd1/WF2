@@ -78,9 +78,22 @@ function suppressUnverifiedImages(record) {
   };
 }
 
-function sanitizeTradingRecord(record) {
+function sanitizeTradingRecord(record, { verifiedImages = false } = {}) {
   const issues = [];
-  const sanitized = suppressUnverifiedImages(record);
+  const verifiedImageUrls = verifiedImages && Array.isArray(record.image_urls)
+    ? record.image_urls.map(cleanText).filter(Boolean)
+    : [];
+  const verifiedThumbnail = verifiedImages ? cleanText(record.thumbnail_url) : null;
+  const hasVerifiedImages = Boolean(verifiedThumbnail && verifiedImageUrls.length);
+  const sanitized = verifiedImages
+    ? {
+        ...record,
+        has_images: hasVerifiedImages,
+        thumbnail_url: hasVerifiedImages ? verifiedThumbnail : null,
+        image_urls: hasVerifiedImages ? verifiedImageUrls : [],
+        dealer_photos: [],
+      }
+    : suppressUnverifiedImages(record);
   const brand = cleanText(record.brand);
   const reference = cleanText(record.reference);
   const dial = cleanText(record.dial_color);
@@ -142,7 +155,7 @@ function sanitizeTradingRecord(record) {
 
   const identityIssue = catalogIdentityIssue(record);
   if (identityIssue) issues.push(identityIssue);
-  if (record.has_images || record.thumbnail_url || record.image_urls?.length) {
+  if (!verifiedImages && (record.has_images || record.thumbnail_url || record.image_urls?.length)) {
     issues.push('IMAGE_VISUAL_VERIFICATION_REQUIRED');
   }
 
