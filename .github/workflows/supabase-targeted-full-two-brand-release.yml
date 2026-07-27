@@ -153,11 +153,19 @@ jobs:
           SELECT
             brand,
             identity_status,
-            review_disposition,
-            count(*) AS pending_identity_review_rows
+            count(*) AS unresolved_identity_rows
           FROM public.two_brand_identity_review_queue
-          GROUP BY brand, identity_status, review_disposition
-          ORDER BY brand, review_disposition, identity_status;
+          GROUP BY brand, identity_status
+          ORDER BY brand, identity_status;
+
+          SELECT
+            brand,
+            identity_status,
+            count(*) AS actionable_identity_rows
+          FROM public.two_brand_identity_review_queue
+          WHERE review_disposition = 'READY_FOR_IDENTITY_REVIEW'
+          GROUP BY brand, identity_status
+          ORDER BY brand, identity_status;
           SQL
             echo '```'
             echo

@@ -155,8 +155,21 @@ WITH candidates AS (
       )
     )
     AND NOT (COALESCE(w.flags, '[]'::jsonb) @> '["BUNDLE_SPLIT_REQUIRED"]'::jsonb)
-    AND NOT public.is_unsplit_bundle_parent(w.id)
-    AND public.is_listing_duplicate_eligible(w.id)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.normalization_shadow_v4 shadow
+      WHERE shadow.source_record_id = w.id
+        AND (
+          shadow.candidate_count > 1
+          OR 'BUNDLE_SPLIT_REQUIRED' = ANY(COALESCE(shadow.change_flags, ARRAY[]::text[]))
+        )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.duplicate_review_candidates duplicate
+      WHERE duplicate.duplicate_id = w.id
+        AND duplicate.status = 'SUPPRESSED'
+    )
     AND COALESCE(w.listing_status, 'ACTIVE') NOT IN ('HIDDEN', 'REJECTED', 'DELETED')
     AND w.id NOT LIKE 'preview_demo_%'
 ), ranked AS (
@@ -215,14 +228,27 @@ WITH unresolved AS (
       WHEN COALESCE(w.flags, '[]'::jsonb) @> '["BUNDLE_SPLIT_REQUIRED"]'::jsonb THEN true
       WHEN COALESCE(w.verdict, 'HUMAN') = 'APPROVED'
         AND COALESCE(w.confidence, 0) >= 90
-        THEN public.is_unsplit_bundle_parent(w.id)
+        THEN EXISTS (
+          SELECT 1
+          FROM public.normalization_shadow_v4 shadow
+          WHERE shadow.source_record_id = w.id
+            AND (
+              shadow.candidate_count > 1
+              OR 'BUNDLE_SPLIT_REQUIRED' = ANY(COALESCE(shadow.change_flags, ARRAY[]::text[]))
+            )
+        )
       ELSE false
     END AS bundle_blocked,
     CASE
       WHEN COALESCE(w.verdict, 'HUMAN') = 'APPROVED'
         AND COALESCE(w.confidence, 0) >= 90
         AND w.listing_type IN ('WTS', 'WTB', 'NTQ')
-        THEN NOT public.is_listing_duplicate_eligible(w.id)
+        THEN EXISTS (
+          SELECT 1
+          FROM public.duplicate_review_candidates duplicate
+          WHERE duplicate.duplicate_id = w.id
+            AND duplicate.status = 'SUPPRESSED'
+        )
       ELSE false
     END AS duplicate_blocked,
     CASE

@@ -141,8 +141,8 @@ brand:
 - visually verified image rows;
 - human-approved identity rows;
 - deterministic catalog-confirmed rows; and
-- pending identity-review rows by status.
-- unresolved identity rows by operational review disposition.
+- unresolved identity rows by status; and
+- actionable identity rows where the identity decision is the final blocker.
 
 Do not copy older two-brand or three-reference counts into this section. Use the
 new workflow summary because it measures the actual deployed view.

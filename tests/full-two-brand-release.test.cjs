@@ -22,7 +22,9 @@ test('full-brand Trading Floor uses a service-only deduplicated keyset source', 
   assert.match(migration, /w\.verdict = 'APPROVED'/);
   assert.match(migration, /w\.confidence >= 90/);
   assert.match(migration, /w\.price_usd >= 1000/);
-  assert.match(migration, /public\.is_listing_duplicate_eligible\(w\.id\)/);
+  assert.match(migration, /duplicate\.status = 'SUPPRESSED'/);
+  assert.match(migration, /shadow\.candidate_count > 1/);
+  assert.doesNotMatch(migration, /public\.is_listing_duplicate_eligible\(w\.id\)/);
   assert.doesNotMatch(migration, /FROM public\.trading_floor_market_listings m/);
   assert.match(migration, /SET LOCAL lock_timeout = '30s'/);
   assert.match(migration, /r\.status IN \('CATALOG_CONFIRMED', 'HUMAN_APPROVED'\)/);
