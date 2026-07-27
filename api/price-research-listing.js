@@ -5,6 +5,7 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
+const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
@@ -54,9 +55,10 @@ module.exports = async function handler(req, res) {
       if (strictGate.error) throw strictGate.error;
       if (!strictGate.data) return res.status(404).json({ error: 'Listing not found' });
     }
+    const sourceTable = 'watch_records';
     const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,accessories,image_urls,thumbnail_url,has_images,dealer_photos,region,source_type,listing_status,confidence';
     const { data, error } = await client
-      .from('watch_records')
+      .from(sourceTable)
       .select(columns)
       .eq('id', id)
       .eq('verdict', 'APPROVED')
@@ -100,6 +102,8 @@ module.exports = async function handler(req, res) {
     const priceIssues = priceVerified
       ? customerListing.data_quality_issues
       : [...new Set([...(customerListing.data_quality_issues || []), normalized.analytics_currency_status])];
+    const redactedSource = redactPublicSource(rawSource.text).trim();
+    const publicSource = redactedSource.slice(0, 12_000);
 
     return res.status(200).json({
       success: true,
@@ -112,9 +116,9 @@ module.exports = async function handler(req, res) {
         price_normalization: normalized.price_normalization,
         price_evidence_status: normalized.analytics_currency_status,
         currency: priceVerified ? 'USD' : null,
-        raw_message: null,
-        raw_message_scope: 'unavailable',
-        raw_message_lineage_id: null,
+        raw_message: publicSource || null,
+        raw_message_scope: publicSource ? rawSource.scope : 'unavailable',
+        raw_message_truncated: redactedSource.length > publicSource.length,
         source_message_available_to_reviewers: Boolean(rawSource.text),
         created_at: customerListing.created_at,
         listing_date: customerListing.listing_date,

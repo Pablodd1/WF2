@@ -1,18 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, ImageOff, Loader2, MessageCircle, Search, X } from 'lucide-react';
-import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
+import { JoinGroupsCta } from '../components/JoinGroupsCta';
 import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
   id: string;
   price_usd: number;
-  stored_price_usd?: number | null;
-  price_normalization?: string | null;
   created_at: string;
   listing_date?: string | null;
   dial_color: string | null;
@@ -52,13 +51,13 @@ interface ListingDetailData {
   brand: string;
   reference: string;
   price_raw: number | string | null;
-  price_usd: number;
-  stored_price_usd?: number | null;
+  price_usd: number | null;
   price_normalization?: string | null;
+  price_evidence_status?: string | null;
   currency: string | null;
   raw_message: string | null;
   raw_message_scope: 'original_post' | 'stored_source_message' | 'unavailable';
-  raw_message_lineage_id: string | null;
+  raw_message_truncated?: boolean;
   created_at: string;
   listing_date?: string | null;
   condition: string | null;
@@ -272,6 +271,27 @@ function PriceHistoryTooltip({ active, label, payload }: {
   );
 }
 
+function ListingComparisonTooltip({ active, label, payload }: {
+  active?: boolean;
+  label?: string;
+  payload?: Array<{ payload?: Record<string, number | string | null> }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const point = payload.find(item => item.payload)?.payload || {};
+  const monthlyAverage = Number(point.avg_price);
+  const selectedPrice = Number(point.selected_price);
+  const count = Number(point.count || 0);
+  return (
+    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '10px 12px', fontSize: 12 }}>
+      <div style={{ color: NAVY, fontWeight: 700, marginBottom: 5 }}>{label}</div>
+      {Number.isFinite(monthlyAverage) && monthlyAverage > 0 && <div style={{ color: TEXT }}>Cohort monthly average: <strong>${Math.round(monthlyAverage).toLocaleString()}</strong></div>}
+      {Number.isFinite(selectedPrice) && selectedPrice > 0 && <div style={{ color: GOLD }}>Selected listing: <strong>${Math.round(selectedPrice).toLocaleString()}</strong></div>}
+      {point.observed_date && <div style={{ color: MUTED }}>Posted: {String(point.observed_date)}</div>}
+      {count > 0 && <div style={{ color: MUTED }}>Comparable listings: {count.toLocaleString()}</div>}
+    </div>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
@@ -390,7 +410,7 @@ export default function PriceResearch() {
     try {
       const [response, contactResponse] = await Promise.all([
         fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`, { signal: controller.signal }),
-        fetch(`/api/listing-contact?id=${encodeURIComponent(row.id)}`, { signal: controller.signal }),
+        fetch(`/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research`, { signal: controller.signal }),
       ]);
       const [payload, contactPayload] = await Promise.all([response.json(), contactResponse.json()]);
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Listing detail is unavailable');
@@ -1193,6 +1213,8 @@ export default function PriceResearch() {
           benchmark={data?.stats}
           comparableCount={data?.count || 0}
           monthly={data?.monthly || []}
+          cohortDial={data?.selected_cohort.dial_color || selectedRow.dial_color || ''}
+          cohortCondition={data?.selected_cohort.condition || selectedRow.condition || ''}
         />
       )}
     </div>
@@ -1225,7 +1247,7 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
   );
 }
 
-function ListingDetailModal({ summary, detail, seller, loading, error, onClose, outlierLabel, benchmark, comparableCount, monthly }: {
+function ListingDetailModal({ summary, detail, seller, loading, error, onClose, outlierLabel, benchmark, comparableCount, monthly, cohortDial, cohortCondition }: {
   summary: RowData;
   detail: ListingDetailData | null;
   seller: ListingSellerData | null;
@@ -1236,6 +1258,8 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   benchmark: MarketBenchmark | null | undefined;
   comparableCount: number;
   monthly: MonthlyPoint[];
+  cohortDial: string;
+  cohortCondition: string;
 }) {
   const [activeImage, setActiveImage] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -1247,27 +1271,46 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   const displayPrice = Number.isFinite(Number(summary.price_usd)) && Number(summary.price_usd) > 0
     ? Number(summary.price_usd)
     : Number(detail?.price_usd || 0);
-  const storedPrice = detail?.stored_price_usd ?? summary.stored_price_usd;
-  const normalizationReason = summary.price_normalization || detail?.price_normalization;
-  const priceWasCorrected = normalizationReason && Number.isFinite(Number(storedPrice))
-    && Math.round(Number(storedPrice)) !== Math.round(displayPrice);
   const rating = rateMarketPrice(displayPrice, benchmark || null, comparableCount);
-  const observedMonth = observedAt ? String(observedAt).slice(0, 7) : null;
-  const priceHistory: Array<Omit<MonthlyPoint, 'avg_price'> & { avg_price: number | null; selected_price: number | null }> = monthly.map(point => ({
-    ...point,
-    selected_price: observedMonth === point.month ? displayPrice : null,
+  const observedDate = observedAt ? observedAt.split('T')[0] : null;
+  const observedMonth = observedDate?.slice(0, 7) || '';
+  const comparisonData: Array<{
+    month: string;
+    avg_price: number | null;
+    count: number;
+    selected_price: number | null;
+    observed_date: string | null;
+  }> = monthly.map(point => ({
+    month: point.month,
+    avg_price: point.avg_price,
+    count: point.count,
+    selected_price: point.month === observedMonth ? displayPrice : null,
+    observed_date: point.month === observedMonth ? observedDate : null,
   }));
-  if (observedMonth && !priceHistory.some(point => point.month === observedMonth)) {
-    priceHistory.push({
+  if (observedMonth && !comparisonData.some(point => point.month === observedMonth)) {
+    comparisonData.push({
       month: observedMonth,
-      count: 0,
       avg_price: null,
-      min_price: 0,
-      max_price: 0,
+      count: 0,
       selected_price: displayPrice,
+      observed_date: observedDate,
     });
-    priceHistory.sort((a, b) => a.month.localeCompare(b.month));
+    comparisonData.sort((a, b) => a.month.localeCompare(b.month));
   }
+  const cohortAverage = Number(benchmark?.avg || 0);
+  const cohortLabel = `${cohortDial || 'Unspecified'} dial · ${conditionLabel(cohortCondition || 'Unspecified')}`;
+  const comparisonPrices = [
+    ...monthly.map(point => Number(point.avg_price)),
+    displayPrice,
+    cohortAverage,
+  ].filter(value => Number.isFinite(value) && value > 0);
+  const comparisonMin = Math.min(...comparisonPrices);
+  const comparisonMax = Math.max(...comparisonPrices);
+  const comparisonPadding = Math.max(1000, (comparisonMax - comparisonMin) * 0.15);
+  const comparisonDomain: [number, number] = [
+    Math.max(0, Math.floor((comparisonMin - comparisonPadding) / 1000) * 1000),
+    Math.ceil((comparisonMax + comparisonPadding) / 1000) * 1000,
+  ];
 
   const copyRawMessage = async () => {
     if (!detail?.raw_message) return;
@@ -1289,9 +1332,9 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
 
         {!loading && detail && (
           <div className="grid lg:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]">
-            <section style={{ background: '#f1f3f5', minHeight: 600, padding: 20 }}>
+            <section style={{ background: '#f1f3f5', minHeight: images.length ? 600 : 'auto', padding: 20 }}>
               <div style={{ position: 'sticky', top: 84 }}>
-                <div style={{ minHeight: 500, height: 'min(68vh, 680px)', background: '#e5e7eb', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 10 }}>
+                <div style={{ minHeight: images.length ? 500 : 260, height: images.length ? 'min(68vh, 680px)' : 260, background: '#e5e7eb', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 10 }}>
                   {images[activeImage] ? (
                     <img src={images[activeImage]} alt={`${detail.brand} ${detail.reference} listing`} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
                   ) : (
@@ -1315,12 +1358,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
               </div>
 
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{detail.brand} {detail.reference}</h1>
-              <div style={{ color: GOLD, fontSize: 26, fontWeight: 800, marginBottom: priceWasCorrected ? 8 : 28 }}>${displayPrice.toLocaleString()} <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>USD normalized</span></div>
-              {priceWasCorrected && (
-                <div style={{ marginBottom: 24, padding: '9px 11px', borderLeft: `3px solid ${GOLD}`, background: '#fffaf0', color: '#725817', fontSize: 12, lineHeight: 1.45 }}>
-                  Analytics correction applied from the exact reference line. Stored legacy value: ${Number(storedPrice).toLocaleString()}.
-                </div>
-              )}
+              <div style={{ color: GOLD, fontSize: 26, fontWeight: 800, marginBottom: 28 }}>${displayPrice.toLocaleString()} <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>USD asking price</span></div>
 
               <DetailCard title="Price rating">
                 <div className="flex items-start gap-4">
@@ -1335,28 +1373,36 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
               </DetailCard>
 
               <DetailCard title="Price when posted">
-                <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginBottom: 14 }}>
-                  Selected listing versus monthly averages for the exact dial and condition cohort shown in this research result.
-                </p>
-                {priceHistory.length > 0 ? (
-                  <div style={{ width: '100%', height: 250 }} role="img" aria-label="Selected listing price compared with monthly average prices">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={priceHistory}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                        <XAxis dataKey="month" tick={{ fill: MUTED, fontSize: 10 }} />
-                        <YAxis tick={{ fill: MUTED, fontSize: 10 }} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} />
-                        <Tooltip formatter={(value: number, name: string) => [`$${Number(value).toLocaleString()}`, name === 'avg_price' ? 'Monthly average' : 'Selected listing']} />
-                        <Line type="monotone" dataKey="avg_price" name="Monthly average" stroke={GOLD} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
-                        <Scatter dataKey="selected_price" name="Selected listing" fill={NAVY} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
+                <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.5, marginBottom: 14 }}>
+                  Selected listing versus the exact {cohortLabel.toLowerCase()} comparable cohort. Monthly averages use qualified asking-price evidence only.
+                </div>
+                {comparisonData.length > 0 && observedMonth ? (
+                  <>
+                    <div role="img" aria-label={`Selected listing price compared with monthly average prices for the ${cohortLabel} cohort`} style={{ width: '100%', height: 260 }}>
+                      <ResponsiveContainer>
+                        <ComposedChart data={comparisonData} margin={{ top: 10, right: 16, left: 4, bottom: 4 }}>
+                          <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="month" stroke={MUTED} fontSize={10} tickFormatter={month => String(month).replace(/^(\d{4})-(\d{2})$/, '$2/$1')} />
+                          <YAxis domain={comparisonDomain} stroke={MUTED} fontSize={10} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} width={52} />
+                          <Tooltip content={<ListingComparisonTooltip />} />
+                          {cohortAverage > 0 && <ReferenceLine y={cohortAverage} stroke={MUTED} strokeDasharray="5 4" />}
+                          <Line type="monotone" dataKey="avg_price" name="Monthly cohort average" stroke={NAVY} strokeWidth={2.5} dot={{ r: 3, fill: NAVY, stroke: WHITE, strokeWidth: 1.5 }} connectNulls />
+                          <Scatter dataKey="selected_price" name="Selected listing" fill={GOLD} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex flex-wrap gap-x-5 gap-y-2" style={{ color: MUTED, fontSize: 11, marginTop: 10 }}>
+                      <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `3px solid ${NAVY}` }} /> Monthly cohort average</span>
+                      <span className="flex items-center gap-2"><span style={{ width: 9, height: 9, borderRadius: '50%', background: GOLD }} /> Selected listing{observedDate ? ` · ${observedDate}` : ''}</span>
+                      {cohortAverage > 0 && <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `2px dashed ${MUTED}` }} /> Full cohort average ${Math.round(cohortAverage).toLocaleString()}</span>}
+                    </div>
+                  </>
                 ) : (
-                  <div style={{ color: MUTED, fontSize: 13 }}>No dated comparable history is available for this exact cohort.</div>
+                  <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>A posting date is not available, so this listing cannot be placed on the price timeline yet.</div>
                 )}
               </DetailCard>
 
-              <DetailCard title="Seller and market activity">
+              <DetailCard title="Posted by">
                 {seller?.dealer_name ? (
                   <>
                     <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>{seller.dealer_name}</div>
@@ -1376,28 +1422,28 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                     </div>
                   </>
                 ) : (
-                  <div style={{ color: MUTED, fontSize: 13 }}>The historical poster has not yet been matched to a verified dealer profile. No identity or contact data is inferred.</div>
+                  <div style={{ color: MUTED, fontSize: 13 }}>Poster verification is pending. The person or dealer will appear only after this exact listing is linked to a verified WatchFacts profile. No identity or contact data is guessed.</div>
                 )}
               </DetailCard>
 
-              <DetailCard title="Original listing" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy source message'}</button> : undefined}>
+              <DetailCard title="Original listing" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy listing text'}</button> : undefined}>
                 <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
-                  <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>SOURCE TEXT / CONTACT REDACTED</span>
+                  <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>ORIGINAL LISTING / CONTACT REDACTED</span>
                   <span style={{ color: MUTED, fontSize: 12 }}>
                     {detail.raw_message_scope === 'original_post'
                       ? 'Complete post recovered from immutable ingestion lineage; direct contact tokens are redacted in this public view.'
                       : detail.raw_message_scope === 'stored_source_message'
                         ? 'Stored source text for this historical listing; direct contact tokens are redacted and full-post lineage is unavailable.'
-                        : 'Source evidence is preserved for authenticated reviewers and is not exposed in the public marketplace.'}
+                        : 'Original listing text has not yet been linked to this record.'}
                   </span>
                 </div>
-                {detail.raw_message ? <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>{detail.raw_message}</pre> : <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>Source evidence is available only in the authenticated review workflow.</div>}
-                {detail.raw_message_lineage_id && <div style={{ marginTop: 8, color: MUTED, fontSize: 10, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>Raw lineage ID: {detail.raw_message_lineage_id}</div>}
+                {detail.raw_message ? <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>{detail.raw_message}</pre> : <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>Original listing text is not available for this record yet.</div>}
+                {detail.raw_message_truncated && <div style={{ marginTop: 8, color: MUTED, fontSize: 11 }}>Long source text is shortened in this customer view; the immutable original remains preserved for review.</div>}
               </DetailCard>
 
               <DetailCard title="Watch details">
                 <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
-                  <DetailField label="Observed" value={observedAt ? observedAt.split('T')[0] : null} />
+                  <DetailField label="Observed" value={observedDate} />
                   <DetailField label="Asking price as posted" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
                   <DetailField label="Condition" value={detail.condition} />
                   <DetailField label="Dial" value={detail.dial_color} />
@@ -1423,6 +1469,11 @@ function DetailCard({ title, action, children }: { title: string; action?: React
   return <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 20, marginBottom: 20 }}><div className="flex items-center justify-between gap-3" style={{ marginBottom: 18 }}><h2 style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{title}</h2>{action}</div>{children}</div>;
 }
 
+function DetailField({ label, value }: { label: string; value: string | number | null | undefined }) {
+  const missing = value == null || value === '';
+  return <div><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>{label}</div><div style={{ color: missing ? MUTED : TEXT, fontSize: 13, overflowWrap: 'anywhere' }}>{missing ? 'Not provided' : value}</div></div>;
+}
+
 function forecastReason(reason?: string) {
   const messages: Record<string, string> = {
     CONDITION_REQUIRED: 'select a specific condition so New, Used, and unstated inventory are not mixed',
@@ -1438,16 +1489,15 @@ function forecastReason(reason?: string) {
   return messages[reason || ''] || 'the forecast release gate was not satisfied';
 }
 
-function DetailField({ label, value, mono = false }: { label: string; value: string | number | null | undefined; mono?: boolean }) {
-  return <div><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>{label}</div><div style={{ color: value == null || value === '' ? MUTED : TEXT, fontSize: 13, fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined, overflowWrap: 'anywhere' }}>{value == null || value === '' ? 'Not provided' : value}</div></div>;
-}
-
 function Footer() {
   const linkStyle: React.CSSProperties = { color: MUTED, fontSize: 13, textDecoration: 'none', cursor: 'pointer' };
   const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 8 };
 
   return (
     <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 32, marginTop: 16 }}>
+      <div style={{ marginBottom: 32 }}>
+        <JoinGroupsCta />
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
         <div>
           <div style={sectionTitle}>Features</div>
