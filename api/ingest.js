@@ -334,7 +334,7 @@ async function loadFullReviewedBrandCursorPage({
         Authorization: `Bearer ${readKey}`,
         'Range-Unit': 'items',
         Range: `${start}-${end}`,
-        Prefer: 'count=exact',
+        Prefer: 'return=representation',
       },
     },
   );
@@ -383,7 +383,9 @@ async function loadFullReviewedBrandCursorPage({
     };
   });
   const contentRange = response.headers.get('content-range') || '';
-  const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
+  const totalText = contentRange.split('/')[1] || '';
+  const parsedTotal = Number.parseInt(totalText, 10);
+  const total = Number.isFinite(parsedTotal) ? parsedTotal : null;
   const hasMore = matched.length > pageSize || candidateRows.length > pageSize;
   const cursorRecord = selected.at(-1);
   return {

@@ -21,7 +21,8 @@ const sellerLane = source.slice(
 test('image lane loads actual evidence and has no default review decision', () => {
   assert.match(source, /'images'/);
   assert.match(source, />\s*Images\s*</);
-  assert.match(imageLane, /fetch\('\/api\/image-review-queue\?release=true'/);
+  assert.match(imageLane, /imageQueueUrl = `\/api\/image-review-queue\?release=true&limit=50/);
+  assert.match(imageLane, /fetch\(imageQueueUrl/);
   assert.match(imageLane, /credentials:\s*'include'/);
   assert.match(imageLane, /src=\{item\.public_url\}/);
   assert.match(imageLane, /item\.raw_message/);
@@ -33,6 +34,10 @@ test('image lane loads actual evidence and has no default review decision', () =
   assert.match(imageLane, /\(\['MATCH', 'NO_MATCH'\] as const\)/);
   assert.match(imageLane, /type="radio"/);
   assert.match(imageLane, /type="checkbox"/);
+  assert.match(imageLane, /setNextCursor\(String\(data\.nextCursor/);
+  assert.match(imageLane, /Image review page \{cursorHistory\.length \+ 1\}/);
+  assert.match(imageLane, />\s*Previous\s*</);
+  assert.match(imageLane, />\s*Next\s*</);
 });
 
 test('image lane sends only an explicit, reasoned match decision', () => {
@@ -52,7 +57,8 @@ test('image lane sends only an explicit, reasoned match decision', () => {
 test('seller lane shows masked source evidence and proposed verified dealer', () => {
   assert.match(source, /'sellers'/);
   assert.match(source, />\s*Sellers\s*</);
-  assert.match(sellerLane, /fetch\('\/api\/seller-lineage-review-queue\?limit=50'/);
+  assert.match(sellerLane, /sellerQueueUrl = `\/api\/seller-lineage-review-queue\?limit=50/);
+  assert.match(sellerLane, /fetch\(sellerQueueUrl/);
   assert.match(sellerLane, /credentials:\s*'include'/);
   assert.match(sellerLane, /item\.raw_message/);
   assert.match(sellerLane, /item\.observed_name/);
@@ -64,6 +70,8 @@ test('seller lane shows masked source evidence and proposed verified dealer', ()
   assert.match(sellerLane, /proposedDealer\?\.company_name/);
   assert.match(sellerLane, /type="checkbox"/);
   assert.match(sellerLane, /I confirm the source seller, this exact listing/);
+  assert.match(sellerLane, /setNextCursor\(Number\.isSafeInteger\(returnedCursor\)/);
+  assert.match(sellerLane, /Seller review page \{cursorHistory\.length \+ 1\}/);
   assert.doesNotMatch(sellerLane, /seller_phone|phone|email|whatsapp/i);
 });
 

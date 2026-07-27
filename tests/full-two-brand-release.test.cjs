@@ -38,7 +38,9 @@ test('full-brand Trading Floor uses a service-only deduplicated keyset source', 
   assert.match(ingest, /rest\/v1\/two_brand_verified_trading_release/);
   assert.match(ingest, /order: 'created_at\.desc\.nullslast,id\.desc'/);
   assert.match(ingest, /Range: `\$\{start\}-\$\{end\}`/);
-  assert.match(ingest, /Prefer: 'count=exact'/);
+  assert.match(ingest, /Prefer: 'return=representation'/);
+  assert.doesNotMatch(ingest, /Prefer: 'count=exact'/);
+  assert.match(ingest, /const total = Number\.isFinite\(parsedTotal\) \? parsedTotal : null/);
 });
 
 test('identity review is signed, evidence-first, and leaves raw records immutable', () => {
