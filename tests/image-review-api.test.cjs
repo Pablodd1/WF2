@@ -19,7 +19,10 @@ test('image review queue is reviewer-only, bounded, keyset-paginated, and approv
   assert.match(queueSource, /\.eq\('image_status', 'SOURCE_LINKED'\)/);
   assert.match(queueSource, /\.in\('identity_status', VERIFIED_IDENTITY_STATUSES\)/);
   assert.match(queueSource, /'CATALOG_CONFIRMED', 'HUMAN_APPROVED'/);
+  assert.match(queueSource, /isFullReviewedBrandRelease\(\)/);
+  assert.match(queueSource, /\['Rolex', 'Patek Philippe'\]\.filter/);
   assert.match(queueSource, /nextCursor/);
+  assert.match(queueSource, /hasMore:/);
   assert.doesNotMatch(queueSource, /offset\(/i);
 });
 

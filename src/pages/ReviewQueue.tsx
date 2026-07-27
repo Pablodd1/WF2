@@ -1003,26 +1003,33 @@ function ImageReviewLane() {
   const [choices, setChoices] = useState<Record<string, 'MATCH' | 'NO_MATCH' | undefined>>({});
   const [inspected, setInspected] = useState<Record<string, boolean>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     setError(null);
-    fetch('/api/image-review-queue?release=true', { credentials: 'include', signal: controller.signal })
+    const imageQueueUrl = `/api/image-review-queue?release=true&limit=50${cursor ? `&after=${encodeURIComponent(cursor)}` : ''}`;
+    fetch(imageQueueUrl, { credentials: 'include', signal: controller.signal })
       .then(async response => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Image review queue is unavailable');
         return data;
       })
-      .then(data => setItems((data.items || []) as ImageReviewQueueApiItem[]))
+      .then(data => {
+        setItems((data.items || []) as ImageReviewQueueApiItem[]);
+        setNextCursor(String(data.nextCursor || '') || null);
+      })
       .catch(fetchError => {
         if (fetchError?.name !== 'AbortError') {
           setError(fetchError instanceof Error ? fetchError.message : 'Image review queue is unavailable');
         }
       });
     return () => controller.abort();
-  }, []);
+  }, [cursor]);
 
   const submit = async (item: ImageReviewQueueApiItem) => {
     const visualMatch = choices[item.source_object_key];
@@ -1163,7 +1170,37 @@ function ImageReviewLane() {
 
       {!error && items.length === 0 && (
         <div className="rounded-xl border border-border-default bg-bg-card p-6 text-center text-sm text-text-muted">
-          No pending image matches were returned.
+          No pending image matches were returned on this page.
+        </div>
+      )}
+
+      {(cursorHistory.length > 0 || nextCursor) && (
+        <div className="flex items-center justify-between rounded-xl border border-border-default bg-bg-card p-4 text-xs text-text-muted">
+          <button
+            type="button"
+            disabled={cursorHistory.length === 0}
+            onClick={() => {
+              const previous = cursorHistory.at(-1) ?? null;
+              setCursorHistory(current => current.slice(0, -1));
+              setCursor(previous);
+            }}
+            className="rounded-lg border border-border-default px-4 py-2 disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span>Image review page {cursorHistory.length + 1}</span>
+          <button
+            type="button"
+            disabled={!nextCursor}
+            onClick={() => {
+              if (!nextCursor) return;
+              setCursorHistory(current => [...current, cursor]);
+              setCursor(nextCursor);
+            }}
+            className="rounded-lg border border-border-default px-4 py-2 disabled:opacity-40"
+          >
+            Next
+          </button>
         </div>
       )}
     </div>
@@ -1174,13 +1211,17 @@ function SellerLineageReviewLane() {
   const [items, setItems] = useState<SellerLineageReviewQueueApiItem[]>([]);
   const [exactMatches, setExactMatches] = useState<Record<string, boolean>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<Array<number | null>>([]);
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     setError(null);
-    fetch('/api/seller-lineage-review-queue?limit=50', {
+    const sellerQueueUrl = `/api/seller-lineage-review-queue?limit=50${cursor !== null ? `&cursor=${cursor}` : ''}`;
+    fetch(sellerQueueUrl, {
       credentials: 'include',
       signal: controller.signal,
     })
@@ -1189,14 +1230,18 @@ function SellerLineageReviewLane() {
         if (!response.ok) throw new Error(data.error || 'Seller lineage queue is unavailable');
         return data;
       })
-      .then(data => setItems((data.items || []) as SellerLineageReviewQueueApiItem[]))
+      .then(data => {
+        setItems((data.items || []) as SellerLineageReviewQueueApiItem[]);
+        const returnedCursor = Number(data.nextCursor);
+        setNextCursor(Number.isSafeInteger(returnedCursor) && returnedCursor > 0 ? returnedCursor : null);
+      })
       .catch(fetchError => {
         if (fetchError?.name !== 'AbortError') {
           setError(fetchError instanceof Error ? fetchError.message : 'Seller lineage queue is unavailable');
         }
       });
     return () => controller.abort();
-  }, []);
+  }, [cursor]);
 
   const submit = async (item: SellerLineageReviewQueueApiItem, decision: 'APPROVE' | 'REJECT') => {
     const reason = reasons[item.lineage_id]?.trim() || '';
@@ -1316,7 +1361,37 @@ function SellerLineageReviewLane() {
 
       {!error && items.length === 0 && (
         <div className="rounded-xl border border-border-default bg-bg-card p-6 text-center text-sm text-text-muted">
-          No pending seller matches were returned.
+          No pending seller matches were returned on this page.
+        </div>
+      )}
+
+      {(cursorHistory.length > 0 || nextCursor !== null) && (
+        <div className="flex items-center justify-between rounded-xl border border-border-default bg-bg-card p-4 text-xs text-text-muted">
+          <button
+            type="button"
+            disabled={cursorHistory.length === 0}
+            onClick={() => {
+              const previous = cursorHistory.at(-1) ?? null;
+              setCursorHistory(current => current.slice(0, -1));
+              setCursor(previous);
+            }}
+            className="rounded-lg border border-border-default px-4 py-2 disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span>Seller review page {cursorHistory.length + 1}</span>
+          <button
+            type="button"
+            disabled={nextCursor === null}
+            onClick={() => {
+              if (nextCursor === null) return;
+              setCursorHistory(current => [...current, cursor]);
+              setCursor(nextCursor);
+            }}
+            className="rounded-lg border border-border-default px-4 py-2 disabled:opacity-40"
+          >
+            Next
+          </button>
         </div>
       )}
     </div>

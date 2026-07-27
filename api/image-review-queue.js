@@ -4,6 +4,7 @@ const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 const { boundedInteger } = require('./_lib/review-packets.cjs');
 const { publicationBrands } = require('./_lib/publication-brands.cjs');
 const {
+  isFullReviewedBrandRelease,
   MIN_RELEASE_CONFIDENCE,
   isReleaseListingEligible,
   publicationReferences,
@@ -97,7 +98,11 @@ module.exports = async function handler(req, res) {
       .eq('image_status', 'SOURCE_LINKED')
       .in('identity_status', VERIFIED_IDENTITY_STATUSES);
     if (releaseOnly) {
-      const brands = publicationBrands();
+      const configuredBrands = publicationBrands();
+      const brands = isFullReviewedBrandRelease()
+        ? ['Rolex', 'Patek Philippe'].filter(brand => !configuredBrands.length
+          || configuredBrands.some(configured => configured.toLowerCase() === brand.toLowerCase()))
+        : configuredBrands;
       const references = [...new Set(publicationReferences().map(entry => entry.reference))];
       if (brands.length) {
         pageQuery = pageQuery.in('brand', brands);
@@ -164,6 +169,7 @@ module.exports = async function handler(req, res) {
       totalIsBounded: releaseOnly,
       releaseOnly,
       nextCursor: (rows || []).length > limit ? page.at(-1)?.source_object_key || null : null,
+      hasMore: (rows || []).length > limit,
     });
   } catch (error) {
     console.error('[image-review-queue]', error);
