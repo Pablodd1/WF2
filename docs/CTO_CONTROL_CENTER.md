@@ -18,6 +18,19 @@ It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
 
+## Pending Patek outlier and multi-listing correction
+
+The live Patek `5712/1A-001` and `5712/1R-001` evidence review confirmed that
+the large excluded-evidence table is primarily a bundle/currency/FX queue, not
+a statistical-outlier queue. The exact observations, cross-line inheritance
+failure pattern, required regression fixture, and shadow-only remediation
+sequence are in
+[`PENDING_PATEK_OUTLIER_AND_MULTILISTING_REMEDIATION_2026-07-27.md`](PENDING_PATEK_OUTLIER_AND_MULTILISTING_REMEDIATION_2026-07-27.md).
+
+This is a pending plan only. It authorizes neither a parser change nor a
+production-record write. The existing bundle-parent, image, seller, currency,
+and duplicate gates remain in force.
+
 ## July 27 continuation: image/listing evidence and AI review
 
 The current continuation decision, request summary, verified pending work, and
