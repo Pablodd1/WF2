@@ -22,7 +22,7 @@ export interface VerifyImageResult {
     confidence: number;
     notes: string;
   };
-  source?: 'gemini' | 'kimi';
+  source?: 'gemini' | 'kimi' | 'openai';
   policy?: string;
   error?: string;
 }

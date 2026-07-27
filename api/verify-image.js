@@ -77,6 +77,34 @@ async function visionKimi(key, base64, mime) {
   return { parsed: parseObservation(raw), source: 'kimi' };
 }
 
+async function visionOpenAI(key, base64, mime) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model: process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini',
+      temperature: 0,
+      max_tokens: 300,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'Return only a valid JSON object. Do not decide a listing match.' },
+        { role: 'user', content: [
+          { type: 'text', text: VISION_PROMPT },
+          { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
+        ] },
+      ],
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenAI ${response.status}`);
+  const data = await response.json();
+  return { parsed: parseObservation(data.choices?.[0]?.message?.content || ''), source: 'openai' };
+}
+
+function providerFailure(provider, error) {
+  console.error(`[verify-image] ${provider} unavailable:`, error.message);
+  return provider;
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!sameOrigin(req)) return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
@@ -94,7 +122,10 @@ module.exports = async function handler(req, res) {
 
   const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   const kimiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
-  if (!geminiKey && !kimiKey) return res.status(503).json({ error: 'Image review assistance is not configured' });
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!geminiKey && !kimiKey && !openaiKey) {
+    return res.status(503).json({ error: 'Image review assistance is not configured' });
+  }
 
   const quota = await consumeAiQuota(req, { route: 'image-visual-advisory', limit: 20 });
   if (!quota.allowed) return rejectForQuota(res, quota);
@@ -102,12 +133,21 @@ module.exports = async function handler(req, res) {
   try {
     const sourceImage = await fetchPublicImage(imageUrl);
     const base64 = sourceImage.buffer.toString('base64');
+    const unavailableProviders = [];
     let vision;
     if (geminiKey) {
-      try { vision = await visionGemini(geminiKey, base64, sourceImage.mime); } catch (error) { console.error('[verify-image] Gemini unavailable:', error.message); }
+      try { vision = await visionGemini(geminiKey, base64, sourceImage.mime); } catch (error) { unavailableProviders.push(providerFailure('Gemini', error)); }
     }
-    if (!vision?.parsed && kimiKey) vision = await visionKimi(kimiKey, base64, sourceImage.mime);
-    if (!vision?.parsed) return res.status(502).json({ error: 'Vision providers returned no structured observation' });
+    if (!vision?.parsed && kimiKey) {
+      try { vision = await visionKimi(kimiKey, base64, sourceImage.mime); } catch (error) { unavailableProviders.push(providerFailure('Kimi', error)); }
+    }
+    if (!vision?.parsed && openaiKey) {
+      try { vision = await visionOpenAI(openaiKey, base64, sourceImage.mime); } catch (error) { unavailableProviders.push(providerFailure('OpenAI', error)); }
+    }
+    if (!vision?.parsed) {
+      const tried = unavailableProviders.length ? ` (${unavailableProviders.join(', ')} unavailable)` : '';
+      return res.status(502).json({ error: `Vision providers returned no structured observation${tried}` });
+    }
 
     const advisory = classifyVisualAdvisory(claim, vision.parsed);
     return res.status(200).json({

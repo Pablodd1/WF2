@@ -147,6 +147,9 @@ test('visual assistance is reviewer-only, same-origin, quota-bounded, and cannot
   assert.match(advisorySource, /new Set\(\['reviewer', 'admin'\]\)/);
   assert.match(advisorySource, /consumeAiQuota\(req, \{ route: 'image-visual-advisory', limit: 20 \}\)/);
   assert.match(advisorySource, /classifyVisualAdvisory\(claim, vision\.parsed\)/);
+  assert.match(advisorySource, /OPENAI_API_KEY/);
+  assert.match(advisorySource, /visionOpenAI/);
+  assert.match(advisorySource, /Image review assistance is not configured/);
   assert.match(advisorySource, /does not attach images, alter listing fields, approve a review, or publish a listing/);
   assert.doesNotMatch(advisorySource, /Access-Control-Allow-Origin/);
   assert.doesNotMatch(advisorySource, /\.from\('watch_records'\)/);
