@@ -191,6 +191,32 @@ interface ImageReviewQueueApiItem {
   evidence?: Record<string, unknown> | null;
 }
 
+interface IdentityReviewQueueApiItem {
+  record_id: string;
+  identity_status: 'UNVERIFIED' | 'CONFLICT';
+  brand?: string | null;
+  model?: string | null;
+  reference?: string | null;
+  dial_color?: string | null;
+  raw_message?: string | null;
+  seller_name?: string | null;
+  seller_phone?: string | null;
+  source?: string | null;
+  source_type?: string | null;
+  listing_date?: string | null;
+  created_at?: string | null;
+  thumbnail_url?: string | null;
+  image_urls?: string[] | null;
+  release_blockers?: string[];
+}
+
+interface IdentityDraft {
+  brand: string;
+  model: string;
+  reference: string;
+  dial_color: string;
+}
+
 interface SellerLineageReviewQueueApiItem {
   lineage_id: string;
   record_id?: string | null;
@@ -696,6 +722,252 @@ function PacketReviewLane({ openUnbundled }: { openUnbundled: () => void }) {
   );
 }
 
+function IdentityReviewLane() {
+  const [items, setItems] = useState<IdentityReviewQueueApiItem[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, IdentityDraft>>({});
+  const [inspected, setInspected] = useState<Record<string, boolean>>({});
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [brand, setBrand] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ page: String(page), limit: '50' });
+    if (brand) params.set('brand', brand);
+    setError(null);
+    fetch(`/api/identity-review-queue?${params.toString()}`, {
+      credentials: 'include',
+      signal: controller.signal,
+    })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Identity review queue is unavailable');
+        return data;
+      })
+      .then(data => {
+        const nextItems = (data.items || []) as IdentityReviewQueueApiItem[];
+        setItems(nextItems);
+        setTotal(Number(data.total || 0));
+        setDrafts(Object.fromEntries(nextItems.map(item => [item.record_id, {
+          brand: item.brand || '',
+          model: item.model || '',
+          reference: item.reference || '',
+          dial_color: item.dial_color || '',
+        }])));
+      })
+      .catch(fetchError => {
+        if (fetchError?.name !== 'AbortError') {
+          setError(fetchError instanceof Error ? fetchError.message : 'Identity review queue is unavailable');
+        }
+      });
+    return () => controller.abort();
+  }, [brand, page]);
+
+  const submit = async (item: IdentityReviewQueueApiItem, decision: 'APPROVE' | 'CONFLICT') => {
+    const reason = reasons[item.record_id]?.trim() || '';
+    const canonical = drafts[item.record_id];
+    if (!inspected[item.record_id] || reason.length < 12) return;
+    if (decision === 'APPROVE' && (!canonical || Object.values(canonical).some(value => !value.trim()))) return;
+
+    setBusy(item.record_id);
+    setError(null);
+    setResult(null);
+    try {
+      const response = await fetch('/api/identity-review-decision', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId: item.record_id,
+          decision,
+          reason,
+          canonical: decision === 'APPROVE' ? canonical : undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Identity review decision failed');
+      setItems(current => current.filter(candidate => candidate.record_id !== item.record_id));
+      setTotal(current => Math.max(0, current - 1));
+      setResult(data.customer_publishable
+        ? `${item.record_id} is human-approved and now customer-publishable.`
+        : `${item.record_id} identity decision saved; other release blockers still prevent publication.`);
+    } catch (decisionError) {
+      setError(decisionError instanceof Error ? decisionError.message : 'Identity review decision failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-border-default bg-bg-card p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-text-primary">Rolex and Patek identity review</h2>
+            <p className="mt-1 max-w-3xl text-xs text-text-muted">
+              {total.toLocaleString()} unresolved identities. Approval requires the exact reference in the preserved raw listing, a catalog-compatible dial, and a signed reviewer reason. The decision never changes the raw record.
+            </p>
+          </div>
+          <label className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+            Brand
+            <select
+              value={brand}
+              onChange={event => { setBrand(event.target.value); setPage(1); }}
+              className="mt-1 block rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs normal-case text-text-primary"
+            >
+              <option value="">Rolex + Patek</option>
+              <option value="Rolex">Rolex</option>
+              <option value="Patek Philippe">Patek Philippe</option>
+            </select>
+          </label>
+        </div>
+        {result && <p className="mt-3 text-xs text-emerald-300">{result}</p>}
+        {error && <p className="mt-3 text-xs text-red-400" role="alert">{error}</p>}
+      </div>
+
+      {items.map(item => {
+        const draft = drafts[item.record_id] || { brand: '', model: '', reference: '', dial_color: '' };
+        const reason = reasons[item.record_id] || '';
+        const candidateImage = item.thumbnail_url || item.image_urls?.[0] || null;
+        const approvalReady = Boolean(
+          inspected[item.record_id]
+          && item.raw_message
+          && reason.trim().length >= 12
+          && Object.values(draft).every(value => value.trim()),
+        );
+        return (
+          <article key={item.record_id} className="rounded-xl border border-border-default bg-bg-card p-4">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
+              <div className="min-w-0 space-y-4">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded-full border border-amber-500/30 px-2 py-1 font-bold text-amber-300">{item.identity_status}</span>
+                  <span className="break-all text-text-muted">{item.record_id}</span>
+                  <span className="text-text-muted">{item.source || 'Unknown source'}{item.source_type ? ` · ${item.source_type}` : ''}</span>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Immutable raw listing</div>
+                  <div className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border-default bg-bg-elevated p-3 text-xs text-text-secondary">
+                    {item.raw_message || 'Raw evidence missing. Approval is blocked.'}
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(Object.keys(draft) as (keyof IdentityDraft)[]).map(field => (
+                    <label key={field} className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                      {field.replace('_', ' ')}
+                      {field === 'brand' ? (
+                        <select
+                          value={draft[field]}
+                          onChange={event => setDrafts(current => ({
+                            ...current,
+                            [item.record_id]: { ...draft, [field]: event.target.value },
+                          }))}
+                          className="mt-1 w-full rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs normal-case text-text-primary"
+                        >
+                          <option value="">Select brand</option>
+                          <option value="Rolex">Rolex</option>
+                          <option value="Patek Philippe">Patek Philippe</option>
+                        </select>
+                      ) : (
+                        <input
+                          value={draft[field]}
+                          onChange={event => setDrafts(current => ({
+                            ...current,
+                            [item.record_id]: { ...draft, [field]: event.target.value },
+                          }))}
+                          className="mt-1 w-full rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs normal-case text-text-primary"
+                        />
+                      )}
+                    </label>
+                  ))}
+                </div>
+                {Boolean(item.release_blockers?.length) && (
+                  <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">
+                    Other release blockers: {item.release_blockers?.join(', ')}. Identity approval is audited separately and does not bypass them.
+                  </p>
+                )}
+                <label className="flex items-start gap-3 rounded-lg border border-border-default bg-bg-elevated p-3 text-xs text-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(inspected[item.record_id])}
+                    onChange={event => setInspected(current => ({ ...current, [item.record_id]: event.target.checked }))}
+                    className="mt-0.5"
+                  />
+                  <span>I inspected the complete raw listing and confirm my decision is supported by that evidence.</span>
+                </label>
+                <label className="block text-xs font-bold text-text-primary">
+                  Reviewer reason <span className="text-red-400">*</span>
+                  <textarea
+                    value={reason}
+                    onChange={event => setReasons(current => ({ ...current, [item.record_id]: event.target.value }))}
+                    placeholder="At least 12 characters. Cite the exact reference and dial evidence."
+                    className="mt-2 min-h-20 w-full rounded-lg border border-border-default bg-bg-elevated p-3 text-xs font-normal text-text-primary"
+                  />
+                </label>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => void submit(item, 'APPROVE')}
+                    disabled={busy === item.record_id || !approvalReady}
+                    className="rounded-lg bg-gold-primary px-4 py-2 text-xs font-bold text-black disabled:opacity-40"
+                  >
+                    Human approve identity
+                  </button>
+                  <button
+                    onClick={() => void submit(item, 'CONFLICT')}
+                    disabled={busy === item.record_id || !inspected[item.record_id] || reason.trim().length < 12}
+                    className="rounded-lg border border-red-500/40 px-4 py-2 text-xs font-bold text-red-300 disabled:opacity-40"
+                  >
+                    Confirm conflict
+                  </button>
+                </div>
+              </div>
+
+              <aside className="space-y-3">
+                <div className="rounded-lg border border-border-default bg-bg-elevated p-3 text-xs text-text-secondary">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Observed seller evidence</div>
+                  <div className="mt-2">Name: <strong className="text-text-primary">{item.seller_name || 'Not provided'}</strong></div>
+                  <div>Phone: <strong className="text-text-primary">{item.seller_phone || 'Not provided'}</strong></div>
+                  <div>Posted: <strong className="text-text-primary">{item.listing_date || item.created_at || 'Not provided'}</strong></div>
+                </div>
+                <div className="overflow-hidden rounded-lg border border-border-default bg-bg-elevated">
+                  {candidateImage ? (
+                    <>
+                      <img src={candidateImage} alt="Source-linked candidate requiring separate visual review" className="h-72 w-full object-contain" />
+                      <p className="border-t border-border-default p-2 text-[10px] text-amber-200">
+                        Source candidate only. Customer image publication still requires the separate Images decision.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="flex h-40 items-center justify-center p-4 text-center text-xs text-text-muted">
+                      No source image candidate is linked to this identity.
+                    </div>
+                  )}
+                </div>
+              </aside>
+            </div>
+          </article>
+        );
+      })}
+
+      {!error && items.length === 0 && (
+        <div className="rounded-xl border border-border-default bg-bg-card p-6 text-center text-sm text-text-muted">
+          No unresolved identities were returned for this page.
+        </div>
+      )}
+      {total > 50 && (
+        <div className="flex justify-center gap-3">
+          <button onClick={() => setPage(current => Math.max(1, current - 1))} disabled={page === 1} className="rounded-lg border border-border-default px-4 py-2 text-xs text-text-secondary disabled:opacity-40">Previous</button>
+          <span className="px-3 py-2 text-xs text-text-muted">Page {page} of {Math.max(1, Math.ceil(total / 50))}</span>
+          <button onClick={() => setPage(current => current + 1)} disabled={page * 50 >= total} className="rounded-lg border border-border-default px-4 py-2 text-xs text-text-secondary disabled:opacity-40">Next</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ImageReviewLane() {
   const [items, setItems] = useState<ImageReviewQueueApiItem[]>([]);
   const [choices, setChoices] = useState<Record<string, 'MATCH' | 'NO_MATCH' | undefined>>({});
@@ -756,7 +1028,7 @@ function ImageReviewLane() {
       <div className="rounded-xl border border-border-default bg-bg-card p-4">
         <h2 className="text-sm font-bold text-text-primary">Exact image-to-listing review</h2>
         <p className="mt-1 text-xs text-text-muted">
-          Current three-watch release only. Compare the actual source image with the preserved raw listing. No image is attached until a reviewer makes an explicit decision.
+          Full reviewed Rolex/Patek scope. Compare the actual source image with the preserved raw listing. No image is attached until a reviewer makes an explicit decision.
         </p>
         {error && <p className="mt-3 text-xs text-red-400" role="alert">{error}</p>}
       </div>
@@ -1022,7 +1294,7 @@ function SellerLineageReviewLane() {
 }
 
 export default function ReviewQueue() {
-  const [lane, setLane] = useState<'shadow' | 'unbundled' | 'duplicates' | 'price' | 'packets' | 'images' | 'sellers'>('unbundled');
+  const [lane, setLane] = useState<'identity' | 'shadow' | 'unbundled' | 'duplicates' | 'price' | 'packets' | 'images' | 'sellers'>('identity');
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [reasonFilter, setReasonFilter] = useState('');
@@ -1223,7 +1495,7 @@ export default function ReviewQueue() {
         });
       return () => { active = false; };
     }
-    if (lane === 'images' || lane === 'sellers' || lane === 'packets') {
+    if (lane === 'identity' || lane === 'images' || lane === 'sellers' || lane === 'packets') {
       setItems([]);
       return () => { active = false; };
     }
@@ -1487,7 +1759,7 @@ export default function ReviewQueue() {
     }
   };
 
-  const dedicatedLane = lane === 'packets' || lane === 'images' || lane === 'sellers';
+  const dedicatedLane = lane === 'identity' || lane === 'packets' || lane === 'images' || lane === 'sellers';
 
   return (
     <Layout>
@@ -1519,6 +1791,12 @@ export default function ReviewQueue() {
         </div>
 
         <div className="mb-6 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => { setLane('identity'); setSelected(null); }}
+            className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'identity' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
+          >
+            Rolex + Patek identity
+          </button>
           <button
             onClick={() => { setLane('unbundled'); setSelected(null); }}
             className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'unbundled' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
@@ -1566,6 +1844,7 @@ export default function ReviewQueue() {
           )}
         </div>
 
+        {lane === 'identity' && <IdentityReviewLane />}
         {lane === 'packets' && (
           <PacketReviewLane openUnbundled={() => { setLane('unbundled'); setSelected(null); }} />
         )}

@@ -103,7 +103,7 @@ module.exports = async function handler(req, res) {
       brand: identitySnapshot.brand,
       reference: identitySnapshot.reference,
     })) {
-      return res.status(409).json({ error: 'Listing is outside the approved three-reference review release' });
+      return res.status(409).json({ error: 'Listing is outside the configured reviewed publication release' });
     }
     if (!text(queueRow.public_url) || !text(queueRow.raw_message)) {
       return res.status(409).json({ error: 'Image review evidence is incomplete; correct the structural evidence first' });

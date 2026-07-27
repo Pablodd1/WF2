@@ -29,6 +29,7 @@ const {
   publicationBrands,
 } = require('./_lib/publication-brands.cjs');
 const {
+  isFullReviewedBrandRelease,
   isReleaseListingEligible,
   publicationReferencePostgrestFilter,
   publicationReferences,
@@ -273,6 +274,135 @@ function matchesStrictReleaseFilters(record, {
   return isCustomerIdentitySafe(record);
 }
 
+async function loadFullReviewedBrandCursorPage({
+  supabaseUrl,
+  readKey,
+  cursor,
+  page,
+  pageSize,
+  listingType,
+  itemType,
+  requestedBrand,
+  condition,
+  region,
+  search,
+  imagesOnly,
+}) {
+  if (itemType && !['all', 'watches'].includes(itemType)) {
+    return {
+      count: 0,
+      total: 0,
+      page,
+      pageSize,
+      totalIsEstimate: false,
+      nextCursor: null,
+      hasMore: false,
+      records: [],
+      status: 'ok',
+      publicationBrands: publicationBrands(),
+      publicationReferences: [],
+      publicationScope: 'ALL_REVIEWED',
+      accessMode: 'server_key',
+    };
+  }
+
+  const candidateLimit = Math.min(Math.max(pageSize * 5, 50), 500);
+  const start = cursor ? 0 : (page - 1) * pageSize;
+  const end = start + candidateLimit;
+  const params = new URLSearchParams({
+    select: 'id,brand,model,reference,dial_color,condition,year,price_raw,price_usd,currency,confidence,verdict,source,source_type,listing_type,listing_date,listing_status,created_at,has_images,thumbnail_url,image_urls,region,identity_review_status',
+    order: 'created_at.desc.nullslast,id.desc',
+  });
+  if (listingType === 'WTB') params.set('listing_type', 'in.(WTB,NTQ)');
+  else if (listingType) params.set('listing_type', `eq.${listingType}`);
+  if (requestedBrand) params.set('brand', `eq.${requestedBrand}`);
+  if (condition) params.set('condition', `ilike.${condition}`);
+  if (region) params.set('region', `ilike.*${region}*`);
+  if (imagesOnly) params.set('has_images', 'eq.true');
+  const parsedSearch = parseTradingSearch(search);
+  if (parsedSearch.reference) params.set('reference', `eq.${parsedSearch.reference}`);
+  if (parsedSearch.brand && !requestedBrand) params.set('brand', `ilike.${parsedSearch.brand}`);
+  if (parsedSearch.dial) params.set('dial_color', `ilike.${parsedSearch.dial}`);
+  const cursorFilter = tradingCursorFilter(cursor);
+  if (cursorFilter) params.set('and', `(${cursorFilter})`);
+
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/two_brand_verified_trading_release?${params.toString()}`,
+    {
+      headers: {
+        apikey: readKey,
+        Authorization: `Bearer ${readKey}`,
+        'Range-Unit': 'items',
+        Range: `${start}-${end}`,
+        Prefer: 'count=exact',
+      },
+    },
+  );
+  if (!response.ok) throw new Error(`full reviewed brand release returned ${response.status}`);
+  const candidateRows = await response.json();
+  const matched = candidateRows.filter(record => matchesStrictReleaseFilters(record, {
+    listingType,
+    itemType,
+    requestedBrand,
+    condition,
+    region,
+    search,
+  }));
+  const selected = matched.slice(0, pageSize);
+  const records = selected.map(resolved => {
+    const normalized = normalizeMarketRow(
+      resolved,
+      listEquivalentReferences(resolved.reference, resolved.brand),
+    );
+    const priceVerified = resolved.listing_type === 'WTS'
+      && normalized.analytics_currency_status === 'VERIFIED'
+      && Number.isFinite(Number(normalized.analytics_price_usd))
+      && Number(normalized.analytics_price_usd) > 0;
+    const safe = sanitizeTradingRecord({
+      ...resolved,
+      price_usd: priceVerified ? normalized.analytics_price_usd : null,
+      price_raw: normalized.source_price_amount || null,
+      currency: priceVerified ? 'USD' : normalized.source_currency || null,
+    }, { verifiedImages: Boolean(resolved.has_images) });
+    if (resolved.listing_type !== 'WTS' || priceVerified) {
+      return {
+        ...safe,
+        price_evidence_status: resolved.listing_type === 'WTS'
+          ? normalized.analytics_currency_status
+          : null,
+      };
+    }
+    return {
+      ...safe,
+      data_quality_issues: [...new Set([
+        ...(safe.data_quality_issues || []),
+        normalized.analytics_currency_status,
+      ])],
+      data_quality_review_required: true,
+      price_evidence_status: normalized.analytics_currency_status,
+    };
+  });
+  const contentRange = response.headers.get('content-range') || '';
+  const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
+  const hasMore = matched.length > pageSize || candidateRows.length > pageSize;
+  const cursorRecord = selected.at(-1);
+  return {
+    count: records.length,
+    total,
+    page,
+    pageSize,
+    totalIsEstimate: false,
+    nextCursor: hasMore && cursorRecord ? encodeTradingCursor(cursorRecord) : null,
+    hasMore,
+    records,
+    status: 'ok',
+    publicationBrands: publicationBrands(),
+    publicationReferences: [],
+    publicationScope: 'ALL_REVIEWED',
+    accessMode: 'server_key',
+  };
+}
+
 async function loadStrictCursorPage({
   supabaseUrl,
   readKey,
@@ -285,7 +415,24 @@ async function loadStrictCursorPage({
   condition,
   region,
   search,
+  imagesOnly,
 }) {
+  if (isFullReviewedBrandRelease()) {
+    return loadFullReviewedBrandCursorPage({
+      supabaseUrl,
+      readKey,
+      cursor,
+      page,
+      pageSize,
+      listingType,
+      itemType,
+      requestedBrand,
+      condition,
+      region,
+      search,
+      imagesOnly,
+    });
+  }
   // The three-reference release currently contains fewer than 999 reviewed
   // identities. Load that bounded set once so repost selection is global for
   // the release and cannot repeat the same offer on a later browser page.
@@ -1230,6 +1377,7 @@ module.exports = async function handler(req, res) {
           condition,
           region,
           search,
+          imagesOnly,
         });
         return res.status(200).json(strictPage);
       }

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
+  FULL_REVIEWED_BRAND_RELEASE,
   MIN_RELEASE_CONFIDENCE,
   THREE_WATCH_RELEASE_REFERENCES,
   isPublicationReferenceAllowed,
@@ -73,4 +74,20 @@ test('release eligibility requires approved finite confidence at or above 90', (
   assert.equal(isReleaseListingEligible({ ...base, confidence: Number.NaN }, configured), false);
   assert.equal(isReleaseListingEligible({ ...base, verdict: 'HUMAN' }, configured), false);
   assert.equal(isReleaseListingEligible({ ...base, brand: 'Patek Philippe' }, configured), false);
+});
+
+test('full reviewed scope expands only Rolex and Patek references', () => {
+  assert.equal(FULL_REVIEWED_BRAND_RELEASE, 'ALL_REVIEWED');
+  assert.deepEqual(publicationReferences(FULL_REVIEWED_BRAND_RELEASE), []);
+  assert.equal(publicationReferencePostgrestFilter(FULL_REVIEWED_BRAND_RELEASE), null);
+  assert.equal(isPublicationReferenceAllowed('Rolex', '126500LN', FULL_REVIEWED_BRAND_RELEASE), true);
+  assert.equal(isPublicationReferenceAllowed('Patek Philippe', '5167A-001', FULL_REVIEWED_BRAND_RELEASE), true);
+  assert.equal(isPublicationReferenceAllowed('Audemars Piguet', '15500ST', FULL_REVIEWED_BRAND_RELEASE), false);
+  assert.equal(isPublicationReferenceAllowed('Rolex', '', FULL_REVIEWED_BRAND_RELEASE), false);
+  assert.equal(isReleaseListingEligible({
+    brand: 'Rolex',
+    reference: '126500LN',
+    verdict: 'APPROVED',
+    confidence: 90,
+  }, FULL_REVIEWED_BRAND_RELEASE), true);
 });
