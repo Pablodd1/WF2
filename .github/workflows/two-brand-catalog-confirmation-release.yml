@@ -71,7 +71,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -158,7 +158,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -213,7 +213,7 @@ jobs:
           const fs = require('node:fs');
           const files = fs.readdirSync('audit-output/two-brand-catalog-release')
             .filter(name => name.startsWith('apply-shard-'));
-          if (files.length !== 4) throw new Error(`Expected four worker reports, received ${files.length}`);
+          if (files.length !== 8) throw new Error(`Expected eight indexed partition reports, received ${files.length}`);
           const reports = files.map(name => JSON.parse(fs.readFileSync(`audit-output/two-brand-catalog-release/${name}`, 'utf8')));
           if (reports.some(report => !report.completed || !report.reconciliation.reconciled)) {
             throw new Error('At least one worker did not complete and reconcile');
@@ -240,7 +240,7 @@ jobs:
             `- Human decisions preserved: ${totals.preserved.toLocaleString()}\n` +
             `- Missing during apply: ${totals.missing.toLocaleString()}\n` +
             `- Errors: ${totals.errors.toLocaleString()}\n` +
-            `- Reconciliation: exact across four workers\n` +
+            `- Reconciliation: exact across eight indexed partitions with four concurrent workers\n` +
             `- watch_records writes: 0\n`);
           NODE
       - name: Install PostgreSQL client
