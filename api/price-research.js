@@ -84,7 +84,36 @@ async function lookupLiquidity(client, reference, listingCount, demand, selectio
   return { source: 'live_fallback', listing_count: listingCount, ...demand };
 }
 
-async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection) {
+async function retainVerifiedIdentityRows(client, rows) {
+  const ids = [...new Set((rows || []).map(row => String(row.id || '')).filter(Boolean))];
+  if (!ids.length) return [];
+  const batches = [];
+  for (let index = 0; index < ids.length; index += 200) {
+    batches.push(ids.slice(index, index + 200));
+  }
+  const results = await Promise.all(batches.map(batch => client
+    .from('listing_identity_reviews')
+    .select('record_id,canonical_brand,canonical_reference,canonical_dial_color,status')
+    .in('record_id', batch)
+    .in('status', ['CATALOG_CONFIRMED', 'HUMAN_APPROVED'])));
+  const error = results.find(result => result.error)?.error;
+  if (error) throw error;
+  const reviews = new Map(results
+    .flatMap(result => result.data || [])
+    .map(review => [String(review.record_id), review]));
+  return (rows || []).flatMap(row => {
+    const review = reviews.get(String(row.id));
+    if (!review) return [];
+    return [{
+      ...row,
+      brand: review.canonical_brand || row.brand,
+      reference: review.canonical_reference || row.reference,
+      dial_color: review.canonical_dial_color || row.dial_color,
+    }];
+  });
+}
+
+async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, strictVerifiedPublication) {
   const { data, error } = await client
     .from(sourceTable)
     .select('id,brand,reference,dial_color,condition,listing_type,verdict,raw_message,flags')
@@ -96,8 +125,20 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     .limit(5000);
   if (error) return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
 
-  const shadowBundleIds = await loadShadowBundleParentIds(client, data || []);
-  const eligible = (data || [])
+  let demandRows = data || [];
+  if (strictVerifiedPublication) {
+    try {
+      demandRows = await retainVerifiedIdentityRows(client, demandRows);
+    } catch {
+      return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
+    }
+  }
+  const equivalentKeys = new Set(referenceVariants.map(normRef));
+  demandRows = demandRows.filter(row =>
+    String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
+    && equivalentKeys.has(normRef(row.reference)));
+  const shadowBundleIds = await loadShadowBundleParentIds(client, demandRows);
+  const eligible = demandRows
     .map(row => ({ ...row, bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds) }))
     .filter(row => !classifyDemandEligibility(row, catalog));
   const grouped = new Map();
@@ -119,7 +160,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
   return {
     demand_count: demandCohorts.reduce((sum, cohort) => sum + cohort.count, 0),
     demand_cohorts: demandCohorts,
-    demand_sample_capped: (data || []).length >= 5000,
+    demand_sample_capped: demandRows.length >= 5000,
   };
 }
 
@@ -190,9 +231,10 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-    const sourceTable = process.env.STRICT_VERIFIED_PUBLICATION === 'true'
-      ? 'price_research_verified_source'
-      : 'watch_records';
+    const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
+    // Exact brand/reference predicates can use the watch_records indexes.
+    // Strict identity approval is applied to the bounded result IDs below.
+    const sourceTable = 'watch_records';
 
     // Resolve reference — support prefix matching (3712 -> 3712/1A)
     let targetRef = rawRef;
@@ -354,6 +396,13 @@ module.exports = async function handler(req, res) {
       for (const row of supplementalPages.flatMap(page => page.data || [])) rowsById.set(row.id, row);
       rows = [...rowsById.values()];
     }
+    if (strictVerifiedPublication) {
+      rows = await retainVerifiedIdentityRows(client, rows);
+      const equivalentKeys = new Set(referenceVariants.map(normRef));
+      rows = rows.filter(row =>
+        String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
+        && equivalentKeys.has(normRef(row.reference)));
+    }
     const shadowBundleIds = await loadShadowBundleParentIds(client, rows);
 
     const normalizedRows = rows
@@ -499,7 +548,15 @@ module.exports = async function handler(req, res) {
 
     // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
     const model = catalogHit?.found ? (catalogHit.model || null) : lookupModel(targetRef, brand);
-    const demand = await lookupDemand(client, sourceTable, brand, referenceVariants, catalogHit, selection);
+    const demand = await lookupDemand(
+      client,
+      sourceTable,
+      brand,
+      referenceVariants,
+      catalogHit,
+      selection,
+      strictVerifiedPublication,
+    );
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
     const outlierEvidenceLimit = 100;

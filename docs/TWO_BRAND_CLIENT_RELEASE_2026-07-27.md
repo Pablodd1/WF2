@@ -67,6 +67,9 @@ human-approved and is not a customer-visible count.
 - Trading Floor cards publish verified identity first. A clicked detail shows a
   price only after the exact source line verifies USD or HKD; unresolved
   currency is labeled as under review instead of displaying a stored guess.
+- Price Research reads bounded exact brand/reference rows through indexed
+  `watch_records` predicates, then retains only IDs with approved identity
+  reviews before currency, bundle, duplicate, outlier, and cohort analysis.
 - Customer detail cards omit record IDs, parser confidence, internal source
   names, and internal status fields.
 - Both detail experiences compare the posted price with the monthly average for
