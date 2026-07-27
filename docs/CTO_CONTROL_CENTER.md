@@ -29,6 +29,12 @@ an analytics cohort dimension. Price Research and Trading Floor market
 comparisons aggregate New, Used, and Unspecified observations by exact
 brand/reference/dial.
 
+The July 27 approved-90 evidence expansion and current human-review counts are
+recorded in the same release document. It distinguishes 109 true statistical
+outliers from currency, catalog, bundle, and duplicate exclusions; records 689
+private screening candidates under the historical fixed-HKD-rate audit; and
+preserves fail-closed canonical identity, FX, image, and seller publication.
+
 The earlier two-brand release remains the predecessor and infrastructure
 baseline:
 

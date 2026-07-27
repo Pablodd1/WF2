@@ -4,7 +4,7 @@ const { getClient } = require('./_lib/supabase');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
-const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
+const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
@@ -14,10 +14,9 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-    const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
-    const publicTable = strictVerifiedPublication
-      ? 'trading_floor_verified_listings'
-      : 'trading_floor_listings';
+    // Direct customer access always requires reviewed canonical identity,
+    // regardless of deployment configuration.
+    const publicTable = 'trading_floor_verified_listings';
     const { data: publicListing, error: publicError } = await client
       .from(publicTable)
       .select('id,brand,model,reference,dial_color,has_images,thumbnail_url,image_urls')
@@ -25,23 +24,13 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
     if (publicError) throw publicError;
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
-    let verifiedListing = strictVerifiedPublication ? publicListing : null;
-    if (!verifiedListing) {
-      const verifiedResult = await client
-        .from('trading_floor_verified_listings')
-        .select('id,brand,model,reference,dial_color,has_images,thumbnail_url,image_urls')
-        .eq('id', id)
-        .maybeSingle();
-      if (verifiedResult.error) {
-        console.warn('[trading-listing] verified media unavailable; image withheld:', verifiedResult.error.message);
-      } else {
-        verifiedListing = verifiedResult.data;
-      }
-    }
+    const verifiedListing = publicListing;
 
     const { data, error } = await client.from('watch_records')
       .select('id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,listing_type,verdict,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,image_urls,region,raw_message')
       .eq('id', id)
+      .eq('verdict', 'APPROVED')
+      .gte('confidence', MIN_RELEASE_CONFIDENCE)
       .maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Listing not found' });
@@ -59,7 +48,7 @@ module.exports = async function handler(req, res) {
     if (!isPublicationBrandAllowed(resolvedData.brand)) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
-    if (!isPublicationReferenceAllowed(resolvedData.brand, resolvedData.reference)) {
+    if (!isReleaseListingEligible(resolvedData)) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
     if (!isCustomerIdentitySafe(resolvedData)) return res.status(404).json({ error: 'Listing under identity review' });

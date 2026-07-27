@@ -6,7 +6,7 @@ const { classifyResearchEligibility } = require('./_lib/price-research-eligibili
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { isPublicationBrandAllowed, publicationBrands } = require('./_lib/publication-brands.cjs');
-const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
+const { isPublicationReferenceAllowed, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 
 module.exports = async function handler(req, res) {
@@ -71,10 +71,9 @@ module.exports = async function handler(req, res) {
     }).filter(row => {
       const catalog = lookupCatalog(row.reference, row.brand);
       return !classifyResearchEligibility(row, catalog)
-        && isPublicationReferenceAllowed(row.brand, row.reference)
+        && isReleaseListingEligible(row)
         && Number(row.price_usd) >= 1000
         && Number(row.price_usd) <= 2500000
-        && Number(row.confidence) >= 85
         && row.thumbnail_url;
     });
     const { uniqueRows } = deduplicateReposts(candidates);

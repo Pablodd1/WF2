@@ -6,23 +6,22 @@ const THREE_WATCH_RELEASE_REFERENCES = [
   'Patek Philippe::5712/1A-001',
   'Rolex::126710BLNR',
 ].join('|');
+const MIN_RELEASE_CONFIDENCE = 90;
 
 function normalizePublicationReference(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
-  // This release must fail closed even when a deployment omits its environment
-  // override. A later reviewed release can replace the exact list explicitly.
-  const releaseConfiguration = String(value || '').trim() || THREE_WATCH_RELEASE_REFERENCES;
-  return [...new Map(releaseConfiguration
+function parsedReferences(value) {
+  return [...new Map(String(value || '')
     .split('|')
     .map(entry => entry.trim())
     .filter(Boolean)
     .map(entry => {
       const separator = entry.indexOf('::');
-      const brand = separator >= 0 ? entry.slice(0, separator).trim() : '';
-      const reference = separator >= 0 ? entry.slice(separator + 2).trim() : entry;
+      if (separator < 1) return null;
+      const brand = entry.slice(0, separator).trim();
+      const reference = entry.slice(separator + 2).trim();
       const normalizedReference = normalizePublicationReference(reference);
       return [`${brand.toLowerCase()}::${normalizedReference}`, {
         brand,
@@ -30,23 +29,49 @@ function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
         normalizedReference,
       }];
     })
-    .filter(([, entry]) => entry.normalizedReference)).values()];
+    .filter(entry => entry && entry[1].brand && entry[1].normalizedReference)).values()];
+}
+
+const REVIEWED_RELEASE_REFERENCES = parsedReferences(THREE_WATCH_RELEASE_REFERENCES);
+
+function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
+  // Deployment configuration may restrict this reviewed release, but it may
+  // never add a brand/reference pair. Empty or omitted configuration uses the
+  // reviewed defaults; malformed or unknown non-empty configuration fails shut.
+  const configured = String(value || '').trim();
+  if (!configured) return REVIEWED_RELEASE_REFERENCES.map(entry => ({ ...entry }));
+  const requestedKeys = new Set(parsedReferences(configured).map(entry =>
+    `${entry.brand.toLowerCase()}::${entry.reference.toUpperCase()}`));
+  return REVIEWED_RELEASE_REFERENCES
+    .filter(entry => requestedKeys.has(`${entry.brand.toLowerCase()}::${entry.reference.toUpperCase()}`))
+    .map(entry => ({ ...entry }));
 }
 
 function isPublicationReferenceAllowed(brand, reference, value = process.env.PUBLICATION_REFERENCES) {
   const allowed = publicationReferences(value);
-  if (!allowed.length) return true;
+  if (!allowed.length) return false;
   const normalizedBrand = String(brand || '').trim().toLowerCase();
-  const normalizedReference = normalizePublicationReference(reference);
+  const exactReference = String(reference || '').trim().toUpperCase();
   return allowed.some(entry =>
-    (!entry.brand || entry.brand.toLowerCase() === normalizedBrand)
-    && entry.normalizedReference === normalizedReference);
+    entry.brand.toLowerCase() === normalizedBrand
+    && entry.reference.toUpperCase() === exactReference);
+}
+
+function isReleaseListingEligible(record, value = process.env.PUBLICATION_REFERENCES) {
+  const confidence = Number(record?.confidence);
+  return Boolean(
+    record
+    && isPublicationReferenceAllowed(record.brand, record.reference, value)
+    && String(record.verdict || '').trim().toUpperCase() === 'APPROVED'
+    && Number.isFinite(confidence)
+    && confidence >= MIN_RELEASE_CONFIDENCE
+  );
 }
 
 function publicationReferencesForBrand(brand, value = process.env.PUBLICATION_REFERENCES) {
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return publicationReferences(value)
-    .filter(entry => !entry.brand || entry.brand.toLowerCase() === normalizedBrand)
+    .filter(entry => entry.brand.toLowerCase() === normalizedBrand)
     .map(entry => entry.reference);
 }
 
@@ -57,8 +82,10 @@ function publicationReferencePostgrestFilter(value = process.env.PUBLICATION_REF
 }
 
 module.exports = {
+  MIN_RELEASE_CONFIDENCE,
   THREE_WATCH_RELEASE_REFERENCES,
   isPublicationReferenceAllowed,
+  isReleaseListingEligible,
   normalizePublicationReference,
   publicationReferencePostgrestFilter,
   publicationReferences,

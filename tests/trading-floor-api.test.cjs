@@ -39,11 +39,11 @@ async function runQuery(query) {
   }
 }
 
-test('customer inventory quarantines catalog-proven cross-brand rows', async () => {
+test('customer inventory withholds rows when canonical identity is not verified', async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => new Response(JSON.stringify([
-    { id: 'bad', brand: 'Audemars Piguet', reference: 'RM 17-01', dial_color: 'Skeleton' },
-    { id: 'good', brand: 'Richard Mille', reference: 'RM 17-01', dial_color: 'Skeleton' },
+    { id: 'bad', brand: 'Patek Philippe', reference: '116610LN', dial_color: 'Black', verdict: 'APPROVED', confidence: 90 },
+    { id: 'good', brand: 'Rolex', reference: '116610LN', dial_color: 'Black', verdict: 'APPROVED', confidence: 90 },
   ]), {
     status: 200,
     headers: { 'content-range': '0-1/2', 'content-type': 'application/json' },
@@ -52,7 +52,241 @@ test('customer inventory quarantines catalog-proven cross-brand rows', async () 
     const res = responseRecorder();
     await handler({ method: 'GET', query: { quality: 'market' } }, res);
     assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.records.map(row => row.id), []);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('customer inventory admits an exact APPROVED 90 row only after canonical identity verification', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async url => {
+    const requestUrl = String(url);
+    let body = [];
+    if (requestUrl.includes('/trading_floor_market_listings?')) {
+      body = [{
+        id: 'good',
+        brand: 'Rolex',
+        reference: '116610LN',
+        dial_color: 'Black',
+        listing_type: 'WTS',
+        verdict: 'APPROVED',
+        confidence: 90,
+        price_usd: 10000,
+      }];
+    } else if (requestUrl.includes('/listing_identity_reviews?')) {
+      body = [{
+        record_id: 'good',
+        canonical_brand: 'Rolex',
+        canonical_model: 'Submariner Date',
+        canonical_reference: '116610LN',
+        canonical_dial_color: 'Black',
+        status: 'CATALOG_CONFIRMED',
+      }];
+    } else if (requestUrl.includes('/trading_floor_verified_listings?')) {
+      const fields = new URL(requestUrl).searchParams.get('select') || '';
+      body = fields.includes('brand')
+        ? [{
+            id: 'good',
+            brand: 'Rolex',
+            reference: '116610LN',
+            dial_color: 'Black',
+            listing_type: 'WTS',
+            verdict: 'APPROVED',
+            confidence: 90,
+            price_usd: 10000,
+            created_at: '2026-07-27T12:00:00Z',
+          }]
+        : [{ id: 'good', has_images: false, thumbnail_url: null, image_urls: [] }];
+    } else if (requestUrl.includes('/watch_records?')) {
+      body = [{
+        id: 'good',
+        dealer_id: '11111111-1111-4111-8111-111111111111',
+        raw_message: 'Rolex 116610LN black USD 10000',
+      }];
+    }
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-range': '0-0/1', 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const res = responseRecorder();
+    await handler({ method: 'GET', query: { quality: 'market' } }, res);
+    assert.equal(res.statusCode, 200);
     assert.deepEqual(res.body.records.map(row => row.id), ['good']);
+    assert.equal(res.body.records[0].price_usd, 10000);
+    assert.equal(res.body.records[0].price_evidence_status, 'VERIFIED');
+    assert.equal(Object.hasOwn(res.body.records[0], 'dealer_id'), false);
+    assert.equal(Object.hasOwn(res.body.records[0], 'raw_message'), false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('customer inventory counts one deterministic repost from the same verified dealer', async () => {
+  const originalFetch = global.fetch;
+  const marketRows = ['newest', 'older'].map((id, index) => ({
+    id,
+    brand: 'Rolex',
+    reference: '116610LN',
+    dial_color: 'Black',
+    condition: 'Used',
+    listing_type: 'WTS',
+    verdict: 'APPROVED',
+    confidence: 95,
+    price_usd: 10000,
+    created_at: `2026-07-${27 - index}T12:00:00Z`,
+  }));
+  global.fetch = async url => {
+    const requestUrl = String(url);
+    let body = [];
+    if (requestUrl.includes('/trading_floor_market_listings?')) {
+      body = marketRows;
+    } else if (requestUrl.includes('/listing_identity_reviews?')) {
+      body = marketRows.map(row => ({
+        record_id: row.id,
+        canonical_brand: 'Rolex',
+        canonical_model: 'Submariner Date',
+        canonical_reference: '116610LN',
+        canonical_dial_color: 'Black',
+        status: 'CATALOG_CONFIRMED',
+      }));
+    } else if (requestUrl.includes('/trading_floor_verified_listings?')) {
+      const fields = new URL(requestUrl).searchParams.get('select') || '';
+      body = fields.includes('brand')
+        ? marketRows
+        : marketRows.map(row => ({
+            id: row.id,
+            has_images: false,
+            thumbnail_url: null,
+            image_urls: [],
+          }));
+    } else if (requestUrl.includes('/watch_records?')) {
+      body = marketRows.map(row => ({
+        id: row.id,
+        dealer_id: '11111111-1111-4111-8111-111111111111',
+        raw_message: 'Rolex 116610LN black Used USD 10000',
+      }));
+    }
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-range': '0-1/2', 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const res = responseRecorder();
+    await handler({ method: 'GET', query: { quality: 'market' } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.records.map(row => row.id), ['newest']);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('strict cursor pages do not repeat a same-dealer repost across page boundaries', async () => {
+  const originalFetch = global.fetch;
+  const uniqueRows = Array.from({ length: 12 }, (_, index) => ({
+    id: `row_${String(index).padStart(2, '0')}`,
+    brand: 'Rolex',
+    reference: '116610LN',
+    dial_color: 'Black',
+    condition: 'Used',
+    listing_type: 'WTS',
+    verdict: 'APPROVED',
+    confidence: 95,
+    price_usd: 10000 + index,
+    created_at: `2026-07-${String(27 - index).padStart(2, '0')}T12:00:00Z`,
+  }));
+  const repost = {
+    ...uniqueRows[0],
+    id: 'row_repost',
+    created_at: '2026-07-01T12:00:00Z',
+  };
+  const marketRows = [...uniqueRows, repost];
+  global.fetch = async url => {
+    const requestUrl = String(url);
+    let body = [];
+    if (requestUrl.includes('/listing_identity_reviews?')) {
+      body = marketRows.map(row => ({
+        record_id: row.id,
+        canonical_brand: 'Rolex',
+        canonical_model: 'Submariner Date',
+        canonical_reference: '116610LN',
+        canonical_dial_color: 'Black',
+        status: 'CATALOG_CONFIRMED',
+        updated_at: row.created_at,
+      }));
+    } else if (requestUrl.includes('/trading_floor_verified_listings?')) {
+      const fields = new URL(requestUrl).searchParams.get('select') || '';
+      body = fields.includes('brand')
+        ? marketRows
+        : marketRows.map(row => ({ id: row.id, has_images: false, thumbnail_url: null, image_urls: [] }));
+    } else if (requestUrl.includes('/watch_records?')) {
+      body = marketRows.map((row, index) => ({
+        id: row.id,
+        dealer_id: row.id === 'row_repost'
+          ? 'dealer_00'
+          : `dealer_${String(index).padStart(2, '0')}`,
+        raw_message: `Rolex 116610LN black Used USD ${row.price_usd}`,
+      }));
+    }
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-range': '0-12/13', 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const first = responseRecorder();
+    await handler({ method: 'GET', query: { quality: 'market', pagination: 'cursor', pageSize: '10' } }, first);
+    assert.equal(first.statusCode, 200);
+    assert.equal(first.body.records.length, 10);
+    assert.ok(first.body.nextCursor);
+
+    const second = responseRecorder();
+    await handler({
+      method: 'GET',
+      query: {
+        quality: 'market',
+        pagination: 'cursor',
+        pageSize: '10',
+        cursor: first.body.nextCursor,
+      },
+    }, second);
+    assert.equal(second.statusCode, 200);
+    const allIds = [...first.body.records, ...second.body.records].map(row => row.id);
+    assert.equal(allIds.length, 12);
+    assert.equal(new Set(allIds).size, 12);
+    assert.equal(allIds.includes('row_repost'), false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('strict release fails closed when PostgREST returns its 1,000-row ceiling', async () => {
+  const originalFetch = global.fetch;
+  const identities = Array.from({ length: 1000 }, (_, index) => ({
+    record_id: `bounded_${String(index).padStart(4, '0')}`,
+    canonical_brand: 'Rolex',
+    canonical_model: 'Submariner Date',
+    canonical_reference: '116610LN',
+    canonical_dial_color: 'Black',
+    status: 'CATALOG_CONFIRMED',
+    updated_at: '2026-07-27T12:00:00Z',
+  }));
+  global.fetch = async url => {
+    const requestUrl = String(url);
+    assert.match(requestUrl, /\/listing_identity_reviews\?/);
+    return new Response(JSON.stringify(identities), {
+      status: 200,
+      headers: { 'content-range': '0-999/*', 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const res = responseRecorder();
+    await handler({ method: 'GET', query: { quality: 'market' } }, res);
+    assert.equal(res.statusCode, 500);
+    assert.match(res.body.error, /999-row global repost-deduplication window/);
   } finally {
     global.fetch = originalFetch;
   }
@@ -60,38 +294,33 @@ test('customer inventory quarantines catalog-proven cross-brand rows', async () 
 
 test('recent inventory excludes recycle rows and undated imports', async () => {
   const url = await runQuery({ quality: 'market' });
-  assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
-  assert.equal(url.searchParams.get('id'), 'not.like.preview_demo_*');
-  assert.equal(url.searchParams.get('created_at'), 'not.is.null');
-  assert.equal(url.pathname, '/rest/v1/trading_floor_market_listings');
+  assert.equal(url.searchParams.get('status'), 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)');
+  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","5712/1A","5712/1A-001","126710BLNR")');
+  assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
 test('all inventory still excludes recycle rows but includes undated imports', async () => {
   const url = await runQuery({ quality: 'archive' });
-  assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
-  assert.equal(url.searchParams.get('id'), 'not.like.preview_demo_*');
-  assert.equal(url.searchParams.has('created_at'), false);
-  assert.equal(url.pathname, '/rest/v1/trading_floor_listings');
+  assert.equal(url.searchParams.get('status'), 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)');
+  assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
 test('reference search reaches dated and undated eligible market inventory', async () => {
   const url = await runQuery({ quality: 'market', q: '116610LN' });
-  assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
-  assert.equal(url.searchParams.get('id'), 'not.like.preview_demo_*');
-  assert.equal(url.searchParams.get('reference'), 'eq.116610LN');
-  assert.equal(url.searchParams.has('created_at'), false);
+  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","5712/1A","5712/1A-001","126710BLNR")');
+  assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
 test('WTB includes NTQ but excludes unsplit bundle parents', async () => {
   const url = await runQuery({ quality: 'archive', type: 'WTB' });
-  assert.equal(url.searchParams.get('listing_type'), 'in.(WTB,NTQ)');
-  assert.equal(url.pathname, '/rest/v1/trading_floor_listings');
+  assert.equal(url.searchParams.get('status'), 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)');
+  assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
 test('watch category and buyer intent can be combined', async () => {
   const url = await runQuery({ quality: 'market', item: 'watches', type: 'WTB' });
-  assert.equal(url.searchParams.get('listing_type'), 'in.(WTB,NTQ)');
-  assert.equal(url.pathname, '/rest/v1/trading_floor_market_listings');
+  assert.equal(url.searchParams.get('status'), 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)');
+  assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
 test('strict market view requires complete watch identity and a plausible WTS price', () => {
@@ -108,10 +337,10 @@ test('strict market view requires complete watch identity and a plausible WTS pr
 
 test('public inventory excludes multi, trade, and unrecognized listing types', async () => {
   const watches = await runQuery({ quality: 'market', item: 'watches' });
-  assert.equal(watches.searchParams.get('listing_type'), 'in.(WTS,WTB,NTQ)');
+  assert.equal(watches.pathname, '/rest/v1/listing_identity_reviews');
 
   const all = await runQuery({ quality: 'market', item: 'all' });
-  assert.equal(all.searchParams.get('listing_type'), 'in.(WTS,WTB,NTQ,OTHER)');
+  assert.equal(all.pathname, '/rest/v1/listing_identity_reviews');
 });
 
 test('unnormalized luxury records reject unsupported intent combinations', async () => {
@@ -129,18 +358,16 @@ test('unnormalized luxury records reject unsupported intent combinations', async
 
 test('non-watch categories use source evidence and remain separate from intent', async () => {
   const jewelry = await runQuery({ quality: 'market', item: 'jewelry' });
-  assert.equal(jewelry.searchParams.get('listing_type'), 'eq.OTHER');
-  assert.equal(jewelry.searchParams.get('source_type'), 'eq.jewelry_archive');
+  assert.equal(jewelry.pathname, '/rest/v1/listing_identity_reviews');
 
   const handbags = await runQuery({ quality: 'market', item: 'handbags' });
-  assert.equal(handbags.searchParams.get('source_type'), 'in.(handbag_archive,handbags_archive,bag_archive)');
+  assert.equal(handbags.pathname, '/rest/v1/listing_identity_reviews');
 
   const accessories = await runQuery({ quality: 'market', item: 'accessories' });
-  assert.equal(accessories.searchParams.get('source_type'), 'in.(accessory_archive,accessories_archive)');
+  assert.equal(accessories.pathname, '/rest/v1/listing_identity_reviews');
 
   const other = await runQuery({ quality: 'market', item: 'other' });
-  assert.equal(other.searchParams.get('listing_type'), 'eq.OTHER');
-  assert.equal(other.searchParams.get('source_type'), 'not.in.(jewelry_archive,handbag_archive,handbags_archive,bag_archive,accessory_archive,accessories_archive)');
+  assert.equal(other.pathname, '/rest/v1/listing_identity_reviews');
 });
 
 test('bulk and trade are not public filters', async () => {

@@ -16,6 +16,7 @@ const {
   extractPriceObservations,
   segmentDealerMessage,
 } = require('./_lib/normalization-v4.cjs');
+const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
@@ -27,11 +28,11 @@ const {
   publicationBrands,
 } = require('./_lib/publication-brands.cjs');
 const {
-  isPublicationReferenceAllowed,
-  normalizePublicationReference,
+  isReleaseListingEligible,
   publicationReferencePostgrestFilter,
   publicationReferences,
 } = require('./_lib/publication-references.cjs');
+const { repostSignature } = require('./_lib/repost-deduplication.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -123,7 +124,7 @@ async function loadVerifiedPublicListings(supabaseUrl, readKey, ids) {
   return verified;
 }
 
-async function loadStrictIdentityCandidates(supabaseUrl, readKey, cursor, limit = 500) {
+async function loadStrictIdentityCandidates(supabaseUrl, readKey, limit = 999) {
   const params = new URLSearchParams({
     select: 'record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status,updated_at',
     status: 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)',
@@ -131,9 +132,6 @@ async function loadStrictIdentityCandidates(supabaseUrl, readKey, cursor, limit 
   });
   const releaseReferenceFilter = publicationReferencePostgrestFilter();
   if (releaseReferenceFilter) params.set('canonical_reference', releaseReferenceFilter);
-  if (cursor?.createdAt) {
-    params.set('or', `(updated_at.lt.${cursor.createdAt},and(updated_at.eq.${cursor.createdAt},record_id.lt.${cursor.id}))`);
-  }
   const response = await fetch(
     `${supabaseUrl}/rest/v1/listing_identity_reviews?${params.toString()}`,
     {
@@ -163,15 +161,86 @@ async function loadMarketRowsById(supabaseUrl, readKey, ids) {
     const params = new URLSearchParams({
       select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,region',
       id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+      verdict: 'eq.APPROVED',
+      confidence: 'gte.90',
     });
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/trading_floor_market_listings?${params.toString()}`,
+      `${supabaseUrl}/rest/v1/trading_floor_verified_listings?${params.toString()}`,
       { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
     );
     if (!response.ok) throw new Error(`market listing batch returned ${response.status}`);
+    const marketRows = await response.json();
+    if (!marketRows.length) return [];
+    const rawParams = new URLSearchParams({
+      select: 'id,dealer_id,raw_message',
+      id: `in.(${marketRows.map(row => `"${String(row.id).replaceAll('"', '')}"`).join(',')})`,
+    });
+    const rawResponse = await fetch(
+      `${supabaseUrl}/rest/v1/watch_records?${rawParams.toString()}`,
+      { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+    );
+    if (!rawResponse.ok) throw new Error(`raw evidence batch returned ${rawResponse.status}`);
+    const evidenceById = new Map((await rawResponse.json()).map(row => [String(row.id), row]));
+    return marketRows.map(row => {
+      const evidence = evidenceById.get(String(row.id));
+      return {
+        ...row,
+        dealer_id: evidence?.dealer_id || null,
+        raw_message: evidence?.raw_message || null,
+      };
+    });
+  }));
+  return new Map(results.flat().map(row => [String(row.id), row]));
+}
+
+async function loadRepostEvidenceById(supabaseUrl, readKey, ids) {
+  if (!ids.length) return new Map();
+  const batches = [];
+  for (let index = 0; index < ids.length; index += 50) {
+    batches.push(ids.slice(index, index + 50));
+  }
+  const results = await Promise.all(batches.map(async batch => {
+    const params = new URLSearchParams({
+      select: 'id,dealer_id,raw_message',
+      id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+    });
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/watch_records?${params.toString()}`,
+      { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+    );
+    if (!response.ok) throw new Error(`repost evidence batch returned ${response.status}`);
     return response.json();
   }));
   return new Map(results.flat().map(row => [String(row.id), row]));
+}
+
+function deduplicateTradingItems(items) {
+  const seen = new Set();
+  return items.filter(item => {
+    const signature = repostSignature(item.resolved);
+    if (seen.has(signature)) return false;
+    seen.add(signature);
+    return true;
+  });
+}
+
+function listingIsAfterCursor(record, cursor) {
+  if (!cursor) return true;
+  const recordId = String(record?.id || '');
+  const timestamp = Date.parse(record?.created_at || '');
+  const createdAt = Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+  if (!cursor.createdAt) return createdAt === null && recordId < cursor.id;
+  if (createdAt === null) return true;
+  return createdAt < cursor.createdAt || (createdAt === cursor.createdAt && recordId < cursor.id);
+}
+
+function sortTradingItems(items) {
+  return [...items].sort((left, right) => {
+    const leftTime = Date.parse(left.resolved?.created_at || '') || Number.NEGATIVE_INFINITY;
+    const rightTime = Date.parse(right.resolved?.created_at || '') || Number.NEGATIVE_INFINITY;
+    if (leftTime !== rightTime) return rightTime - leftTime;
+    return String(right.resolved?.id || '').localeCompare(String(left.resolved?.id || ''));
+  });
 }
 
 function matchesStrictReleaseFilters(record, {
@@ -183,13 +252,12 @@ function matchesStrictReleaseFilters(record, {
   search,
 }) {
   if (!record || !isPublicationBrandAllowed(record.brand)) return false;
-  if (!isPublicationReferenceAllowed(record.brand, record.reference)) return false;
+  if (!isReleaseListingEligible(record)) return false;
   if (requestedBrand && String(record.brand).toLowerCase() !== requestedBrand.toLowerCase()) return false;
   if (itemType && !['all', 'watches'].includes(itemType)) return false;
   if (listingType === 'WTB' && !['WTB', 'NTQ'].includes(record.listing_type)) return false;
   if (listingType && listingType !== 'WTB' && record.listing_type !== listingType) return false;
   if (!listingType && !['WTS', 'WTB', 'NTQ', 'OTHER'].includes(record.listing_type)) return false;
-  if (String(record.verdict || '').toUpperCase() === 'RECYCLE') return false;
   if (String(record.id || '').startsWith('preview_demo_')) return false;
   if (condition && String(record.condition || '').toLowerCase() !== condition.toLowerCase()) return false;
   if (region && !String(record.region || '').toLowerCase().includes(region.toLowerCase())) return false;
@@ -215,7 +283,13 @@ async function loadStrictCursorPage({
   region,
   search,
 }) {
-  const identityPage = await loadStrictIdentityCandidates(supabaseUrl, readKey, cursor);
+  // The three-reference release currently contains fewer than 999 reviewed
+  // identities. Load that bounded set once so repost selection is global for
+  // the release and cannot repeat the same offer on a later browser page.
+  const identityPage = await loadStrictIdentityCandidates(supabaseUrl, readKey);
+  if (identityPage.hasMore) {
+    throw new Error('Reviewed release exceeds the 999-row global repost-deduplication window');
+  }
   const marketById = await loadMarketRowsById(
     supabaseUrl,
     readKey,
@@ -241,7 +315,10 @@ async function loadStrictCursorPage({
       }) ? { identity, resolved } : null;
     })
     .filter(Boolean);
-  const selected = matched.slice(0, pageSize);
+  const uniqueMatched = deduplicateTradingItems(sortTradingItems(matched));
+  const afterCursor = uniqueMatched.filter(item => listingIsAfterCursor(item.resolved, cursor));
+  const offset = cursor ? 0 : (page - 1) * pageSize;
+  const selected = afterCursor.slice(offset, offset + pageSize);
   const verifiedById = await loadVerifiedPublicListings(
     supabaseUrl,
     readKey,
@@ -249,39 +326,50 @@ async function loadStrictCursorPage({
   );
   const records = selected.map(({ resolved }) => {
     const verified = verifiedById.get(String(resolved.id));
+    const normalized = normalizeMarketRow(resolved, resolved.reference);
+    const priceVerified = resolved.listing_type === 'WTS'
+      && normalized.analytics_currency_status === 'VERIFIED'
+      && Number.isFinite(Number(normalized.analytics_price_usd))
+      && Number(normalized.analytics_price_usd) > 0;
+    const { dealer_id: _dealerId, raw_message: _rawMessage, ...publicResolved } = resolved;
     const safe = sanitizeTradingRecord({
-      ...resolved,
+      ...publicResolved,
       brand: verified?.brand || resolved.brand,
       reference: verified?.reference || resolved.reference,
       dial_color: verified?.dial_color || resolved.dial_color,
       has_images: Boolean(verified?.has_images),
       thumbnail_url: verified?.thumbnail_url || null,
       image_urls: verified?.image_urls || [],
-      price_usd: null,
+      price_usd: priceVerified ? normalized.analytics_price_usd : null,
       price_raw: null,
-      currency: null,
+      currency: priceVerified ? 'USD' : null,
     }, { verifiedImages: Boolean(verified?.has_images) });
-    if (resolved.listing_type !== 'WTS') return safe;
+    if (resolved.listing_type !== 'WTS' || priceVerified) {
+      return {
+        ...safe,
+        price_evidence_status: resolved.listing_type === 'WTS'
+          ? normalized.analytics_currency_status
+          : null,
+      };
+    }
     return {
       ...safe,
       data_quality_issues: [...new Set([
         ...(safe.data_quality_issues || []),
-        'PRICE_EVIDENCE_LOAD_REQUIRED',
+        normalized.analytics_currency_status,
       ])],
       data_quality_review_required: true,
+      price_evidence_status: normalized.analytics_currency_status,
     };
   });
-  const matchedHasMore = matched.length > pageSize;
-  const hasMore = matchedHasMore || identityPage.hasMore;
-  const cursorIdentity = matchedHasMore
-    ? matched[pageSize - 1]?.identity
-    : identityPage.rows[identityPage.rows.length - 1];
-  const nextCursor = hasMore && cursorIdentity
-    ? encodeTradingCursor({ id: cursorIdentity.record_id, created_at: cursorIdentity.updated_at })
+  const hasMore = afterCursor.length > offset + pageSize;
+  const cursorRecord = selected.at(-1)?.resolved;
+  const nextCursor = hasMore && cursorRecord
+    ? encodeTradingCursor(cursorRecord)
     : null;
   return {
     count: records.length,
-    total: null,
+    total: uniqueMatched.length,
     page,
     pageSize,
     totalIsEstimate: false,
@@ -1068,8 +1156,10 @@ module.exports = async function handler(req, res) {
       // Main inventory is intentionally stricter than the archive: incomplete
       // watch identity and implausible WTS prices remain reviewable in the full
       // archive but cannot consume customer-market page slots or totals.
-      const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
-      const candidatePageSize = strictVerifiedPublication && cursorMode
+      // The deadline release is always canonical-identity verified. An
+      // environment omission must not reopen the legacy publication path.
+      const strictVerifiedPublication = true;
+      const candidatePageSize = strictVerifiedPublication
         ? Math.min(pageSize * 10, 500)
         : pageSize;
       const start = cursorMode ? 0 : (page - 1) * candidatePageSize;
@@ -1106,7 +1196,7 @@ module.exports = async function handler(req, res) {
       if (requestedBrand && !isPublicationBrandAllowed(requestedBrand)) {
         return res.status(400).json({ error: 'Brand is not included in this release' });
       }
-      if (strictVerifiedPublication && cursorMode) {
+      if (strictVerifiedPublication) {
         if (!serviceKey) {
           return res.status(503).json({ error: 'Strict publication requires server-side verification' });
         }
@@ -1165,7 +1255,8 @@ module.exports = async function handler(req, res) {
       // view avoids letting undated legacy imports dominate page one, while the
       // all-inventory view and every explicit search still include those rows.
       // Price Research applies its own stricter approved/comparable-data policy.
-      params.set('or', '(verdict.neq.RECYCLE,verdict.is.null)');
+      params.set('verdict', 'eq.APPROVED');
+      params.set('confidence', 'gte.90');
       // Supabase preview bootstrap rows are useful for deployment checks, but
       // must never be presented as dealer inventory in a customer environment.
       params.set('id', 'not.like.preview_demo_*');
@@ -1185,9 +1276,9 @@ module.exports = async function handler(req, res) {
           const parsedSearch = parseTradingSearch(search);
           if (parsedSearch.reference) {
             const configuredReferences = publicationReferences();
-            const referenceConfigured = !configuredReferences.length || configuredReferences.some(entry =>
-              entry.normalizedReference === normalizePublicationReference(parsedSearch.reference)
-              && (!requestedBrand || !entry.brand || entry.brand.toLowerCase() === requestedBrand.toLowerCase()));
+            const referenceConfigured = configuredReferences.some(entry =>
+              entry.reference.toUpperCase() === String(parsedSearch.reference || '').trim().toUpperCase()
+              && (!requestedBrand || entry.brand.toLowerCase() === requestedBrand.toLowerCase()));
             if (!referenceConfigured) {
               return res.status(400).json({ error: 'Reference is not included in this release' });
             }
@@ -1231,9 +1322,15 @@ module.exports = async function handler(req, res) {
         readKey,
         candidateRecords.map(row => row.id),
       );
-      const customerCandidates = candidateRecords
+      const repostEvidenceById = await loadRepostEvidenceById(
+        supabaseUrl,
+        serviceKey || readKey,
+        candidateRecords.map(row => row.id),
+      );
+      const preparedCandidates = candidateRecords
         .map(record => {
           const verified = verifiedById.get(String(record.id));
+          const repostEvidence = repostEvidenceById.get(String(record.id));
           const resolved = verified
             ? {
                 ...record,
@@ -1243,31 +1340,54 @@ module.exports = async function handler(req, res) {
                 has_images: verified.has_images,
                 thumbnail_url: verified.thumbnail_url,
                 image_urls: verified.image_urls,
+                dealer_id: repostEvidence?.dealer_id || record.dealer_id || null,
+                raw_message: repostEvidence?.raw_message || null,
               }
-            : record;
-          const customerResolved = strictVerifiedPublication
-            ? { ...resolved, price_usd: null, price_raw: null, currency: null }
-            : resolved;
+            : {
+                ...record,
+                dealer_id: repostEvidence?.dealer_id || record.dealer_id || null,
+                raw_message: repostEvidence?.raw_message || null,
+              };
+          const normalized = normalizeMarketRow(resolved, resolved.reference);
+          const priceVerified = resolved.listing_type === 'WTS'
+            && normalized.analytics_currency_status === 'VERIFIED'
+            && Number.isFinite(Number(normalized.analytics_price_usd))
+            && Number(normalized.analytics_price_usd) > 0;
+          const customerResolved = {
+            ...resolved,
+            price_usd: priceVerified ? normalized.analytics_price_usd : null,
+            price_raw: null,
+            currency: priceVerified ? 'USD' : null,
+          };
           return {
             resolved: customerResolved,
             verified,
             verifiedImages: Boolean(verified?.has_images),
-            priceEvidenceRequired: strictVerifiedPublication && resolved.listing_type === 'WTS',
+            priceEvidenceRequired: resolved.listing_type === 'WTS' && !priceVerified,
+            priceEvidenceStatus: resolved.listing_type === 'WTS'
+              ? normalized.analytics_currency_status
+              : null,
           };
         })
         .filter(({ resolved, verified }) =>
-          (!strictVerifiedPublication || Boolean(verified))
-          && isCustomerIdentitySafe(resolved))
-        .map(({ resolved, verifiedImages, priceEvidenceRequired }) => {
-          const customerRecord = sanitizeTradingRecord(resolved, { verifiedImages });
-          if (!priceEvidenceRequired) return customerRecord;
+          Boolean(verified)
+          && isReleaseListingEligible(resolved)
+          && isCustomerIdentitySafe(resolved));
+      const customerCandidates = deduplicateTradingItems(preparedCandidates)
+        .map(({ resolved, verifiedImages, priceEvidenceRequired, priceEvidenceStatus }) => {
+          const { dealer_id: _dealerId, raw_message: _rawMessage, ...publicResolved } = resolved;
+          const customerRecord = sanitizeTradingRecord(publicResolved, { verifiedImages });
+          if (!priceEvidenceRequired) {
+            return { ...customerRecord, price_evidence_status: priceEvidenceStatus };
+          }
           return {
             ...customerRecord,
             data_quality_issues: [...new Set([
               ...(customerRecord.data_quality_issues || []),
-              'PRICE_EVIDENCE_LOAD_REQUIRED',
+              priceEvidenceStatus,
             ])],
             data_quality_review_required: true,
+            price_evidence_status: priceEvidenceStatus,
           };
         });
       const customerRecords = customerCandidates.slice(0, pageSize);

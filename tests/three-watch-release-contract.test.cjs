@@ -14,16 +14,62 @@ test('all customer listing surfaces enforce the reference release gate', () => {
     'api/price-research-listing.js',
     'api/trading-listing.js',
     'api/listing-contact.js',
+    'api/dealer-profile.js',
     'api/featured-listings.js',
+    'api/export-excel.js',
     'api/catalog-models.js',
     'api/catalog-references.js',
   ]) {
-    assert.match(read(relativePath), /isPublicationReferenceAllowed/);
+    assert.match(read(relativePath), /isPublicationReferenceAllowed|isReleaseListingEligible/);
   }
   const ingest = read('api/ingest.js');
   assert.match(ingest, /publicationReferencePostgrestFilter/);
   assert.match(ingest, /canonical_reference/);
-  assert.match(ingest, /isPublicationReferenceAllowed\(record\.brand, record\.reference\)/);
+  assert.match(ingest, /isReleaseListingEligible\(record\)/);
+});
+
+test('all release reads enforce APPROVED confidence 90 without request-shape bypasses', () => {
+  const ingest = read('api/ingest.js');
+  const research = read('api/price-research.js');
+  const researchDetail = read('api/price-research-listing.js');
+  const tradingDetail = read('api/trading-listing.js');
+  const contact = read('api/listing-contact.js');
+  const featured = read('api/featured-listings.js');
+  const imageQueue = read('api/image-review-queue.js');
+  const imageDecision = read('api/image-review-decision.js');
+  const dealerProfile = read('api/dealer-profile.js');
+  const exportCsv = read('api/export-excel.js');
+  const catalogReferences = read('api/catalog-references.js');
+
+  assert.match(ingest, /if \(strictVerifiedPublication\) \{[\s\S]*loadStrictCursorPage/);
+  assert.match(ingest, /verdict: 'eq\.APPROVED'/);
+  assert.match(ingest, /confidence: 'gte\.90'/);
+  assert.match(ingest, /params\.set\('verdict', 'eq\.APPROVED'\)/);
+  assert.match(ingest, /params\.set\('confidence', 'gte\.90'\)/);
+
+  for (const source of [research, researchDetail, tradingDetail, contact, imageQueue, imageDecision]) {
+    assert.match(source, /\.eq\('verdict', 'APPROVED'\)/);
+    assert.match(source, /\.gte\('confidence', MIN_RELEASE_CONFIDENCE\)/);
+    assert.match(source, /isReleaseListingEligible/);
+  }
+  assert.match(featured, /isReleaseListingEligible\(row\)/);
+  assert.doesNotMatch(featured, /confidence\) >= 85/);
+  assert.match(research, /const sampleLimit = 10000/);
+  for (const source of [dealerProfile, exportCsv, catalogReferences]) {
+    assert.match(source, /isReleaseListingEligible/);
+    assert.match(source, /\.gte\('confidence', MIN_RELEASE_CONFIDENCE\)/);
+  }
+  assert.match(exportCsv, /from\('price_research_verified_source'\)/);
+  assert.match(catalogReferences, /from\('price_research_verified_source'\)/);
+  assert.match(dealerProfile, /from\('seller_listing_lineage_staging'\)/);
+  assert.match(dealerProfile, /loadAnalyticsSuppressedIds/);
+  assert.match(dealerProfile, /deduplicateReposts/);
+  assert.match(ingest, /deduplicateTradingItems/);
+  assert.match(ingest, /loadRepostEvidenceById/);
+  assert.doesNotMatch(ingest, /select: 'id,brand,reference[^']*region,dealer_id'/);
+  assert.match(ingest, /select: 'id,dealer_id,raw_message'/);
+  assert.match(ingest, /const strictVerifiedPublication = true/);
+  assert.match(imageQueue, /const releaseOnly = true/);
 });
 
 test('market analytics ignore condition while retaining it on listing evidence', () => {

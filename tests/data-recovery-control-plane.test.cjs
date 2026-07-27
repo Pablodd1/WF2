@@ -245,9 +245,10 @@ test('database control plane is private, fail closed, and bundle ordered', () =>
   assert.doesNotMatch(migration, /DELETE FROM public\.watch_records/);
 });
 
-test('production verified publication is an explicit rollout switch', () => {
+test('three-reference production publication cannot fall back to legacy identity', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'ingest.js'), 'utf8');
-  assert.match(source, /STRICT_VERIFIED_PUBLICATION === 'true'/);
+  assert.match(source, /const strictVerifiedPublication = true/);
+  assert.doesNotMatch(source, /STRICT_VERIFIED_PUBLICATION === 'true'/);
   assert.match(source, /strictVerifiedPublication[\s\S]*trading_floor_verified_listings/);
 });
 
@@ -259,9 +260,10 @@ test('dealer contact and profiles use verified identity and consent boundaries',
   assert.match(contact, /dealer\.status !== 'VERIFIED'/);
   assert.match(contact, /!dealer\.contact_consent/);
   assert.match(contact, /SELLER_LINEAGE_UNVERIFIED/);
-  assert.match(contact, /from\('verified_dealer_profile_stats'\)/);
+  assert.match(contact, /dealer_stats: null/);
   assert.match(profile, /from\('listing_identity_reviews'\)/);
-  assert.match(profile, /verifiedIds\.has\(listing\.id\)/);
+  assert.match(profile, /from\('seller_listing_lineage_staging'\)/);
+  assert.match(profile, /match_status', 'APPLIED'/);
 });
 
 test('forward hardening renders canonical identity and preserves reviewed decisions', () => {
@@ -281,13 +283,15 @@ test('strict publication covers floor, archive, price research, featured, and de
   const featured = fs.readFileSync(path.join(__dirname, '..', 'api', 'featured-listings.js'), 'utf8');
   const detail = fs.readFileSync(path.join(__dirname, '..', 'api', 'trading-listing.js'), 'utf8');
   assert.match(ingest, /strictVerifiedPublication[\s\S]*\? 'trading_floor_verified_listings'[\s\S]*quality === 'archive'/);
-  assert.match(price, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*const sourceTable = 'watch_records'/);
-  assert.match(price, /retainVerifiedIdentityRows[\s\S]*listing_identity_reviews[\s\S]*CATALOG_CONFIRMED[\s\S]*HUMAN_APPROVED/);
-  assert.match(priceDetail, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
+  assert.match(price, /const sourceTable = 'watch_records'/);
+  assert.match(price, /isReleaseListingEligible\(row\)/);
+  assert.match(price, /\.gte\('confidence', MIN_RELEASE_CONFIDENCE\)/);
+  assert.match(priceDetail, /from\('price_research_verified_source'\)/);
   assert.match(price, /lookupDemand\(client, sourceTable,/);
   assert.doesNotMatch(price, /\.from\('price_research_verified_source'\)/);
   assert.match(featured, /from\('listing_image_reviews'\)[\s\S]*VISUALLY_VERIFIED[\s\S]*loadVerifiedListingRows[\s\S]*from\('price_research_verified_source'\)/);
-  assert.match(detail, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*trading_floor_verified_listings/);
+  assert.match(detail, /const publicTable = 'trading_floor_verified_listings'/);
+  assert.match(detail, /isReleaseListingEligible\(resolvedData\)/);
 });
 
 test('forward repair verifies prerequisites without replaying deployed migrations', () => {

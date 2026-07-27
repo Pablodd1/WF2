@@ -12,15 +12,20 @@ test('cursor browsing does not count the complete verified view', () => {
   assert.match(ingestSource, /const total = cursorMode[\s\S]*\? null/);
 });
 
-test('strict browsing verifies bounded indexed candidates instead of scanning the strict view', () => {
-  assert.match(ingestSource, /candidatePageSize = strictVerifiedPublication[\s\S]*Math\.min\(pageSize \* 10, 500\)/);
-  assert.match(ingestSource, /const tableName = strictVerifiedPublication[\s\S]*trading_floor_market_listings/);
-  assert.match(ingestSource, /candidateRecords\.map\(row => row\.id\)/);
-  assert.match(ingestSource, /!strictVerifiedPublication \|\| Boolean\(verified\)/);
+test('strict browsing verifies and globally deduplicates the bounded reviewed release', () => {
+  assert.match(ingestSource, /const strictVerifiedPublication = true/);
+  assert.match(ingestSource, /loadStrictIdentityCandidates\(supabaseUrl, readKey, limit = 999\)/);
+  assert.match(ingestSource, /Range: `0-\$\{limit\}`/);
+  assert.match(ingestSource, /hasMore: Array\.isArray\(rows\) && rows\.length > limit/);
+  assert.match(ingestSource, /if \(identityPage\.hasMore\)[\s\S]*999-row global repost-deduplication window/);
+  assert.match(ingestSource, /sortTradingItems\(matched\)/);
+  assert.match(ingestSource, /listingIsAfterCursor/);
+  assert.match(ingestSource, /rest\/v1\/trading_floor_verified_listings/);
+  assert.match(ingestSource, /verdict: 'eq\.APPROVED'/);
+  assert.match(ingestSource, /confidence: 'gte\.90'/);
   assert.match(ingestSource, /rest\/v1\/listing_identity_reviews/);
   assert.match(ingestSource, /status: 'in\.\(CATALOG_CONFIRMED,HUMAN_APPROVED\)'/);
   assert.match(ingestSource, /Verified media batch unavailable; images remain withheld/);
-  assert.match(ingestSource, /strictVerifiedPublication && cursorMode/);
-  assert.match(ingestSource, /loadStrictCursorPage/);
+  assert.match(ingestSource, /if \(strictVerifiedPublication\) \{[\s\S]*loadStrictCursorPage/);
   assert.match(ingestSource, /Strict publication requires server-side verification/);
 });

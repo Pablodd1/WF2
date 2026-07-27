@@ -1,7 +1,7 @@
 'use strict';
 
 const { comparisonKey, normalizeDialValue, uniqueCatalogDials } = require('./dial-normalization.cjs');
-const { isReferencePriceCollision } = require('./trading-record-safety.cjs');
+const { isLikelyYearAsPrice, isReferencePriceCollision } = require('./trading-record-safety.cjs');
 
 function classifyResearchEligibility(row, catalog) {
   const price = Number(row?.price_usd);
@@ -12,6 +12,7 @@ function classifyResearchEligibility(row, catalog) {
   if (!Number.isFinite(price) || price <= 0) return 'MISSING_PRICE';
   if (row?.analytics_currency_status && row.analytics_currency_status !== 'VERIFIED') return row.analytics_currency_status;
   if (isReferencePriceCollision(row)) return 'REFERENCE_TOKEN_AS_PRICE';
+  if (isLikelyYearAsPrice(row)) return 'YEAR_TOKEN_AS_PRICE';
 
   const dial = normalizeDialValue(row?.dial_color);
   if (!dial.known) return 'MISSING_DIAL';
