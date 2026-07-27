@@ -22,6 +22,7 @@ const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
 const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs');
+const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -182,6 +183,9 @@ module.exports = async function handler(req, res) {
         hint: 'Brand auto-resolution failed. Provide the brand explicitly.'
       });
     }
+  }
+  if (!isPublicationBrandAllowed(brand)) {
+    return res.status(404).json({ error: 'Brand is not included in this release' });
   }
 
   try {

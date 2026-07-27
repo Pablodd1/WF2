@@ -3,6 +3,7 @@
 const { getClient } = require('./_lib/supabase');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
+const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
@@ -23,6 +24,19 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
     if (publicError) throw publicError;
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
+    let verifiedListing = strictVerifiedPublication ? publicListing : null;
+    if (!verifiedListing) {
+      const verifiedResult = await client
+        .from('trading_floor_verified_listings')
+        .select('id,brand,model,reference,dial_color,has_images,thumbnail_url,image_urls')
+        .eq('id', id)
+        .maybeSingle();
+      if (verifiedResult.error) {
+        console.warn('[trading-listing] verified media unavailable; image withheld:', verifiedResult.error.message);
+      } else {
+        verifiedListing = verifiedResult.data;
+      }
+    }
 
     const { data, error } = await client.from('watch_records')
       .select('id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,listing_type,verdict,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,image_urls,region,raw_message')
@@ -30,45 +44,51 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Listing not found' });
-    if (!isCustomerIdentitySafe(data)) return res.status(404).json({ error: 'Listing under identity review' });
-    if (strictVerifiedPublication) {
-      data.brand = publicListing.brand;
-      data.reference = publicListing.reference;
-      data.dial_color = publicListing.dial_color;
-      data.has_images = publicListing.has_images;
-      data.thumbnail_url = publicListing.thumbnail_url;
-      data.image_urls = publicListing.image_urls;
+    const resolvedData = verifiedListing
+      ? {
+          ...data,
+          brand: verifiedListing.brand,
+          reference: verifiedListing.reference,
+          dial_color: verifiedListing.dial_color,
+          has_images: verifiedListing.has_images,
+          thumbnail_url: verifiedListing.thumbnail_url,
+          image_urls: verifiedListing.image_urls,
+        }
+      : data;
+    if (!isPublicationBrandAllowed(resolvedData.brand)) {
+      return res.status(404).json({ error: 'Listing not included in this release' });
     }
-    const normalized = normalizeMarketRow(data, data.reference);
-    const listing = sanitizeTradingRecord(data);
+    if (!isCustomerIdentitySafe(resolvedData)) return res.status(404).json({ error: 'Listing under identity review' });
+    const normalized = normalizeMarketRow(resolvedData, resolvedData.reference);
+    const listing = sanitizeTradingRecord(resolvedData, { verifiedImages: Boolean(verifiedListing?.has_images) });
     if (normalized.analytics_currency_status === 'VERIFIED') {
       listing.price_usd = normalized.analytics_price_usd;
     }
     return res.status(200).json({
       success: true,
       listing: {
-        id: data.id,
-        brand: data.brand,
-        reference: data.reference,
+        id: listing.id,
+        brand: listing.brand,
+        reference: listing.reference,
         price_usd: listing.price_usd,
         price_raw: listing.price_raw,
-        currency: data.currency,
-        dial_color: data.dial_color,
-        condition: data.condition,
-        year: data.year,
-        listing_type: data.listing_type,
-        verdict: data.verdict,
-        source: data.source,
-        source_type: data.source_type,
+        currency: listing.currency,
+        dial_color: listing.dial_color,
+        condition: listing.condition,
+        year: listing.year,
+        listing_type: listing.listing_type,
+        verdict: listing.verdict,
+        source: listing.source,
+        source_type: listing.source_type,
         raw_message: null,
-        listing_date: data.listing_date,
-        listing_status: data.listing_status,
-        created_at: data.created_at,
-        confidence: data.confidence,
+        listing_date: listing.listing_date,
+        listing_status: listing.listing_status,
+        created_at: listing.created_at,
+        confidence: listing.confidence,
         has_images: listing.has_images,
         thumbnail_url: listing.thumbnail_url,
         image_urls: listing.image_urls,
-        region: data.region,
+        region: listing.region,
         data_quality_issues: listing.data_quality_issues,
         source_message_available_to_reviewers: Boolean(data.raw_message),
       },

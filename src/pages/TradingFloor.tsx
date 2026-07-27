@@ -53,6 +53,8 @@ const INTENT_OPTIONS = [
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
+const RELEASE_BRANDS = ['Rolex', 'Patek Philippe'] as const;
+
 interface ListingRecord {
   id: string;
   brand: string;
@@ -129,6 +131,7 @@ type ViewMode = 'grid' | 'list';
 type InventoryScope = 'market' | 'archive';
 type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
+type BrandFilter = '' | typeof RELEASE_BRANDS[number];
 
 export default function TradingFloor() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -141,6 +144,10 @@ export default function TradingFloor() {
     ? requestedIntent as IntentFilter
     : '';
   const search = searchParams.get('q') || '';
+  const requestedBrand = searchParams.get('brand') || '';
+  const brandFilter: BrandFilter = RELEASE_BRANDS.includes(requestedBrand as typeof RELEASE_BRANDS[number])
+    ? requestedBrand as BrandFilter
+    : '';
   const conditionFilter = searchParams.get('condition') || '';
   const regionFilter = searchParams.get('region') || '';
   const inventoryScope: InventoryScope = searchParams.get('scope') === 'archive' ? 'archive' : 'market';
@@ -161,9 +168,10 @@ export default function TradingFloor() {
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 48);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [categoryFilter, intentFilter, search, conditionFilter, regionFilter, inventoryScope].join('\u001f');
+  const viewKey = [brandFilter, categoryFilter, intentFilter, search, conditionFilter, regionFilter, inventoryScope].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
+    Boolean(brandFilter),
     categoryFilter !== 'all',
     Boolean(intentFilter),
     Boolean(conditionFilter),
@@ -272,6 +280,7 @@ export default function TradingFloor() {
         params.set('quality', inventoryScope);
         if (cursor) params.set('cursor', cursor);
         params.set('item', categoryFilter);
+        if (brandFilter) params.set('brand', brandFilter);
         if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
         if (conditionFilter) params.set('condition', conditionFilter);
@@ -304,13 +313,15 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [categoryFilter, conditionFilter, cursor, intentFilter, inventoryScope, pageSize, regionFilter, search]);
+  }, [brandFilter, categoryFilter, conditionFilter, cursor, intentFilter, inventoryScope, pageSize, regionFilter, search]);
 
   useEffect(() => {
     const controller = new AbortController();
     async function loadFeatured() {
       try {
-        const response = await fetch('/api/featured-listings?limit=18', { signal: controller.signal });
+        const params = new URLSearchParams({ limit: '18' });
+        if (brandFilter) params.set('brand', brandFilter);
+        const response = await fetch(`/api/featured-listings?${params.toString()}`, { signal: controller.signal });
         const data = await response.json() as TradingFloorResponse;
         if (response.ok && data.status === 'ok') {
           setFeaturedListings((data.records || []).filter(isCustomerSafeFeaturedListing));
@@ -321,7 +332,7 @@ export default function TradingFloor() {
     }
     void loadFeatured();
     return () => controller.abort();
-  }, []);
+  }, [brandFilter]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -369,6 +380,18 @@ export default function TradingFloor() {
           </div>
 
           <div className="hidden gap-4 md:grid" aria-label="Marketplace filters">
+            <FilterGroup label="Release brands">
+              <FilterChoice active={!brandFilter} label="Both brands" onClick={() => {
+                resetResults();
+                updateViewParams({ brand: null });
+              }} />
+              {RELEASE_BRANDS.map(brand => (
+                <FilterChoice key={brand} active={brandFilter === brand} label={brand} onClick={() => {
+                  resetResults();
+                  updateViewParams({ brand });
+                }} />
+              ))}
+            </FilterGroup>
             <FilterGroup label="Category">
               {CATEGORY_OPTIONS.map(option => (
                 <FilterChoice key={option.value} active={categoryFilter === option.value} label={option.label} onClick={() => {
@@ -401,6 +424,7 @@ export default function TradingFloor() {
 
       {filtersOpen && (
         <MobileFilterSheet
+          brand={brandFilter}
           category={categoryFilter}
           intent={intentFilter}
           condition={conditionFilter}
@@ -411,6 +435,7 @@ export default function TradingFloor() {
             setFiltersOpen(false);
             resetResults();
             updateViewParams({
+              brand: next.brand || null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
               condition: next.condition || null,
@@ -556,6 +581,7 @@ function InventoryScopeControl({ value, onChange }: { value: InventoryScope; onC
 }
 
 function MobileFilterSheet({
+  brand,
   category,
   intent,
   condition,
@@ -564,14 +590,16 @@ function MobileFilterSheet({
   onApply,
   onClose,
 }: {
+  brand: BrandFilter;
   category: CategoryFilter;
   intent: IntentFilter;
   condition: string;
   region: string;
   inventoryScope: InventoryScope;
-  onApply: (filters: { category: CategoryFilter; intent: IntentFilter; condition: string; region: string; inventoryScope: InventoryScope }) => void;
+  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; condition: string; region: string; inventoryScope: InventoryScope }) => void;
   onClose: () => void;
 }) {
+  const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
   const [draftCondition, setDraftCondition] = useState(condition);
@@ -596,6 +624,12 @@ function MobileFilterSheet({
         </header>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
+          <FilterGroup label="Release brands">
+            <FilterChoice active={!draftBrand} label="Both brands" onClick={() => setDraftBrand('')} />
+            {RELEASE_BRANDS.map(value => (
+              <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
+            ))}
+          </FilterGroup>
           <FilterGroup label="Category">
             {CATEGORY_OPTIONS.map(option => (
               <FilterChoice key={option.value} active={draftCategory === option.value} label={option.label} onClick={() => {
@@ -619,13 +653,14 @@ function MobileFilterSheet({
 
         <footer className="grid shrink-0 grid-cols-2 gap-3 border-t p-4" style={{ borderColor: BORDER, background: SURFACE }}>
           <button type="button" onClick={() => {
+            setDraftBrand('');
             setDraftCategory('all');
             setDraftIntent('');
             setDraftCondition('');
             setDraftRegion('');
             setDraftInventoryScope('market');
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ category: draftCategory, intent: draftIntent, condition: draftCondition, region: draftRegion.trim(), inventoryScope: draftInventoryScope })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, condition: draftCondition, region: draftRegion.trim(), inventoryScope: draftInventoryScope })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
         </footer>
       </section>
     </div>

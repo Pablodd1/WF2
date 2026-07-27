@@ -158,3 +158,19 @@ test('suppresses listing images until visual identity is durably verified', () =
   assert.deepEqual(result.image_urls, []);
   assert.match(result.data_quality_issues.join(','), /IMAGE_VISUAL_VERIFICATION_REQUIRED/);
 });
+
+test('preserves only image media explicitly loaded through the verified publication view', () => {
+  const result = sanitizeTradingRecord({
+    brand: 'Rolex',
+    reference: '126610LN',
+    dial_color: 'Black',
+    has_images: true,
+    thumbnail_url: 'https://cdn.example.com/verified.jpg',
+    image_urls: ['https://cdn.example.com/verified.jpg'],
+  }, { verifiedImages: true });
+
+  assert.equal(result.has_images, true);
+  assert.equal(result.thumbnail_url, 'https://cdn.example.com/verified.jpg');
+  assert.deepEqual(result.image_urls, ['https://cdn.example.com/verified.jpg']);
+  assert.doesNotMatch(result.data_quality_issues.join(','), /IMAGE_VISUAL_VERIFICATION_REQUIRED/);
+});

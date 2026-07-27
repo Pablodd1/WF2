@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, ImageOff, Loader2, MessageCircle, Search, X } from 'lucide-react';
-import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
@@ -1195,6 +1195,7 @@ export default function PriceResearch() {
           outlierLabel={outlierReason(selectedRow.outlier_reason)}
           benchmark={data?.stats}
           comparableCount={data?.count || 0}
+          monthly={data?.monthly || []}
         />
       )}
     </div>
@@ -1227,7 +1228,7 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
   );
 }
 
-function ListingDetailModal({ summary, detail, seller, loading, error, onClose, outlierLabel, benchmark, comparableCount }: {
+function ListingDetailModal({ summary, detail, seller, loading, error, onClose, outlierLabel, benchmark, comparableCount, monthly }: {
   summary: RowData;
   detail: ListingDetailData | null;
   seller: ListingSellerData | null;
@@ -1237,6 +1238,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   outlierLabel: string;
   benchmark: MarketBenchmark | null | undefined;
   comparableCount: number;
+  monthly: MonthlyPoint[];
 }) {
   const [activeImage, setActiveImage] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -1253,6 +1255,22 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   const priceWasCorrected = normalizationReason && Number.isFinite(Number(storedPrice))
     && Math.round(Number(storedPrice)) !== Math.round(displayPrice);
   const rating = rateMarketPrice(displayPrice, benchmark || null, comparableCount);
+  const observedMonth = observedAt ? String(observedAt).slice(0, 7) : null;
+  const priceHistory: Array<Omit<MonthlyPoint, 'avg_price'> & { avg_price: number | null; selected_price: number | null }> = monthly.map(point => ({
+    ...point,
+    selected_price: observedMonth === point.month ? displayPrice : null,
+  }));
+  if (observedMonth && !priceHistory.some(point => point.month === observedMonth)) {
+    priceHistory.push({
+      month: observedMonth,
+      count: 0,
+      avg_price: null,
+      min_price: 0,
+      max_price: 0,
+      selected_price: displayPrice,
+    });
+    priceHistory.sort((a, b) => a.month.localeCompare(b.month));
+  }
 
   const copyRawMessage = async () => {
     if (!detail?.raw_message) return;
@@ -1319,6 +1337,28 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                 </div>}
               </DetailCard>
 
+              <DetailCard title="Price when posted">
+                <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginBottom: 14 }}>
+                  Selected listing versus monthly averages for the exact dial and condition cohort shown in this research result.
+                </p>
+                {priceHistory.length > 0 ? (
+                  <div style={{ width: '100%', height: 250 }} role="img" aria-label="Selected listing price compared with monthly average prices">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={priceHistory}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                        <XAxis dataKey="month" tick={{ fill: MUTED, fontSize: 10 }} />
+                        <YAxis tick={{ fill: MUTED, fontSize: 10 }} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} />
+                        <Tooltip formatter={(value: number, name: string) => [`$${Number(value).toLocaleString()}`, name === 'avg_price' ? 'Monthly average' : 'Selected listing']} />
+                        <Line type="monotone" dataKey="avg_price" name="Monthly average" stroke={GOLD} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                        <Scatter dataKey="selected_price" name="Selected listing" fill={NAVY} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div style={{ color: MUTED, fontSize: 13 }}>No dated comparable history is available for this exact cohort.</div>
+                )}
+              </DetailCard>
+
               <DetailCard title="Seller and market activity">
                 {seller?.dealer_name ? (
                   <>
@@ -1343,7 +1383,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                 )}
               </DetailCard>
 
-              <DetailCard title="Source evidence" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy source message'}</button> : undefined}>
+              <DetailCard title="Original listing" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy source message'}</button> : undefined}>
                 <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
                   <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>SOURCE TEXT / CONTACT REDACTED</span>
                   <span style={{ color: MUTED, fontSize: 12 }}>
@@ -1358,20 +1398,14 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                 {detail.raw_message_lineage_id && <div style={{ marginTop: 8, color: MUTED, fontSize: 10, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>Raw lineage ID: {detail.raw_message_lineage_id}</div>}
               </DetailCard>
 
-              <DetailCard title="Normalized record — what the parser produced">
+              <DetailCard title="Watch details">
                 <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
-                  <DetailField label="Record ID" value={detail.id} mono />
                   <DetailField label="Observed" value={observedAt ? observedAt.split('T')[0] : null} />
-                  <DetailField label="Source" value={detail.source} />
-                  <DetailField label="Stored source price" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
+                  <DetailField label="Asking price as posted" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
                   <DetailField label="Condition" value={detail.condition} />
                   <DetailField label="Dial" value={detail.dial_color} />
                   <DetailField label="Year" value={detail.year} />
-                  <DetailField label="Listing type" value={detail.listing_type} />
                   <DetailField label="Region" value={detail.region} />
-                  <DetailField label="Source type" value={detail.source_type} />
-                  <DetailField label="Status" value={detail.listing_status} />
-                  <DetailField label="Normalization confidence" value={detail.confidence != null ? `${Math.round(detail.confidence * (detail.confidence <= 1 ? 100 : 1))}%` : null} />
                 </div>
                 {detail.accessories.length > 0 && <div style={{ marginTop: 20 }}><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Accessories stated in source</div><div className="flex flex-wrap gap-2">{detail.accessories.map(item => <span key={item} style={{ background: LIGHT_GRAY, border: `1px solid ${BORDER}`, padding: '5px 9px', borderRadius: 5, fontSize: 12 }}>{item}</span>)}</div></div>}
               </DetailCard>

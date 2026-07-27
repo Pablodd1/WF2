@@ -21,6 +21,11 @@ const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { confirmCatalogCandidate } = require('./_lib/catalog-confirmation.cjs');
 const { decodeTradingCursor, encodeTradingCursor, tradingCursorFilter } = require('./_lib/trading-cursor.cjs');
+const {
+  isPublicationBrandAllowed,
+  publicationBrandPostgrestFilter,
+  publicationBrands,
+} = require('./_lib/publication-brands.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -45,6 +50,26 @@ const CONDITIONS = loadJsonSafe('conditions.json', { conditions: {}, set_status:
 const CURRENCIES = loadJsonSafe('currencies.json', { currencies: {}, price_multipliers: {} });
 const MATERIALS = loadJsonSafe('materials.json', { materials: {}, bracelets: {}, bezels: {} });
 const MASTER_CATALOG = loadJsonSafe('master_catalog.json', {});
+
+async function loadVerifiedPublicListings(supabaseUrl, readKey, ids) {
+  if (!ids.length) return new Map();
+  const params = new URLSearchParams({
+    select: 'id,brand,model,reference,dial_color,has_images,thumbnail_url,image_urls',
+    id: `in.(${ids.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+  });
+  try {
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/trading_floor_verified_listings?${params.toString()}`,
+      { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+    );
+    if (!response.ok) throw new Error(`verified listing read returned ${response.status}`);
+    const rows = await response.json();
+    return new Map((rows || []).map(row => [String(row.id), row]));
+  } catch (error) {
+    console.warn(`[Trading Floor] Verified media unavailable; images remain withheld: ${error.message}`);
+    return new Map();
+  }
+}
 
 // Standard USD exchange rates
 const RATES = {
@@ -807,6 +832,7 @@ module.exports = async function handler(req, res) {
       if (cursorValue && !cursor) return res.status(400).json({ error: 'Invalid pagination cursor' });
       const condition = String(req.query?.condition || '').trim().slice(0, 30).replace(/[(),.%*]/g, ' ');
       const region = String(req.query?.region || '').trim().slice(0, 50).replace(/[(),.%*]/g, ' ');
+      const requestedBrand = String(req.query?.brand || '').trim().slice(0, 80).replace(/[(),.%*]/g, ' ');
       const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
       const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'OTHER']);
       const allowedItems = new Set(['all', 'watches', 'jewelry', 'handbags', 'accessories', 'other', 'luxury']);
@@ -818,14 +844,14 @@ module.exports = async function handler(req, res) {
       // watch identity and implausible WTS prices remain reviewable in the full
       // archive but cannot consume customer-market page slots or totals.
       const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
-      const tableName = strictVerifiedPublication
+      const tableName = strictVerifiedPublication || imagesOnly
         ? 'trading_floor_verified_listings'
         : quality === 'archive'
           ? 'trading_floor_listings'
           : 'trading_floor_market_listings';
       const params = new URLSearchParams({
         // Keep this response marketplace-safe even when a server key is used.
-        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region',
+        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,image_urls,region',
         // This matches the production created_at DESC index. NULLS LAST needs a
         // dedicated index before it can be enabled safely on millions of rows.
         order: cursorMode ? 'created_at.desc,id.desc' : 'created_at.desc',
@@ -839,6 +865,9 @@ module.exports = async function handler(req, res) {
       }
       if (itemType && !['all', 'watches'].includes(itemType) && listingType) {
         return res.status(400).json({ error: 'Intent filtering is unavailable for unnormalized luxury records' });
+      }
+      if (requestedBrand && !isPublicationBrandAllowed(requestedBrand)) {
+        return res.status(400).json({ error: 'Brand is not included in this release' });
       }
 
       // NTQ is historical buyer-intent shorthand. Customer-facing WTB must
@@ -869,6 +898,11 @@ module.exports = async function handler(req, res) {
       if (imagesOnly) params.set('has_images', 'eq.true');
       if (condition) params.set('condition', `ilike.${condition}`);
       if (region) params.set('region', `ilike.*${region}*`);
+      if (requestedBrand) params.set('brand', `eq.${requestedBrand}`);
+      else {
+        const releaseBrandFilter = publicationBrandPostgrestFilter();
+        if (releaseBrandFilter) params.set('brand', releaseBrandFilter);
+      }
       // Customer-facing inventory never includes RECYCLE records. The recent
       // view avoids letting undated legacy imports dominate page one, while the
       // all-inventory view and every explicit search still include those rows.
@@ -892,7 +926,12 @@ module.exports = async function handler(req, res) {
           // indexed search service/RPC.
           const parsedSearch = parseTradingSearch(search);
           if (parsedSearch.reference) params.set('reference', `eq.${parsedSearch.reference}`);
-          if (parsedSearch.brand) params.set('brand', `ilike.${parsedSearch.brand}`);
+          if (parsedSearch.brand && !requestedBrand) {
+            if (!isPublicationBrandAllowed(parsedSearch.brand)) {
+              return res.status(400).json({ error: 'Brand is not included in this release' });
+            }
+            params.set('brand', `ilike.${parsedSearch.brand}`);
+          }
           if (parsedSearch.dial) params.set('dial_color', `ilike.${parsedSearch.dial}`);
         }
       }
@@ -917,9 +956,27 @@ module.exports = async function handler(req, res) {
       const records = await resp.json();
       const hasMore = cursorMode && Array.isArray(records) && records.length > pageSize;
       const visibleRecords = Array.isArray(records) ? records.slice(0, pageSize) : [];
+      const verifiedById = tableName === 'trading_floor_verified_listings'
+        ? new Map(visibleRecords.map(row => [String(row.id), row]))
+        : await loadVerifiedPublicListings(supabaseUrl, readKey, visibleRecords.map(row => row.id));
       const customerRecords = visibleRecords
-        .filter(isCustomerIdentitySafe)
-        .map(sanitizeTradingRecord);
+        .map(record => {
+          const verified = verifiedById.get(String(record.id));
+          const resolved = verified
+            ? {
+                ...record,
+                brand: verified.brand,
+                reference: verified.reference,
+                dial_color: verified.dial_color,
+                has_images: verified.has_images,
+                thumbnail_url: verified.thumbnail_url,
+                image_urls: verified.image_urls,
+              }
+            : record;
+          return { resolved, verifiedImages: Boolean(verified?.has_images) };
+        })
+        .filter(({ resolved }) => isCustomerIdentitySafe(resolved))
+        .map(({ resolved, verifiedImages }) => sanitizeTradingRecord(resolved, { verifiedImages }));
       const nextCursor = hasMore ? encodeTradingCursor(visibleRecords[visibleRecords.length - 1]) : null;
       const contentRange = resp.headers.get('content-range') || '';
       const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
@@ -933,6 +990,7 @@ module.exports = async function handler(req, res) {
         hasMore,
         records: customerRecords,
         status: 'ok',
+        publicationBrands: publicationBrands(),
         accessMode: serviceKey ? 'server_key' : 'publishable_read_only',
       });
     } catch (e) {

@@ -7,6 +7,7 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { listCatalogReferences, lookupCatalog } = require('./_lib/catalog');
+const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 
@@ -77,6 +78,9 @@ module.exports = async function handler(req, res) {
   const brand = (req.query.brand || '').trim();
   const model = (req.query.model || '').trim();
   if (!brand || !model) return res.status(400).json({ error: 'brand and model required' });
+  if (!isPublicationBrandAllowed(brand)) {
+    return res.status(404).json({ error: 'Brand is not included in this release' });
+  }
 
   const cacheKey = `${brand}|${model}`;
   const cached = _cache.get(cacheKey);

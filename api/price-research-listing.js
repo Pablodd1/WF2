@@ -5,7 +5,9 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
-const { isCustomerIdentitySafe } = require('./_lib/trading-record-safety.cjs');
+const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
+const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
+const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 
 function normalizeAccessories(value) {
   if (!value) return [];
@@ -43,6 +45,15 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    if (process.env.STRICT_VERIFIED_PUBLICATION === 'true') {
+      const strictGate = await client
+        .from('price_research_verified_source')
+        .select('id')
+        .eq('id', id)
+        .maybeSingle();
+      if (strictGate.error) throw strictGate.error;
+      if (!strictGate.data) return res.status(404).json({ error: 'Listing not found' });
+    }
     const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,accessories,image_urls,thumbnail_url,has_images,dealer_photos,region,source_type,listing_status,confidence';
     const { data, error } = await client
       .from('watch_records')
@@ -55,42 +66,64 @@ module.exports = async function handler(req, res) {
 
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Listing not found' });
-    if (!isCustomerIdentitySafe(data)) return res.status(404).json({ error: 'Listing under identity review' });
+    let verifiedById = new Map();
+    try {
+      verifiedById = await loadVerifiedListingRows(client, [id]);
+    } catch (verifiedError) {
+      console.warn('[price-research-listing] verified media unavailable; image withheld:', verifiedError.message);
+    }
+    const verified = verifiedById.get(id);
+    const resolvedData = verified
+      ? {
+          ...data,
+          brand: verified.brand,
+          reference: verified.reference,
+          dial_color: verified.dial_color,
+          has_images: verified.has_images,
+          thumbnail_url: verified.thumbnail_url,
+          image_urls: verified.image_urls,
+        }
+      : data;
+    if (!isPublicationBrandAllowed(resolvedData.brand)) {
+      return res.status(404).json({ error: 'Listing not included in this release' });
+    }
+    if (!isCustomerIdentitySafe(resolvedData)) return res.status(404).json({ error: 'Listing under identity review' });
+    const customerListing = sanitizeTradingRecord(resolvedData, { verifiedImages: Boolean(verified?.has_images) });
     const rawSource = await resolveRawSource(client, data);
     const normalized = normalizeMarketRow(
-      { ...data, raw_message: rawSource.text },
-      data.reference,
+      { ...customerListing, raw_message: rawSource.text },
+      customerListing.reference,
     );
 
     return res.status(200).json({
       success: true,
       listing: {
-        id: data.id,
-        brand: data.brand,
-        reference: data.reference,
-        price_raw: data.price_raw,
+        id: customerListing.id,
+        brand: customerListing.brand,
+        reference: customerListing.reference,
+        price_raw: customerListing.price_raw,
         price_usd: normalized.analytics_price_usd,
-        stored_price_usd: data.price_usd,
+        stored_price_usd: customerListing.price_usd,
         price_normalization: normalized.price_normalization,
-        currency: data.currency,
+        currency: customerListing.currency,
         raw_message: null,
         raw_message_scope: 'unavailable',
         raw_message_lineage_id: null,
         source_message_available_to_reviewers: Boolean(rawSource.text),
-        created_at: data.created_at,
-        listing_date: data.listing_date,
-        condition: data.condition,
-        source: data.source,
-        dial_color: data.dial_color,
-        year: data.year,
-        listing_type: data.listing_type,
-        accessories: normalizeAccessories(data.accessories),
-        image_urls: [],
-        has_images: false,
-        region: data.region,
-        source_type: data.source_type,
-        listing_status: data.listing_status,
-        confidence: data.confidence,
+        created_at: customerListing.created_at,
+        listing_date: customerListing.listing_date,
+        condition: customerListing.condition,
+        source: customerListing.source,
+        dial_color: customerListing.dial_color,
+        year: customerListing.year,
+        listing_type: customerListing.listing_type,
+        accessories: normalizeAccessories(customerListing.accessories),
+        image_urls: customerListing.image_urls,
+        has_images: customerListing.has_images,
+        region: customerListing.region,
+        source_type: customerListing.source_type,
+        listing_status: customerListing.listing_status,
+        confidence: customerListing.confidence,
       },
     });
   } catch (error) {
