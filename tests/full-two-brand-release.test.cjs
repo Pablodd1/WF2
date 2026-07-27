@@ -19,8 +19,11 @@ test('full-brand Trading Floor uses a service-only deduplicated keyset source', 
   assert.match(migration, /CREATE OR REPLACE VIEW public\.two_brand_verified_trading_release/);
   assert.match(migration, /PARTITION BY repost_signature/);
   assert.match(migration, /ORDER BY has_images DESC, created_at DESC NULLS LAST, id DESC/);
-  assert.match(migration, /m\.verdict = 'APPROVED'/);
-  assert.match(migration, /m\.confidence >= 90/);
+  assert.match(migration, /w\.verdict = 'APPROVED'/);
+  assert.match(migration, /w\.confidence >= 90/);
+  assert.match(migration, /w\.price_usd >= 1000/);
+  assert.match(migration, /public\.is_listing_duplicate_eligible\(w\.id\)/);
+  assert.doesNotMatch(migration, /FROM public\.trading_floor_market_listings m/);
   assert.match(migration, /SET LOCAL lock_timeout = '30s'/);
   assert.match(migration, /r\.status IN \('CATALOG_CONFIRMED', 'HUMAN_APPROVED'\)/);
   assert.match(migration, /REVOKE ALL ON public\.two_brand_verified_trading_release[\s\S]*PUBLIC, anon, authenticated/);
@@ -40,13 +43,19 @@ test('identity review is signed, evidence-first, and leaves raw records immutabl
 
   assert.match(migration, /CREATE OR REPLACE VIEW public\.two_brand_identity_review_queue/);
   assert.match(migration, /COALESCE\(r\.status, 'UNVERIFIED'\) IN \('UNVERIFIED', 'CONFLICT'\)/);
+  assert.match(migration, /READY_FOR_IDENTITY_REVIEW/);
+  assert.match(migration, /MARKET_REVIEW_REQUIRED/);
   assert.match(queue, /authorizeDealer\(req, res, new Set\(\['reviewer', 'admin'\]\)\)/);
+  assert.match(queue, /req\.query\?\.bucket \|\| 'release-ready'/);
+  assert.match(queue, /\.eq\('review_disposition', reviewDisposition\)/);
   assert.match(decision, /sameOrigin\(req\)/);
+  assert.match(decision, /review_disposition !== 'READY_FOR_IDENTITY_REVIEW'/);
   assert.match(decision, /rawSupportsExactReference/);
   assert.match(decision, /confirmCatalogCandidate\(canonical\)/);
   assert.match(decision, /\.rpc\('apply_listing_identity_review'/);
   assert.doesNotMatch(decision, /\.from\('watch_records'\)\.(?:update|upsert|insert|delete)/);
   assert.match(ui, /Rolex and Patek identity review/);
+  assert.match(ui, /actionable identities where a signed identity decision is the final release blocker/);
   assert.match(ui, /Human approve identity/);
 });
 

@@ -208,6 +208,7 @@ interface IdentityReviewQueueApiItem {
   thumbnail_url?: string | null;
   image_urls?: string[] | null;
   release_blockers?: string[];
+  review_disposition?: 'READY_FOR_IDENTITY_REVIEW';
 }
 
 interface IdentityDraft {
@@ -736,7 +737,7 @@ function IdentityReviewLane() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ page: String(page), limit: '50' });
+    const params = new URLSearchParams({ page: String(page), limit: '50', bucket: 'release-ready' });
     if (brand) params.set('brand', brand);
     setError(null);
     fetch(`/api/identity-review-queue?${params.toString()}`, {
@@ -809,7 +810,7 @@ function IdentityReviewLane() {
           <div>
             <h2 className="text-sm font-bold text-text-primary">Rolex and Patek identity review</h2>
             <p className="mt-1 max-w-3xl text-xs text-text-muted">
-              {total.toLocaleString()} unresolved identities. Approval requires the exact reference in the preserved raw listing, a catalog-compatible dial, and a signed reviewer reason. The decision never changes the raw record.
+              {total.toLocaleString()} actionable identities where a signed identity decision is the final release blocker. Normalization, market-data, bundle, duplicate, and missing-evidence cases stay in their own lanes. Approval requires the exact reference in the preserved raw listing and a catalog-compatible dial.
             </p>
           </div>
           <label className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
@@ -834,6 +835,8 @@ function IdentityReviewLane() {
         const reason = reasons[item.record_id] || '';
         const candidateImage = item.thumbnail_url || item.image_urls?.[0] || null;
         const approvalReady = Boolean(
+          item.review_disposition === 'READY_FOR_IDENTITY_REVIEW'
+          &&
           inspected[item.record_id]
           && item.raw_message
           && reason.trim().length >= 12

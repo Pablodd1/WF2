@@ -63,12 +63,17 @@ module.exports = async function handler(req, res) {
   try {
     const { data: queueRow, error: queueError } = await auth.client
       .from('two_brand_identity_review_queue')
-      .select('record_id,identity_status,brand,model,reference,dial_color,raw_message,source,source_type,release_blockers,prior_identity_evidence')
+      .select('record_id,identity_status,brand,model,reference,dial_color,raw_message,source,source_type,release_blockers,prior_identity_evidence,review_disposition')
       .eq('record_id', recordId)
       .maybeSingle();
     if (queueError) throw queueError;
     if (!queueRow) {
       return res.status(409).json({ error: 'Identity review item changed or is no longer pending; reload the queue' });
+    }
+    if (queueRow.review_disposition !== 'READY_FOR_IDENTITY_REVIEW') {
+      return res.status(409).json({
+        error: `This item is routed to ${queueRow.review_disposition || 'another review lane'}; resolve that blocker before identity review`,
+      });
     }
     if (!text(queueRow.raw_message, 1_000_000)) {
       return res.status(409).json({ error: 'Immutable raw evidence is missing; this listing cannot be approved' });
@@ -103,6 +108,7 @@ module.exports = async function handler(req, res) {
       prior_identity_status: queueRow.identity_status,
       prior_identity_evidence: queueRow.prior_identity_evidence || {},
       release_blockers_at_review: queueRow.release_blockers || [],
+      review_disposition_at_review: queueRow.review_disposition,
       catalog_confirmation: catalog,
       reviewer_role: auth.role,
     };

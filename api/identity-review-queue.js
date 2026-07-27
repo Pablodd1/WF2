@@ -3,6 +3,15 @@
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 
 const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe']);
+const REVIEW_BUCKETS = new Map([
+  ['release-ready', 'READY_FOR_IDENTITY_REVIEW'],
+  ['normalization', 'NORMALIZATION_REVIEW_REQUIRED'],
+  ['bundle', 'BUNDLE_REVIEW_REQUIRED'],
+  ['duplicate', 'DUPLICATE_SUPPRESSED'],
+  ['market', 'MARKET_REVIEW_REQUIRED'],
+  ['missing-evidence', 'MISSING_RAW_EVIDENCE'],
+  ['all', null],
+]);
 const SELECT_FIELDS = [
   'record_id',
   'identity_status',
@@ -31,6 +40,7 @@ const SELECT_FIELDS = [
   'has_images',
   'prior_identity_evidence',
   'release_blockers',
+  'review_disposition',
 ].join(',');
 
 module.exports = async function handler(req, res) {
@@ -45,11 +55,17 @@ module.exports = async function handler(req, res) {
   const brand = String(req.query?.brand || '').trim();
   const reference = String(req.query?.reference || '').trim().slice(0, 80);
   const identityStatus = String(req.query?.status || '').trim().toUpperCase();
+  const bucket = String(req.query?.bucket || 'release-ready').trim().toLowerCase();
   if (brand && !ALLOWED_BRANDS.has(brand)) {
     return res.status(400).json({ error: 'Brand must be Rolex or Patek Philippe' });
   }
   if (identityStatus && !['UNVERIFIED', 'CONFLICT'].includes(identityStatus)) {
     return res.status(400).json({ error: 'Status must be UNVERIFIED or CONFLICT' });
+  }
+  if (!REVIEW_BUCKETS.has(bucket)) {
+    return res.status(400).json({
+      error: 'Bucket must be release-ready, normalization, bundle, duplicate, market, missing-evidence, or all',
+    });
   }
 
   try {
@@ -62,6 +78,8 @@ module.exports = async function handler(req, res) {
     if (brand) query = query.eq('brand', brand);
     if (reference) query = query.eq('reference', reference);
     if (identityStatus) query = query.eq('identity_status', identityStatus);
+    const reviewDisposition = REVIEW_BUCKETS.get(bucket);
+    if (reviewDisposition) query = query.eq('review_disposition', reviewDisposition);
     const { data, error, count } = await query;
     if (error) throw error;
     return res.status(200).json({
@@ -72,6 +90,8 @@ module.exports = async function handler(req, res) {
       count: data?.length || 0,
       items: data || [],
       scope: ['Rolex', 'Patek Philippe'],
+      bucket,
+      reviewDisposition,
       decisionContract: 'A signed reviewer decision changes only listing_identity_reviews. Raw evidence remains immutable.',
     });
   } catch (error) {
@@ -81,4 +101,5 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.ALLOWED_BRANDS = ALLOWED_BRANDS;
+module.exports.REVIEW_BUCKETS = REVIEW_BUCKETS;
 module.exports.SELECT_FIELDS = SELECT_FIELDS;
