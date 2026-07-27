@@ -161,4 +161,4 @@ jobs:
             echo '```'
             echo
             echo "The migration changed no watch_records, image decisions, seller decisions, bundle decisions, or duplicate decisions."
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
