@@ -19,13 +19,7 @@ function classifyResearchEligibility(row, catalog) {
   const catalogDials = uniqueCatalogDials(catalog.dialColors || []);
   if (!catalogDials.length) return 'CATALOG_DIAL_UNCONFIRMED';
   const dialKey = comparisonKey(dial.value);
-  const equivalentKeys = new Set([dialKey]);
-  // Catalog imports often describe a white-metallic/panda dial as Silver,
-  // while dealer listings call the same configuration White. Keep this narrow;
-  // market-significant colors such as Purple, Tiffany, Salmon, etc. never alias.
-  if (dialKey === 'WHITE') equivalentKeys.add('SILVER');
-  if (dialKey === 'SILVER') equivalentKeys.add('WHITE');
-  if (!catalogDials.some(value => equivalentKeys.has(comparisonKey(value)))) {
+  if (!catalogDials.some(value => dialKey === comparisonKey(value))) {
     return 'CATALOG_DIAL_MISMATCH';
   }
   return null;

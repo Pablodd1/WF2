@@ -18,6 +18,7 @@ const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf
 
 test('full-brand Trading Floor uses a service-only deduplicated keyset source', () => {
   const migration = read('supabase/migrations/20260727190000_full_rolex_patek_release.sql');
+  const cacheMigration = read('supabase/migrations/20260727230000_materialized_two_brand_release.sql');
   const ingest = read('api/ingest.js');
 
   assert.match(migration, /CREATE OR REPLACE VIEW public\.two_brand_verified_trading_release/);
@@ -35,7 +36,11 @@ test('full-brand Trading Floor uses a service-only deduplicated keyset source', 
   assert.match(migration, /REVOKE ALL ON public\.two_brand_verified_trading_release[\s\S]*PUBLIC, anon, authenticated/);
   assert.match(migration, /GRANT SELECT ON public\.two_brand_verified_trading_release TO service_role/);
   assert.match(ingest, /isFullReviewedBrandRelease\(\)/);
-  assert.match(ingest, /rest\/v1\/two_brand_verified_trading_release/);
+  assert.match(cacheMigration, /CREATE MATERIALIZED VIEW IF NOT EXISTS public\.two_brand_verified_trading_release_cache/);
+  assert.match(cacheMigration, /FROM public\.two_brand_verified_trading_release/);
+  assert.match(cacheMigration, /GRANT SELECT ON public\.two_brand_verified_trading_release_cache TO service_role/);
+  assert.match(ingest, /rest\/v1\/two_brand_verified_trading_release_cache/);
+  assert.match(ingest, /loadVerifiedPublicListings\([\s\S]*selected\.map\(row => row\.id\)/);
   assert.match(ingest, /order: 'created_at\.desc\.nullslast,id\.desc'/);
   assert.match(ingest, /Range: `\$\{start\}-\$\{end\}`/);
   assert.match(ingest, /Prefer: 'return=representation'/);

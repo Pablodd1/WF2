@@ -27,14 +27,6 @@ function rawSupportsReferenceToken(rawMessage, reference) {
   return new RegExp(`(?<![A-Z0-9])${pattern}(?![A-Z0-9]|\\s*[-/\\\\]\\s*[A-Z0-9])`, 'u').test(raw);
 }
 
-function equivalentDialKeys(value) {
-  const key = comparisonKey(value);
-  const keys = new Set([key]);
-  if (key === 'WHITE') keys.add('SILVER');
-  if (key === 'SILVER') keys.add('WHITE');
-  return keys;
-}
-
 function confirmCatalogCandidate(candidate) {
   if (!candidate?.reference) {
     return { confirmed: false, reason: 'CATALOG_IDENTITY_INCOMPLETE', match: null };
@@ -62,8 +54,8 @@ function confirmCatalogCandidate(candidate) {
   let dialReason = null;
   let canonicalDial = null;
   if (proposedDial.known) {
-    const equivalent = equivalentDialKeys(proposedDial.value);
-    canonicalDial = catalogDials.find(value => equivalent.has(comparisonKey(value))) || null;
+    const proposedDialKey = comparisonKey(proposedDial.value);
+    canonicalDial = catalogDials.find(value => comparisonKey(value) === proposedDialKey) || null;
     dialConfirmed = Boolean(canonicalDial);
     dialReason = dialConfirmed
       ? 'CATALOG_DIAL_CONFIRMED'

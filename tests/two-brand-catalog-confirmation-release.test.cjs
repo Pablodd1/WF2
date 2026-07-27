@@ -130,4 +130,6 @@ test('release workflow uses the validated four-worker batch-250 ceiling', () => 
   assert.match(workflow, /APPLY_EXACT_TWO_BRAND_CATALOG_RELEASE/);
   assert.match(workflow, /Run read-only exact-match canary/);
   assert.match(workflow, /Require exact reconciliation and zero writes/);
+  assert.match(workflow, /REFRESH MATERIALIZED VIEW public\.two_brand_verified_trading_release_cache/);
+  assert.match(workflow, /FROM public\.two_brand_verified_trading_release_cache/);
 });

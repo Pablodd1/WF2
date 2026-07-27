@@ -18,10 +18,10 @@ test('rejects a dial that is impossible for the cataloged reference', () => {
   );
 });
 
-test('accepts the narrow white and silver marketplace/catalog vocabulary equivalence', () => {
+test('rejects white when the exact catalog configuration is silver', () => {
   assert.equal(
     classifyResearchEligibility({ ...valid, dial_color: 'White' }, { ...catalog, dialColors: ['Black', 'Silver'] }),
-    null,
+    'CATALOG_DIAL_MISMATCH',
   );
 });
 
