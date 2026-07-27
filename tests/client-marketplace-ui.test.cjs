@@ -38,6 +38,15 @@ test('Trading Floor watch view does not render internal listing labels or identi
   assert.match(floor, /aria-label="Close selected watch"/);
 });
 
+test('Trading Floor shows bounded price evidence before unresolved release rows', () => {
+  const floor = read('src/pages/TradingFloor.tsx');
+
+  assert.match(floor, /media\.matches \? 48 : 100/);
+  assert.match(floor, /function priceEvidenceRank/);
+  assert.match(floor, /priceEvidenceRank\(right\) - priceEvidenceRank\(left\)/);
+  assert.match(floor, /setListings\(current => sortListingsForDisplay/);
+});
+
 test('dealer login keeps authentication but omits the removed marketing panel', () => {
   const login = read('src/pages/DealerLogin.tsx');
 

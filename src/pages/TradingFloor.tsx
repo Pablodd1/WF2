@@ -134,6 +134,16 @@ type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = '' | typeof RELEASE_BRANDS[number];
 
+function priceEvidenceRank(listing: ListingRecord) {
+  if (Number(listing.price_usd) > 0 && listing.currency === 'USD') return 2;
+  if (Number(listing.price_raw) > 0 && listing.currency) return 1;
+  return 0;
+}
+
+function sortListingsForDisplay(listings: ListingRecord[]) {
+  return [...listings].sort((left, right) => priceEvidenceRank(right) - priceEvidenceRank(left));
+}
+
 export default function TradingFloor() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedCategory = searchParams.get('item');
@@ -166,7 +176,7 @@ export default function TradingFloor() {
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 48);
+  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 48 : 100);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
   const viewKey = [brandFilter, categoryFilter, intentFilter, search, conditionFilter, regionFilter, inventoryScope].join('\u001f');
@@ -223,7 +233,7 @@ export default function TradingFloor() {
   useEffect(() => {
     const media = window.matchMedia('(max-width: 640px)');
     const updatePageSize = () => {
-      setPageSize(media.matches ? 24 : 48);
+      setPageSize(media.matches ? 48 : 100);
       resetResults();
     };
     updatePageSize();
@@ -295,7 +305,11 @@ export default function TradingFloor() {
         if (!response.ok || data.status !== 'ok') throw new Error(data.error || 'Unable to load listings');
 
         const nextListings = data.records || [];
-        setListings(current => cursor ? [...current, ...nextListings.filter(row => !current.some(existing => existing.id === row.id))] : nextListings);
+        setListings(current => sortListingsForDisplay(
+          cursor
+            ? [...current, ...nextListings.filter(row => !current.some(existing => existing.id === row.id))]
+            : nextListings,
+        ));
         if (!cursor) {
           const parsedTotal = data.total == null ? null : Number(data.total);
           setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
