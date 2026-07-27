@@ -20,4 +20,7 @@ test('strict browsing verifies bounded indexed candidates instead of scanning th
   assert.match(ingestSource, /rest\/v1\/listing_identity_reviews/);
   assert.match(ingestSource, /status: 'in\.\(CATALOG_CONFIRMED,HUMAN_APPROVED\)'/);
   assert.match(ingestSource, /Verified media batch unavailable; images remain withheld/);
+  assert.match(ingestSource, /strictVerifiedPublication && cursorMode/);
+  assert.match(ingestSource, /loadStrictCursorPage/);
+  assert.match(ingestSource, /Strict publication requires server-side verification/);
 });

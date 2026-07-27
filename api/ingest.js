@@ -117,6 +117,174 @@ async function loadVerifiedPublicListings(supabaseUrl, readKey, ids) {
   return verified;
 }
 
+async function loadStrictIdentityCandidates(supabaseUrl, readKey, cursor, limit = 500) {
+  const params = new URLSearchParams({
+    select: 'record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status,updated_at',
+    status: 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)',
+    order: 'updated_at.desc,record_id.desc',
+  });
+  if (cursor?.createdAt) {
+    params.set('or', `(updated_at.lt.${cursor.createdAt},and(updated_at.eq.${cursor.createdAt},record_id.lt.${cursor.id}))`);
+  }
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/listing_identity_reviews?${params.toString()}`,
+    {
+      headers: {
+        apikey: readKey,
+        Authorization: `Bearer ${readKey}`,
+        'Range-Unit': 'items',
+        Range: `0-${limit}`,
+        Prefer: 'return=representation',
+      },
+    },
+  );
+  if (!response.ok) throw new Error(`identity candidate read returned ${response.status}`);
+  const rows = await response.json();
+  return {
+    rows: Array.isArray(rows) ? rows.slice(0, limit) : [],
+    hasMore: Array.isArray(rows) && rows.length > limit,
+  };
+}
+
+async function loadMarketRowsById(supabaseUrl, readKey, ids) {
+  const batches = [];
+  for (let index = 0; index < ids.length; index += 50) {
+    batches.push(ids.slice(index, index + 50));
+  }
+  const results = await Promise.all(batches.map(async batch => {
+    const params = new URLSearchParams({
+      select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,region',
+      id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+    });
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/trading_floor_market_listings?${params.toString()}`,
+      { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+    );
+    if (!response.ok) throw new Error(`market listing batch returned ${response.status}`);
+    return response.json();
+  }));
+  return new Map(results.flat().map(row => [String(row.id), row]));
+}
+
+function matchesStrictReleaseFilters(record, {
+  listingType,
+  itemType,
+  requestedBrand,
+  condition,
+  region,
+  search,
+}) {
+  if (!record || !isPublicationBrandAllowed(record.brand)) return false;
+  if (requestedBrand && String(record.brand).toLowerCase() !== requestedBrand.toLowerCase()) return false;
+  if (itemType && !['all', 'watches'].includes(itemType)) return false;
+  if (listingType === 'WTB' && !['WTB', 'NTQ'].includes(record.listing_type)) return false;
+  if (listingType && listingType !== 'WTB' && record.listing_type !== listingType) return false;
+  if (!listingType && !['WTS', 'WTB', 'NTQ', 'OTHER'].includes(record.listing_type)) return false;
+  if (String(record.verdict || '').toUpperCase() === 'RECYCLE') return false;
+  if (String(record.id || '').startsWith('preview_demo_')) return false;
+  if (condition && String(record.condition || '').toLowerCase() !== condition.toLowerCase()) return false;
+  if (region && !String(record.region || '').toLowerCase().includes(region.toLowerCase())) return false;
+  if (search) {
+    const parsed = parseTradingSearch(search);
+    if (parsed.reference && String(record.reference || '').toUpperCase() !== parsed.reference.toUpperCase()) return false;
+    if (parsed.brand && String(record.brand || '').toLowerCase() !== parsed.brand.toLowerCase()) return false;
+    if (parsed.dial && String(record.dial_color || '').toLowerCase() !== parsed.dial.toLowerCase()) return false;
+  }
+  return isCustomerIdentitySafe(record);
+}
+
+async function loadStrictCursorPage({
+  supabaseUrl,
+  readKey,
+  cursor,
+  page,
+  pageSize,
+  listingType,
+  itemType,
+  requestedBrand,
+  condition,
+  region,
+  search,
+}) {
+  const identityPage = await loadStrictIdentityCandidates(supabaseUrl, readKey, cursor);
+  const marketById = await loadMarketRowsById(
+    supabaseUrl,
+    readKey,
+    identityPage.rows.map(row => row.record_id),
+  );
+  const matched = identityPage.rows
+    .map(identity => {
+      const market = marketById.get(String(identity.record_id));
+      if (!market) return null;
+      const resolved = {
+        ...market,
+        brand: identity.canonical_brand || market.brand,
+        reference: identity.canonical_reference || market.reference,
+        dial_color: identity.canonical_dial_color || market.dial_color,
+      };
+      return matchesStrictReleaseFilters(resolved, {
+        listingType,
+        itemType,
+        requestedBrand,
+        condition,
+        region,
+        search,
+      }) ? { identity, resolved } : null;
+    })
+    .filter(Boolean);
+  const selected = matched.slice(0, pageSize);
+  const verifiedById = await loadVerifiedPublicListings(
+    supabaseUrl,
+    readKey,
+    selected.map(item => item.resolved.id),
+  );
+  const records = selected.map(({ resolved }) => {
+    const verified = verifiedById.get(String(resolved.id));
+    const safe = sanitizeTradingRecord({
+      ...resolved,
+      brand: verified?.brand || resolved.brand,
+      reference: verified?.reference || resolved.reference,
+      dial_color: verified?.dial_color || resolved.dial_color,
+      has_images: Boolean(verified?.has_images),
+      thumbnail_url: verified?.thumbnail_url || null,
+      image_urls: verified?.image_urls || [],
+      price_usd: null,
+      price_raw: null,
+      currency: null,
+    }, { verifiedImages: Boolean(verified?.has_images) });
+    if (resolved.listing_type !== 'WTS') return safe;
+    return {
+      ...safe,
+      data_quality_issues: [...new Set([
+        ...(safe.data_quality_issues || []),
+        'PRICE_EVIDENCE_LOAD_REQUIRED',
+      ])],
+      data_quality_review_required: true,
+    };
+  });
+  const matchedHasMore = matched.length > pageSize;
+  const hasMore = matchedHasMore || identityPage.hasMore;
+  const cursorIdentity = matchedHasMore
+    ? matched[pageSize - 1]?.identity
+    : identityPage.rows[identityPage.rows.length - 1];
+  const nextCursor = hasMore && cursorIdentity
+    ? encodeTradingCursor({ id: cursorIdentity.record_id, created_at: cursorIdentity.updated_at })
+    : null;
+  return {
+    count: records.length,
+    total: null,
+    page,
+    pageSize,
+    totalIsEstimate: false,
+    nextCursor,
+    hasMore,
+    records,
+    status: 'ok',
+    publicationBrands: publicationBrands(),
+    accessMode: 'server_key',
+  };
+}
+
 // Standard USD exchange rates
 const RATES = {
   USD: 1.0, USDT: 1.0, HKD: 0.128, EUR: 1.08,
@@ -924,6 +1092,25 @@ module.exports = async function handler(req, res) {
       }
       if (requestedBrand && !isPublicationBrandAllowed(requestedBrand)) {
         return res.status(400).json({ error: 'Brand is not included in this release' });
+      }
+      if (strictVerifiedPublication && cursorMode) {
+        if (!serviceKey) {
+          return res.status(503).json({ error: 'Strict publication requires server-side verification' });
+        }
+        const strictPage = await loadStrictCursorPage({
+          supabaseUrl,
+          readKey: serviceKey,
+          cursor,
+          page,
+          pageSize,
+          listingType,
+          itemType,
+          requestedBrand,
+          condition,
+          region,
+          search,
+        });
+        return res.status(200).json(strictPage);
       }
 
       // NTQ is historical buyer-intent shorthand. Customer-facing WTB must
