@@ -7,6 +7,26 @@ function normalizeBrand(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function compactIdentityEvidence(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function rawSupportsExactReference(rawMessage, reference) {
+  const raw = compactIdentityEvidence(rawMessage);
+  const exactReference = compactIdentityEvidence(reference);
+  return Boolean(raw && exactReference && raw.includes(exactReference));
+}
+
+function rawSupportsReferenceToken(rawMessage, reference) {
+  const raw = String(rawMessage || '').toUpperCase();
+  const parts = String(reference || '').toUpperCase().match(/[A-Z0-9]+/g) || [];
+  if (!raw || !parts.length) return false;
+  const pattern = parts
+    .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('[^A-Z0-9]*');
+  return new RegExp(`(?<![A-Z0-9])${pattern}(?![A-Z0-9]|\\s*[-/\\\\]\\s*[A-Z0-9])`, 'u').test(raw);
+}
+
 function equivalentDialKeys(value) {
   const key = comparisonKey(value);
   const keys = new Set([key]);
@@ -40,9 +60,11 @@ function confirmCatalogCandidate(candidate) {
   const catalogDials = uniqueCatalogDials(match.dialColors || []);
   let dialConfirmed = null;
   let dialReason = null;
+  let canonicalDial = null;
   if (proposedDial.known) {
     const equivalent = equivalentDialKeys(proposedDial.value);
-    dialConfirmed = catalogDials.some(value => equivalent.has(comparisonKey(value)));
+    canonicalDial = catalogDials.find(value => equivalent.has(comparisonKey(value))) || null;
+    dialConfirmed = Boolean(canonicalDial);
     dialReason = dialConfirmed
       ? 'CATALOG_DIAL_CONFIRMED'
       : (catalogDials.length ? 'CATALOG_DIAL_CONFLICT' : 'CATALOG_DIAL_UNCONFIRMED');
@@ -53,6 +75,7 @@ function confirmCatalogCandidate(candidate) {
     reason: 'CATALOG_CONFIRMED',
     dialConfirmed,
     dialReason,
+    canonicalDial,
     match: {
       reference: normalizeRef(match.matchedRef || candidate.reference),
       brand: match.brand || candidate.brand,
@@ -65,4 +88,9 @@ function confirmCatalogCandidate(candidate) {
   };
 }
 
-module.exports = { confirmCatalogCandidate };
+module.exports = {
+  compactIdentityEvidence,
+  confirmCatalogCandidate,
+  rawSupportsExactReference,
+  rawSupportsReferenceToken,
+};

@@ -132,6 +132,24 @@ assuming the indexed view census completes inside its 120-second database
 timeout. Human review continues incrementally and does not block already
 publishable listings.
 
+## Deterministic bulk catalog confirmation
+
+The manual workflow `Confirm exact Rolex and Patek catalog matches` scans a
+frozen two-brand snapshot through four disjoint record-ID shards. Each worker
+uses the validated batch size of 250 and writes only `CATALOG_CONFIRMED`
+decisions. It requires the parsed reference to appear in immutable raw
+evidence, an exact or explicitly curated catalog configuration, a catalog
+model, and an agreeing catalog dial. Explicit model or dial conflicts and
+incomplete evidence remain in review.
+
+The workflow runs a read-only canary first, preserves signed human decisions,
+atomically checkpoints every batch, and reconciles every input row to a
+classification or error. It never writes `watch_records`. Newly confirmed rows
+flow automatically to Trading Floor when the remaining publication gates pass
+and to Price Research only when source-backed price and currency gates also
+pass. Existing images and seller evidence remain governed by independent
+signed lineage, visual-review, dealer-verification, and consent controls.
+
 ## Exact release census
 
 The targeted production workflow publishes the authoritative census grouped by
