@@ -61,7 +61,7 @@ interface ListingRecord {
   reference: string | null;
   price_usd: number | null;
   price_raw: number | null;
-  currency: string;
+  currency: string | null;
   dial_color: string | null;
   condition: string | null;
   year: number | null;
@@ -117,7 +117,7 @@ interface ListingBenchmark {
   rating: MarketPriceRating;
 }
 
-interface ListingEvidence {
+interface ListingEvidence extends Partial<ListingRecord> {
   id: string;
   brand: string;
   reference: string;
@@ -774,7 +774,6 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 }
 
 function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
-  const meta = useMemo(() => getListingMeta(listing), [listing]);
   const canLoadBenchmark = Boolean(listing.reference && listing.brand && listing.listing_type === 'WTS');
   const [contact, setContact] = useState<ListingContact | null>(null);
   const [evidence, setEvidence] = useState<ListingEvidence | null>(null);
@@ -787,11 +786,21 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
     monthly: [],
     rating: rateMarketPrice(listing.price_usd, null, 0),
   });
+  const detailListing = useMemo<ListingRecord>(() => evidence
+    ? {
+        ...listing,
+        ...evidence,
+        id: listing.id,
+        brand: evidence.brand || listing.brand,
+        reference: evidence.reference || listing.reference,
+      }
+    : listing, [evidence, listing]);
+  const meta = useMemo(() => getListingMeta(detailListing), [detailListing]);
   const images = useMemo(() => {
     return (evidence?.image_urls || []).map(value => String(value || '').trim()).filter(Boolean);
   }, [evidence]);
   const priceTimeline = useMemo(() => {
-    const postedAt = listing.listing_date || listing.created_at;
+    const postedAt = detailListing.listing_date || detailListing.created_at;
     const observedDate = postedAt?.split('T')[0] || null;
     const observedMonth = observedDate?.slice(0, 7) || '';
     const rows: Array<{ month: string; avg_price: number | null; count: number; selected_price: number | null; observed_date: string | null }> =
@@ -799,21 +808,25 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         month: point.month,
         avg_price: point.avg_price,
         count: point.count,
-        selected_price: point.month === observedMonth ? listing.price_usd : null,
+        selected_price: point.month === observedMonth ? detailListing.price_usd : null,
         observed_date: point.month === observedMonth ? observedDate : null,
       }));
-    if (observedMonth && listing.price_usd && !rows.some(point => point.month === observedMonth)) {
+    if (observedMonth && detailListing.price_usd && !rows.some(point => point.month === observedMonth)) {
       rows.push({
         month: observedMonth,
         avg_price: null,
         count: 0,
-        selected_price: listing.price_usd,
+        selected_price: detailListing.price_usd,
         observed_date: observedDate,
       });
       rows.sort((left, right) => left.month.localeCompare(right.month));
     }
     return { rows, observedMonth };
-  }, [benchmark.monthly, listing.created_at, listing.listing_date, listing.price_usd]);
+  }, [benchmark.monthly, detailListing.created_at, detailListing.listing_date, detailListing.price_usd]);
+  const detailRating = useMemo(
+    () => rateMarketPrice(detailListing.price_usd, benchmark.stats, benchmark.count),
+    [benchmark.count, benchmark.stats, detailListing.price_usd],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -904,7 +917,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             className="h-[648px] w-full rounded-sm object-contain"
           />
         ) : (
-          <ListingImage listing={{ ...listing, thumbnail_url: null }} className="h-[648px] w-full" large />
+          <ListingImage listing={{ ...detailListing, thumbnail_url: null }} className="h-[648px] w-full" large />
         )}
         {images.length > 1 && (
           <div className="mt-2 flex gap-2 overflow-x-auto">
@@ -946,12 +959,12 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
-            {[displayDial(listing.dial_color), cleanValue(listing.condition), listing.year ? String(listing.year) : ''].filter(Boolean).map(value => (
+            {[displayDial(detailListing.dial_color), cleanValue(detailListing.condition), detailListing.year ? String(detailListing.year) : ''].filter(Boolean).map(value => (
               <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: BORDER }}>{value}</span>
             ))}
           </div>
 
-          {listing.data_quality_review_required && (
+          {detailListing.data_quality_review_required && (
             <p className="mt-5 border-l-2 pl-3 text-sm leading-6" style={{ borderColor: '#B7791F', color: '#F6C453' }}>
               One or more normalized fields were withheld because they conflict with the source data. The original listing remains preserved for review.
             </p>
@@ -963,7 +976,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(listing.listing_type) ? 'Buyer request contact' : 'Check availability'}</h2>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(detailListing.listing_type) ? 'Buyer request contact' : 'Check availability'}</h2>
           {contact?.dealer_name && (
             <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
               <div className="text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>
@@ -992,9 +1005,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           )}
           {contact?.contact_available && contact.whatsapp_url ? (
             <>
-              <p className="mt-3 text-sm" style={{ color: MUTED }}>{isBuyerIntent(listing.listing_type) ? `Contact ${contact.dealer_name || 'the verified buyer'} about this request.` : `Contact ${contact.dealer_name || 'the verified dealer'} directly about this item.`}</p>
+              <p className="mt-3 text-sm" style={{ color: MUTED }}>{isBuyerIntent(detailListing.listing_type) ? `Contact ${contact.dealer_name || 'the verified buyer'} about this request.` : `Contact ${contact.dealer_name || 'the verified dealer'} directly about this item.`}</p>
               <a href={contact.whatsapp_url} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
-                <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
+                <MessageCircle size={18} /> {isBuyerIntent(detailListing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
               </a>
             </>
           ) : (
@@ -1026,11 +1039,11 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: benchmark.rating.color }}>Price rating</div>
-              <div className="mt-2 text-xl font-semibold" style={{ color: INK }}>{benchmark.loading ? 'Calculating…' : benchmark.rating.label}</div>
-              {!benchmark.loading && <p className="mt-2 text-sm leading-6" style={{ color: MUTED }}>{benchmark.rating.reason}</p>}
+              <div className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: detailRating.color }}>Price rating</div>
+              <div className="mt-2 text-xl font-semibold" style={{ color: INK }}>{benchmark.loading ? 'Calculating…' : detailRating.label}</div>
+              {!benchmark.loading && <p className="mt-2 text-sm leading-6" style={{ color: MUTED }}>{detailRating.reason}</p>}
             </div>
-            <div className="h-3 w-3 shrink-0 rounded-full" style={{ background: benchmark.rating.color }} />
+            <div className="h-3 w-3 shrink-0 rounded-full" style={{ background: detailRating.color }} />
           </div>
           {benchmark.stats && benchmark.count >= 5 && (
             <div className="mt-6 grid grid-cols-3 gap-3 border-t pt-5 text-center" style={{ borderColor: BORDER }}>
@@ -1044,7 +1057,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             <div className="mt-6 border-t pt-5" style={{ borderColor: BORDER }}>
               <h3 className="text-[15px] font-medium" style={{ color: INK }}>Price when posted</h3>
               <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>
-                Selected listing versus monthly averages for the exact {displayDial(listing.dial_color) || 'unspecified dial'} / {cleanValue(listing.condition) || 'unspecified condition'} cohort.
+                Selected listing versus monthly averages for the exact {displayDial(detailListing.dial_color) || 'unspecified dial'} / {cleanValue(detailListing.condition) || 'unspecified condition'} cohort.
               </p>
               <div className="mt-4 h-64 w-full" role="img" aria-label={`Selected listing price compared with monthly average prices for ${meta.title}`}>
                 <ResponsiveContainer>
@@ -1142,7 +1155,7 @@ function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
   const rawPriceLabel = formatRawPrice(listing);
-  const usdPriceLabel = listing.data_quality_issues?.includes('REFERENCE_TOKEN_AS_PRICE')
+  const usdPriceLabel = hasPriceReviewIssue(listing)
     ? 'Price under review'
     : formatUsdPrice(listing.price_usd, listing.listing_type);
   const title = buildListingTitle(listing);
@@ -1178,12 +1191,21 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function formatRawPrice(listing: ListingRecord) {
-  if (listing.data_quality_issues?.includes('REFERENCE_TOKEN_AS_PRICE')) return 'Price under review';
+  if (hasPriceReviewIssue(listing)) return 'Exact source currency is being verified';
   if (listing.price_raw && listing.currency) {
     return `${compactNumber(listing.price_raw)}${listing.currency}`;
   }
   if (listing.price_usd) return `${compactNumber(listing.price_usd)}USD`;
   return isBuyerIntent(listing.listing_type) ? 'Buyer budget not stated' : 'Price on request';
+}
+
+function hasPriceReviewIssue(listing: ListingRecord) {
+  return (listing.data_quality_issues || []).some(issue =>
+    issue === 'REFERENCE_TOKEN_AS_PRICE'
+    || issue === 'PRICE_EVIDENCE_LOAD_REQUIRED'
+    || issue === 'MISSING_PRICE'
+    || issue.startsWith('CURRENCY_')
+  );
 }
 
 function formatUsdPrice(value: number | null, listingType: string) {

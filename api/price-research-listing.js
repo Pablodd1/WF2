@@ -94,6 +94,12 @@ module.exports = async function handler(req, res) {
       { ...customerListing, raw_message: rawSource.text },
       customerListing.reference,
     );
+    const priceVerified = normalized.analytics_currency_status === 'VERIFIED'
+      && Number.isFinite(Number(normalized.analytics_price_usd))
+      && Number(normalized.analytics_price_usd) > 0;
+    const priceIssues = priceVerified
+      ? customerListing.data_quality_issues
+      : [...new Set([...(customerListing.data_quality_issues || []), normalized.analytics_currency_status])];
 
     return res.status(200).json({
       success: true,
@@ -101,11 +107,11 @@ module.exports = async function handler(req, res) {
         id: customerListing.id,
         brand: customerListing.brand,
         reference: customerListing.reference,
-        price_raw: customerListing.price_raw,
-        price_usd: normalized.analytics_price_usd,
-        stored_price_usd: customerListing.price_usd,
+        price_raw: null,
+        price_usd: priceVerified ? normalized.analytics_price_usd : null,
         price_normalization: normalized.price_normalization,
-        currency: customerListing.currency,
+        price_evidence_status: normalized.analytics_currency_status,
+        currency: priceVerified ? 'USD' : null,
         raw_message: null,
         raw_message_scope: 'unavailable',
         raw_message_lineage_id: null,
@@ -124,6 +130,8 @@ module.exports = async function handler(req, res) {
         source_type: customerListing.source_type,
         listing_status: customerListing.listing_status,
         confidence: customerListing.confidence,
+        data_quality_issues: priceIssues,
+        data_quality_review_required: priceIssues.length > 0,
       },
     });
   } catch (error) {

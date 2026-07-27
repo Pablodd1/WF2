@@ -61,6 +61,9 @@ human-approved and is not a customer-visible count.
 
 - Trading Floor has Rolex, Patek Philippe, and combined brand filters.
 - Trading Floor and Price Research use the same listing-detail evidence route.
+- Trading Floor cards publish verified identity first. A clicked detail shows a
+  price only after the exact source line verifies USD or HKD; unresolved
+  currency is labeled as under review instead of displaying a stored guess.
 - Customer detail cards omit record IDs, parser confidence, internal source
   names, and internal status fields.
 - Both detail experiences compare the posted price with the monthly average for

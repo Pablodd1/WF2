@@ -981,10 +981,28 @@ module.exports = async function handler(req, res) {
                 image_urls: verified.image_urls,
               }
             : record;
-          return { resolved, verifiedImages: Boolean(verified?.has_images) };
+          const customerResolved = strictVerifiedPublication
+            ? { ...resolved, price_usd: null, price_raw: null, currency: null }
+            : resolved;
+          return {
+            resolved: customerResolved,
+            verifiedImages: Boolean(verified?.has_images),
+            priceEvidenceRequired: strictVerifiedPublication && resolved.listing_type === 'WTS',
+          };
         })
         .filter(({ resolved }) => isCustomerIdentitySafe(resolved))
-        .map(({ resolved, verifiedImages }) => sanitizeTradingRecord(resolved, { verifiedImages }));
+        .map(({ resolved, verifiedImages, priceEvidenceRequired }) => {
+          const customerRecord = sanitizeTradingRecord(resolved, { verifiedImages });
+          if (!priceEvidenceRequired) return customerRecord;
+          return {
+            ...customerRecord,
+            data_quality_issues: [...new Set([
+              ...(customerRecord.data_quality_issues || []),
+              'PRICE_EVIDENCE_LOAD_REQUIRED',
+            ])],
+            data_quality_review_required: true,
+          };
+        });
       const nextCursor = hasMore ? encodeTradingCursor(visibleRecords[visibleRecords.length - 1]) : null;
       const contentRange = resp.headers.get('content-range') || '';
       const total = cursorMode

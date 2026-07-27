@@ -13,6 +13,14 @@ const research = fs.readFileSync(
   path.join(__dirname, '..', 'src', 'pages', 'PriceResearch.tsx'),
   'utf8',
 );
+const tradingApi = fs.readFileSync(
+  path.join(__dirname, '..', 'api', 'trading-listing.js'),
+  'utf8',
+);
+const researchDetailApi = fs.readFileSync(
+  path.join(__dirname, '..', 'api', 'price-research-listing.js'),
+  'utf8',
+);
 
 test('Trading Floor uses the same safe listing evidence source as Price Research', () => {
   assert.match(trading, /\/api\/price-research-listing\?id=/);
@@ -45,4 +53,14 @@ test('both customer details compare the selected listing with its exact price co
     assert.match(page, /dial/i);
     assert.match(page, /condition/i);
   }
+});
+
+test('customer detail prices require exact raw-line currency evidence', () => {
+  for (const api of [tradingApi, researchDetailApi]) {
+    assert.match(api, /analytics_currency_status === 'VERIFIED'/);
+    assert.match(api, /priceVerified \? normalized\.analytics_price_usd : null/);
+    assert.match(api, /price_evidence_status/);
+  }
+  assert.match(trading, /Price under review/);
+  assert.match(trading, /detailListing\.price_usd/);
 });

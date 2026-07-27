@@ -61,9 +61,15 @@ module.exports = async function handler(req, res) {
     if (!isCustomerIdentitySafe(resolvedData)) return res.status(404).json({ error: 'Listing under identity review' });
     const normalized = normalizeMarketRow(resolvedData, resolvedData.reference);
     const listing = sanitizeTradingRecord(resolvedData, { verifiedImages: Boolean(verifiedListing?.has_images) });
-    if (normalized.analytics_currency_status === 'VERIFIED') {
-      listing.price_usd = normalized.analytics_price_usd;
-    }
+    const priceVerified = normalized.analytics_currency_status === 'VERIFIED'
+      && Number.isFinite(Number(normalized.analytics_price_usd))
+      && Number(normalized.analytics_price_usd) > 0;
+    listing.price_usd = priceVerified ? normalized.analytics_price_usd : null;
+    listing.price_raw = null;
+    listing.currency = priceVerified ? 'USD' : null;
+    const priceIssues = priceVerified
+      ? listing.data_quality_issues
+      : [...new Set([...(listing.data_quality_issues || []), normalized.analytics_currency_status])];
     return res.status(200).json({
       success: true,
       listing: {
@@ -89,7 +95,9 @@ module.exports = async function handler(req, res) {
         thumbnail_url: listing.thumbnail_url,
         image_urls: listing.image_urls,
         region: listing.region,
-        data_quality_issues: listing.data_quality_issues,
+        data_quality_issues: priceIssues,
+        data_quality_review_required: priceIssues.length > 0,
+        price_evidence_status: normalized.analytics_currency_status,
         source_message_available_to_reviewers: Boolean(data.raw_message),
       },
     });
