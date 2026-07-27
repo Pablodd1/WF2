@@ -85,7 +85,7 @@ interface TradingFloorResponse {
   status: string;
   error?: string;
   records?: ListingRecord[];
-  total?: number;
+  total?: number | null;
   totalIsEstimate?: boolean;
   nextCursor?: string | null;
   hasMore?: boolean;
@@ -155,7 +155,7 @@ export default function TradingFloor() {
   const [listings, setListings] = useState<ListingRecord[]>([]);
   const [featuredListings, setFeaturedListings] = useState<ListingRecord[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState<number | null>(null);
   const [totalIsEstimate, setTotalIsEstimate] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -296,8 +296,9 @@ export default function TradingFloor() {
         const nextListings = data.records || [];
         setListings(current => cursor ? [...current, ...nextListings.filter(row => !current.some(existing => existing.id === row.id))] : nextListings);
         if (!cursor) {
-          setTotal(Number(data.total) || 0);
-          setTotalIsEstimate(Boolean(data.totalIsEstimate));
+          const parsedTotal = data.total == null ? null : Number(data.total);
+          setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
+          setTotalIsEstimate(parsedTotal !== null && Boolean(data.totalIsEstimate));
         }
         setNextCursor(data.nextCursor || null);
         setHasMore(Boolean(data.hasMore && data.nextCursor));
@@ -344,7 +345,7 @@ export default function TradingFloor() {
             <div>
               <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {totalIsEstimate ? '~' : ''}{total.toLocaleString()} customer-visible listings
+                {total === null ? 'Verified customer-visible inventory' : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} customer-visible listings`}
               </p>
             </div>
 
@@ -453,7 +454,12 @@ export default function TradingFloor() {
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
-          <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</span>
+          <span>
+            Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong>
+            {total === null
+              ? ' customer-visible records from verified inventory'
+              : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</>}
+          </span>
           <span title="Records are fetched in bounded batches from Postgres; search and filters run on the database.">{pageSize} per request keeps mobile memory bounded.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>

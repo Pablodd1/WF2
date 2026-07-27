@@ -948,9 +948,13 @@ module.exports = async function handler(req, res) {
             'Authorization': `Bearer ${readKey}`,
             'Range-Unit': 'items',
             'Range': `${start}-${end}`,
-            // Feed availability matters more than recounting a large view on
-            // every page request. Exact release totals come from the audit.
-            'Prefer': search ? 'count=planned' : 'count=estimated',
+            // Cursor pagination needs only the bounded rows plus one lookahead.
+            // Do not count the full verified view on every client page request.
+            'Prefer': cursorMode
+              ? 'return=representation'
+              : search
+                ? 'count=planned'
+                : 'count=estimated',
           },
         }
       );
@@ -983,13 +987,15 @@ module.exports = async function handler(req, res) {
         .map(({ resolved, verifiedImages }) => sanitizeTradingRecord(resolved, { verifiedImages }));
       const nextCursor = hasMore ? encodeTradingCursor(visibleRecords[visibleRecords.length - 1]) : null;
       const contentRange = resp.headers.get('content-range') || '';
-      const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
+      const total = cursorMode
+        ? null
+        : Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
       return res.status(200).json({
         count: customerRecords.length,
         total,
         page,
         pageSize,
-        totalIsEstimate: true,
+        totalIsEstimate: !cursorMode,
         nextCursor,
         hasMore,
         records: customerRecords,

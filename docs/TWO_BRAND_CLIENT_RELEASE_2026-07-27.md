@@ -39,10 +39,9 @@ Current Supabase readback:
 | Verified/applied public dealer links | 0 | 0 | 0 |
 
 The exact Trading Floor counts above come from a controlled readback. The
-interactive feed uses a fast estimated count, explicitly labeled as an
-estimate, because forcing Postgres to recount the complete verified view on
-every page request caused intermittent Supabase 500 responses. Pagination
-continues through the full eligible cohort.
+interactive cursor feed intentionally omits a total because forcing Postgres
+to recount the complete verified view on every page request caused intermittent
+Supabase 500 responses. Pagination continues through the full eligible cohort.
 
 The deterministic unbundled export is much larger, but it is not the public
 inventory:

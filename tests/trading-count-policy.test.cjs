@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const ingestSource = fs.readFileSync(path.join(__dirname, '..', 'api', 'ingest.js'), 'utf8');
 
-test('reference search uses a planned count instead of an exact-count fallback', () => {
-  assert.match(ingestSource, /'Prefer': search \? 'count=planned' : 'count=estimated'/);
+test('cursor browsing does not count the complete verified view', () => {
+  assert.match(ingestSource, /cursorMode[\s\S]*\? 'return=representation'[\s\S]*\? 'count=planned'[\s\S]*: 'count=estimated'/);
+  assert.match(ingestSource, /const total = cursorMode[\s\S]*\? null/);
 });
