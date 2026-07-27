@@ -10,7 +10,7 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { inferBrand } = require('./_lib/resolve');
-const { lookupCatalog } = require('./_lib/catalog');
+const { listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
@@ -67,7 +67,10 @@ module.exports = async function handler(req, res) {
     const qualified = rows
       .filter(row => !excluded.has(row.source) && isReleaseListingEligible(row))
       .map(row => {
-        const normalized = normalizeMarketRow(row, targetRef);
+        const normalized = normalizeMarketRow(
+          row,
+          listEquivalentReferences(targetRef, brand),
+        );
         return {
           ...normalized,
           price_usd: normalized.analytics_price_usd,

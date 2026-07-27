@@ -1,6 +1,7 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
+const { listEquivalentReferences } = require('./_lib/catalog');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -52,14 +53,17 @@ module.exports = async function handler(req, res) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
     if (!isCustomerIdentitySafe(resolvedData)) return res.status(404).json({ error: 'Listing under identity review' });
-    const normalized = normalizeMarketRow(resolvedData, resolvedData.reference);
+    const normalized = normalizeMarketRow(
+      resolvedData,
+      listEquivalentReferences(resolvedData.reference, resolvedData.brand),
+    );
     const listing = sanitizeTradingRecord(resolvedData, { verifiedImages: Boolean(verifiedListing?.has_images) });
     const priceVerified = normalized.analytics_currency_status === 'VERIFIED'
       && Number.isFinite(Number(normalized.analytics_price_usd))
       && Number(normalized.analytics_price_usd) > 0;
     listing.price_usd = priceVerified ? normalized.analytics_price_usd : null;
-    listing.price_raw = null;
-    listing.currency = priceVerified ? 'USD' : null;
+    listing.price_raw = normalized.source_price_amount || null;
+    listing.currency = priceVerified ? 'USD' : normalized.source_currency || null;
     const priceIssues = priceVerified
       ? listing.data_quality_issues
       : [...new Set([...(listing.data_quality_issues || []), normalized.analytics_currency_status])];
