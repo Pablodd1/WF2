@@ -24,7 +24,7 @@ DECLARE
   v_preserved INTEGER := 0;
   v_missing INTEGER := 0;
 BEGIN
-  IF p_job_name !~ '^identity-stage:two_brands:v2:snapshot-[a-f0-9]{12}:shard-[0-3]$' THEN
+  IF p_job_name !~ '^identity-stage:two_brands:v4:snapshot-[a-f0-9]{12}:partition-[0-7]$' THEN
     RAISE EXCEPTION 'Invalid two-brand catalog staging job';
   END IF;
   IF NULLIF(trim(p_last_record_id), '') IS NULL
