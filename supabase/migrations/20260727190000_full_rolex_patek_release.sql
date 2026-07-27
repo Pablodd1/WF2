@@ -309,7 +309,8 @@ SELECT
     WHEN duplicate_blocked THEN 'DUPLICATE_SUPPRESSED'
     WHEN NOT market_ready THEN 'MARKET_REVIEW_REQUIRED'
     ELSE 'READY_FOR_IDENTITY_REVIEW'
-  END AS review_disposition
+  END AS review_disposition,
+  flags
 FROM unresolved;
 
 REVOKE ALL ON public.two_brand_identity_review_queue

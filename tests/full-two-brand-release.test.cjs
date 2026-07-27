@@ -8,6 +8,10 @@ const {
   rawSupportsExactReference,
   validateDecisionBody,
 } = require('../api/identity-review-decision.js');
+const {
+  MAX_SCANNED_PER_PAGE,
+  passesStaticReleaseGates,
+} = require('../api/identity-review-queue.js');
 
 const root = path.join(__dirname, '..');
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -49,9 +53,11 @@ test('identity review is signed, evidence-first, and leaves raw records immutabl
   assert.match(migration, /MARKET_REVIEW_REQUIRED/);
   assert.match(queue, /authorizeDealer\(req, res, new Set\(\['reviewer', 'admin'\]\)\)/);
   assert.match(queue, /req\.query\?\.bucket \|\| 'release-ready'/);
-  assert.match(queue, /\.eq\('review_disposition', reviewDisposition\)/);
-  assert.match(queue, /\.range\(\(page - 1\) \* limit, page \* limit\)/);
-  assert.match(queue, /hasMore: rows\.length > limit/);
+  assert.match(queue, /\.order\('record_id', \{ ascending: false \}\)/);
+  assert.match(queue, /\.lt\('record_id', scanCursor\)/);
+  assert.match(queue, /\.from\('normalization_shadow_v4'\)/);
+  assert.match(queue, /\.from\('duplicate_review_candidates'\)/);
+  assert.match(queue, /nextCursor/);
   assert.doesNotMatch(queue, /count: 'exact'/);
   assert.match(decision, /sameOrigin\(req\)/);
   assert.match(decision, /review_disposition !== 'READY_FOR_IDENTITY_REVIEW'/);
@@ -62,6 +68,30 @@ test('identity review is signed, evidence-first, and leaves raw records immutabl
   assert.match(ui, /Rolex and Patek identity review/);
   assert.match(ui, /Actionable identities are loaded in bounded pages of 50/);
   assert.match(ui, /Human approve identity/);
+});
+
+test('bounded identity pages apply every non-identity static publication gate', () => {
+  const ready = {
+    record_id: 'record-1',
+    raw_message: 'Rolex 126500LN black USD 28000',
+    verdict: 'APPROVED',
+    confidence: 90,
+    listing_type: 'WTS',
+    price_usd: 28000,
+    flags: [],
+  };
+  assert.equal(MAX_SCANNED_PER_PAGE, 1000);
+  assert.equal(passesStaticReleaseGates(ready), true);
+  assert.equal(passesStaticReleaseGates({ ...ready, raw_message: '' }), false);
+  assert.equal(passesStaticReleaseGates({ ...ready, confidence: 89 }), false);
+  assert.equal(passesStaticReleaseGates({ ...ready, listing_type: 'MULTI' }), false);
+  assert.equal(passesStaticReleaseGates({ ...ready, price_usd: 999 }), false);
+  assert.equal(passesStaticReleaseGates({ ...ready, flags: ['BUNDLE_SPLIT_REQUIRED'] }), false);
+  assert.equal(passesStaticReleaseGates({
+    ...ready,
+    listing_type: 'WTB',
+    price_usd: null,
+  }), true);
 });
 
 test('identity approval requires complete two-brand canonical evidence', () => {

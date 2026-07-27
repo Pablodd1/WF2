@@ -130,9 +130,8 @@ jobs:
 
           SELECT record_id, brand, reference, created_at
           FROM public.two_brand_identity_review_queue
-          WHERE review_disposition = 'READY_FOR_IDENTITY_REVIEW'
-          ORDER BY created_at DESC NULLS LAST, record_id DESC
-          LIMIT 51;
+          ORDER BY record_id DESC
+          LIMIT 100;
           SQL
 
       - name: Publish exact release census
