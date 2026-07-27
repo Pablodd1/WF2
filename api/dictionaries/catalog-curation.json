@@ -1,6 +1,12 @@
 {
   "overrides": [
     {
+      "brand": "Rolex",
+      "reference": "116500LN",
+      "dial_colors": ["Black", "White"],
+      "reason": "The imported Rolex catalog mislabeled the white Panda variant as Silver; its source variant URL identifies it as the white Panda dial."
+    },
+    {
       "brand": "Patek Philippe",
       "reference": "5712/1A-001",
       "dial_colors": ["Blue"],

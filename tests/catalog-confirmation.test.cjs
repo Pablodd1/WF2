@@ -117,6 +117,25 @@ test('curates imported Patek dial labels from manufacturer evidence', () => {
   assert.deepEqual(lookupCatalog('5711/1A-010', 'Patek Philippe').dialColors, ['Blue']);
 });
 
+test('curates the imported Rolex 116500LN Silver label to White', () => {
+  const white = confirmCatalogCandidate({
+    brand: 'Rolex',
+    reference: '116500LN',
+    dial_color: 'White',
+  });
+  assert.equal(white.confirmed, true);
+  assert.equal(white.dialConfirmed, true);
+  assert.deepEqual(white.match.dialColors, ['Black', 'White']);
+
+  const mislabeledSilver = confirmCatalogCandidate({
+    brand: 'Rolex',
+    reference: '116500LN',
+    dial_color: 'Silver',
+  });
+  assert.equal(mislabeledSilver.confirmed, true);
+  assert.equal(mislabeledSilver.dialConfirmed, false);
+});
+
 test('returns verified shorthand and canonical references as one market family', () => {
   assert.deepEqual(
     new Set(listEquivalentReferences('5712/1A', 'Patek Philippe')),

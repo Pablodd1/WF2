@@ -129,8 +129,10 @@ jobs:
           user="${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}"
           port="${SUPABASE_DB_PORT:-5432}"
           db_url="host=${host} port=${port} dbname=postgres user=${user} sslmode=require"
-          migration="supabase/migrations/20260727220000_atomic_two_brand_catalog_staging.sql"
-          test -f "$migration"
+          atomic_migration="supabase/migrations/20260727220000_atomic_two_brand_catalog_staging.sql"
+          cache_migration="supabase/migrations/20260727230000_materialized_two_brand_release.sql"
+          test -f "$atomic_migration"
+          test -f "$cache_migration"
           psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
           DO $$
           BEGIN
@@ -142,7 +144,8 @@ jobs:
           END
           $$;
           SQL
-          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$atomic_migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$cache_migration"
 
   apply:
     needs: [snapshot, migrate]
@@ -185,7 +188,7 @@ jobs:
   verify:
     needs: [apply, snapshot]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     environment: production
     permissions:
       contents: read
@@ -269,6 +272,11 @@ jobs:
           )"
           source_rows="$(echo "$source_rows" | tail -n 1 | tr -d '[:space:]')"
           test "$source_rows" = "${{ steps.aggregate.outputs.scanned }}"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          SET statement_timeout = '1800s';
+          REFRESH MATERIALIZED VIEW public.two_brand_verified_trading_release_cache;
+          ANALYZE public.two_brand_verified_trading_release_cache;
+          SQL
           {
             echo
             echo '### Customer release after catalog confirmation'
@@ -283,7 +291,7 @@ jobs:
             count(*) FILTER (WHERE has_images) AS visually_verified_image_rows,
             count(*) FILTER (WHERE identity_review_status = 'HUMAN_APPROVED') AS human_approved_rows,
             count(*) FILTER (WHERE identity_review_status = 'CATALOG_CONFIRMED') AS catalog_confirmed_rows
-          FROM public.two_brand_verified_trading_release
+          FROM public.two_brand_verified_trading_release_cache
           GROUP BY brand
           ORDER BY brand;
 

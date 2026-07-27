@@ -20,16 +20,17 @@ if (!['RM_CONFLICTS', 'IMAGE_BACKED', 'ALL', 'TWO_BRANDS'].includes(SCOPE)) {
 const LIMIT = boundedInt(process.env.IDENTITY_BATCH_SIZE, SCOPE === 'TWO_BRANDS' ? 250 : 100, 1, 1000);
 const MAX_BATCHES = boundedInt(process.env.IDENTITY_MAX_BATCHES, 1, 1, 10000);
 const REPORT_PATH = String(process.env.IDENTITY_REPORT_PATH || '').trim();
+const LEGACY_ID_PREFIX = 'mysql_auction_watches_';
 const ID_SHARDS = [
-  { lower: null, upper: '4' },
-  { lower: '4', upper: '8' },
-  { lower: '8', upper: 'c' },
-  { lower: 'c', upper: null },
+  { segments: [{ lower: null, upper: '4' }, { lower: LEGACY_ID_PREFIX, upper: `${LEGACY_ID_PREFIX}4` }] },
+  { segments: [{ lower: '4', upper: '8' }, { lower: `${LEGACY_ID_PREFIX}4`, upper: `${LEGACY_ID_PREFIX}8` }] },
+  { segments: [{ lower: '8', upper: 'c' }, { lower: `${LEGACY_ID_PREFIX}8`, upper: `${LEGACY_ID_PREFIX}c` }] },
+  { segments: [{ lower: 'c', upper: LEGACY_ID_PREFIX }, { lower: `${LEGACY_ID_PREFIX}c`, upper: null }] },
 ];
 const SHARD = parseShard(process.env.IDENTITY_SHARD);
 const SNAPSHOT_AT = String(process.env.IDENTITY_SNAPSHOT_AT || '').trim();
 const SNAPSHOT_KEY = SNAPSHOT_AT ? sha256(SNAPSHOT_AT).slice(0, 12) : 'no-snapshot';
-const JOB_NAME = `identity-stage:${SCOPE.toLowerCase()}${SCOPE === 'TWO_BRANDS' ? `:v2:snapshot-${SNAPSHOT_KEY}:shard-${SHARD}` : ''}`;
+const JOB_NAME = `identity-stage:${SCOPE.toLowerCase()}${SCOPE === 'TWO_BRANDS' ? `:v3:snapshot-${SNAPSHOT_KEY}:shard-${SHARD}` : ''}`;
 
 function parseShard(value) {
   const parsed = Number.parseInt(String(value ?? '0'), 10);
@@ -41,6 +42,20 @@ function parseShard(value) {
 
 function sha256(value) {
   return createHash('sha256').update(String(value || '')).digest('hex');
+}
+
+function segmentFilter(idColumn, segment) {
+  const clauses = [];
+  if (segment.lower) clauses.push(`${idColumn}.gte.${segment.lower}`);
+  if (segment.upper) clauses.push(`${idColumn}.lt.${segment.upper}`);
+  return clauses.length === 1 ? clauses[0] : `and(${clauses.join(',')})`;
+}
+
+function twoBrandSourceFilter(idColumn, shardIndex, snapshotAt) {
+  const shard = ID_SHARDS[shardIndex];
+  const shardFilter = `or(${shard.segments.map(segment => segmentFilter(idColumn, segment)).join(',')})`;
+  const snapshotFilter = `or(created_at.is.null,created_at.lte.${snapshotAt})`;
+  return `(${shardFilter},${snapshotFilter})`;
 }
 
 function classifyIdentity(record) {
@@ -174,10 +189,7 @@ async function sourceRows(lastRecordId) {
     order: `${source.idColumn}.asc`,
     limit: String(LIMIT),
   });
-  const shard = ID_SHARDS[SHARD];
   if (lastRecordId) query.append(source.idColumn, `gt.${lastRecordId}`);
-  else if (SCOPE === 'TWO_BRANDS' && shard.lower) query.append(source.idColumn, `gte.${shard.lower}`);
-  if (SCOPE === 'TWO_BRANDS' && shard.upper) query.append(source.idColumn, `lt.${shard.upper}`);
   if (source.brandFilter) query.set('brand', source.brandFilter);
   if (SCOPE === 'TWO_BRANDS') {
     if (!SNAPSHOT_AT || !Number.isFinite(Date.parse(SNAPSHOT_AT))) {
@@ -185,7 +197,7 @@ async function sourceRows(lastRecordId) {
     }
     // Historical imports legitimately have no created_at value. They are still
     // immutable source evidence and must not disappear from the frozen release.
-    query.set('or', `(created_at.is.null,created_at.lte.${SNAPSHOT_AT})`);
+    query.set('and', twoBrandSourceFilter(source.idColumn, SHARD, SNAPSHOT_AT));
   }
   if (source.imageFilter) query.set('or', source.imageFilter);
   return supabaseFetch(`/rest/v1/${source.table}?${query}`);
@@ -424,4 +436,5 @@ module.exports = {
   classifyTwoBrandIdentity,
   parseShard,
   scopeSource,
+  twoBrandSourceFilter,
 };

@@ -327,7 +327,7 @@ async function loadFullReviewedBrandCursorPage({
   if (cursorFilter) params.set('and', `(${cursorFilter})`);
 
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/two_brand_verified_trading_release?${params.toString()}`,
+    `${supabaseUrl}/rest/v1/two_brand_verified_trading_release_cache?${params.toString()}`,
     {
       headers: {
         apikey: readKey,
@@ -349,7 +349,27 @@ async function loadFullReviewedBrandCursorPage({
     search,
   }));
   const selected = matched.slice(0, pageSize);
-  const records = selected.map(resolved => {
+  const verifiedById = await loadVerifiedPublicListings(
+    supabaseUrl,
+    readKey,
+    selected.map(row => row.id),
+  );
+  const current = selected
+    .map(row => {
+      const verified = verifiedById.get(String(row.id));
+      return verified ? {
+        ...row,
+        brand: verified.brand || row.brand,
+        model: verified.model || row.model,
+        reference: verified.reference || row.reference,
+        dial_color: verified.dial_color || row.dial_color,
+        has_images: verified.has_images,
+        thumbnail_url: verified.thumbnail_url,
+        image_urls: verified.image_urls,
+      } : null;
+    })
+    .filter(Boolean);
+  const records = current.map(resolved => {
     const normalized = normalizeMarketRow(
       resolved,
       listEquivalentReferences(resolved.reference, resolved.brand),
