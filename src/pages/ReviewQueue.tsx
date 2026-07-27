@@ -729,16 +729,19 @@ function IdentityReviewLane() {
   const [inspected, setInspected] = useState<Record<string, boolean>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [brand, setBrand] = useState('');
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
+  const [cursor, setCursor] = useState('');
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const page = cursorHistory.length + 1;
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ page: String(page), limit: '50', bucket: 'release-ready' });
+    const params = new URLSearchParams({ limit: '50', bucket: 'release-ready' });
     if (brand) params.set('brand', brand);
+    if (cursor) params.set('after', cursor);
     setError(null);
     fetch(`/api/identity-review-queue?${params.toString()}`, {
       credentials: 'include',
@@ -752,7 +755,7 @@ function IdentityReviewLane() {
       .then(data => {
         const nextItems = (data.items || []) as IdentityReviewQueueApiItem[];
         setItems(nextItems);
-        setHasMore(Boolean(data.hasMore));
+        setNextCursor(data.nextCursor || null);
         setDrafts(Object.fromEntries(nextItems.map(item => [item.record_id, {
           brand: item.brand || '',
           model: item.model || '',
@@ -766,7 +769,7 @@ function IdentityReviewLane() {
         }
       });
     return () => controller.abort();
-  }, [brand, page]);
+  }, [brand, cursor]);
 
   const submit = async (item: IdentityReviewQueueApiItem, decision: 'APPROVE' | 'CONFLICT') => {
     const reason = reasons[item.record_id]?.trim() || '';
@@ -816,7 +819,12 @@ function IdentityReviewLane() {
             Brand
             <select
               value={brand}
-              onChange={event => { setBrand(event.target.value); setPage(1); }}
+              onChange={event => {
+                setBrand(event.target.value);
+                setCursor('');
+                setCursorHistory([]);
+                setNextCursor(null);
+              }}
               className="mt-1 block rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs normal-case text-text-primary"
             >
               <option value="">Rolex + Patek</option>
@@ -959,11 +967,31 @@ function IdentityReviewLane() {
           No unresolved identities were returned for this page.
         </div>
       )}
-      {(page > 1 || hasMore) && (
+      {(page > 1 || nextCursor) && (
         <div className="flex justify-center gap-3">
-          <button onClick={() => setPage(current => Math.max(1, current - 1))} disabled={page === 1} className="rounded-lg border border-border-default px-4 py-2 text-xs text-text-secondary disabled:opacity-40">Previous</button>
+          <button
+            onClick={() => {
+              const priorCursors = [...cursorHistory];
+              setCursor(priorCursors.pop() || '');
+              setCursorHistory(priorCursors);
+            }}
+            disabled={page === 1}
+            className="rounded-lg border border-border-default px-4 py-2 text-xs text-text-secondary disabled:opacity-40"
+          >
+            Previous
+          </button>
           <span className="px-3 py-2 text-xs text-text-muted">Page {page}</span>
-          <button onClick={() => setPage(current => current + 1)} disabled={!hasMore} className="rounded-lg border border-border-default px-4 py-2 text-xs text-text-secondary disabled:opacity-40">Next</button>
+          <button
+            onClick={() => {
+              if (!nextCursor) return;
+              setCursorHistory(current => [...current, cursor]);
+              setCursor(nextCursor);
+            }}
+            disabled={!nextCursor}
+            className="rounded-lg border border-border-default px-4 py-2 text-xs text-text-secondary disabled:opacity-40"
+          >
+            Next
+          </button>
         </div>
       )}
     </div>

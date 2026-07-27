@@ -145,9 +145,12 @@ brand:
 
 Do not synchronously recompute a global disposition count across the unresolved
 universe. It exceeds the 120-second production audit budget. The reviewer API
-evaluates `READY_FOR_IDENTITY_REVIEW` only through bounded 50-row pages and
-reports `hasMore`; a checkpointed queue snapshot may add a durable global count
-later without blocking reviewers or customer reads.
+builds `READY_FOR_IDENTITY_REVIEW` pages through record-ID keyset scans of 100
+unresolved rows at a time, checks bundle and duplicate ledgers only for those
+IDs, returns at most 50 actionable records, and scans no more than 1,000 raw
+queue rows per request. It reports an opaque `nextCursor`; a checkpointed queue
+snapshot may add a durable global count later without blocking reviewers or
+customer reads.
 
 Do not copy older two-brand or three-reference counts into this section. Use the
 new workflow summary because it measures the actual deployed view.
