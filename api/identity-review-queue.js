@@ -71,27 +71,31 @@ module.exports = async function handler(req, res) {
   try {
     let query = auth.client
       .from('two_brand_identity_review_queue')
-      .select(SELECT_FIELDS, { count: 'exact' })
+      .select(SELECT_FIELDS)
       .order('created_at', { ascending: false, nullsFirst: false })
       .order('record_id', { ascending: false })
-      .range((page - 1) * limit, page * limit - 1);
+      .range((page - 1) * limit, page * limit);
     if (brand) query = query.eq('brand', brand);
     if (reference) query = query.eq('reference', reference);
     if (identityStatus) query = query.eq('identity_status', identityStatus);
     const reviewDisposition = REVIEW_BUCKETS.get(bucket);
     if (reviewDisposition) query = query.eq('review_disposition', reviewDisposition);
-    const { data, error, count } = await query;
+    const { data, error } = await query;
     if (error) throw error;
+    const rows = data || [];
+    const items = rows.slice(0, limit);
     return res.status(200).json({
       status: 'ok',
       page,
       limit,
-      total: Number(count || 0),
-      count: data?.length || 0,
-      items: data || [],
+      total: null,
+      count: items.length,
+      hasMore: rows.length > limit,
+      items,
       scope: ['Rolex', 'Patek Philippe'],
       bucket,
       reviewDisposition,
+      countStatus: 'Global actionable membership is evaluated asynchronously; this endpoint performs only a bounded review-page read.',
       decisionContract: 'A signed reviewer decision changes only listing_identity_reviews. Raw evidence remains immutable.',
     });
   } catch (error) {

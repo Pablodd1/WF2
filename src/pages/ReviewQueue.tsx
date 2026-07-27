@@ -730,7 +730,7 @@ function IdentityReviewLane() {
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [brand, setBrand] = useState('');
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
@@ -752,7 +752,7 @@ function IdentityReviewLane() {
       .then(data => {
         const nextItems = (data.items || []) as IdentityReviewQueueApiItem[];
         setItems(nextItems);
-        setTotal(Number(data.total || 0));
+        setHasMore(Boolean(data.hasMore));
         setDrafts(Object.fromEntries(nextItems.map(item => [item.record_id, {
           brand: item.brand || '',
           model: item.model || '',
@@ -792,7 +792,6 @@ function IdentityReviewLane() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Identity review decision failed');
       setItems(current => current.filter(candidate => candidate.record_id !== item.record_id));
-      setTotal(current => Math.max(0, current - 1));
       setResult(data.customer_publishable
         ? `${item.record_id} is human-approved and now customer-publishable.`
         : `${item.record_id} identity decision saved; other release blockers still prevent publication.`);
@@ -810,7 +809,7 @@ function IdentityReviewLane() {
           <div>
             <h2 className="text-sm font-bold text-text-primary">Rolex and Patek identity review</h2>
             <p className="mt-1 max-w-3xl text-xs text-text-muted">
-              {total.toLocaleString()} actionable identities where a signed identity decision is the final release blocker. Normalization, market-data, bundle, duplicate, and missing-evidence cases stay in their own lanes. Approval requires the exact reference in the preserved raw listing and a catalog-compatible dial.
+              Actionable identities are loaded in bounded pages of 50, with no synchronous global count across the 1.4M-row unresolved universe. Normalization, market-data, bundle, duplicate, and missing-evidence cases stay in their own lanes. Approval requires the exact reference in the preserved raw listing and a catalog-compatible dial.
             </p>
           </div>
           <label className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
@@ -960,11 +959,11 @@ function IdentityReviewLane() {
           No unresolved identities were returned for this page.
         </div>
       )}
-      {total > 50 && (
+      {(page > 1 || hasMore) && (
         <div className="flex justify-center gap-3">
           <button onClick={() => setPage(current => Math.max(1, current - 1))} disabled={page === 1} className="rounded-lg border border-border-default px-4 py-2 text-xs text-text-secondary disabled:opacity-40">Previous</button>
-          <span className="px-3 py-2 text-xs text-text-muted">Page {page} of {Math.max(1, Math.ceil(total / 50))}</span>
-          <button onClick={() => setPage(current => current + 1)} disabled={page * 50 >= total} className="rounded-lg border border-border-default px-4 py-2 text-xs text-text-secondary disabled:opacity-40">Next</button>
+          <span className="px-3 py-2 text-xs text-text-muted">Page {page}</span>
+          <button onClick={() => setPage(current => current + 1)} disabled={!hasMore} className="rounded-lg border border-border-default px-4 py-2 text-xs text-text-secondary disabled:opacity-40">Next</button>
         </div>
       )}
     </div>

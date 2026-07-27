@@ -50,6 +50,9 @@ test('identity review is signed, evidence-first, and leaves raw records immutabl
   assert.match(queue, /authorizeDealer\(req, res, new Set\(\['reviewer', 'admin'\]\)\)/);
   assert.match(queue, /req\.query\?\.bucket \|\| 'release-ready'/);
   assert.match(queue, /\.eq\('review_disposition', reviewDisposition\)/);
+  assert.match(queue, /\.range\(\(page - 1\) \* limit, page \* limit\)/);
+  assert.match(queue, /hasMore: rows\.length > limit/);
+  assert.doesNotMatch(queue, /count: 'exact'/);
   assert.match(decision, /sameOrigin\(req\)/);
   assert.match(decision, /review_disposition !== 'READY_FOR_IDENTITY_REVIEW'/);
   assert.match(decision, /rawSupportsExactReference/);
@@ -57,7 +60,7 @@ test('identity review is signed, evidence-first, and leaves raw records immutabl
   assert.match(decision, /\.rpc\('apply_listing_identity_review'/);
   assert.doesNotMatch(decision, /\.from\('watch_records'\)\.(?:update|upsert|insert|delete)/);
   assert.match(ui, /Rolex and Patek identity review/);
-  assert.match(ui, /actionable identities where a signed identity decision is the final release blocker/);
+  assert.match(ui, /Actionable identities are loaded in bounded pages of 50/);
   assert.match(ui, /Human approve identity/);
 });
 
