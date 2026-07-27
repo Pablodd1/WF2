@@ -41,7 +41,10 @@ Current Supabase readback:
 The exact Trading Floor counts above come from a controlled readback. The
 interactive cursor feed intentionally omits a total because forcing Postgres
 to recount the complete verified view on every page request caused intermittent
-Supabase 500 responses. Pagination continues through the full eligible cohort.
+Supabase 500 responses. It reads a bounded indexed market batch and verifies
+only those IDs against the strict identity/media view. Pagination continues
+through the full eligible cohort and fails closed if the verification read is
+unavailable.
 
 The deterministic unbundled export is much larger, but it is not the public
 inventory:

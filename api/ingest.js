@@ -53,18 +53,24 @@ const MASTER_CATALOG = loadJsonSafe('master_catalog.json', {});
 
 async function loadVerifiedPublicListings(supabaseUrl, readKey, ids) {
   if (!ids.length) return new Map();
-  const params = new URLSearchParams({
-    select: 'id,brand,model,reference,dial_color,has_images,thumbnail_url,image_urls',
-    id: `in.(${ids.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
-  });
   try {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/trading_floor_verified_listings?${params.toString()}`,
-      { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
-    );
-    if (!response.ok) throw new Error(`verified listing read returned ${response.status}`);
-    const rows = await response.json();
-    return new Map((rows || []).map(row => [String(row.id), row]));
+    const batches = [];
+    for (let index = 0; index < ids.length; index += 80) {
+      batches.push(ids.slice(index, index + 80));
+    }
+    const results = await Promise.all(batches.map(async batch => {
+      const params = new URLSearchParams({
+        select: 'id,brand,model,reference,dial_color,has_images,thumbnail_url,image_urls',
+        id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+      });
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/trading_floor_verified_listings?${params.toString()}`,
+        { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+      );
+      if (!response.ok) throw new Error(`verified listing read returned ${response.status}`);
+      return response.json();
+    }));
+    return new Map(results.flat().map(row => [String(row.id), row]));
   } catch (error) {
     console.warn(`[Trading Floor] Verified media unavailable; images remain withheld: ${error.message}`);
     return new Map();
@@ -836,17 +842,24 @@ module.exports = async function handler(req, res) {
       const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
       const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'OTHER']);
       const allowedItems = new Set(['all', 'watches', 'jewelry', 'handbags', 'accessories', 'other', 'luxury']);
-      const start = cursorMode ? 0 : (page - 1) * pageSize;
-      const end = start + pageSize - (cursorMode ? 0 : 1);
       // Both server-key and publishable-key reads use the same customer-safe
       // database view so publication rules cannot drift by deployment mode.
       // Main inventory is intentionally stricter than the archive: incomplete
       // watch identity and implausible WTS prices remain reviewable in the full
       // archive but cannot consume customer-market page slots or totals.
       const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
-      const tableName = strictVerifiedPublication || imagesOnly
-        ? 'trading_floor_verified_listings'
-        : quality === 'archive'
+      const candidatePageSize = strictVerifiedPublication && cursorMode
+        ? Math.min(pageSize * 10, 500)
+        : pageSize;
+      const start = cursorMode ? 0 : (page - 1) * candidatePageSize;
+      const end = start + candidatePageSize - (cursorMode ? 0 : 1);
+      const tableName = strictVerifiedPublication
+        ? quality === 'archive'
+          ? 'trading_floor_listings'
+          : 'trading_floor_market_listings'
+        : imagesOnly
+          ? 'trading_floor_verified_listings'
+          : quality === 'archive'
           ? 'trading_floor_listings'
           : 'trading_floor_market_listings';
       const params = new URLSearchParams({
@@ -960,14 +973,14 @@ module.exports = async function handler(req, res) {
       );
       if (!resp.ok) throw new Error(`Supabase returned ${resp.status}`);
       const records = await resp.json();
-      const hasMore = cursorMode && Array.isArray(records) && records.length > pageSize;
-      const visibleRecords = Array.isArray(records) ? records.slice(0, pageSize) : [];
+      const candidateHasMore = cursorMode && Array.isArray(records) && records.length > candidatePageSize;
+      const candidateRecords = Array.isArray(records) ? records.slice(0, candidatePageSize) : [];
       const verifiedById = await loadVerifiedPublicListings(
         supabaseUrl,
         readKey,
-        visibleRecords.map(row => row.id),
+        candidateRecords.map(row => row.id),
       );
-      const customerRecords = visibleRecords
+      const customerCandidates = candidateRecords
         .map(record => {
           const verified = verifiedById.get(String(record.id));
           const resolved = verified
@@ -986,11 +999,14 @@ module.exports = async function handler(req, res) {
             : resolved;
           return {
             resolved: customerResolved,
+            verified,
             verifiedImages: Boolean(verified?.has_images),
             priceEvidenceRequired: strictVerifiedPublication && resolved.listing_type === 'WTS',
           };
         })
-        .filter(({ resolved }) => isCustomerIdentitySafe(resolved))
+        .filter(({ resolved, verified }) =>
+          (!strictVerifiedPublication || Boolean(verified))
+          && isCustomerIdentitySafe(resolved))
         .map(({ resolved, verifiedImages, priceEvidenceRequired }) => {
           const customerRecord = sanitizeTradingRecord(resolved, { verifiedImages });
           if (!priceEvidenceRequired) return customerRecord;
@@ -1003,7 +1019,13 @@ module.exports = async function handler(req, res) {
             data_quality_review_required: true,
           };
         });
-      const nextCursor = hasMore ? encodeTradingCursor(visibleRecords[visibleRecords.length - 1]) : null;
+      const customerRecords = customerCandidates.slice(0, pageSize);
+      const verifiedHasMore = customerCandidates.length > pageSize;
+      const hasMore = cursorMode && (verifiedHasMore || candidateHasMore);
+      const cursorRecord = verifiedHasMore
+        ? customerCandidates[pageSize - 1]
+        : candidateRecords[candidateRecords.length - 1];
+      const nextCursor = hasMore && cursorRecord ? encodeTradingCursor(cursorRecord) : null;
       const contentRange = resp.headers.get('content-range') || '';
       const total = cursorMode
         ? null
