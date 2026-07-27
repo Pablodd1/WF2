@@ -3,7 +3,11 @@
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 const { boundedInteger } = require('./_lib/review-packets.cjs');
 const { publicationBrands } = require('./_lib/publication-brands.cjs');
-const { publicationReferences } = require('./_lib/publication-references.cjs');
+const {
+  MIN_RELEASE_CONFIDENCE,
+  isReleaseListingEligible,
+  publicationReferences,
+} = require('./_lib/publication-references.cjs');
 
 const QUEUE_FIELDS = [
   'source_object_key',
@@ -74,7 +78,9 @@ module.exports = async function handler(req, res) {
 
   const limit = boundedInteger(req.query?.limit, 50, 1, 50);
   const after = cursorValue(req.query?.after);
-  const releaseOnly = String(req.query?.release || '').toLowerCase() === 'true';
+  // The current review deployment is intentionally bounded to the three
+  // reviewed references. A later release must explicitly change this code.
+  const releaseOnly = true;
   if (req.query?.after && !after) return res.status(400).json({ error: 'Valid after cursor required' });
 
   try {
@@ -114,20 +120,48 @@ module.exports = async function handler(req, res) {
     const page = (rows || []).slice(0, limit);
     const recordIds = [...new Set(page.map(row => row.record_id).filter(Boolean))];
     let identityByRecord = new Map();
+    let releaseListingByRecord = new Map();
     if (recordIds.length) {
-      const { data: identities, error: identityError } = await auth.client
-        .from('listing_identity_reviews')
-        .select('record_id,status,canonical_brand,canonical_model,canonical_reference,canonical_dial_color')
-        .in('record_id', recordIds)
-        .in('status', VERIFIED_IDENTITY_STATUSES);
+      const [
+        { data: identities, error: identityError },
+        releaseListingsResult,
+      ] = await Promise.all([
+        auth.client
+          .from('listing_identity_reviews')
+          .select('record_id,status,canonical_brand,canonical_model,canonical_reference,canonical_dial_color')
+          .in('record_id', recordIds)
+          .in('status', VERIFIED_IDENTITY_STATUSES),
+        releaseOnly
+          ? auth.client
+            .from('price_research_verified_source')
+            .select('id,verdict,confidence')
+            .in('id', recordIds)
+            .eq('verdict', 'APPROVED')
+            .gte('confidence', MIN_RELEASE_CONFIDENCE)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
       if (identityError) throw identityError;
+      if (releaseListingsResult.error) throw releaseListingsResult.error;
       identityByRecord = new Map((identities || []).map(identity => [identity.record_id, identity]));
+      releaseListingByRecord = new Map((releaseListingsResult.data || []).map(row => [row.id, row]));
     }
+    const reviewedItems = page
+      .map(row => reviewItem(row, identityByRecord.get(row.record_id)))
+      .filter(item => {
+        if (!releaseOnly) return true;
+        const releaseListing = releaseListingByRecord.get(item.record_id);
+        return isReleaseListingEligible({
+          ...releaseListing,
+          brand: item.brand,
+          reference: item.reference,
+        });
+      });
 
     return res.status(200).json({
       status: 'ok',
-      items: page.map(row => reviewItem(row, identityByRecord.get(row.record_id))),
-      total: count || 0,
+      items: reviewedItems,
+      total: releaseOnly ? reviewedItems.length : count || 0,
+      totalIsBounded: releaseOnly,
       releaseOnly,
       nextCursor: (rows || []).length > limit ? page.at(-1)?.source_object_key || null : null,
     });

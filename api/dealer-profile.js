@@ -1,6 +1,9 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
+const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
+const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
+const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
@@ -18,41 +21,72 @@ module.exports = async function handler(req, res) {
     if (error) throw error;
     if (!dealer || dealer.status !== 'VERIFIED') return res.status(404).json({ error: 'Verified dealer profile not found' });
 
-    const [statsResult, listingsResult] = await Promise.all([
-      client.from('verified_dealer_profile_stats').select('*').eq('dealer_id', dealer.id).maybeSingle(),
-      client.from('watch_records')
-        .select('id,brand,reference,dial_color,condition,price_usd,currency,listing_type,listing_date,created_at,listing_status,verdict')
-        .eq('dealer_id', dealer.id)
-        .not('listing_type', 'eq', 'MULTI')
-        .not('flags', 'cs', '["BUNDLE_SPLIT_REQUIRED"]')
-        .or('verdict.is.null,verdict.neq.RECYCLE')
-        .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
-        .order('listing_date', { ascending: false, nullsFirst: false })
-        .order('id', { ascending: true })
-        .limit(50),
-    ]);
-    if (statsResult.error) throw statsResult.error;
+    const listingsResult = await client.from('watch_records')
+      .select('id,brand,reference,dial_color,condition,price_usd,dealer_id,listing_type,listing_date,created_at,listing_status,verdict,confidence')
+      .eq('dealer_id', dealer.id)
+      .eq('verdict', 'APPROVED')
+      .gte('confidence', MIN_RELEASE_CONFIDENCE)
+      .not('listing_type', 'eq', 'MULTI')
+      .not('flags', 'cs', '["BUNDLE_SPLIT_REQUIRED"]')
+      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
+      .order('listing_date', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })
+      .limit(50);
     if (listingsResult.error) throw listingsResult.error;
     const listingRows = listingsResult.data || [];
     const listingIds = listingRows.map(listing => listing.id);
+    const suppressedIds = await loadAnalyticsSuppressedIds(client, listingIds);
     const { data: bundleParents, error: bundleError } = listingIds.length
       ? await client.from('normalization_shadow_v4').select('source_record_id').in('source_record_id', listingIds).gt('candidate_count', 1)
       : { data: [], error: null };
     if (bundleError) throw bundleError;
     const { data: verifiedIdentities, error: identityError } = listingIds.length
       ? await client.from('listing_identity_reviews')
-        .select('record_id')
+        .select('record_id,canonical_brand,canonical_reference,canonical_dial_color')
         .in('record_id', listingIds)
         .in('status', ['CATALOG_CONFIRMED', 'HUMAN_APPROVED'])
       : { data: [], error: null };
     if (identityError) throw identityError;
+    const { data: appliedLineage, error: lineageError } = listingIds.length
+      ? await client.from('seller_listing_lineage_staging')
+        .select('source_record_id')
+        .in('source_record_id', listingIds)
+        .eq('matched_dealer_id', dealer.id)
+        .eq('match_status', 'APPLIED')
+      : { data: [], error: null };
+    if (lineageError) throw lineageError;
     const excludedIds = new Set((bundleParents || []).map(row => row.source_record_id));
-    const verifiedIds = new Set((verifiedIdentities || []).map(row => row.record_id));
+    const identityById = new Map((verifiedIdentities || []).map(row => [row.record_id, row]));
+    const lineageIds = new Set((appliedLineage || []).map(row => row.source_record_id));
+    const safeCandidates = listingRows.flatMap(listing => {
+      const verified = identityById.get(listing.id);
+      if (!verified || !lineageIds.has(listing.id) || excludedIds.has(listing.id) || suppressedIds.has(String(listing.id))) return [];
+      const resolved = {
+        ...listing,
+        brand: verified.canonical_brand || listing.brand,
+        reference: verified.canonical_reference || listing.reference,
+        dial_color: verified.canonical_dial_color || listing.dial_color,
+      };
+      if (!isReleaseListingEligible(resolved)) return [];
+      return [resolved];
+    });
+    const { uniqueRows } = deduplicateReposts(safeCandidates);
+    const safeListings = uniqueRows.map(listing => {
+      const { price_usd: _storedPrice, dealer_id: _dealerId, ...publicListing } = listing;
+      return {
+        ...publicListing,
+        // Dealer profiles do not load raw price evidence. Exact normalized
+        // prices remain available on the evidence-gated listing detail.
+        price_usd: null,
+        currency: null,
+      };
+    });
     return res.status(200).json({
       success: true,
       dealer,
-      stats: statsResult.data || null,
-      listings: listingRows.filter(listing => verifiedIds.has(listing.id) && !excludedIds.has(listing.id)),
+      stats: null,
+      stats_status: 'WITHHELD_UNTIL_APPLIED_LINEAGE_AGGREGATE',
+      listings: safeListings,
       raw_message_access: false,
     });
   } catch (error) {

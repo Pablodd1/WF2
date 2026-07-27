@@ -22,7 +22,8 @@ interface RowData {
   outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' |
     'MISSING_BRAND' | 'MISSING_REFERENCE' | 'CATALOG_MODEL_UNCONFIRMED' | 'MISSING_PRICE' |
     'MISSING_DIAL' | 'CATALOG_DIAL_UNCONFIRMED' | 'CATALOG_DIAL_MISMATCH' |
-    'REPOST_DUPLICATE' | 'BUNDLE_SOURCE_UNSPLIT' | 'REFERENCE_TOKEN_AS_PRICE' | null;
+    'REPOST_DUPLICATE' | 'BUNDLE_SOURCE_UNSPLIT' | 'REFERENCE_TOKEN_AS_PRICE' | 'YEAR_TOKEN_AS_PRICE' |
+    'CURRENCY_UNVERIFIED' | 'CURRENCY_AMBIGUOUS' | 'CURRENCY_RATE_UNVERIFIED' | null;
 }
 
 interface MonthlyPoint {
@@ -199,6 +200,18 @@ interface PriceData {
     repost_excluded_count?: number;
     unsplit_bundle_excluded_count?: number;
     lower_fence?: number | null; upper_fence?: number | null;
+  };
+  admission_policy?: {
+    verdict: 'APPROVED';
+    minimum_confidence: number;
+    confidence_is_probability: false;
+    exact_release_reference_required: true;
+    canonical_identity_review_required: true;
+    explicit_currency_evidence_required: true;
+    verified_fx_provenance_required: true;
+    catalog_model_and_dial_required: true;
+    unsplit_bundles_excluded: true;
+    reviewed_duplicates_excluded: true;
   };
 }
 
@@ -524,6 +537,10 @@ export default function PriceResearch() {
     if (reason === 'REPOST_DUPLICATE') return 'Dealer repost already counted once';
     if (reason === 'BUNDLE_SOURCE_UNSPLIT') return 'Unsplit multi-listing source';
     if (reason === 'REFERENCE_TOKEN_AS_PRICE') return 'Reference token copied as price';
+    if (reason === 'YEAR_TOKEN_AS_PRICE') return 'Year token copied as price';
+    if (reason === 'CURRENCY_UNVERIFIED') return 'Price exists but source currency is not verified';
+    if (reason === 'CURRENCY_AMBIGUOUS') return 'Bare dollar sign requires currency review';
+    if (reason === 'CURRENCY_RATE_UNVERIFIED') return 'Currency conversion rate is not verified';
     return 'Invalid price';
   };
 
@@ -1019,7 +1036,7 @@ export default function PriceResearch() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    Required WTS fields and catalog configuration are checked first. Cohorts with five or more observations then use a market plausibility floor followed by the standard 1.5 x IQR method.
+                    The release starts with canonical-identity-reviewed APPROVED records at confidence 90 or higher for the exact three references. Confidence is a parser score, not a probability. Explicit source currency, verified FX provenance when conversion is required, catalog model and dial, bundle, and duplicate checks run before a cohort with five or more observations uses the market plausibility floor and standard 1.5 x IQR method.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
@@ -1079,9 +1096,20 @@ export default function PriceResearch() {
 
             {canReviewExcludedEvidence && data.outlier_rows.length > 0 && (
               <section style={{ marginBottom: 28 }}>
-                <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Discarded observations and outliers</h3>
-                  <span style={{ fontSize: 12, color: MUTED }}>Retained for audit, excluded from market statistics</span>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ marginBottom: 10 }}>
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Excluded evidence for human review</h3>
+                    <p style={{ fontSize: 12, color: MUTED, marginTop: 3 }}>
+                      These rows are preserved, not discarded. Most require a currency, dial, bundle, or duplicate decision; only rows labeled with an IQR or plausibility reason are statistical price outliers.
+                    </p>
+                  </div>
+                  <Link
+                    to="/review-queue"
+                    className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md px-4 text-xs font-bold"
+                    style={{ background: NAVY, color: WHITE }}
+                  >
+                    Open Human Review Queue
+                  </Link>
                 </div>
                 <div style={{ overflowX: 'auto', borderTop: `1px solid ${BORDER}` }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760, fontSize: 13 }}>
@@ -1377,12 +1405,18 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                     <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>
                       {[seller.dealer_city, seller.dealer_country].filter(Boolean).join(', ') || 'Location not published'}
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }}>
-                      <Metric label="For sale" value={Number(seller.dealer_stats?.wts_posts || 0).toLocaleString()} />
-                      <Metric label="Looking for" value={Number(seller.dealer_stats?.wtb_posts || 0).toLocaleString()} />
-                      <Metric label="Reviews" value={Number(seller.dealer_review_count || 0).toLocaleString()} />
-                      <Metric label="Common groups" value={Number(seller.dealer_group_count || 0).toLocaleString()} />
-                    </div>
+                    {seller.dealer_stats ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }}>
+                        <Metric label="For sale" value={Number(seller.dealer_stats.wts_posts).toLocaleString()} />
+                        <Metric label="Looking for" value={Number(seller.dealer_stats.wtb_posts).toLocaleString()} />
+                        <Metric label="Reviews" value={Number(seller.dealer_review_count || 0).toLocaleString()} />
+                        <Metric label="Common groups" value={Number(seller.dealer_group_count || 0).toLocaleString()} />
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 16, padding: 12, background: LIGHT_GRAY, color: MUTED, fontSize: 12 }}>
+                        Dealer activity is not available until an applied-lineage aggregate is verified.
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-3" style={{ marginTop: 18 }}>
                       {seller.dealer_profile_url && <Link to={seller.dealer_profile_url} style={{ color: NAVY, border: `1px solid ${BORDER}`, padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>View profile</Link>}
                       {seller.contact_available && seller.whatsapp_url && <a href={seller.whatsapp_url} target="_blank" rel="noreferrer" className="flex items-center gap-2" style={{ color: '#07140b', background: '#25D366', padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 800 }}><MessageCircle size={15} /> Contact on WhatsApp</a>}

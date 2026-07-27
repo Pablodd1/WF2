@@ -68,7 +68,18 @@ function normalizeMarketRow(row, reference) {
   const hkd = explicitAmount(line, ['HKD', 'HDK', 'HK\\$']);
   if (hkd) {
     const converted = Math.round(hkd / 7.8);
-    return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_HKD_FROM_REFERENCE_LINE' : null, analytics_currency_status: 'VERIFIED' };
+    // The historical 7.8 conversion is useful as a review proposal, but it has
+    // no source date and is not admissible to customer analytics as verified FX.
+    return {
+      ...row,
+      analytics_price_usd: converted,
+      price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_HKD_FROM_REFERENCE_LINE' : null,
+      analytics_currency_status: 'CURRENCY_RATE_UNVERIFIED',
+      analytics_fx_rate: 7.8,
+      analytics_fx_rate_basis: 'HKD_PER_USD',
+      analytics_fx_source: 'LEGACY_FIXED_RATE_REVIEW_ONLY',
+      analytics_fx_date: null,
+    };
   }
   if (hasCurrencyToken(line, ['EUR', 'GBP', 'CHF', 'CNY', 'JPY', 'SGD'])) {
     return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: 'CURRENCY_RATE_UNVERIFIED' };

@@ -8,7 +8,10 @@ test('repairs HKD stored as USD using the exact reference line', () => {
   const result = normalizeMarketRow({ price_usd: 325000, raw_message: '52506 Ice Blue - HKD 325k\n52508 Black - HKD 296k' }, '52506');
   assert.equal(result.analytics_price_usd, 41667);
   assert.equal(result.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
-  assert.equal(result.analytics_currency_status, 'VERIFIED');
+  assert.equal(result.analytics_currency_status, 'CURRENCY_RATE_UNVERIFIED');
+  assert.equal(result.analytics_fx_rate, 7.8);
+  assert.equal(result.analytics_fx_source, 'LEGACY_FIXED_RATE_REVIEW_ONLY');
+  assert.equal(result.analytics_fx_date, null);
 });
 
 test('prefers an explicit USD equivalent on the exact reference line', () => {

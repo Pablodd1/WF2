@@ -8,13 +8,18 @@
 const { getClient } = require('./_lib/supabase');
 const { listCatalogReferences, lookupCatalog } = require('./_lib/catalog');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
-const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
+const {
+  MIN_RELEASE_CONFIDENCE,
+  isPublicationReferenceAllowed,
+  isReleaseListingEligible,
+} = require('./_lib/publication-references.cjs');
+const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
-const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
+const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
-const REFERENCE_SAMPLE_LIMIT = 500;
+const REFERENCE_SAMPLE_LIMIT = 1000;
 const MINIMUM_ANALYTICS_SAMPLE = 5;
 const LOOKUP_CONCURRENCY = 8;
 
@@ -33,11 +38,12 @@ async function mapWithConcurrency(items, concurrency, mapper) {
 
 async function loadReferenceEvidence(client, brand, entry) {
   const { data, error } = await client
-    .from('watch_records')
-    .select('id, reference, price_usd, dial_color, raw_message, flags')
+    .from('price_research_verified_source')
+    .select('id,brand,reference,price_raw,price_usd,currency,dial_color,condition,raw_message,flags,confidence,verdict,dealer_id')
     .eq('brand', brand)
     .eq('reference', entry.reference)
     .eq('verdict', 'APPROVED')
+    .gte('confidence', MIN_RELEASE_CONFIDENCE)
     .eq('listing_type', 'WTS')
     .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
     .gt('price_usd', 0)
@@ -46,12 +52,18 @@ async function loadReferenceEvidence(client, brand, entry) {
   if (!data?.length) return null;
 
   const catalog = lookupCatalog(entry.reference, brand);
-  const shadowBundleIds = await loadShadowBundleParentIds(client, data);
-  const qualified = data.filter(row => !classifyResearchEligibility({
-    ...row,
-    brand,
-    bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds),
-  }, catalog));
+  const eligible = data
+    .filter(row => isReleaseListingEligible(row))
+    .map(row => {
+      const normalized = normalizeMarketRow(row, entry.reference);
+      return {
+        ...normalized,
+        price_usd: normalized.analytics_price_usd,
+        bundle_candidate_count: 1,
+      };
+    })
+    .filter(row => !classifyResearchEligibility(row, catalog));
+  const { uniqueRows: qualified } = deduplicateReposts(eligible);
   const dials = new Map();
   let sum = 0;
   for (const row of qualified) {

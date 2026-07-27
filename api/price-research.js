@@ -24,7 +24,11 @@ const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsp
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
 const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
-const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
+const {
+  MIN_RELEASE_CONFIDENCE,
+  isPublicationReferenceAllowed,
+  isReleaseListingEligible,
+} = require('./_lib/publication-references.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -106,34 +110,43 @@ async function retainVerifiedIdentityRows(client, rows) {
   });
 }
 
-async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, strictVerifiedPublication) {
+async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection) {
   const { data, error } = await client
     .from(sourceTable)
-    .select('id,brand,reference,dial_color,condition,listing_type,verdict,raw_message,flags')
+    .select('id,brand,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id')
     .eq('brand', brand)
     .in('reference', referenceVariants)
     .in('listing_type', ['WTB', 'NTQ'])
-    .in('verdict', ['APPROVED', 'HUMAN'])
+    .eq('verdict', 'APPROVED')
+    .gte('confidence', MIN_RELEASE_CONFIDENCE)
     .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
     .limit(5000);
   if (error) return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
 
-  let demandRows = data || [];
-  if (strictVerifiedPublication) {
-    try {
-      demandRows = await retainVerifiedIdentityRows(client, demandRows);
-    } catch {
-      return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
-    }
+  let demandRows;
+  try {
+    demandRows = await retainVerifiedIdentityRows(client, data || []);
+  } catch {
+    return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
   }
   const equivalentKeys = new Set(referenceVariants.map(normRef));
   demandRows = demandRows.filter(row =>
+    isReleaseListingEligible(row)
+    &&
     String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
     && equivalentKeys.has(normRef(row.reference)));
+  let suppressedIds;
+  try {
+    suppressedIds = await loadAnalyticsSuppressedIds(client, demandRows.map(row => row.id));
+  } catch {
+    return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
+  }
+  demandRows = demandRows.filter(row => !suppressedIds.has(String(row.id)));
   const shadowBundleIds = await loadShadowBundleParentIds(client, demandRows);
-  const eligible = demandRows
+  const eligibleBeforeReposts = demandRows
     .map(row => ({ ...row, bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds) }))
     .filter(row => !classifyDemandEligibility(row, catalog));
+  const { uniqueRows: eligible, repostRows } = deduplicateReposts(eligibleBeforeReposts);
   const grouped = new Map();
   for (const row of eligible.filter(row => matchesSelection({
     ...row,
@@ -154,6 +167,8 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     demand_count: demandCohorts.reduce((sum, cohort) => sum + cohort.count, 0),
     demand_cohorts: demandCohorts,
     demand_sample_capped: demandRows.length >= 5000,
+    demand_repost_count: repostRows.length,
+    demand_suppressed_duplicate_count: suppressedIds.size,
   };
 }
 
@@ -212,9 +227,9 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-    const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
     // Exact brand/reference predicates can use the watch_records indexes.
-    // Strict identity approval is applied to the bounded result IDs below.
+    // The reviewed release gate and deterministic evidence rules are applied
+    // again in memory after the bounded, indexed read.
     const sourceTable = 'watch_records';
 
     // Resolve reference — support prefix matching (3712 -> 3712/1A)
@@ -231,6 +246,7 @@ module.exports = async function handler(req, res) {
         .select('reference')
         .eq('brand', brand)
         .eq('verdict', 'APPROVED')
+        .gte('confidence', MIN_RELEASE_CONFIDENCE)
         .ilike('reference', reference)
         .limit(50)));
       const exactRefError = exactRefResults.every(result => result.error)
@@ -248,6 +264,7 @@ module.exports = async function handler(req, res) {
           .select('reference')
           .eq('brand', brand)
           .eq('verdict', 'APPROVED')
+          .gte('confidence', MIN_RELEASE_CONFIDENCE)
           .ilike('reference', `${rawRef}%`)
           .limit(50);
         refs = prefixResult.data;
@@ -282,14 +299,15 @@ module.exports = async function handler(req, res) {
     // PostgREST caps each response at 1,000 rows. Page explicitly so a busy
     // reference does not produce a chart made only from its newest day.
     const pageSize = 1000;
-    const sampleLimit = 5000;
-    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id';
+    const sampleLimit = 10000;
+    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict';
     const buildRowsQuery = (from, to) => client
       .from(sourceTable)
       .select(columns)
       .eq('brand', brand)
       .in('reference', referenceVariants)
       .eq('verdict', 'APPROVED')
+      .gte('confidence', MIN_RELEASE_CONFIDENCE)
       .eq('listing_type', 'WTS')
       .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
       .order('created_at', { ascending: false })
@@ -365,6 +383,7 @@ module.exports = async function handler(req, res) {
         .eq('brand', brand)
         .in('reference', referenceVariants)
         .eq('verdict', 'APPROVED')
+        .gte('confidence', MIN_RELEASE_CONFIDENCE)
         .eq('listing_type', 'WTS')
         .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
         .ilike('dial_color', dial)
@@ -377,13 +396,12 @@ module.exports = async function handler(req, res) {
       for (const row of supplementalPages.flatMap(page => page.data || [])) rowsById.set(row.id, row);
       rows = [...rowsById.values()];
     }
-    if (strictVerifiedPublication) {
-      rows = await retainVerifiedIdentityRows(client, rows);
-      const equivalentKeys = new Set(referenceVariants.map(normRef));
-      rows = rows.filter(row =>
-        String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
-        && equivalentKeys.has(normRef(row.reference)));
-    }
+    rows = await retainVerifiedIdentityRows(client, rows);
+    const equivalentKeys = new Set(referenceVariants.map(normRef));
+    rows = rows.filter(row =>
+      isReleaseListingEligible(row)
+      && String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
+      && equivalentKeys.has(normRef(row.reference)));
     const shadowBundleIds = await loadShadowBundleParentIds(client, rows);
 
     const normalizedRows = rows
@@ -531,7 +549,6 @@ module.exports = async function handler(req, res) {
       referenceVariants,
       catalogHit,
       selection,
-      strictVerifiedPublication,
     );
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
@@ -569,6 +586,18 @@ module.exports = async function handler(req, res) {
         analytics_dimension: false,
         cohort: 'All conditions',
         listing_description_retained: true,
+      },
+      admission_policy: {
+        verdict: 'APPROVED',
+        minimum_confidence: MIN_RELEASE_CONFIDENCE,
+        confidence_is_probability: false,
+        exact_release_reference_required: true,
+        canonical_identity_review_required: true,
+        explicit_currency_evidence_required: true,
+        verified_fx_provenance_required: true,
+        catalog_model_and_dial_required: true,
+        unsplit_bundles_excluded: true,
+        reviewed_duplicates_excluded: true,
       },
       totalListings: listedRows.length,
       reference_listing_count: totalListings,

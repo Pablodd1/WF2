@@ -70,6 +70,48 @@ audit-output/three-watch-release/candidate-ranking.json
 These counts mean the three watch cohorts are ready for fail-closed identity
 and price publication. They do not authorize images or seller contacts.
 
+## Approved-90 evidence expansion
+
+The July 27 continuation screens every exact-release WTS row for the private
+review queue, but public Price Research remains limited to canonical-identity-
+reviewed rows. A customer-facing observation must pass:
+
+1. stored verdict `APPROVED`;
+2. finite parser confidence at least 90 (the score is not a probability);
+3. exact allowed brand/reference pair;
+4. canonical identity status `CATALOG_CONFIRMED` or `HUMAN_APPROVED`;
+5. explicit USD/USDT evidence, or explicit currency plus retained verified FX
+   rate source and date;
+6. catalog-confirmed model and compatible dial;
+7. no unsplit bundle;
+8. no reviewed duplicate suppression; and
+9. one observation per deterministic dealer repost group.
+
+The same `APPROVED` and confidence-90 release gate now applies to Trading
+Floor, direct listing detail, contact, featured listing, Price Research,
+image-review queue, and image-review decision routes. Deployment environment
+configuration may restrict the reviewed references but cannot add another
+reference or fail open.
+
+Read-only cohort audit before deployment:
+
+| Exact cohort | APPROVED WTS | 90+ with reference, dial and parsed positive price | Deterministic review candidates before repost/outlier gates | Candidate comparables before mandatory identity/FX public gates |
+| --- | ---: | ---: | ---: | ---: |
+| Rolex 116610LN | 3,363 | 2,723 | 219 | 84 |
+| Patek Philippe 5712/1A-001 and 5712/1A | 5,413 | 4,309 | 662 | 393 |
+| Rolex 126710BLNR | 11,731 | 8,946 | 582 | 212 |
+| **Total** | **20,507** | **15,978** | **1,463** | **689** |
+
+The `689` count is a private review-screening figure produced under the
+historical fixed-HKD-rate analysis; it is not the public comparable count.
+Fixed-rate HKD conversions without an FX source date are now marked
+`CURRENCY_RATE_UNVERIFIED` and withheld from public analytics. The audit
+classified 109 true statistical outliers after its deterministic screening
+(7, 81, and 21 by cohort). The much larger excluded population was not "all
+outliers": it was primarily ambiguous or unverified currency and unsplit
+bundle evidence. The reviewer UI now names this table
+`Excluded evidence for human review` and explains each correction reason.
+
 ## Images
 
 The release image queue is filtered to the configured references. It shows the
@@ -92,6 +134,13 @@ fields remain empty until an authenticated human submits the exact decisions.
 After a MATCH, the existing verified media view exposes only that reviewed
 image for that exact record.
 
+The latest independent production read at 2026-07-27 14:45-14:47 UTC found 29
+source-linked exact-reference images: 11 for 116610LN, 1 for 5712/1A, and 17
+for 126710BLNR. Twenty-four were actionable in the authenticated review API:
+7, 0, and 17 respectively. The Patek item is blocked by missing dial evidence;
+four additional 116610LN items remain identity-unverified. Signed visual
+approvals remain exactly zero, so no image is auto-published.
+
 ## Sellers and users
 
 No exact seller-lineage item currently passes all release gates. Public seller
@@ -108,14 +157,24 @@ appear only after:
 5. contact consent; and
 6. a verified contact method.
 
-The UI already displays the full safe dealer profile, history metrics, and
-contact action when those gates pass. It displays a truthful pending message
-otherwise.
+The UI displays the safe dealer profile and contact action only when those
+gates pass. Dealer activity metrics remain unavailable until an
+applied-lineage aggregate exists; the UI says so instead of inventing zero
+activity.
+
+An independent local read of `watches_only_report.csv` found 27 private
+exact-reference seller seeds and 26 possible image rows, but all 27 CSV rows
+lack an immutable live source record ID. They may enter only a private,
+contact-masked review packet. Verified/applied dealers, consented public
+contacts, and production-ready seller matches remain exactly zero.
 
 ## Customer behavior
 
 - Trading Floor, Price Research, catalog browsing, featured inventory, listing
   detail, and contact APIs all enforce the same three-reference allowlist.
+- Trading Floor globally deduplicates the current reviewed cohort before
+  pagination and fails closed if it grows beyond the 999-row bounded release
+  window.
 - Search uses exact reference predicates; the browser never receives the full
   archive.
 - Price charts combine all listing conditions for the selected exact dial.

@@ -65,6 +65,13 @@ test('rejects a numeric reference copied into the market price', () => {
   );
 });
 
+test('rejects a year token copied into the market price', () => {
+  assert.equal(
+    classifyResearchEligibility({ ...valid, price_usd: 2025, price_raw: 2025 }, catalog),
+    'YEAR_TOKEN_AS_PRICE',
+  );
+});
+
 test('WTB demand requires identity and dial but not an asking price', () => {
   assert.equal(classifyDemandEligibility({ ...valid, price_usd: null }, catalog), null);
   assert.equal(classifyDemandEligibility({ ...valid, dial_color: 'Purple', price_usd: null }, catalog), 'CATALOG_DIAL_MISMATCH');

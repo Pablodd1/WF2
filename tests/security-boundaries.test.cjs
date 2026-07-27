@@ -128,7 +128,8 @@ test('public listing evidence is withheld and public dealer profiles omit raw me
   assert.doesNotMatch(listingRoute, /redactPublicSource/);
   assert.doesNotMatch(listingRoute, /authorizeDealer/);
   assert.match(listingRoute, /trading_floor_verified_listings/);
-  assert.match(listingRoute, /trading_floor_listings/);
+  assert.doesNotMatch(listingRoute, /const publicTable[\s\S]*trading_floor_listings/);
+  assert.match(listingRoute, /isReleaseListingEligible/);
   assert.match(listingRoute, /\.from\(publicTable\)/);
   assert.doesNotMatch(profileRoute, /select\([^)]*raw_message/);
 });
@@ -143,6 +144,9 @@ test('Price Research shows contact-redacted source evidence and only verified se
   assert.match(page, /No identity or contact data is guessed/);
   assert.match(page, /api\/listing-contact/);
   assert.doesNotMatch(page, /title\.startsWith\('Raw source'\)/);
+  assert.match(page, /seller\.dealer_stats \?/);
+  assert.doesNotMatch(page, /seller\.dealer_stats\?\.wts_posts \|\| 0/);
+  assert.match(page, /Dealer activity is not available until an applied-lineage aggregate is verified/);
 });
 
 test('Price Research only returns excluded observation rows to reviewers and admins', () => {

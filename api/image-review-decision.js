@@ -2,6 +2,7 @@
 
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 const { sameOrigin, sha256 } = require('./_lib/review-packets.cjs');
+const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
 
 const QUEUE_FIELDS = [
   'source_object_key',
@@ -89,6 +90,21 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
     if (identityError) throw identityError;
     const identitySnapshot = exactIdentitySnapshot(queueRow, identity);
+    const { data: releaseListing, error: releaseListingError } = await auth.client
+      .from('price_research_verified_source')
+      .select('id,verdict,confidence')
+      .eq('id', recordId)
+      .eq('verdict', 'APPROVED')
+      .gte('confidence', MIN_RELEASE_CONFIDENCE)
+      .maybeSingle();
+    if (releaseListingError) throw releaseListingError;
+    if (!isReleaseListingEligible({
+      ...releaseListing,
+      brand: identitySnapshot.brand,
+      reference: identitySnapshot.reference,
+    })) {
+      return res.status(409).json({ error: 'Listing is outside the approved three-reference review release' });
+    }
     if (!text(queueRow.public_url) || !text(queueRow.raw_message)) {
       return res.status(409).json({ error: 'Image review evidence is incomplete; correct the structural evidence first' });
     }

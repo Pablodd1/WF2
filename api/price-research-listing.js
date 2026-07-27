@@ -4,11 +4,16 @@
  * not make the main analytics response unnecessarily large.
  */
 const { getClient } = require('./_lib/supabase');
+const { lookupCatalog } = require('./_lib/catalog');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
+const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
+const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
+const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
+const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
-const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
+const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 
 function normalizeAccessories(value) {
@@ -16,6 +21,17 @@ function normalizeAccessories(value) {
   if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean).slice(0, 20);
   if (typeof value === 'string') return value.split(/[,;|]/).map(item => item.trim()).filter(Boolean).slice(0, 20);
   return [];
+}
+
+function listingCatalog(reference, brand) {
+  let catalog = lookupCatalog(reference, brand);
+  if ((!catalog?.found || !catalog.model)
+    && /^\d{4}\/1A$/i.test(String(reference || ''))
+    && String(brand || '').toUpperCase() === 'PATEK PHILIPPE') {
+    const canonical = lookupCatalog(`${reference}-001`, brand);
+    if (canonical?.found && canonical.model) catalog = canonical;
+  }
+  return catalog;
 }
 
 async function resolveRawSource(client, listing) {
@@ -47,22 +63,30 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-    if (process.env.STRICT_VERIFIED_PUBLICATION === 'true') {
-      const strictGate = await client
-        .from('price_research_verified_source')
-        .select('id')
-        .eq('id', id)
-        .maybeSingle();
-      if (strictGate.error) throw strictGate.error;
-      if (!strictGate.data) return res.status(404).json({ error: 'Listing not found' });
+    let canReview = false;
+    try {
+      const sessionClient = authClient();
+      const sessionUser = sessionClient ? await resolveSession(sessionClient, req, res) : null;
+      canReview = ['admin', 'reviewer'].includes(userRole(sessionUser));
+    } catch {
+      // Public evidence remains available when optional reviewer resolution fails.
     }
+    const strictResult = await client
+      .from('price_research_verified_source')
+      .select('id,brand,reference,dial_color')
+      .eq('id', id)
+      .maybeSingle();
+    if (strictResult.error) throw strictResult.error;
+    const strictGate = strictResult.data;
+    if (!strictGate && !canReview) return res.status(404).json({ error: 'Listing not found' });
     const sourceTable = 'watch_records';
-    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,accessories,image_urls,thumbnail_url,has_images,dealer_photos,region,source_type,listing_status,confidence';
+    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,accessories,image_urls,thumbnail_url,has_images,dealer_photos,region,source_type,listing_status,confidence,verdict';
     const { data, error } = await client
       .from(sourceTable)
       .select(columns)
       .eq('id', id)
       .eq('verdict', 'APPROVED')
+      .gte('confidence', MIN_RELEASE_CONFIDENCE)
       .eq('listing_type', 'WTS')
       .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
       .maybeSingle();
@@ -76,30 +100,45 @@ module.exports = async function handler(req, res) {
       console.warn('[price-research-listing] verified media unavailable; image withheld:', verifiedError.message);
     }
     const verified = verifiedById.get(id);
-    const resolvedData = verified
+    const canonical = strictGate || verified;
+    const resolvedData = canonical
       ? {
           ...data,
-          brand: verified.brand,
-          reference: verified.reference,
-          dial_color: verified.dial_color,
-          has_images: verified.has_images,
-          thumbnail_url: verified.thumbnail_url,
-          image_urls: verified.image_urls,
+          brand: canonical.brand,
+          reference: canonical.reference,
+          dial_color: canonical.dial_color,
+          has_images: Boolean(verified?.has_images),
+          thumbnail_url: verified?.thumbnail_url || null,
+          image_urls: verified?.image_urls || [],
         }
       : data;
-    if (!isPublicationBrandAllowed(resolvedData.brand)) {
+    if (!isPublicationBrandAllowed(resolvedData.brand) || !isReleaseListingEligible(resolvedData)) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
-    if (!isPublicationReferenceAllowed(resolvedData.brand, resolvedData.reference)) {
-      return res.status(404).json({ error: 'Listing not included in this release' });
-    }
-    if (!isCustomerIdentitySafe(resolvedData)) return res.status(404).json({ error: 'Listing under identity review' });
-    const customerListing = sanitizeTradingRecord(resolvedData, { verifiedImages: Boolean(verified?.has_images) });
     const rawSource = await resolveRawSource(client, data);
     const normalized = normalizeMarketRow(
-      { ...customerListing, raw_message: rawSource.text },
-      customerListing.reference,
+      { ...resolvedData, raw_message: rawSource.text },
+      resolvedData.reference,
     );
+    const shadowBundleIds = await loadShadowBundleParentIds(client, [data]);
+    const eligibilityRow = {
+      ...normalized,
+      price_usd: normalized.analytics_price_usd,
+      bundle_candidate_count: bundleCandidateCount(data, shadowBundleIds),
+    };
+    const exclusionReason = classifyResearchEligibility(
+      eligibilityRow,
+      listingCatalog(resolvedData.reference, resolvedData.brand),
+    );
+    const suppressedIds = await loadAnalyticsSuppressedIds(client, [id]);
+    const publicEligible = Boolean(strictGate)
+      && !exclusionReason
+      && !suppressedIds.has(id)
+      && isCustomerIdentitySafe(resolvedData);
+    if (!publicEligible && !canReview) {
+      return res.status(404).json({ error: 'Listing is retained for authorized human review' });
+    }
+    const customerListing = sanitizeTradingRecord(resolvedData, { verifiedImages: Boolean(verified?.has_images) });
     const priceVerified = normalized.analytics_currency_status === 'VERIFIED'
       && Number.isFinite(Number(normalized.analytics_price_usd))
       && Number(normalized.analytics_price_usd) > 0;
@@ -138,6 +177,10 @@ module.exports = async function handler(req, res) {
         source_type: customerListing.source_type,
         listing_status: customerListing.listing_status,
         confidence: customerListing.confidence,
+        review_exclusion_reason: canReview
+          ? (suppressedIds.has(id) ? 'REVIEWED_DUPLICATE_SUPPRESSED' : exclusionReason)
+          : null,
+        human_review_available: canReview,
         data_quality_issues: priceIssues,
         data_quality_review_required: priceIssues.length > 0,
       },
