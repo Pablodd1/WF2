@@ -17,4 +17,7 @@ test('strict browsing verifies bounded indexed candidates instead of scanning th
   assert.match(ingestSource, /const tableName = strictVerifiedPublication[\s\S]*trading_floor_market_listings/);
   assert.match(ingestSource, /candidateRecords\.map\(row => row\.id\)/);
   assert.match(ingestSource, /!strictVerifiedPublication \|\| Boolean\(verified\)/);
+  assert.match(ingestSource, /rest\/v1\/listing_identity_reviews/);
+  assert.match(ingestSource, /status: 'in\.\(CATALOG_CONFIRMED,HUMAN_APPROVED\)'/);
+  assert.match(ingestSource, /Verified media batch unavailable; images remain withheld/);
 });

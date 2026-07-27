@@ -53,28 +53,68 @@ const MASTER_CATALOG = loadJsonSafe('master_catalog.json', {});
 
 async function loadVerifiedPublicListings(supabaseUrl, readKey, ids) {
   if (!ids.length) return new Map();
-  try {
-    const batches = [];
-    for (let index = 0; index < ids.length; index += 80) {
-      batches.push(ids.slice(index, index + 80));
+  const batches = [];
+  for (let index = 0; index < ids.length; index += 50) {
+    batches.push(ids.slice(index, index + 50));
+  }
+
+  const identityResults = await Promise.all(batches.map(async batch => {
+    const params = new URLSearchParams({
+      select: 'record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status',
+      record_id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+      status: 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)',
+    });
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/listing_identity_reviews?${params.toString()}`,
+        { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+      );
+      if (!response.ok) throw new Error(`identity review read returned ${response.status}`);
+      return response.json();
+    } catch (error) {
+      console.warn(`[Trading Floor] Identity verification batch withheld: ${error.message}`);
+      return [];
     }
-    const results = await Promise.all(batches.map(async batch => {
-      const params = new URLSearchParams({
-        select: 'id,brand,model,reference,dial_color,has_images,thumbnail_url,image_urls',
-        id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
-      });
+  }));
+  const verified = new Map(identityResults.flat().map(row => [String(row.record_id), {
+    id: row.record_id,
+    brand: row.canonical_brand,
+    model: row.canonical_model,
+    reference: row.canonical_reference,
+    dial_color: row.canonical_dial_color,
+    has_images: false,
+    thumbnail_url: null,
+    image_urls: [],
+  }]));
+  const verifiedIds = [...verified.keys()];
+  if (!verifiedIds.length) return verified;
+
+  const mediaBatches = [];
+  for (let index = 0; index < verifiedIds.length; index += 50) {
+    mediaBatches.push(verifiedIds.slice(index, index + 50));
+  }
+  const mediaResults = await Promise.all(mediaBatches.map(async batch => {
+    const params = new URLSearchParams({
+      select: 'id,has_images,thumbnail_url,image_urls',
+      id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
+    });
+    try {
       const response = await fetch(
         `${supabaseUrl}/rest/v1/trading_floor_verified_listings?${params.toString()}`,
         { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
       );
-      if (!response.ok) throw new Error(`verified listing read returned ${response.status}`);
+      if (!response.ok) throw new Error(`verified media read returned ${response.status}`);
       return response.json();
-    }));
-    return new Map(results.flat().map(row => [String(row.id), row]));
-  } catch (error) {
-    console.warn(`[Trading Floor] Verified media unavailable; images remain withheld: ${error.message}`);
-    return new Map();
+    } catch (error) {
+      console.warn(`[Trading Floor] Verified media batch unavailable; images remain withheld: ${error.message}`);
+      return [];
+    }
+  }));
+  for (const media of mediaResults.flat()) {
+    const current = verified.get(String(media.id));
+    if (current) verified.set(String(media.id), { ...current, ...media });
   }
+  return verified;
 }
 
 // Standard USD exchange rates
@@ -986,9 +1026,9 @@ module.exports = async function handler(req, res) {
           const resolved = verified
             ? {
                 ...record,
-                brand: verified.brand,
-                reference: verified.reference,
-                dial_color: verified.dial_color,
+                brand: verified.brand || record.brand,
+                reference: verified.reference || record.reference,
+                dial_color: verified.dial_color || record.dial_color,
                 has_images: verified.has_images,
                 thumbnail_url: verified.thumbnail_url,
                 image_urls: verified.image_urls,
