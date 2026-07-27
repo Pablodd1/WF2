@@ -1,7 +1,7 @@
 # Rolex and Patek Client Release
 
 > Superseded for customer scope by
-> [`THREE_WATCH_CLIENT_RELEASE_2026-07-27.md`](THREE_WATCH_CLIENT_RELEASE_2026-07-27.md).
+> [`FULL_ROLEX_PATEK_RELEASE_2026-07-27.md`](FULL_ROLEX_PATEK_RELEASE_2026-07-27.md).
 > This document remains the two-brand infrastructure baseline.
 
 **Control date:** July 27, 2026

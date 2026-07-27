@@ -6,6 +6,8 @@ const THREE_WATCH_RELEASE_REFERENCES = [
   'Patek Philippe::5712/1A-001',
   'Rolex::126710BLNR',
 ].join('|');
+const FULL_REVIEWED_BRAND_RELEASE = 'ALL_REVIEWED';
+const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe']);
 const MIN_RELEASE_CONFIDENCE = 90;
 
 function normalizePublicationReference(value) {
@@ -34,11 +36,16 @@ function parsedReferences(value) {
 
 const REVIEWED_RELEASE_REFERENCES = parsedReferences(THREE_WATCH_RELEASE_REFERENCES);
 
+function isFullReviewedBrandRelease(value = process.env.PUBLICATION_REFERENCES) {
+  return String(value || '').trim().toUpperCase() === FULL_REVIEWED_BRAND_RELEASE;
+}
+
 function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
   // Deployment configuration may restrict this reviewed release, but it may
   // never add a brand/reference pair. Empty or omitted configuration uses the
   // reviewed defaults; malformed or unknown non-empty configuration fails shut.
   const configured = String(value || '').trim();
+  if (isFullReviewedBrandRelease(configured)) return [];
   if (!configured) return REVIEWED_RELEASE_REFERENCES.map(entry => ({ ...entry }));
   const requestedKeys = new Set(parsedReferences(configured).map(entry =>
     `${entry.brand.toLowerCase()}::${entry.reference.toUpperCase()}`));
@@ -48,6 +55,10 @@ function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
 }
 
 function isPublicationReferenceAllowed(brand, reference, value = process.env.PUBLICATION_REFERENCES) {
+  if (isFullReviewedBrandRelease(value)) {
+    return FULL_REVIEWED_BRANDS.has(String(brand || '').trim().toLowerCase())
+      && Boolean(normalizePublicationReference(reference));
+  }
   const allowed = publicationReferences(value);
   if (!allowed.length) return false;
   const normalizedBrand = String(brand || '').trim().toLowerCase();
@@ -82,8 +93,11 @@ function publicationReferencePostgrestFilter(value = process.env.PUBLICATION_REF
 }
 
 module.exports = {
+  FULL_REVIEWED_BRAND_RELEASE,
+  FULL_REVIEWED_BRANDS,
   MIN_RELEASE_CONFIDENCE,
   THREE_WATCH_RELEASE_REFERENCES,
+  isFullReviewedBrandRelease,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
   normalizePublicationReference,

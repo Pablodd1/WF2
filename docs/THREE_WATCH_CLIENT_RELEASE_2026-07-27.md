@@ -1,5 +1,9 @@
 # Three-Watch Client Release
 
+> Superseded for active customer scope by
+> [`FULL_ROLEX_PATEK_RELEASE_2026-07-27.md`](FULL_ROLEX_PATEK_RELEASE_2026-07-27.md).
+> This document remains the rollback baseline and canary evidence.
+
 **Control date:** July 27, 2026  
 **Release cohorts:** Rolex 116610LN, Patek Philippe 5712/1A-001,
 Rolex 126710BLNR  

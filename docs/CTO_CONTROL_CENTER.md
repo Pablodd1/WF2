@@ -1,9 +1,11 @@
 # WatchFacts CTO Control Center
 
 **Control date:** July 27, 2026
-**Assignment mode:** bounded three-watch client implementation after final shadow-normalization control readback
-**Current release decision:** do not bulk-promote normalization, bundles, images,
-sellers, or duplicates.
+**Assignment mode:** full Rolex/Patek evidence-first client release
+**Current release decision:** publish all currently verified Rolex/Patek
+identities through bounded database pagination; route every unresolved row to
+its exact human-review disposition. Do not bulk-promote normalization, bundles,
+images, sellers, or duplicates.
 
 **Infrastructure update:** the upgraded Supabase and Railway queue path has now
 exactly reconciled every raw-evidence-eligible record. Four Railway workers with
@@ -16,9 +18,28 @@ It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
 
-## July 27 three-watch client release
+## July 27 full Rolex and Patek release
 
-The current deadline release is limited to Rolex 116610LN, Patek Philippe
+The active customer mission expands the prior three-reference canary to every
+Rolex and Patek Philippe listing that passes the reviewed identity, confidence,
+bundle, duplicate, and customer-safety gates. The implementation, definition
+of “full,” human identity workflow, deployment sequence, census contract, and
+rollback are in
+[`FULL_ROLEX_PATEK_RELEASE_2026-07-27.md`](FULL_ROLEX_PATEK_RELEASE_2026-07-27.md).
+
+The customer API no longer loads the whole reviewed population into application
+memory. Postgres performs global repost selection and the API uses bounded
+created-at/record-ID keyset pagination. The prior 999-row ceiling remains only
+as the fail-closed rollback path for the older exact-reference release.
+
+The new identity-review lane is authenticated and signed. It shows immutable
+raw evidence, observed seller evidence, candidate images, and other release
+blockers, but its decision changes only `listing_identity_reviews`. Price,
+currency, image, seller, bundle, and duplicate gates remain independent.
+
+## July 27 three-watch rollback baseline
+
+The previous deadline release was limited to Rolex 116610LN, Patek Philippe
 5712/1A-001, and Rolex 126710BLNR. The exact selection evidence, condition
 aggregation rule, counts, image review gate, seller gate, preview acceptance
 tests, and rollback are in
