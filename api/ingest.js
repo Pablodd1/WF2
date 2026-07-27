@@ -21,6 +21,7 @@ const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { requireServiceToken } = require('./_lib/require-service-token.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { confirmCatalogCandidate } = require('./_lib/catalog-confirmation.cjs');
+const { listEquivalentReferences } = require('./_lib/catalog');
 const { decodeTradingCursor, encodeTradingCursor, tradingCursorFilter } = require('./_lib/trading-cursor.cjs');
 const {
   isPublicationBrandAllowed,
@@ -215,13 +216,15 @@ async function loadRepostEvidenceById(supabaseUrl, readKey, ids) {
 }
 
 function deduplicateTradingItems(items) {
-  const seen = new Set();
-  return items.filter(item => {
+  const preferredBySignature = new Map();
+  for (const item of items) {
     const signature = repostSignature(item.resolved);
-    if (seen.has(signature)) return false;
-    seen.add(signature);
-    return true;
-  });
+    const current = preferredBySignature.get(signature);
+    if (!current || (item.resolved?.has_images && !current.resolved?.has_images)) {
+      preferredBySignature.set(signature, item);
+    }
+  }
+  return [...preferredBySignature.values()];
 }
 
 function listingIsAfterCursor(record, cursor) {
@@ -315,18 +318,33 @@ async function loadStrictCursorPage({
       }) ? { identity, resolved } : null;
     })
     .filter(Boolean);
-  const uniqueMatched = deduplicateTradingItems(sortTradingItems(matched));
-  const afterCursor = uniqueMatched.filter(item => listingIsAfterCursor(item.resolved, cursor));
-  const offset = cursor ? 0 : (page - 1) * pageSize;
-  const selected = afterCursor.slice(offset, offset + pageSize);
   const verifiedById = await loadVerifiedPublicListings(
     supabaseUrl,
     readKey,
-    selected.map(item => item.resolved.id),
+    matched.map(item => item.resolved.id),
   );
+  const mediaResolved = matched.map(item => {
+    const verified = verifiedById.get(String(item.resolved.id));
+    return {
+      ...item,
+      resolved: {
+        ...item.resolved,
+        has_images: Boolean(verified?.has_images),
+        thumbnail_url: verified?.thumbnail_url || null,
+        image_urls: verified?.image_urls || [],
+      },
+    };
+  });
+  const uniqueMatched = sortTradingItems(deduplicateTradingItems(mediaResolved));
+  const afterCursor = uniqueMatched.filter(item => listingIsAfterCursor(item.resolved, cursor));
+  const offset = cursor ? 0 : (page - 1) * pageSize;
+  const selected = afterCursor.slice(offset, offset + pageSize);
   const records = selected.map(({ resolved }) => {
     const verified = verifiedById.get(String(resolved.id));
-    const normalized = normalizeMarketRow(resolved, resolved.reference);
+    const normalized = normalizeMarketRow(
+      resolved,
+      listEquivalentReferences(resolved.reference, resolved.brand),
+    );
     const priceVerified = resolved.listing_type === 'WTS'
       && normalized.analytics_currency_status === 'VERIFIED'
       && Number.isFinite(Number(normalized.analytics_price_usd))
@@ -341,8 +359,8 @@ async function loadStrictCursorPage({
       thumbnail_url: verified?.thumbnail_url || null,
       image_urls: verified?.image_urls || [],
       price_usd: priceVerified ? normalized.analytics_price_usd : null,
-      price_raw: null,
-      currency: priceVerified ? 'USD' : null,
+      price_raw: normalized.source_price_amount || null,
+      currency: priceVerified ? 'USD' : normalized.source_currency || null,
     }, { verifiedImages: Boolean(verified?.has_images) });
     if (resolved.listing_type !== 'WTS' || priceVerified) {
       return {
@@ -1348,7 +1366,10 @@ module.exports = async function handler(req, res) {
                 dealer_id: repostEvidence?.dealer_id || record.dealer_id || null,
                 raw_message: repostEvidence?.raw_message || null,
               };
-          const normalized = normalizeMarketRow(resolved, resolved.reference);
+          const normalized = normalizeMarketRow(
+            resolved,
+            listEquivalentReferences(resolved.reference, resolved.brand),
+          );
           const priceVerified = resolved.listing_type === 'WTS'
             && normalized.analytics_currency_status === 'VERIFIED'
             && Number.isFinite(Number(normalized.analytics_price_usd))

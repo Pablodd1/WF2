@@ -1,0 +1,51 @@
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { listEquivalentReferences } = require('../api/_lib/catalog');
+const { normalizeMarketRow } = require('../api/_lib/market-row-normalization.cjs');
+
+const root = path.join(__dirname, '..');
+
+test('Trading Floor canonical Patek references retain the claimed reference for exact price evidence', () => {
+  const references = listEquivalentReferences('5712/1A-001', 'Patek Philippe');
+  const normalized = normalizeMarketRow({
+    price_usd: 871000,
+    raw_message: 'Patek Philippe 5712/1A blue 2020 HKD 871k',
+  }, references);
+
+  assert.ok(references.includes('5712/1A'));
+  assert.equal(normalized.source_price_amount, 871000);
+  assert.equal(normalized.source_currency, 'HKD');
+  assert.equal(normalized.analytics_currency_status, 'CURRENCY_RATE_UNVERIFIED');
+});
+
+test('Trading Floor publishes exact source HKD separately from an unverified USD conversion', () => {
+  const ingest = fs.readFileSync(path.join(root, 'api', 'ingest.js'), 'utf8');
+  const trading = fs.readFileSync(path.join(root, 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
+
+  assert.match(ingest, /listEquivalentReferences\(resolved\.reference,\s*resolved\.brand\)/);
+  assert.match(ingest, /price_raw:\s*normalized\.source_price_amount/);
+  assert.match(ingest, /currency:\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
+  assert.match(trading, /Source price: \$\{listing\.currency\}/);
+  assert.match(trading, /USD conversion unavailable/);
+});
+
+test('Price Research labels excluded HKD evidence in its source currency', () => {
+  const api = fs.readFileSync(path.join(root, 'api', 'price-research.js'), 'utf8');
+  const ui = fs.readFileSync(path.join(root, 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
+
+  assert.match(api, /source_price_amount:\s*r\.source_price_amount/);
+  assert.match(api, /source_currency:\s*r\.source_currency/);
+  assert.match(ui, /row\.source_price_amount\s*&&\s*row\.source_currency/);
+});
+
+test('Listing detail uses reference aliases and preserves exact source currency', () => {
+  const detail = fs.readFileSync(path.join(root, 'api', 'price-research-listing.js'), 'utf8');
+
+  assert.match(detail, /listEquivalentReferences\(resolvedData\.reference,\s*resolvedData\.brand\)/);
+  assert.match(detail, /price_raw:\s*normalized\.source_price_amount/);
+  assert.match(detail, /currency:\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
+});

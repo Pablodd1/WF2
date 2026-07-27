@@ -24,6 +24,8 @@ interface RowData {
     'MISSING_DIAL' | 'CATALOG_DIAL_UNCONFIRMED' | 'CATALOG_DIAL_MISMATCH' |
     'REPOST_DUPLICATE' | 'BUNDLE_SOURCE_UNSPLIT' | 'REFERENCE_TOKEN_AS_PRICE' | 'YEAR_TOKEN_AS_PRICE' |
     'CURRENCY_UNVERIFIED' | 'CURRENCY_AMBIGUOUS' | 'CURRENCY_RATE_UNVERIFIED' | null;
+  source_price_amount?: number | null;
+  source_currency?: string | null;
 }
 
 interface MonthlyPoint {
@@ -1124,7 +1126,7 @@ export default function PriceResearch() {
                           key={row.id || `${row.created_at}-${row.price_usd}-${index}`}
                           tabIndex={0}
                           role="button"
-                          aria-label={`View source detail for excluded observation${Number.isFinite(Number(row.price_usd)) ? ` at $${Number(row.price_usd).toLocaleString()}` : ''}`}
+                          aria-label={`View source detail for excluded observation${row.source_price_amount && row.source_currency ? ` at ${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}` : Number.isFinite(Number(row.price_usd)) ? ` at $${Number(row.price_usd).toLocaleString()}` : ''}`}
                           onClick={() => void openListing(row)}
                           onKeyDown={event => {
                             if (event.key === 'Enter' || event.key === ' ') {
@@ -1137,7 +1139,11 @@ export default function PriceResearch() {
                           onMouseLeave={event => (event.currentTarget.style.backgroundColor = WHITE)}
                         >
                           <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>
-                            {Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0 ? `$${Number(row.price_usd).toLocaleString()}` : 'No price'}
+                            {row.source_price_amount && row.source_currency
+                              ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
+                              : Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0
+                                ? `$${Number(row.price_usd).toLocaleString()}`
+                                : 'No price'}
                           </td>
                           <td style={{ padding: '11px 8px' }}>{row.listing_date ? row.listing_date.split('T')[0] : 'Unknown'}</td>
                           <td style={{ padding: '11px 8px', color: '#8a6500' }}>{outlierReason(row.outlier_reason)}</td>

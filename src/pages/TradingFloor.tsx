@@ -1160,7 +1160,9 @@ function getListingMeta(listing: ListingRecord) {
   const postedDate = formatListingDate(listing.listing_date);
   const rawPriceLabel = formatRawPrice(listing);
   const usdPriceLabel = hasPriceReviewIssue(listing)
-    ? 'Price under review'
+    ? listing.currency && listing.currency !== 'USD'
+      ? 'USD conversion unavailable'
+      : 'Price under review'
     : formatUsdPrice(listing.price_usd, listing.listing_type);
   const title = buildListingTitle(listing);
 
@@ -1195,10 +1197,10 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function formatRawPrice(listing: ListingRecord) {
-  if (hasPriceReviewIssue(listing)) return 'Exact source currency is being verified';
   if (listing.price_raw && listing.currency) {
-    return `${compactNumber(listing.price_raw)}${listing.currency}`;
+    return `Source price: ${listing.currency} ${Math.round(listing.price_raw).toLocaleString('en-US')}`;
   }
+  if (hasPriceReviewIssue(listing)) return 'Exact source currency is being verified';
   if (listing.price_usd) return `${compactNumber(listing.price_usd)}USD`;
   return isBuyerIntent(listing.listing_type) ? 'Buyer budget not stated' : 'Price on request';
 }

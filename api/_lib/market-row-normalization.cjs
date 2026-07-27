@@ -63,7 +63,14 @@ function normalizeMarketRow(row, reference) {
   const usd = explicitAmount(line, ['USDT', 'USD', 'US\\$', 'U\\$']);
   if (usd) {
     const converted = Math.round(usd);
-    return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_USD_FROM_REFERENCE_LINE' : null, analytics_currency_status: 'VERIFIED' };
+    return {
+      ...row,
+      analytics_price_usd: converted,
+      price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_USD_FROM_REFERENCE_LINE' : null,
+      analytics_currency_status: 'VERIFIED',
+      source_price_amount: converted,
+      source_currency: 'USD',
+    };
   }
   const hkd = explicitAmount(line, ['HKD', 'HDK', 'HK\\$']);
   if (hkd) {
@@ -79,6 +86,8 @@ function normalizeMarketRow(row, reference) {
       analytics_fx_rate_basis: 'HKD_PER_USD',
       analytics_fx_source: 'LEGACY_FIXED_RATE_REVIEW_ONLY',
       analytics_fx_date: null,
+      source_price_amount: hkd,
+      source_currency: 'HKD',
     };
   }
   if (hasCurrencyToken(line, ['EUR', 'GBP', 'CHF', 'CNY', 'JPY', 'SGD'])) {

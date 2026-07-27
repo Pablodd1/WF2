@@ -618,6 +618,8 @@ module.exports = async function handler(req, res) {
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year, is_outlier: true, outlier_reason: r.outlier_reason,
         stored_price_usd: r.stored_price_usd, price_normalization: r.price_normalization,
+        source_price_amount: r.source_price_amount || null,
+        source_currency: r.source_currency || null,
       })) : [],
       analytics_ready: summary.analytics_ready,
       sample_quality: summary.sample_quality,

@@ -4,7 +4,7 @@
  * not make the main analytics response unnecessarily large.
  */
 const { getClient } = require('./_lib/supabase');
-const { lookupCatalog } = require('./_lib/catalog');
+const { listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
@@ -118,7 +118,7 @@ module.exports = async function handler(req, res) {
     const rawSource = await resolveRawSource(client, data);
     const normalized = normalizeMarketRow(
       { ...resolvedData, raw_message: rawSource.text },
-      resolvedData.reference,
+      listEquivalentReferences(resolvedData.reference, resolvedData.brand),
     );
     const shadowBundleIds = await loadShadowBundleParentIds(client, [data]);
     const eligibilityRow = {
@@ -154,11 +154,11 @@ module.exports = async function handler(req, res) {
         id: customerListing.id,
         brand: customerListing.brand,
         reference: customerListing.reference,
-        price_raw: null,
+        price_raw: normalized.source_price_amount || null,
         price_usd: priceVerified ? normalized.analytics_price_usd : null,
         price_normalization: normalized.price_normalization,
         price_evidence_status: normalized.analytics_currency_status,
-        currency: priceVerified ? 'USD' : null,
+        currency: priceVerified ? 'USD' : normalized.source_currency || null,
         raw_message: publicSource || null,
         raw_message_scope: publicSource ? rawSource.scope : 'unavailable',
         raw_message_truncated: redactedSource.length > publicSource.length,
