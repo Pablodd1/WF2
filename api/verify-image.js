@@ -57,7 +57,7 @@ async function visionGemini(key, base64, mime) {
   return { parsed: parseObservation(raw), source: 'gemini' };
 }
 
-async function visionKimi(key, base64, mime) {
+async function visionKimi(key, imageUrl) {
   const response = await fetch(KIMI_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
@@ -67,7 +67,7 @@ async function visionKimi(key, base64, mime) {
       max_tokens: 500,
       messages: [
         { role: 'system', content: 'Return only valid JSON. Do not decide a listing match.' },
-        { role: 'user', content: [{ type: 'text', text: VISION_PROMPT }, { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } }] },
+        { role: 'user', content: [{ type: 'text', text: VISION_PROMPT }, { type: 'image_url', image_url: { url: imageUrl } }] },
       ],
     }),
   });
@@ -77,7 +77,7 @@ async function visionKimi(key, base64, mime) {
   return { parsed: parseObservation(raw), source: 'kimi' };
 }
 
-async function visionOpenAI(key, base64, mime) {
+async function visionOpenAI(key, imageUrl) {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
@@ -90,7 +90,7 @@ async function visionOpenAI(key, base64, mime) {
         { role: 'system', content: 'Return only a valid JSON object. Do not decide a listing match.' },
         { role: 'user', content: [
           { type: 'text', text: VISION_PROMPT },
-          { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
+          { type: 'image_url', image_url: { url: imageUrl } },
         ] },
       ],
     }),
@@ -131,18 +131,21 @@ module.exports = async function handler(req, res) {
   if (!quota.allowed) return rejectForQuota(res, quota);
 
   try {
-    const sourceImage = await fetchPublicImage(imageUrl);
-    const base64 = sourceImage.buffer.toString('base64');
     const unavailableProviders = [];
     let vision;
-    if (geminiKey) {
-      try { vision = await visionGemini(geminiKey, base64, sourceImage.mime); } catch (error) { unavailableProviders.push(providerFailure('Gemini', error)); }
-    }
-    if (!vision?.parsed && kimiKey) {
-      try { vision = await visionKimi(kimiKey, base64, sourceImage.mime); } catch (error) { unavailableProviders.push(providerFailure('Kimi', error)); }
+    if (kimiKey) {
+      try { vision = await visionKimi(kimiKey, imageUrl); } catch (error) { unavailableProviders.push(providerFailure('Kimi', error)); }
     }
     if (!vision?.parsed && openaiKey) {
-      try { vision = await visionOpenAI(openaiKey, base64, sourceImage.mime); } catch (error) { unavailableProviders.push(providerFailure('OpenAI', error)); }
+      try { vision = await visionOpenAI(openaiKey, imageUrl); } catch (error) { unavailableProviders.push(providerFailure('OpenAI', error)); }
+    }
+    if (!vision?.parsed && geminiKey) {
+      try {
+        const sourceImage = await fetchPublicImage(imageUrl);
+        vision = await visionGemini(geminiKey, sourceImage.buffer.toString('base64'), sourceImage.mime);
+      } catch (error) {
+        unavailableProviders.push(providerFailure('Gemini', error));
+      }
     }
     if (!vision?.parsed) {
       const tried = unavailableProviders.length ? ` (${unavailableProviders.join(', ')} unavailable)` : '';

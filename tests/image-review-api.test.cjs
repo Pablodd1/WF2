@@ -149,6 +149,8 @@ test('visual assistance is reviewer-only, same-origin, quota-bounded, and cannot
   assert.match(advisorySource, /classifyVisualAdvisory\(claim, vision\.parsed\)/);
   assert.match(advisorySource, /OPENAI_API_KEY/);
   assert.match(advisorySource, /visionOpenAI/);
+  assert.match(advisorySource, /visionKimi\(kimiKey, imageUrl\)/);
+  assert.match(advisorySource, /visionOpenAI\(openaiKey, imageUrl\)/);
   assert.match(advisorySource, /Image review assistance is not configured/);
   assert.match(advisorySource, /does not attach images, alter listing fields, approve a review, or publish a listing/);
   assert.doesNotMatch(advisorySource, /Access-Control-Allow-Origin/);
