@@ -948,14 +948,9 @@ module.exports = async function handler(req, res) {
             'Authorization': `Bearer ${readKey}`,
             'Range-Unit': 'items',
             'Range': `${start}-${end}`,
-            // Estimated counts avoid a full-table count for a multi-million-row archive.
-            // Estimated counts may fall back to an exact scan for filtered
-            // cohorts. Reference search only needs a fast approximate total.
-            'Prefer': strictVerifiedPublication
-              ? 'count=exact'
-              : search
-                ? 'count=planned'
-                : 'count=estimated',
+            // Feed availability matters more than recounting a large view on
+            // every page request. Exact release totals come from the audit.
+            'Prefer': search ? 'count=planned' : 'count=estimated',
           },
         }
       );
@@ -994,7 +989,7 @@ module.exports = async function handler(req, res) {
         total,
         page,
         pageSize,
-        totalIsEstimate: !strictVerifiedPublication,
+        totalIsEstimate: true,
         nextCursor,
         hasMore,
         records: customerRecords,

@@ -32,10 +32,17 @@ Current Supabase readback:
 | Gate | Rolex | Patek Philippe | Combined |
 | --- | ---: | ---: | ---: |
 | Strict Trading Floor identities | 7,544 | 632 | 8,176 |
+| Strict Trading Floor WTS identities | 6,732 | 498 | 7,230 |
 | Strict Price Research WTS source rows | 7,231 | 548 | 7,779 |
 | Exact image-review-ready rows | 495 | 4 | 499 |
 | Visually verified customer images | 0 | 0 | 0 |
 | Verified/applied public dealer links | 0 | 0 | 0 |
+
+The exact Trading Floor counts above come from a controlled readback. The
+interactive feed uses a fast estimated count, explicitly labeled as an
+estimate, because forcing Postgres to recount the complete verified view on
+every page request caused intermittent Supabase 500 responses. Pagination
+continues through the full eligible cohort.
 
 The deterministic unbundled export is much larger, but it is not the public
 inventory:
