@@ -951,7 +951,11 @@ module.exports = async function handler(req, res) {
             // Estimated counts avoid a full-table count for a multi-million-row archive.
             // Estimated counts may fall back to an exact scan for filtered
             // cohorts. Reference search only needs a fast approximate total.
-            'Prefer': search ? 'count=planned' : 'count=estimated',
+            'Prefer': strictVerifiedPublication
+              ? 'count=exact'
+              : search
+                ? 'count=planned'
+                : 'count=estimated',
           },
         }
       );
@@ -990,7 +994,7 @@ module.exports = async function handler(req, res) {
         total,
         page,
         pageSize,
-        totalIsEstimate: true,
+        totalIsEstimate: !strictVerifiedPublication,
         nextCursor,
         hasMore,
         records: customerRecords,
