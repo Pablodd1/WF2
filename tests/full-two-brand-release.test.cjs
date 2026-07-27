@@ -47,6 +47,8 @@ test('full-brand Trading Floor uses a service-only deduplicated keyset source', 
   assert.match(cacheMigration, /GRANT SELECT ON public\.two_brand_verified_trading_release_cache TO service_role/);
   assert.match(ingest, /rest\/v1\/two_brand_verified_trading_release_cache/);
   assert.match(ingest, /loadVerifiedPublicListings\([\s\S]*selected\.map\(row => row\.id\)/);
+  assert.match(ingest, /select: 'id,raw_message'[\s\S]*raw price evidence read returned/);
+  assert.match(ingest, /normalizeMarketRow\(\s*\{\s*\.\.\.resolved,\s*raw_message: verified\?\.raw_message \|\| null/);
   assert.match(ingest, /order: 'created_at\.desc\.nullslast,id\.desc'/);
   assert.match(ingest, /Range: `\$\{start\}-\$\{end\}`/);
   assert.match(ingest, /Prefer: 'return=representation'/);
