@@ -21,6 +21,7 @@ test('full two-brand deployment is manual, allowlisted, and privacy-verified', (
   assert.match(workflow, /has_table_privilege\('anon', 'public\.two_brand_verified_trading_release', 'SELECT'\)/);
   assert.match(workflow, /two_brand_identity_review_queue/);
   assert.match(workflow, /review_disposition/);
+  assert.match(workflow, /actionable_identity_rows/);
   assert.match(workflow, /Full Rolex and Patek release census/);
   assert.match(workflow, /tee -a "\$GITHUB_STEP_SUMMARY"/);
 });
