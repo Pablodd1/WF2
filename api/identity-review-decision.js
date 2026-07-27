@@ -1,7 +1,10 @@
 'use strict';
 
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
-const { confirmCatalogCandidate } = require('./_lib/catalog-confirmation.cjs');
+const {
+  confirmCatalogCandidate,
+  rawSupportsExactReference,
+} = require('./_lib/catalog-confirmation.cjs');
 const { sameOrigin, sha256 } = require('./_lib/review-packets.cjs');
 
 const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe']);
@@ -13,16 +16,6 @@ const RPC_DECISIONS = {
 function text(value, maxLength = 200) {
   const normalized = String(value || '').trim();
   return normalized && normalized.length <= maxLength ? normalized : null;
-}
-
-function compact(value) {
-  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-}
-
-function rawSupportsExactReference(rawMessage, reference) {
-  const raw = compact(rawMessage);
-  const exactReference = compact(reference);
-  return Boolean(raw && exactReference && raw.includes(exactReference));
 }
 
 function validateDecisionBody(body) {
