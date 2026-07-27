@@ -84,46 +84,45 @@ CREATE OR REPLACE VIEW public.two_brand_verified_trading_release
 WITH (security_invoker = true) AS
 WITH candidates AS (
   SELECT
-    m.id,
+    w.id,
     trim(r.canonical_brand) AS brand,
     trim(r.canonical_model) AS model,
     trim(r.canonical_reference) AS reference,
     trim(r.canonical_dial_color) AS dial_color,
-    m.condition,
-    m.year,
-    m.price_raw,
-    m.price_usd,
-    m.currency,
-    m.confidence,
-    m.verdict,
-    m.source,
-    m.source_type,
-    m.listing_type,
-    m.listing_date,
-    m.listing_status,
-    m.created_at,
+    w.condition,
+    w.year,
+    w.price_raw,
+    w.price_usd,
+    w.currency,
+    w.confidence,
+    w.verdict,
+    w.source,
+    w.source_type,
+    w.listing_type,
+    w.listing_date,
+    w.listing_status,
+    w.created_at,
     media.public_url IS NOT NULL AS has_images,
     media.public_url AS thumbnail_url,
     CASE
       WHEN media.public_url IS NULL THEN '[]'::jsonb
       ELSE jsonb_build_array(media.public_url)
     END AS image_urls,
-    m.region,
+    w.region,
     r.status AS identity_review_status,
     public.two_brand_repost_signature(
-      m.id,
+      w.id,
       w.dealer_id::text,
       w.raw_message,
       r.canonical_brand,
       r.canonical_reference,
       r.canonical_dial_color,
-      m.condition,
-      m.price_usd::double precision
+      w.condition,
+      w.price_usd::double precision
     ) AS repost_signature
-  FROM public.trading_floor_market_listings m
-  JOIN public.watch_records w ON w.id = m.id
+  FROM public.watch_records w
   JOIN public.listing_identity_reviews r
-    ON r.record_id = m.id
+    ON r.record_id = w.id
    AND r.status IN ('CATALOG_CONFIRMED', 'HUMAN_APPROVED')
   LEFT JOIN LATERAL (
     SELECT manifest.public_url
@@ -131,7 +130,7 @@ WITH candidates AS (
     JOIN public.media_manifest manifest
       ON manifest.source_object_key = image_review.source_object_key
      AND manifest.matched_record_id = image_review.record_id
-    WHERE image_review.record_id = m.id
+    WHERE image_review.record_id = w.id
       AND image_review.status = 'VISUALLY_VERIFIED'
       AND lower(trim(image_review.identity_snapshot->>'brand')) = lower(trim(r.canonical_brand))
       AND lower(trim(image_review.identity_snapshot->>'model')) = lower(trim(r.canonical_model))
@@ -144,10 +143,22 @@ WITH candidates AS (
     AND NULLIF(trim(r.canonical_model), '') IS NOT NULL
     AND NULLIF(trim(r.canonical_reference), '') IS NOT NULL
     AND NULLIF(trim(r.canonical_dial_color), '') IS NOT NULL
-    AND m.listing_type IN ('WTS', 'WTB', 'NTQ')
-    AND m.verdict = 'APPROVED'
-    AND m.confidence >= 90
-    AND m.id NOT LIKE 'preview_demo_%'
+    AND w.listing_type IN ('WTS', 'WTB', 'NTQ')
+    AND w.verdict = 'APPROVED'
+    AND w.confidence >= 90
+    AND (
+      w.listing_type IN ('WTB', 'NTQ')
+      OR (
+        w.listing_type = 'WTS'
+        AND w.price_usd IS NOT NULL
+        AND w.price_usd >= 1000
+      )
+    )
+    AND NOT (COALESCE(w.flags, '[]'::jsonb) @> '["BUNDLE_SPLIT_REQUIRED"]'::jsonb)
+    AND NOT public.is_unsplit_bundle_parent(w.id)
+    AND public.is_listing_duplicate_eligible(w.id)
+    AND COALESCE(w.listing_status, 'ACTIVE') NOT IN ('HIDDEN', 'REJECTED', 'DELETED')
+    AND w.id NOT LIKE 'preview_demo_%'
 ), ranked AS (
   SELECT
     candidates.*,
@@ -190,49 +201,90 @@ GRANT SELECT ON public.two_brand_verified_trading_release TO service_role;
 
 CREATE OR REPLACE VIEW public.two_brand_identity_review_queue
 WITH (security_invoker = true) AS
+WITH unresolved AS (
+  SELECT
+    w.*,
+    COALESCE(NULLIF(trim(r.status), ''), 'UNVERIFIED') AS identity_status,
+    COALESCE(NULLIF(trim(r.canonical_brand), ''), w.brand) AS review_brand,
+    COALESCE(NULLIF(trim(r.canonical_model), ''), w.model) AS review_model,
+    COALESCE(NULLIF(trim(r.canonical_reference), ''), w.reference) AS review_reference,
+    COALESCE(NULLIF(trim(r.canonical_dial_color), ''), w.dial_color) AS review_dial_color,
+    COALESCE(r.evidence, '{}'::jsonb) AS prior_identity_evidence,
+    CASE
+      WHEN w.listing_type = 'MULTI' THEN true
+      WHEN COALESCE(w.flags, '[]'::jsonb) @> '["BUNDLE_SPLIT_REQUIRED"]'::jsonb THEN true
+      WHEN COALESCE(w.verdict, 'HUMAN') = 'APPROVED'
+        AND COALESCE(w.confidence, 0) >= 90
+        THEN public.is_unsplit_bundle_parent(w.id)
+      ELSE false
+    END AS bundle_blocked,
+    CASE
+      WHEN COALESCE(w.verdict, 'HUMAN') = 'APPROVED'
+        AND COALESCE(w.confidence, 0) >= 90
+        AND w.listing_type IN ('WTS', 'WTB', 'NTQ')
+        THEN NOT public.is_listing_duplicate_eligible(w.id)
+      ELSE false
+    END AS duplicate_blocked,
+    CASE
+      WHEN w.listing_type IN ('WTB', 'NTQ') THEN true
+      WHEN w.listing_type = 'WTS'
+        AND w.price_usd IS NOT NULL
+        AND w.price_usd >= 1000 THEN true
+      ELSE false
+    END AS market_ready
+  FROM public.watch_records w
+  LEFT JOIN public.listing_identity_reviews r ON r.record_id = w.id
+  WHERE lower(trim(COALESCE(NULLIF(r.canonical_brand, ''), w.brand))) IN ('rolex', 'patek philippe')
+    AND COALESCE(r.status, 'UNVERIFIED') IN ('UNVERIFIED', 'CONFLICT')
+    AND COALESCE(w.listing_status, 'ACTIVE') NOT IN ('HIDDEN', 'REJECTED', 'DELETED')
+)
 SELECT
-  w.id AS record_id,
-  COALESCE(NULLIF(trim(r.status), ''), 'UNVERIFIED') AS identity_status,
-  COALESCE(NULLIF(trim(r.canonical_brand), ''), w.brand) AS brand,
-  COALESCE(NULLIF(trim(r.canonical_model), ''), w.model) AS model,
-  COALESCE(NULLIF(trim(r.canonical_reference), ''), w.reference) AS reference,
-  COALESCE(NULLIF(trim(r.canonical_dial_color), ''), w.dial_color) AS dial_color,
-  w.condition,
-  w.year,
-  w.price_raw,
-  w.price_usd,
-  w.currency,
-  w.listing_type,
-  w.verdict,
-  w.confidence,
-  w.raw_message,
-  w.source,
-  w.source_type,
-  w.listing_date,
-  w.created_at,
-  w.seller_name,
-  w.seller_phone,
-  w.dealer_id,
-  w.thumbnail_url,
-  w.image_urls,
-  w.has_images,
-  COALESCE(r.evidence, '{}'::jsonb) AS prior_identity_evidence,
+  id AS record_id,
+  identity_status,
+  review_brand AS brand,
+  review_model AS model,
+  review_reference AS reference,
+  review_dial_color AS dial_color,
+  condition,
+  year,
+  price_raw,
+  price_usd,
+  currency,
+  listing_type,
+  verdict,
+  confidence,
+  raw_message,
+  source,
+  source_type,
+  listing_date,
+  created_at,
+  seller_name,
+  seller_phone,
+  dealer_id,
+  thumbnail_url,
+  image_urls,
+  has_images,
+  prior_identity_evidence,
   array_remove(ARRAY[
-    CASE WHEN w.raw_message IS NULL OR trim(w.raw_message) = '' THEN 'RAW_EVIDENCE_MISSING' END,
-    CASE WHEN COALESCE(w.verdict, 'HUMAN') <> 'APPROVED' THEN 'NORMALIZATION_NOT_APPROVED' END,
-    CASE WHEN COALESCE(w.confidence, 0) < 90 THEN 'CONFIDENCE_BELOW_90' END,
-    CASE WHEN w.listing_type = 'MULTI' OR public.is_unsplit_bundle_parent(w.id)
-      THEN 'BUNDLE_REVIEW_REQUIRED' END,
-    CASE WHEN NOT public.is_listing_duplicate_eligible(w.id)
-      THEN 'DUPLICATE_SUPPRESSED' END,
-    CASE WHEN COALESCE(r.status, 'UNVERIFIED') = 'CONFLICT'
+    CASE WHEN raw_message IS NULL OR trim(raw_message) = '' THEN 'RAW_EVIDENCE_MISSING' END,
+    CASE WHEN COALESCE(verdict, 'HUMAN') <> 'APPROVED' THEN 'NORMALIZATION_NOT_APPROVED' END,
+    CASE WHEN COALESCE(confidence, 0) < 90 THEN 'CONFIDENCE_BELOW_90' END,
+    CASE WHEN bundle_blocked THEN 'BUNDLE_REVIEW_REQUIRED' END,
+    CASE WHEN duplicate_blocked THEN 'DUPLICATE_SUPPRESSED' END,
+    CASE WHEN NOT market_ready THEN 'MARKET_DATA_REVIEW_REQUIRED' END,
+    CASE WHEN identity_status = 'CONFLICT'
       THEN 'IDENTITY_CONFLICT' END
-  ], NULL)::text[] AS release_blockers
-FROM public.watch_records w
-LEFT JOIN public.listing_identity_reviews r ON r.record_id = w.id
-WHERE lower(trim(COALESCE(NULLIF(r.canonical_brand, ''), w.brand))) IN ('rolex', 'patek philippe')
-  AND COALESCE(r.status, 'UNVERIFIED') IN ('UNVERIFIED', 'CONFLICT')
-  AND COALESCE(w.listing_status, 'ACTIVE') NOT IN ('HIDDEN', 'REJECTED', 'DELETED');
+  ], NULL)::text[] AS release_blockers,
+  CASE
+    WHEN raw_message IS NULL OR trim(raw_message) = '' THEN 'MISSING_RAW_EVIDENCE'
+    WHEN COALESCE(verdict, 'HUMAN') <> 'APPROVED'
+      OR COALESCE(confidence, 0) < 90 THEN 'NORMALIZATION_REVIEW_REQUIRED'
+    WHEN bundle_blocked THEN 'BUNDLE_REVIEW_REQUIRED'
+    WHEN duplicate_blocked THEN 'DUPLICATE_SUPPRESSED'
+    WHEN NOT market_ready THEN 'MARKET_REVIEW_REQUIRED'
+    ELSE 'READY_FOR_IDENTITY_REVIEW'
+  END AS review_disposition
+FROM unresolved;
 
 REVOKE ALL ON public.two_brand_identity_review_queue
   FROM PUBLIC, anon, authenticated;
@@ -241,7 +293,7 @@ GRANT SELECT ON public.two_brand_identity_review_queue TO service_role;
 COMMENT ON VIEW public.two_brand_verified_trading_release IS
   'Service-only, globally deduplicated Rolex/Patek release. Every row has reviewed canonical identity, APPROVED verdict, confidence >= 90, complete identity, and existing bundle/duplicate publication gates.';
 COMMENT ON VIEW public.two_brand_identity_review_queue IS
-  'Service-only evidence queue for unresolved Rolex/Patek identities. Decisions remain audited through apply_listing_identity_review and never mutate watch_records.';
+  'Service-only routed evidence queue for unresolved Rolex/Patek identities. READY_FOR_IDENTITY_REVIEW means identity is the final release blocker; decisions remain audited and never mutate watch_records.';
 
 NOTIFY pgrst, 'reload schema';
 COMMIT;

@@ -43,9 +43,11 @@ A Trading Floor row must satisfy every applicable gate:
 11. deterministic reposts are represented once.
 
 The database view `two_brand_verified_trading_release` performs the bounded
-release selection and global repost ranking. The API uses created-at/record-ID
-keyset pagination and never loads the full reviewed brand population into
-Railway or Vercel memory.
+release selection and global repost ranking directly from immutable raw-backed
+records plus the separate reviewed canonical identity. This allows a signed
+human identity correction to become publishable without rewriting the raw
+record. The API uses created-at/record-ID keyset pagination and never loads the
+full reviewed brand population into Railway or Vercel memory.
 
 ## Price Research
 
@@ -70,6 +72,14 @@ The authenticated `Rolex + Patek identity` lane shows:
 - source-linked candidate image with an explicit unverified warning;
 - every other current release blocker; and
 - the prior identity evidence/status.
+
+The interactive queue defaults to `READY_FOR_IDENTITY_REVIEW`: records where
+normalization, market-data eligibility, raw evidence, bundle handling, and
+duplicate policy already pass, so the signed identity decision is the final
+customer-publication blocker. The service-only queue also reports the other
+routed dispositions for census and operations, but it does not ask a reviewer
+to make a wasted identity decision before those prerequisite lanes are
+complete.
 
 Human approval requires:
 
@@ -132,6 +142,7 @@ brand:
 - human-approved identity rows;
 - deterministic catalog-confirmed rows; and
 - pending identity-review rows by status.
+- unresolved identity rows by operational review disposition.
 
 Do not copy older two-brand or three-reference counts into this section. Use the
 new workflow summary because it measures the actual deployed view.
