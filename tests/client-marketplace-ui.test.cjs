@@ -17,7 +17,8 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
   assert.match(header, /label: 'WANT TO BUY', to: '\/trading\?type=WTB'/);
   assert.match(header, /label: 'PRICE RESEARCH', to: '\/price-research'/);
-  assert.match(header, /label: 'POST ITEM', to: '\/dealer\/post'/);
+  assert.match(header, /const LUXURY_APP_POST_ITEM_URL = 'https:\/\/luxuryapp-wf-w5o1\.vercel\.app\/'/);
+  assert.match(header, /label: 'POST ITEM', href: LUXURY_APP_POST_ITEM_URL, external: true/);
   assert.match(header, /label: 'ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'HIRE FI'/);
   assert.match(header, /overflow-x-auto/);
@@ -63,7 +64,7 @@ test('customer workflows link to the official WatchFacts groups marketplace with
   const research = read('src/pages/PriceResearch.tsx');
 
   assert.match(cta, /JOIN THE GROUPS/);
-  assert.match(cta, /1,322,815\+ listings · 30,609\+ global dealers · 132 countries/);
+  assert.match(cta, /2\.7M\+ listings · 30,609\+ global dealers · 132 countries/);
   assert.match(cta, /https:\/\/watchfacts\.com\/buy\/all\?listing_type=sale&displayModal=hide&tradingFloorStats%5Bid%5D=1&tradingFloorStats%5Btotal_listings%5D=1322815&tradingFloorStats%5Btotal_dealers%5D=30609&tradingFloorStats%5Btotal_countries%5D=132#/);
   assert.match(cta, /target="_blank"/);
   assert.match(cta, /rel="noreferrer"/);
