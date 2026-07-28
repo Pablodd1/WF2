@@ -18,7 +18,7 @@ export function JoinGroupsCta({ dark = false }: { dark?: boolean }) {
           WatchFacts community
         </div>
         <div className="mt-2 text-lg font-semibold" style={{ color: foreground }}>
-          1,322,815+ listings · 30,609+ global dealers · 132 countries
+          2.7M+ listings · 30,609+ global dealers · 132 countries
         </div>
         <p className="mt-1 text-sm" style={{ color: muted }}>
           Enter the official WatchFacts dealer marketplace and request access to its trading communities.
