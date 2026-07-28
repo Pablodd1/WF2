@@ -12,6 +12,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   const banner = read('src/components/LuxFiBanner.tsx');
   const floor = read('src/pages/TradingFloor.tsx');
   const research = read('src/pages/PriceResearch.tsx');
+  const home = read('src/pages/LandingPage.tsx');
 
   assert.match(header, /label: 'HOME', to: '\/'/);
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
@@ -28,6 +29,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(banner, /href="https:\/\/luxfi\.ai\/#add-fi"/);
   assert.match(floor, /<MarketNav \/>[\s\S]*<LuxFiBanner \/>/);
   assert.match(research, /<MarketNav \/>[\s\S]*<LuxFiBanner \/>/);
+  assert.match(home, /Curated Luxury marketplace · WatchFacts market intelligence/);
 });
 
 test('Trading Floor watch view does not render internal listing labels or identifiers', () => {
@@ -36,6 +38,8 @@ test('Trading Floor watch view does not render internal listing labels or identi
   assert.doesNotMatch(floor, />\s*Listing Details\s*</i);
   assert.doesNotMatch(floor, /Listing\s*\{\s*listing\.id\s*\}/);
   assert.doesNotMatch(floor, /Close listing details/i);
+  assert.doesNotMatch(floor, /Price rating/);
+  assert.doesNotMatch(floor, /Price when posted/);
   assert.match(floor, /aria-label="Close selected watch"/);
 });
 
