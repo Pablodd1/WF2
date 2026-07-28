@@ -44,15 +44,17 @@ test('both customer details show contact-redacted original evidence and display-
   }
 });
 
-test('both customer details compare the selected listing with its exact price cohort', () => {
-  for (const page of [trading, research]) {
-    assert.match(page, /Price when posted/);
-    assert.match(page, /dataKey="avg_price"/);
-    assert.match(page, /dataKey="selected_price"/);
-    assert.match(page, /monthly/);
-    assert.match(page, /dial/i);
-    assert.match(page, /condition/i);
-  }
+test('only Price Research renders cohort analytics for the selected listing', () => {
+  assert.doesNotMatch(trading, /Price rating/);
+  assert.doesNotMatch(trading, /Price when posted/);
+  assert.doesNotMatch(trading, /dataKey="avg_price"/);
+  assert.doesNotMatch(trading, /dataKey="selected_price"/);
+  assert.match(research, /Price when posted/);
+  assert.match(research, /dataKey="avg_price"/);
+  assert.match(research, /dataKey="selected_price"/);
+  assert.match(research, /monthly/);
+  assert.match(research, /dial/i);
+  assert.match(research, /condition/i);
 });
 
 test('customer detail prices require exact raw-line currency evidence', () => {
@@ -62,7 +64,7 @@ test('customer detail prices require exact raw-line currency evidence', () => {
     assert.match(api, /price_evidence_status/);
   }
   assert.match(trading, /Price under review/);
-  assert.match(trading, /detailListing\.price_usd/);
+  assert.match(trading, /getListingMeta\(detailListing\)/);
 });
 
 test('Price Research never fabricates brand buttons outside the API catalog', () => {

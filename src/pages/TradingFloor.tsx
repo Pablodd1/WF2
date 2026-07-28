@@ -12,22 +12,10 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import {
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Scatter,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { JoinGroupsCta } from '../components/JoinGroupsCta';
-import { rateMarketPrice, type MarketPriceRating } from '../lib/marketPriceRating';
 
 const GOLD = '#C9A96E';
 const GOLD_BRIGHT = '#D4B87A';
@@ -108,14 +96,6 @@ interface ListingContact {
   dealer_stats?: { total_posts: number; active_listings: number; wts_posts: number; wtb_posts: number; first_post_at: string | null; last_post_at: string | null; posting_years: number } | null;
   whatsapp_url?: string;
   reason?: string;
-}
-
-interface ListingBenchmark {
-  loading: boolean;
-  count: number;
-  stats: { avg: number; median: number; min: number; max: number } | null;
-  monthly: Array<{ month: string; count: number; avg_price: number; min_price: number; max_price: number }>;
-  rating: MarketPriceRating;
 }
 
 interface ListingEvidence extends Partial<ListingRecord> {
@@ -802,18 +782,11 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 }
 
 function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
-  const canLoadBenchmark = Boolean(listing.reference && listing.brand && listing.listing_type === 'WTS');
+  const canLoadPublicEvidence = Boolean(listing.reference && listing.brand);
   const [contact, setContact] = useState<ListingContact | null>(null);
   const [evidence, setEvidence] = useState<ListingEvidence | null>(null);
   const [evidenceError, setEvidenceError] = useState('');
   const [activeImage, setActiveImage] = useState(0);
-  const [benchmark, setBenchmark] = useState<ListingBenchmark>({
-    loading: canLoadBenchmark,
-    count: 0,
-    stats: null,
-    monthly: [],
-    rating: rateMarketPrice(listing.price_usd, null, 0),
-  });
   const detailListing = useMemo<ListingRecord>(() => evidence
     ? {
         ...listing,
@@ -827,34 +800,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const images = useMemo(() => {
     return (evidence?.image_urls || []).map(value => String(value || '').trim()).filter(Boolean);
   }, [evidence]);
-  const priceTimeline = useMemo(() => {
-    const postedAt = detailListing.listing_date || detailListing.created_at;
-    const observedDate = postedAt?.split('T')[0] || null;
-    const observedMonth = observedDate?.slice(0, 7) || '';
-    const rows: Array<{ month: string; avg_price: number | null; count: number; selected_price: number | null; observed_date: string | null }> =
-      benchmark.monthly.map(point => ({
-        month: point.month,
-        avg_price: point.avg_price,
-        count: point.count,
-        selected_price: point.month === observedMonth ? detailListing.price_usd : null,
-        observed_date: point.month === observedMonth ? observedDate : null,
-      }));
-    if (observedMonth && detailListing.price_usd && !rows.some(point => point.month === observedMonth)) {
-      rows.push({
-        month: observedMonth,
-        avg_price: null,
-        count: 0,
-        selected_price: detailListing.price_usd,
-        observed_date: observedDate,
-      });
-      rows.sort((left, right) => left.month.localeCompare(right.month));
-    }
-    return { rows, observedMonth };
-  }, [benchmark.monthly, detailListing.created_at, detailListing.listing_date, detailListing.price_usd]);
-  const detailRating = useMemo(
-    () => rateMarketPrice(detailListing.price_usd, benchmark.stats, benchmark.count),
-    [benchmark.count, benchmark.stats, detailListing.price_usd],
-  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -867,7 +812,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       credentials: 'include',
       signal: controller.signal,
     }).then(async response => response.ok ? response.json() : null);
-    const publicEvidence = canLoadBenchmark
+    const publicEvidence = canLoadPublicEvidence
       ? fetch(`/api/price-research-listing?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
         .then(async response => response.ok ? response.json() : null)
       : Promise.resolve(null);
@@ -894,36 +839,8 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         if (error?.name !== 'AbortError') setEvidenceError('Listing evidence is unavailable.');
       });
 
-    if (!canLoadBenchmark) return () => controller.abort();
-    const reference = listing.reference as string;
-    const params = new URLSearchParams({ reference, brand: listing.brand });
-    if (listing.dial_color) params.set('dial', listing.dial_color);
-    fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })
-      .then(response => response.json())
-      .then(payload => {
-        const count = Number(payload?.count || 0);
-        const stats = payload?.analytics_ready && payload?.stats ? payload.stats : null;
-        setBenchmark({
-          loading: false,
-          count,
-          stats,
-          monthly: Array.isArray(payload?.monthly) ? payload.monthly : [],
-          rating: rateMarketPrice(listing.price_usd, stats, count),
-        });
-      })
-      .catch(error => {
-        if (error?.name !== 'AbortError') {
-          setBenchmark({
-            loading: false,
-            count: 0,
-            stats: null,
-            monthly: [],
-            rating: rateMarketPrice(listing.price_usd, null, 0),
-          });
-        }
-      });
     return () => controller.abort();
-  }, [canLoadBenchmark, listing]);
+  }, [canLoadPublicEvidence, listing]);
 
   return (
     <section className="mb-8 grid gap-8 lg:grid-cols-[minmax(320px,504px)_1fr]" aria-label="Selected listing">
@@ -1063,57 +980,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           )}
         </div>
 
-        <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: detailRating.color }}>Price rating</div>
-              <div className="mt-2 text-xl font-semibold" style={{ color: INK }}>{benchmark.loading ? 'Calculating…' : detailRating.label}</div>
-              {!benchmark.loading && <p className="mt-2 text-sm leading-6" style={{ color: MUTED }}>{detailRating.reason}</p>}
-            </div>
-            <div className="h-3 w-3 shrink-0 rounded-full" style={{ background: detailRating.color }} />
-          </div>
-          {benchmark.stats && benchmark.count >= 5 && (
-            <div className="mt-6 grid grid-cols-3 gap-3 border-t pt-5 text-center" style={{ borderColor: BORDER }}>
-              <MarketStat label="Min" value={benchmark.stats.min} />
-              <MarketStat label="Average" value={benchmark.stats.avg} />
-              <MarketStat label="Max" value={benchmark.stats.max} />
-            </div>
-          )}
-          <div className="mt-4 text-xs" style={{ color: MUTED }}>{benchmark.count.toLocaleString()} outlier-clean comparable offers</div>
-          {priceTimeline.rows.length > 0 && priceTimeline.observedMonth && (
-            <div className="mt-6 border-t pt-5" style={{ borderColor: BORDER }}>
-              <h3 className="text-[15px] font-medium" style={{ color: INK }}>Price when posted</h3>
-              <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>
-                Selected listing versus monthly averages for the exact {displayDial(detailListing.dial_color) || 'unspecified dial'} cohort. New, Used, and Unspecified listings are combined for analytics; condition remains in the listing description.
-              </p>
-              <div className="mt-4 h-64 w-full" role="img" aria-label={`Selected listing price compared with monthly average prices for ${meta.title}`}>
-                <ResponsiveContainer>
-                  <ComposedChart data={priceTimeline.rows} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
-                    <CartesianGrid stroke="rgba(156,163,175,0.18)" strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" stroke={MUTED} fontSize={10} tickFormatter={month => String(month).replace(/^(\d{4})-(\d{2})$/, '$2/$1')} />
-                    <YAxis stroke={MUTED} fontSize={10} width={52} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} />
-                    <Tooltip />
-                    {benchmark.stats?.avg && <ReferenceLine y={benchmark.stats.avg} stroke={MUTED} strokeDasharray="5 4" />}
-                    <Line type="monotone" dataKey="avg_price" name="Monthly cohort average" stroke={GOLD_BRIGHT} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
-                    <Scatter dataKey="selected_price" name="Selected listing" fill={INK} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-[11px]" style={{ color: MUTED }}>
-                <span>Gold line: monthly cohort average</span>
-                <span>White point: selected listing</span>
-                {benchmark.stats?.avg && <span>Dashed line: full cohort average ${Math.round(benchmark.stats.avg).toLocaleString()}</span>}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </section>
   );
-}
-
-function MarketStat({ label, value }: { label: string; value: number }) {
-  return <div><div className="text-[11px] uppercase" style={{ color: MUTED }}>{label}</div><div className="mt-1 text-sm font-semibold" style={{ color: INK }}>${Math.round(value).toLocaleString()}</div></div>;
 }
 
 function ContactMetric({ label, value }: { label: string; value: number }) {
