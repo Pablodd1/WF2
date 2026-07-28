@@ -44,7 +44,9 @@ test('Trading Floor shows bounded price evidence before unresolved release rows'
 
   assert.match(floor, /media\.matches \? 48 : 100/);
   assert.match(floor, /function priceEvidenceRank/);
-  assert.match(floor, /priceEvidenceRank\(right\) - priceEvidenceRank\(left\)/);
+  assert.match(floor, /function verifiedUsdPrice/);
+  assert.match(floor, /verifiedUsdPrice\(right\) - verifiedUsdPrice\(left\)/);
+  assert.match(floor, /Highest verified USD price first; unpriced listings follow\./);
   assert.match(floor, /setListings\(current => sortListingsForDisplay/);
 });
 

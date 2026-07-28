@@ -140,8 +140,16 @@ function priceEvidenceRank(listing: ListingRecord) {
   return 0;
 }
 
+function verifiedUsdPrice(listing: ListingRecord) {
+  return priceEvidenceRank(listing) === 2 ? Number(listing.price_usd) : 0;
+}
+
 function sortListingsForDisplay(listings: ListingRecord[]) {
-  return [...listings].sort((left, right) => priceEvidenceRank(right) - priceEvidenceRank(left));
+  return [...listings].sort((left, right) =>
+    verifiedUsdPrice(right) - verifiedUsdPrice(left)
+    || priceEvidenceRank(right) - priceEvidenceRank(left)
+    || Date.parse(right.created_at || '') - Date.parse(left.created_at || '')
+    || String(right.id).localeCompare(String(left.id)));
 }
 
 export default function TradingFloor() {
@@ -475,6 +483,7 @@ export default function TradingFloor() {
               ? ' customer-visible records from verified inventory'
               : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</>}
           </span>
+          <span>Highest verified USD price first; unpriced listings follow.</span>
           <span title="Records are fetched in bounded batches from Postgres; search and filters run on the database.">{pageSize} per request keeps mobile memory bounded.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
