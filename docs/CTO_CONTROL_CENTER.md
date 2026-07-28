@@ -1,11 +1,12 @@
 # WatchFacts CTO Control Center
 
-**Control date:** July 27, 2026
-**Assignment mode:** full Rolex/Patek evidence-first client release
-**Current release decision:** publish all currently verified Rolex/Patek
-identities through bounded database pagination; route every unresolved row to
-its exact human-review disposition. Do not bulk-promote normalization, bundles,
-images, sellers, or duplicates.
+**Control date:** July 28, 2026
+**Assignment mode:** released customer UI; evidence-first data operations remain
+gated
+**Current release decision:** keep the currently verified Rolex/Patek customer
+inventory live through bounded database pagination; route every unresolved row
+to its exact human-review disposition. Do not bulk-promote normalization,
+bundles, images, sellers, or duplicates.
 
 **Infrastructure update:** the upgraded Supabase and Railway queue path has now
 exactly reconciled every raw-evidence-eligible record. Four Railway workers with
@@ -17,6 +18,53 @@ This is the single navigation and decision index for the current project state.
 It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
+
+## July 28 release record and active bottlenecks
+
+**Released customer-facing work:** PRs #176 through #181 are merged. They add
+advisory direct-image delivery for review only, the Price Research live release
+summary, the community-count and POST ITEM destination, verified-USD-first
+Trading Floor ordering, and the listing-focused Trading Floor detail view. The
+detail view no longer requests or displays Price Research analytics; those
+analytics remain in Price Research. The home footer now distinguishes Curated
+Luxury marketplace from WatchFacts market intelligence.
+
+**Production customer inventory readback:** 110,178 verified Rolex/Patek
+Trading Floor listings are customer-visible: 105,974 Rolex and 4,204 Patek
+Philippe. This is the complete currently publishable two-brand set, not a claim
+that every raw archive row is normalized, image-verified, seller-verified, or
+price-eligible. Price Research is deliberately narrower: it includes only
+source-proven WTS observations with valid identity, currency/FX, bundle, and
+duplicate dispositions.
+
+**Normalization execution is complete for the eligible shadow source:**
+2,631,476 of 2,631,583 watch records were exactly analyzed and reconciled with
+zero normalization-run errors. The remaining 107 records have no immutable raw
+message and cannot be repaired without the original source-to-UUID mapping.
+No final normalization run wrote to `watch_records`.
+
+| Priority | Active bottleneck | Verified size/status | Required safe next action |
+| --- | --- | --- | --- |
+| 1 | Catalog identity | 82,111 conflicts and 38,595 unverified in the legacy control snapshot | Review a bounded 1,000-record/rule canary; publish only signed catalog-confirmed or human-approved identity decisions. |
+| 2 | Bundles and multilisting | 761,489 parent messages require splitting; 70,194 staged children from the supplied unbundled source; zero approved | Reconcile every child to exact source line and parent, review it, materialize accepted children, then suppress a parent only after its accepted children reconcile. Never delete raw parents. |
+| 3 | Currency and price eligibility | HKD needs source-date FX; bare `$` remains ambiguous; Price Research excludes these correctly | Verify source currency and dated FX from evidence. Do not convert from geography, amount, or market expectation. |
+| 4 | Images | 1,359 historical visual-review decisions remain; 172 structural rejects; live narrow queue: 371 Rolex ready, 0 Patek ready, 12 structurally blocked | Repair structural evidence first. Visual AI may rank a review queue only; attach an image only after exact listing lineage and signed human MATCH. |
+| 5 | Sellers/users | 16,094 private seller candidates; zero seller-linked public listings | Prove listing-to-source-to-seller lineage, dealer verification, consent, and allowed contact method before display. |
+| 6 | Missing raw evidence | 107 records blocked | Obtain the authoritative import mapping with database UUIDs and source rows. The supplied listing CSV is not sufficient evidence for repair. |
+| 7 | Patek quality regression | 5712/1A-001 and 5712/1R-001 need the planned cross-line inheritance regression and small shadow canary | Complete the documented shadow-only fix and verify its exact reconciliation before any parser/catalog change or public expansion. |
+
+**Infrastructure decision:** no Railway or computer upgrade is justified now.
+The validated ceiling is four Railway workers, queue mode, batch size 250. The
+work is dominated by database round trips and evidence complexity, not CPU or
+memory. More workers, no-code tools, or an external model cannot turn missing
+lineage into verified identity, price, image, or seller data.
+
+**Immediate operator sequence:** (1) complete the release QA that is already
+live; (2) run catalog and Patek shadow canaries; (3) resolve structural image
+evidence; (4) use the existing signed review lanes in small packets; and (5)
+convert repeated, signed corrections into deterministic regression fixtures.
+Keep each operator's changes on a separate branch and do not mix UI changes
+with normalization or production data writes.
 
 ## Pending Patek outlier and multi-listing correction
 
