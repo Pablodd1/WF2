@@ -30,6 +30,7 @@
   "rewrites": [
     { "source": "/extract", "destination": "/extract.html" },
     { "source": "/extract.html", "destination": "/extract.html" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/marketplace/(.*)", "destination": "/marketplace/$1" },
+    { "source": "/((?!api/|marketplace/).*)", "destination": "/index.html" }
   ]
 }
