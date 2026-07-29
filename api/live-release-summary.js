@@ -5,7 +5,7 @@
  */
 const { getClient } = require('./_lib/supabase');
 
-const BRANDS = ['Rolex', 'Patek Philippe'];
+const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet'];
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cached = null;
 

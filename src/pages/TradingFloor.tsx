@@ -42,7 +42,7 @@ const INTENT_OPTIONS = [
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
-const RELEASE_BRANDS = ['Rolex', 'Patek Philippe'] as const;
+const RELEASE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet'] as const;
 
 interface ListingRecord {
   id: string;

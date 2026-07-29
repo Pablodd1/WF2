@@ -5,9 +5,13 @@ const THREE_WATCH_RELEASE_REFERENCES = [
   'Patek Philippe::5712/1A',
   'Patek Philippe::5712/1A-001',
   'Rolex::126710BLNR',
+  'Audemars Piguet::16202ST',
+  'Audemars Piguet::15500ST',
+  'Audemars Piguet::15500',
+  'Audemars Piguet::15400'
 ].join('|');
 const FULL_REVIEWED_BRAND_RELEASE = 'ALL_REVIEWED';
-const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe']);
+const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe', 'audemars piguet']);
 const MIN_RELEASE_CONFIDENCE = 90;
 
 function normalizePublicationReference(value) {
