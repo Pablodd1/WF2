@@ -20,7 +20,8 @@ test('reviewed Zenith listings remain inspectable without entering price analyti
   const retainedBlock = api.split('retained_rows:')[1].split('rows: serializedComparables')[0];
   assert.doesNotMatch(retainedBlock, /stored_price_usd/);
   assert.match(page, /Reviewed listing evidence/);
-  assert.match(page, /excluded from averages until the raw message provides explicit currency evidence/);
+  assert.match(page, /excluded from averages until source currency and dated FX provenance pass the deterministic eligibility checks/);
+  assert.match(page, /data\.retained_evidence_count \?\? data\.excludedEvidenceCount/);
   assert.match(page, /Price under review/);
   assert.match(page, /This reviewed listing is displayed for its source post, image, seller, and watch identity/);
 });

@@ -820,7 +820,7 @@ export default function PriceResearch() {
                 </div>
                 {data.eligible_observation_count != null && (
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 6, lineHeight: 1.4 }}>
-                    Evidence path: {data.sampledListings.toLocaleString()} rows sampled → {data.eligible_observation_count.toLocaleString()} passed WTS and catalog checks → {data.count.toLocaleString()} in this chart cohort.
+                    Evidence path: {data.sampledListings.toLocaleString()} rows sampled → {data.eligible_observation_count.toLocaleString()} passed all analytics evidence checks → {data.count.toLocaleString()} in this chart cohort.
                   </div>
                 )}
                 {(data.repost_count || 0) > 0 && (
@@ -1153,7 +1153,7 @@ export default function PriceResearch() {
                       Price statistics and charts require at least five approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
-                      {data.sampledListings.toLocaleString()} observations checked · {(data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · 0 qualified comparables
+                      {data.sampledListings.toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · 0 qualified comparables
                     </div>
                   </div>
                 </div>
@@ -1229,7 +1229,7 @@ export default function PriceResearch() {
                 <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}` }}>
                   <h3 style={{ color: NAVY, fontSize: 15, fontWeight: 700 }}>Reviewed listing evidence</h3>
                   <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
-                    These reviewed workbook listings remain available for their image, seller, dial, condition, and original post. Their prices are excluded from averages until the raw message provides explicit currency evidence.
+                    These reviewed workbook listings remain available for their image, seller, dial, condition, and original post. Their prices are excluded from averages until source currency and dated FX provenance pass the deterministic eligibility checks.
                   </p>
                 </div>
                 {retainedListings.map(row => (
