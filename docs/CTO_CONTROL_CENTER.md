@@ -55,11 +55,24 @@ deleting evidence, and fails closed if verified inventory is unavailable.
 POST ITEM routes to the moderated internal dealer submission workflow at
 `/dealer/post`.
 
-**Release verification required before calling this live:** production build,
-focused release/security tests, API readback for Panerai inventory/models/
-references/direct Price Research/detail, desktop and mobile browser QA, and
-production deployment readback. The post-deployment counts must come from the
-deduplicated customer API, not the 99-row source count.
+**Production verification completed July 30, 2026:** PRs
+[#199](https://github.com/Pablodd1/wf/pull/199),
+[#200](https://github.com/Pablodd1/wf/pull/200), and
+[#201](https://github.com/Pablodd1/wf/pull/201) are merged. Vercel and the
+WatchFacts Railway service reported successful production deployments. The
+deduplicated customer API reports `92` Panerai listings and `943` Zenith
+listings (`1,035` total). Panerai browse reports four model families and 69 WTS
+references; the 71-reference release total above also includes references that
+do not belong in WTS Price Research browse.
+
+Production desktop and 390-pixel mobile browser QA confirmed: Panerai detail
+shows its contact-redacted raw message and visible reference-image disclosure;
+POST ITEM opens `/dealer/post`; an unsupported Rolex URL fails closed instead
+of substituting Panerai; and mobile has no horizontal overflow. Direct search
+for `PAM00671` resolves to Panerai and preserves both HKD offers as reviewed
+evidence. It publishes zero analytics observations because dated FX provenance
+is not verified. No database row, schema, or immutable source evidence was
+changed by this release.
 
 ## July 28 historical release record and active bottlenecks
 
