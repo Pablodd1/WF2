@@ -791,20 +791,25 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
 
 function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
+  const cardHasImage = hasListingImage(listing);
 
   return (
     <article
-      className="flex min-h-[660px] flex-col rounded-md border p-6 transition hover:-translate-y-0.5"
+      className={`flex flex-col rounded-md border p-6 transition hover:-translate-y-0.5 ${cardHasImage ? 'min-h-[660px]' : 'min-h-[320px]'}`}
       style={{ borderColor: selected ? GOLD : BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.28)' }}
     >
-      <button type="button" onClick={onSelect} className="block text-left">
-        <ListingImage listing={listing} className="h-[338px] w-full" />
-      </button>
-      {listing.image_evidence_type === 'REFERENCE_IMAGE' && (
-        <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>Reference image · not seller photo</div>
+      {cardHasImage && (
+        <>
+          <button type="button" onClick={onSelect} className="block text-left">
+            <ListingImage listing={listing} className="h-[338px] w-full" />
+          </button>
+          {listing.image_evidence_type === 'REFERENCE_IMAGE' && (
+            <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>Reference image · not seller photo</div>
+          )}
+        </>
       )}
 
-      <div className="mt-5 min-h-[56px]">
+      <div className={`${cardHasImage ? 'mt-5' : ''} min-h-[56px]`}>
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
           <span>{listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}</span>
         </div>
@@ -854,8 +859,17 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
     : listing, [evidence, listing]);
   const meta = useMemo(() => getListingMeta(detailListing), [detailListing]);
   const images = useMemo(() => {
-    return (evidence?.image_urls || []).map(value => String(value || '').trim()).filter(Boolean);
-  }, [evidence]);
+    const candidates = evidence
+      ? evidence.has_images && evidence.image_urls?.length
+        ? evidence.image_urls
+        : []
+      : hasListingImage(listing)
+        ? listing.image_urls?.length
+          ? listing.image_urls
+          : [listing.thumbnail_url]
+        : [];
+    return candidates.map(value => String(value || '').trim()).filter(Boolean);
+  }, [evidence, listing]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -898,6 +912,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           price_raw: tradingListing.price_raw ?? listing.price_raw,
           currency: tradingListing.currency ?? listing.currency,
           raw_message: publicListing.raw_message || null,
+          has_images: imageUrls.length > 0,
           image_urls: imageUrls,
           image_evidence_type: imageSource.image_evidence_type,
           image_evidence_label: imageSource.image_evidence_label,
@@ -912,7 +927,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   }, [canLoadPublicEvidence, listing]);
 
   return (
-    <section className="mb-8 grid gap-8 lg:grid-cols-[minmax(320px,504px)_1fr]" aria-label="Selected listing">
+    <section className={`mb-8 grid gap-8 ${images.length > 0 ? 'lg:grid-cols-[minmax(320px,504px)_1fr]' : ''}`} aria-label="Selected listing">
       <button
         type="button"
         onClick={onClose}
@@ -922,36 +937,34 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         <ArrowLeft size={17} /> Back to results
       </button>
 
-      <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
-        {images[activeImage] ? (
+      {images.length > 0 && (
+        <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
           <img
             src={images[activeImage]}
             alt={`${meta.title} ${detailListing.image_evidence_type === 'REFERENCE_IMAGE' ? 'reference' : 'listing'} image`}
             className="h-[420px] w-full rounded-sm object-contain sm:h-[540px] lg:h-[648px]"
           />
-        ) : (
-          <ListingImage listing={{ ...detailListing, thumbnail_url: null }} className="h-[420px] w-full sm:h-[540px] lg:h-[648px]" large />
-        )}
-        {detailListing.image_evidence_notice && images.length > 0 && (
-          <p className="px-2 py-3 text-xs leading-5" style={{ color: MUTED }}>{detailListing.image_evidence_notice}</p>
-        )}
-        {images.length > 1 && (
-          <div className="mt-2 flex gap-2 overflow-x-auto">
-            {images.map((url, index) => (
-              <button
-                type="button"
-                key={url}
-                onClick={() => setActiveImage(index)}
-                aria-label={`Show listing image ${index + 1}`}
-                className="h-16 w-16 shrink-0 overflow-hidden rounded-sm border p-0.5"
-                style={{ borderColor: index === activeImage ? GOLD : BORDER, background: PANEL }}
-              >
-                <img src={url} alt="" className="h-full w-full object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+          {detailListing.image_evidence_notice && (
+            <p className="px-2 py-3 text-xs leading-5" style={{ color: MUTED }}>{detailListing.image_evidence_notice}</p>
+          )}
+          {images.length > 1 && (
+            <div className="mt-2 flex gap-2 overflow-x-auto">
+              {images.map((url, index) => (
+                <button
+                  type="button"
+                  key={url}
+                  onClick={() => setActiveImage(index)}
+                  aria-label={`Show listing image ${index + 1}`}
+                  className="h-16 w-16 shrink-0 overflow-hidden rounded-sm border p-0.5"
+                  style={{ borderColor: index === activeImage ? GOLD : BORDER, background: PANEL }}
+                >
+                  <img src={url} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-8">
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
@@ -1060,33 +1073,18 @@ function ContactMetric({ label, value }: { label: string; value: number }) {
   return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{Number(value || 0).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
 }
 
-function ListingImage({ listing, className, large = false }: { listing: ListingRecord; className: string; large?: boolean }) {
+function ListingImage({ listing, className }: { listing: ListingRecord; className: string }) {
   const meta = getListingMeta(listing);
+  const imageUrl = listing.thumbnail_url || listing.image_urls?.find(Boolean);
 
-  if (listing.thumbnail_url) {
-    return (
-      <img
-        src={listing.thumbnail_url}
-        alt={meta.title}
-        className={`${className} rounded-sm object-cover`}
-        loading="lazy"
-      />
-    );
-  }
-
-  return (
-    <div
-      className={`${className} flex flex-col items-center justify-center rounded-sm border text-center`}
-      style={{ borderColor: BORDER, background: 'linear-gradient(145deg, #181820, #0E0E14)' }}
-    >
-      <div className={large ? 'text-[34px] font-semibold' : 'text-[22px] font-semibold'} style={{ color: GOLD_BRIGHT }}>
-        {cleanValue(listing.brand) || 'Watch'}
-      </div>
-      <div className="mt-3 text-[15px]" style={{ color: MUTED }}>
-        {cleanValue(listing.model) || cleanValue(listing.reference) || (listing.listing_type === 'MULTI' ? 'Multiple items · split pending' : listingKindLabel(listing))}
-      </div>
-    </div>
-  );
+  return imageUrl ? (
+    <img
+      src={imageUrl}
+      alt={meta.title}
+      className={`${className} rounded-sm object-cover`}
+      loading="lazy"
+    />
+  ) : null;
 }
 
 function ActionButton({ label, muted = false, onClick }: { label: string; muted?: boolean; onClick?: () => void }) {

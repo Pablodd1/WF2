@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, ImageOff, Loader2, MessageCircle, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, Loader2, MessageCircle, Search, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
@@ -1431,28 +1431,22 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
         {!loading && error && <div style={{ margin: 28, padding: 20, border: '1px solid #f1c2c7', background: '#fff5f6', color: RED }}><strong>Detail unavailable.</strong> {error}</div>}
 
         {!loading && detail && (
-          <div className="grid lg:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]">
-            <section style={{ background: '#f1f3f5', minHeight: images.length ? 600 : 'auto', padding: 20 }}>
-              <div style={{ position: 'sticky', top: 84 }}>
-                <div style={{ minHeight: images.length ? 500 : 260, height: images.length ? 'min(68vh, 680px)' : 260, background: '#e5e7eb', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 10 }}>
-                  {images[activeImage] ? (
+          <div className={images.length > 0 ? 'grid lg:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]' : ''}>
+            {images.length > 0 && (
+              <section style={{ background: '#f1f3f5', minHeight: 600, padding: 20 }}>
+                <div style={{ position: 'sticky', top: 84 }}>
+                  <div style={{ minHeight: 500, height: 'min(68vh, 680px)', background: '#e5e7eb', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 10 }}>
                     <img src={images[activeImage]} alt={`${detail.brand} ${detail.reference} ${detail.image_evidence_type === 'REFERENCE_IMAGE' ? 'reference' : 'listing'} image`} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
-                  ) : (
-                    <div style={{ maxWidth: 280, textAlign: 'center', color: MUTED, padding: 24 }}>
-                      <ImageOff size={42} style={{ margin: '0 auto 12px' }} />
-                      <div style={{ color: NAVY, fontWeight: 700, marginBottom: 6 }}>No linked image for this record</div>
-                      <div style={{ fontSize: 13 }}>The listing remains useful as price evidence. An image will appear here only when media is actually linked to this source record.</div>
+                  </div>
+                  {detail.image_evidence_notice && (
+                    <div style={{ marginTop: 10, color: MUTED, fontSize: 12, lineHeight: 1.5 }}>
+                      <strong style={{ color: NAVY }}>{detail.image_evidence_label || 'Image evidence'}:</strong> {detail.image_evidence_notice}
                     </div>
                   )}
+                  {images.length > 1 && <div className="flex gap-2" style={{ marginTop: 10, overflowX: 'auto' }}>{images.map((url, index) => <button type="button" key={url} onClick={() => setActiveImage(index)} aria-label={`Show image ${index + 1}`} style={{ width: 64, height: 64, border: `2px solid ${index === activeImage ? GOLD : 'transparent'}`, background: WHITE, padding: 2, flexShrink: 0, cursor: 'pointer' }}><img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></button>)}</div>}
                 </div>
-                {images.length > 0 && detail.image_evidence_notice && (
-                  <div style={{ marginTop: 10, color: MUTED, fontSize: 12, lineHeight: 1.5 }}>
-                    <strong style={{ color: NAVY }}>{detail.image_evidence_label || 'Image evidence'}:</strong> {detail.image_evidence_notice}
-                  </div>
-                )}
-                {images.length > 1 && <div className="flex gap-2" style={{ marginTop: 10, overflowX: 'auto' }}>{images.map((url, index) => <button type="button" key={url} onClick={() => setActiveImage(index)} aria-label={`Show image ${index + 1}`} style={{ width: 64, height: 64, border: `2px solid ${index === activeImage ? GOLD : 'transparent'}`, background: WHITE, padding: 2, flexShrink: 0, cursor: 'pointer' }}><img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></button>)}</div>}
-              </div>
-            </section>
+              </section>
+            )}
 
             <section style={{ padding: 'clamp(22px, 4vw, 42px)' }}>
               <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 18 }}>
