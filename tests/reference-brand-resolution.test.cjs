@@ -12,4 +12,5 @@ test('preserves existing reference-family inference', () => {
   assert.equal(inferBrand('116500LN'), 'Rolex');
   assert.equal(inferBrand('5711/1A'), 'Patek Philippe');
   assert.equal(inferBrand('RM 11-03'), 'Richard Mille');
+  assert.equal(inferBrand('PAM00671'), 'Panerai');
 });

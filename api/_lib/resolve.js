@@ -51,8 +51,8 @@ function inferBrand(ref) {
   // Tudor: 79xxxx, 70xxxx, M7xxxx (Black Bay GMT, Chronograph)
   if (/^(79|70)\d{4}[A-Z]*$/.test(rClean)) return 'Tudor';
   if (/^M7\d{4}[A-Z]*$/.test(rClean)) return 'Tudor';
-  // Panerai: PAM + digits
-  if (/^PAM\d{3,4}$/i.test(rClean)) return 'Panerai';
+  // Panerai: PAM + the zero-padded numeric reference used by reviewed releases.
+  if (/^PAM\d{3,5}$/i.test(rClean)) return 'Panerai';
   // JLC: Q + 5-6 digits
   if (/^Q\d{5,6}$/i.test(rClean)) return 'Jaeger-LeCoultre';
   // Breitling: AB + digits
