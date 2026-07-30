@@ -54,6 +54,8 @@ test('Panerai reference images are disclosed on both customer surfaces', () => {
   assert.match(ingest, /publicImageProvenance\(resolved\)/);
   assert.match(detail, /publicImageProvenance\(customerListing\)/);
   assert.match(floor, /Reference image · not seller photo/);
+  assert.match(floor, /const imageSource = Array\.isArray\(publicListing\.image_urls\) && publicListing\.image_urls\.length/);
+  assert.match(floor, /image_evidence_notice: imageSource\.image_evidence_notice/);
   assert.match(research, /detail\.image_evidence_notice/);
 });
 

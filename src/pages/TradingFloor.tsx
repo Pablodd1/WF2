@@ -880,8 +880,14 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           setEvidenceError('Listing evidence did not match the selected record.');
           return;
         }
-        const imageUrls = Array.isArray(publicListing.image_urls) ? publicListing.image_urls : [];
+        const imageSource = Array.isArray(publicListing.image_urls) && publicListing.image_urls.length
+          ? publicListing
+          : Array.isArray(tradingListing.image_urls) && tradingListing.image_urls.length
+            ? tradingListing
+            : listing;
+        const imageUrls = imageSource.image_urls || [];
         setEvidence({
+          ...listing,
           ...tradingListing,
           ...publicListing,
           id: listing.id,
@@ -893,6 +899,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           currency: tradingListing.currency ?? listing.currency,
           raw_message: publicListing.raw_message || null,
           image_urls: imageUrls,
+          image_evidence_type: imageSource.image_evidence_type,
+          image_evidence_label: imageSource.image_evidence_label,
+          image_evidence_notice: imageSource.image_evidence_notice,
         });
       })
       .catch(error => {
