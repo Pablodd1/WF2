@@ -18,8 +18,8 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
   assert.match(header, /label: 'WANT TO BUY', to: '\/trading\?type=WTB'/);
   assert.match(header, /label: 'PRICE RESEARCH', to: '\/price-research'/);
-  assert.match(header, /const LUXURY_APP_POST_ITEM_URL = 'https:\/\/luxuryapp-wf-w5o1\.vercel\.app\/'/);
-  assert.match(header, /label: 'POST ITEM', href: LUXURY_APP_POST_ITEM_URL, external: true/);
+  assert.match(header, /label: 'POST ITEM', to: '\/dealer\/post'/);
+  assert.doesNotMatch(header, /luxuryapp-wf-w5o1/);
   assert.match(header, /label: 'ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'HIRE FI'/);
   assert.match(header, /overflow-x-auto/);
@@ -46,7 +46,7 @@ test('Trading Floor watch view does not render internal listing labels or identi
 test('Trading Floor shows image-backed listings before price-ranked rows', () => {
   const floor = read('src/pages/TradingFloor.tsx');
 
-  assert.match(floor, /media\.matches \? 48 : 100/);
+  assert.match(floor, /media\.matches \? 24 : 100/);
   assert.match(floor, /function hasListingImage/);
   assert.match(floor, /function priceEvidenceRank/);
   assert.match(floor, /function customerSortPrice/);
@@ -57,6 +57,9 @@ test('Trading Floor shows image-backed listings before price-ranked rows', () =>
   assert.doesNotMatch(floor, /Price under review/);
   assert.doesNotMatch(floor, /Exact source currency is being verified/);
   assert.match(floor, /setListings\(current => sortListingsForDisplay/);
+  assert.match(floor, /REFERENCE_IMAGE[\s\S]*Reference image · not seller photo/);
+  assert.doesNotMatch(floor, /per request keeps mobile memory bounded/);
+  assert.doesNotMatch(floor, /top_watches_trading_floor\.json/);
 });
 
 test('dealer login keeps authentication but omits the removed marketing panel', () => {

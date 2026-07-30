@@ -15,12 +15,15 @@ const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
+  REVIEWED_PANERAI_SOURCE,
   REVIEWED_ZENITH_SOURCE,
   isReleaseListingEligible,
+  isReviewedPaneraiReleaseRecord,
   isReviewedZenithIdentityCorrectionRecord,
   isReviewedZenithReleaseRecord,
 } = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
+const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
 
 function normalizeAccessories(value) {
   if (!value) return [];
@@ -149,7 +152,8 @@ module.exports = async function handler(req, res) {
     const shadowBundleIds = await loadShadowBundleParentIds(client, [data]);
     const eligibilityRow = {
       ...normalized,
-      owner_reviewed_identity: String(resolvedData.source || '') === REVIEWED_ZENITH_SOURCE,
+      owner_reviewed_identity: [REVIEWED_PANERAI_SOURCE, REVIEWED_ZENITH_SOURCE]
+        .includes(String(resolvedData.source || '')),
       price_usd: normalized.analytics_price_usd,
       bundle_candidate_count: bundleCandidateCount(data, shadowBundleIds),
     };
@@ -158,7 +162,8 @@ module.exports = async function handler(req, res) {
       listingCatalog(resolvedData.reference, resolvedData.brand),
     );
     const suppressedIds = await loadAnalyticsSuppressedIds(client, [id]);
-    const controlledWorkbookListing = isReviewedZenithReleaseRecord(resolvedData)
+    const controlledWorkbookListing = isReviewedPaneraiReleaseRecord(resolvedData)
+      || isReviewedZenithReleaseRecord(resolvedData)
       || isReviewedZenithIdentityCorrectionRecord(resolvedData);
     const publicEligible = Boolean(strictGate)
       && (!exclusionReason || controlledWorkbookListing)
@@ -203,6 +208,7 @@ module.exports = async function handler(req, res) {
         accessories: normalizeAccessories(customerListing.accessories),
         image_urls: customerListing.image_urls,
         has_images: customerListing.has_images,
+        ...publicImageProvenance(customerListing),
         region: customerListing.region,
         source_type: customerListing.source_type,
         listing_status: customerListing.listing_status,

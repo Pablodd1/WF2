@@ -6,16 +6,49 @@
 const { getClient } = require('./_lib/supabase');
 const { publicationBrands } = require('./_lib/publication-brands.cjs');
 const {
-  REVIEWED_PANERAI_RECORD_PREFIX,
+  REVIEWED_PANERAI_RECORD_IDS,
   REVIEWED_PANERAI_SOURCE,
   REVIEWED_ZENITH_RECORD_END,
   REVIEWED_ZENITH_RECORD_START,
   REVIEWED_ZENITH_SOURCE,
+  isReleaseListingEligible,
 } = require('./_lib/publication-references.cjs');
+const { repostSignature } = require('./_lib/repost-deduplication.cjs');
 
 const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'];
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cached = null;
+
+async function loadControlledRows(client, brand) {
+  const columns = 'id,brand,reference,dial_color,condition,price_usd,dealer_id,raw_message,source,verdict,confidence,listing_type,listing_status';
+  if (brand === 'Panerai') {
+    const { data, error } = await client
+      .from('watch_records')
+      .select(columns)
+      .in('id', REVIEWED_PANERAI_RECORD_IDS)
+      .eq('source', REVIEWED_PANERAI_SOURCE)
+      .eq('brand', 'Panerai');
+    if (error) throw error;
+    return data || [];
+  }
+
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await client
+      .from('watch_records')
+      .select(columns)
+      .gte('id', REVIEWED_ZENITH_RECORD_START)
+      .lt('id', REVIEWED_ZENITH_RECORD_END)
+      .eq('source', REVIEWED_ZENITH_SOURCE)
+      .eq('brand', 'Zenith')
+      .order('id', { ascending: true })
+      .range(from, from + 999);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return rows;
+}
 
 async function loadSummary() {
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.payload;
@@ -23,28 +56,18 @@ async function loadSummary() {
   const configuredBrands = publicationBrands();
   const brands = configuredBrands.length ? configuredBrands : DEFAULT_BRANDS;
   const results = await Promise.all(brands.map(async brand => {
-    let query = client
-      .from(['Panerai', 'Zenith'].includes(brand)
-        ? 'watch_records'
-        : 'two_brand_verified_trading_release_cache')
+    if (['Panerai', 'Zenith'].includes(brand)) {
+      const rows = (await loadControlledRows(client, brand))
+        .filter(isReleaseListingEligible);
+      return {
+        brand,
+        listing_count: new Set(rows.map(repostSignature)).size,
+      };
+    }
+    const query = client
+      .from('two_brand_verified_trading_release_cache')
       .select('id', { count: 'exact', head: true })
       .eq('brand', brand);
-    if (brand === 'Panerai') {
-      query = query
-        .like('id', `${REVIEWED_PANERAI_RECORD_PREFIX}%`)
-        .eq('source', REVIEWED_PANERAI_SOURCE)
-        .eq('verdict', 'APPROVED')
-        .gte('confidence', 90)
-        .or('listing_status.is.null,listing_status.eq.ACTIVE');
-    } else if (brand === 'Zenith') {
-      query = query
-        .gte('id', REVIEWED_ZENITH_RECORD_START)
-        .lt('id', REVIEWED_ZENITH_RECORD_END)
-        .eq('source', REVIEWED_ZENITH_SOURCE)
-        .eq('verdict', 'APPROVED')
-        .gte('confidence', 90)
-        .eq('listing_status', 'ACTIVE');
-    }
     const { count, error } = await query;
     if (error) throw error;
     return { brand, listing_count: Number(count || 0) };

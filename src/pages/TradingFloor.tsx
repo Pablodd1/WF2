@@ -71,6 +71,9 @@ interface ListingRecord {
   has_images: boolean;
   thumbnail_url: string | null;
   image_urls?: string[];
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_label?: string | null;
+  image_evidence_notice?: string | null;
   region: string | null;
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
@@ -167,7 +170,8 @@ export default function TradingFloor() {
   const requestedBrand = searchParams.get('brand') || '';
   const [releaseBrands, setReleaseBrands] = useState<string[]>(INITIAL_RELEASE_BRANDS);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
-  const brandFilter: BrandFilter = matchedBrand || (releaseBrands.length <= 2 ? releaseBrands[0] || '' : '');
+  const unsupportedRequestedBrand = Boolean(requestedBrand && !matchedBrand);
+  const brandFilter: BrandFilter = matchedBrand || (!requestedBrand ? releaseBrands[0] || '' : '');
   const conditionFilter = searchParams.get('condition') || '';
   const regionFilter = searchParams.get('region') || '';
   const inventoryScope: InventoryScope = searchParams.get('scope') === 'archive' ? 'archive' : 'market';
@@ -185,7 +189,7 @@ export default function TradingFloor() {
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 48 : 100);
+  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 100);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
   const viewKey = [brandFilter, categoryFilter, intentFilter, search, conditionFilter, regionFilter, inventoryScope].join('\u001f');
@@ -242,7 +246,7 @@ export default function TradingFloor() {
   useEffect(() => {
     const media = window.matchMedia('(max-width: 640px)');
     const updatePageSize = () => {
-      setPageSize(media.matches ? 48 : 100);
+      setPageSize(media.matches ? 24 : 100);
       resetResults();
     };
     updatePageSize();
@@ -296,6 +300,15 @@ export default function TradingFloor() {
       setError('');
 
       try {
+        if (unsupportedRequestedBrand) {
+          setListings([]);
+          setTotal(0);
+          setTotalIsEstimate(false);
+          setHasMore(false);
+          setNextCursor(null);
+          setError(`${requestedBrand} is not included in the current reviewed release.`);
+          return;
+        }
         const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
         params.set('quality', inventoryScope);
         if (cursor) params.set('cursor', cursor);
@@ -306,7 +319,7 @@ export default function TradingFloor() {
         if (conditionFilter) params.set('condition', conditionFilter);
         if (regionFilter.trim()) params.set('region', regionFilter.trim());
 
-        let response = await fetch(`/api/ingest?${params.toString()}`, { signal: controller.signal });
+        const response = await fetch(`/api/ingest?${params.toString()}`, { signal: controller.signal });
         let data: TradingFloorResponse;
         try {
           data = await response.json() as TradingFloorResponse;
@@ -315,49 +328,7 @@ export default function TradingFloor() {
         }
 
         if (data.status === 'supabase_not_configured') {
-          const fallbackRes = await fetch('/top_watches_trading_floor.json', { signal: controller.signal });
-          const fallbackData = await fallbackRes.json();
-          const mapped = fallbackData.map((item: any) => ({
-            id: item.id,
-            brand: item.formData.brand,
-            reference: item.formData.model.replace(item.formData.brand + ' Ref ', '') || '',
-            price_usd: Number(item.formData.estimatedValue),
-            price_raw: Number(item.formData.estimatedValue),
-            currency: 'USD',
-            dial_color: item.formData.dial || 'Classic',
-            condition: '4',
-            year: 2025,
-            listing_type: 'WTS',
-            verdict: 'APPROVED',
-            source: 'WatchFacts Import',
-            source_type: 'Live Ingest',
-            item_category: 'WATCH',
-            listing_date: item.timestamp,
-            listing_status: 'ACTIVE',
-            created_at: item.timestamp,
-            confidence: 99,
-            has_images: true,
-            thumbnail_url: item.imageSrc
-          }));
-
-          let filtered = mapped;
-          if (search) {
-            const query = search.toLowerCase();
-            filtered = filtered.filter((r: any) =>
-              r.brand.toLowerCase().includes(query) ||
-              r.reference.toLowerCase().includes(query) ||
-              (r.dial_color && r.dial_color.toLowerCase().includes(query))
-            );
-          }
-          if (brandFilter) {
-            filtered = filtered.filter((r: any) => r.brand.toLowerCase() === brandFilter.toLowerCase());
-          }
-
-          data = {
-            status: 'ok',
-            records: filtered,
-            total: filtered.length
-          };
+          throw new Error('Verified inventory is temporarily unavailable.');
         } else if (!response.ok || data.status === 'error' || !Array.isArray(data.records)) {
           throw new Error(data.error || 'Failed to load listings');
         }
@@ -390,7 +361,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [brandFilter, categoryFilter, conditionFilter, cursor, intentFilter, inventoryScope, pageSize, regionFilter, search]);
+  }, [brandFilter, categoryFilter, conditionFilter, cursor, intentFilter, inventoryScope, pageSize, regionFilter, requestedBrand, search, unsupportedRequestedBrand]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -540,7 +511,6 @@ export default function TradingFloor() {
               : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</>}
           </span>
           <span>Listings with images first; highest listed price next.</span>
-          <span title="Records are fetched in bounded batches from Postgres; search and filters run on the database.">{pageSize} per request keeps mobile memory bounded.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
@@ -767,8 +737,8 @@ function FeaturedImageRail({ listings, onSelect }: { listings: ListingRecord[]; 
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Visual inventory</div>
-          <h2 id="featured-listings-heading" className="mt-1 text-xl font-semibold" style={{ color: INK }}>Featured watches with source-linked images</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-5" style={{ color: MUTED }}>Prequalified WTS records with complete identity, plausible pricing, and bounded confidence.</p>
+          <h2 id="featured-listings-heading" className="mt-1 text-xl font-semibold" style={{ color: INK }}>Featured watches with reviewed imagery</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-5" style={{ color: MUTED }}>Original listing photos and clearly labeled model-reference images from the reviewed release.</p>
         </div>
         <span className="text-xs" style={{ color: MUTED }}>{listings.length} linked listings</span>
       </div>
@@ -786,6 +756,9 @@ function FeaturedImageRail({ listings, onSelect }: { listings: ListingRecord[]; 
               <img src={listing.thumbnail_url || ''} alt={meta.title} className="h-[250px] w-full object-cover sm:h-[286px]" loading="lazy" />
               <span className="block min-h-[92px] px-4 py-3">
                 <span className="block truncate text-sm font-medium" style={{ color: INK }}>{meta.title}</span>
+                {listing.image_evidence_type === 'REFERENCE_IMAGE' && (
+                  <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>Reference image</span>
+                )}
                 <span className="mt-1 block text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</span>
                 <span className="mt-2 block text-[11px] uppercase tracking-[0.12em]" style={{ color: MUTED }}>View listing</span>
               </span>
@@ -827,6 +800,9 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       <button type="button" onClick={onSelect} className="block text-left">
         <ListingImage listing={listing} className="h-[338px] w-full" />
       </button>
+      {listing.image_evidence_type === 'REFERENCE_IMAGE' && (
+        <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>Reference image · not seller photo</div>
+      )}
 
       <div className="mt-5 min-h-[56px]">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
@@ -840,7 +816,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         >
           {meta.title}
         </button>
-        <div className="mt-1 text-[15px] leading-6" style={{ color: INK }}>{meta.rawPriceLabel}</div>
+        {meta.rawPriceLabel && <div className="mt-1 text-[15px] leading-6" style={{ color: INK }}>{meta.rawPriceLabel}</div>}
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3">
@@ -941,11 +917,14 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         {images[activeImage] ? (
           <img
             src={images[activeImage]}
-            alt={`${meta.title} listing`}
-            className="h-[648px] w-full rounded-sm object-contain"
+            alt={`${meta.title} ${detailListing.image_evidence_type === 'REFERENCE_IMAGE' ? 'reference' : 'listing'} image`}
+            className="h-[420px] w-full rounded-sm object-contain sm:h-[540px] lg:h-[648px]"
           />
         ) : (
-          <ListingImage listing={{ ...detailListing, thumbnail_url: null }} className="h-[648px] w-full" large />
+          <ListingImage listing={{ ...detailListing, thumbnail_url: null }} className="h-[420px] w-full sm:h-[540px] lg:h-[648px]" large />
+        )}
+        {detailListing.image_evidence_notice && images.length > 0 && (
+          <p className="px-2 py-3 text-xs leading-5" style={{ color: MUTED }}>{detailListing.image_evidence_notice}</p>
         )}
         {images.length > 1 && (
           <div className="mt-2 flex gap-2 overflow-x-auto">
@@ -1175,10 +1154,13 @@ function listingKindLabel(listing: ListingRecord) {
 
 function formatRawPrice(listing: ListingRecord) {
   if (listing.price_raw && listing.currency) {
-    return `Source price: ${listing.currency} ${Math.round(listing.price_raw).toLocaleString('en-US')}`;
+    const sameVerifiedUsd = String(listing.currency).toUpperCase() === 'USD'
+      && Number(listing.price_usd) > 0
+      && Math.round(Number(listing.price_raw)) === Math.round(Number(listing.price_usd));
+    if (sameVerifiedUsd) return '';
+    return `Posted price: ${listing.currency} ${Math.round(listing.price_raw).toLocaleString('en-US')}`;
   }
-  if (listing.price_usd) return `${compactNumber(listing.price_usd)}USD`;
-  return isBuyerIntent(listing.listing_type) ? 'Buyer budget not stated' : 'Price on request';
+  return '';
 }
 
 function formatUsdPrice(value: number | null, listingType: string) {
@@ -1188,11 +1170,6 @@ function formatUsdPrice(value: number | null, listingType: string) {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value);
-}
-
-function compactNumber(value: number) {
-  if (!Number.isFinite(value)) return '';
-  return Math.round(value).toLocaleString('en-US').replace(/,/g, '');
 }
 
 function formatListingDate(dateStr: string | null) {

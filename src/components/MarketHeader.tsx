@@ -2,14 +2,13 @@ import { ExternalLink } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const LUXFI_URL = 'https://luxfi.ai/#add-fi';
-const LUXURY_APP_POST_ITEM_URL = 'https://luxuryapp-wf-w5o1.vercel.app/';
 
 const HEADER_LINKS = [
   { label: 'HOME', to: '/' },
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'WANT TO BUY', to: '/trading?type=WTB' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
-  { label: 'POST ITEM', href: LUXURY_APP_POST_ITEM_URL, external: true },
+  { label: 'POST ITEM', to: '/dealer/post' },
   { label: 'ACCOUNT', to: '/dealer/account/profile' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
 ];
@@ -75,4 +74,4 @@ export function MarketHeader({ compact = false, className = '', showLogo = true 
   );
 }
 
-export { LUXFI_URL, LUXURY_APP_POST_ITEM_URL };
+export { LUXFI_URL };

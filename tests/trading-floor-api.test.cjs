@@ -195,6 +195,9 @@ test('Panerai inventory reads only the controlled reviewed workbook release', as
     assert.equal(res.body.records[0].price_usd, 6500);
     assert.equal(res.body.records[0].price_evidence_status, 'HUMAN_APPROVED_WORKBOOK');
     assert.equal(res.body.records[0].thumbnail_url, 'https://images.example/pam00590.jpg');
+    assert.equal(res.body.records[0].image_evidence_type, 'REFERENCE_IMAGE');
+    assert.equal(res.body.records[0].image_evidence_label, 'Reference image');
+    assert.match(res.body.records[0].image_evidence_notice, /not the seller/);
     assert.equal(res.body.publicationScope, 'REVIEWED_FILE');
   } finally {
     global.fetch = originalFetch;

@@ -26,9 +26,13 @@ const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
+  REVIEWED_PANERAI_RECORD_IDS,
+  REVIEWED_PANERAI_REFERENCES,
+  REVIEWED_PANERAI_SOURCE,
   REVIEWED_ZENITH_SOURCE,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
+  isReviewedPaneraiReleaseRecord,
   isReviewedZenithIdentityCorrectionRecord,
 } = require('./_lib/publication-references.cjs');
 
@@ -113,8 +117,8 @@ async function retainVerifiedIdentityRows(client, rows) {
   });
 }
 
-function isOwnerReviewedZenithRow(row) {
-  return (
+function isOwnerReviewedWorkbookRow(row) {
+  return isReviewedPaneraiReleaseRecord(row) || (
     String(row?.brand || '').trim().toLowerCase() === 'zenith'
       && String(row?.source || '') === REVIEWED_ZENITH_SOURCE
   ) || isReviewedZenithIdentityCorrectionRecord(row);
@@ -135,7 +139,9 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
 
   let demandRows;
   try {
-    demandRows = await retainVerifiedIdentityRows(client, data || []);
+    demandRows = (data || []).some(isOwnerReviewedWorkbookRow)
+      ? (data || []).filter(isOwnerReviewedWorkbookRow)
+      : await retainVerifiedIdentityRows(client, data || []);
   } catch {
     return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
   }
@@ -155,7 +161,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
   const shadowBundleIds = await loadShadowBundleParentIds(client, demandRows);
   const eligibleBeforeReposts = demandRows
     .map(row => ({ ...row, bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds) }))
-    .map(row => ({ ...row, owner_reviewed_identity: isOwnerReviewedZenithRow(row) }))
+    .map(row => ({ ...row, owner_reviewed_identity: isOwnerReviewedWorkbookRow(row) }))
     .filter(row => !classifyDemandEligibility(row, catalog));
   const { uniqueRows: eligible, repostRows } = deduplicateReposts(eligibleBeforeReposts);
   const grouped = new Map();
@@ -185,6 +191,22 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
 
 function inferBrand(ref) {
   return sharedInferBrand(ref);
+}
+
+async function inferReleasedWorkbookBrand(reference) {
+  const client = getClient();
+  const { data, error } = await client
+    .from('price_research_verified_source')
+    .select('id,brand,reference,source,verdict,confidence,listing_status')
+    .in('brand', ['Panerai', 'Zenith'])
+    .ilike('reference', reference)
+    .limit(20);
+  if (error) throw error;
+  const brands = [...new Set((data || [])
+    .filter(isReleaseListingEligible)
+    .map(row => String(row.brand || '').trim())
+    .filter(Boolean))];
+  return brands.length === 1 ? brands[0] : '';
 }
 
 function summarizeComparableRows(rows) {
@@ -223,6 +245,13 @@ module.exports = async function handler(req, res) {
   if (!brand) {
     brand = inferBrand(rawRef);
     if (!brand) {
+      try {
+        brand = await inferReleasedWorkbookBrand(rawRef);
+      } catch {
+        // The customer can still select a brand from the bounded browse flow.
+      }
+    }
+    if (!brand) {
       return res.status(400).json({
         error: 'Brand could not be identified for this reference. Select a brand and reference from Browse by Model.',
         hint: 'Brand auto-resolution failed. Provide the brand explicitly.'
@@ -238,15 +267,22 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-    // Exact brand/reference predicates can use the watch_records indexes.
-    // The reviewed release gate and deterministic evidence rules are applied
-    // again in memory after the bounded, indexed read.
-    const sourceTable = 'watch_records';
+    const controlledPaneraiRelease = brand.toLowerCase() === 'panerai';
+    const sourceTable = controlledPaneraiRelease
+      ? 'price_research_verified_source'
+      : 'watch_records';
 
     // Resolve reference — support prefix matching (3712 -> 3712/1A)
     let targetRef = rawRef;
     let referenceVariants = [rawRef];
-    if (rawRef.length >= 3) {
+    if (controlledPaneraiRelease) {
+      const exactReleaseReference = REVIEWED_PANERAI_REFERENCES.find(reference =>
+        normRef(reference) === normRef(rawRef));
+      if (exactReleaseReference) {
+        targetRef = exactReleaseReference;
+        referenceVariants = [exactReleaseReference];
+      }
+    } else if (rawRef.length >= 3) {
       // Resolve exact references case-insensitively first. Historical imports
       // contain casing variants (for example 116500LN and 116500ln); keep all
       // equivalent stored spellings so the market query aggregates them.
@@ -327,15 +363,31 @@ module.exports = async function handler(req, res) {
 
     // Avoid a filtered COUNT over the multi-million-row table. Fetch bounded,
     // deterministic pages in parallel and report whether the sample hit its cap.
-    const sampledPages = await Promise.all(
-      Array.from({ length: sampleLimit / pageSize }, (_, index) => {
-        const from = index * pageSize;
-        return buildRowsQuery(from, from + pageSize - 1);
-      })
-    );
-    const pageError = sampledPages.find(page => page.error)?.error;
-    if (pageError) throw pageError;
-    let rows = sampledPages.flatMap(page => page.data || []);
+    let rows;
+    if (controlledPaneraiRelease) {
+      const { data, error } = await client
+        .from(sourceTable)
+        .select(columns)
+        .in('id', REVIEWED_PANERAI_RECORD_IDS)
+        .eq('brand', 'Panerai')
+        .eq('source', REVIEWED_PANERAI_SOURCE)
+        .in('reference', referenceVariants)
+        .eq('verdict', 'APPROVED')
+        .gte('confidence', MIN_RELEASE_CONFIDENCE)
+        .eq('listing_type', 'WTS');
+      if (error) throw error;
+      rows = data || [];
+    } else {
+      const sampledPages = await Promise.all(
+        Array.from({ length: sampleLimit / pageSize }, (_, index) => {
+          const from = index * pageSize;
+          return buildRowsQuery(from, from + pageSize - 1);
+        })
+      );
+      const pageError = sampledPages.find(page => page.error)?.error;
+      if (pageError) throw pageError;
+      rows = sampledPages.flatMap(page => page.data || []);
+    }
     const baseSampleCount = rows.length;
 
     if (!rows || rows.length === 0) {
@@ -387,7 +439,7 @@ module.exports = async function handler(req, res) {
         || (baseSampleCount >= sampleLimit && observedDialCounts.get(dial.value.toLowerCase()) < 1000)
       ))
       .map(dial => dial.value);
-    if (supplementalCatalogDials.length) {
+    if (!controlledPaneraiRelease && supplementalCatalogDials.length) {
       const supplementalPages = await Promise.all(supplementalCatalogDials.map(dial => client
         .from(sourceTable)
         .select(columns)
@@ -407,7 +459,9 @@ module.exports = async function handler(req, res) {
       for (const row of supplementalPages.flatMap(page => page.data || [])) rowsById.set(row.id, row);
       rows = [...rowsById.values()];
     }
-    rows = await retainVerifiedIdentityRows(client, rows);
+    rows = controlledPaneraiRelease
+      ? rows.filter(isOwnerReviewedWorkbookRow)
+      : await retainVerifiedIdentityRows(client, rows);
     const equivalentKeys = new Set(referenceVariants.map(normRef));
     rows = rows.filter(row =>
       isReleaseListingEligible(row)
@@ -422,7 +476,7 @@ module.exports = async function handler(req, res) {
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {
           ...normalized,
-          owner_reviewed_identity: isOwnerReviewedZenithRow(row),
+          owner_reviewed_identity: isOwnerReviewedWorkbookRow(row),
           bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds),
           dial_color: normalizedDial.known ? normalizedDial.value : normalized.dial_color,
           stored_price_usd: row.price_usd,
@@ -446,7 +500,7 @@ module.exports = async function handler(req, res) {
       .filter(item => item.reason)
       .map(({ row, reason }) => ({ ...row, is_outlier: true, outlier_reason: reason }));
     const retainedEvidenceRows = requiredFieldExclusions.filter(row => (
-      isOwnerReviewedZenithRow(row)
+      isOwnerReviewedWorkbookRow(row)
       && (!requestedDial || String(row.dial_color || '').trim().toLowerCase() === requestedDial)
     ));
     const eligibleMarketRows = analyticsRows.filter(row => !classifyResearchEligibility(row, catalogHit));
@@ -620,7 +674,7 @@ module.exports = async function handler(req, res) {
         canonical_identity_review_required: true,
         explicit_currency_evidence_required: true,
         verified_fx_provenance_required: true,
-        catalog_model_and_dial_required: String(brand).toLowerCase() !== 'zenith',
+        catalog_model_and_dial_required: !['panerai', 'zenith'].includes(String(brand).toLowerCase()),
         catalog_or_owner_reviewed_identity_required: true,
         unsplit_bundles_excluded: true,
         reviewed_duplicates_excluded: true,

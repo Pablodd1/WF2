@@ -29,7 +29,7 @@ test('Trading Floor publishes exact source HKD without customer-facing review la
   assert.match(ingest, /listEquivalentReferences\(resolved\.reference,\s*resolved\.brand\)/);
   assert.match(ingest, /price_raw:\s*normalized\.source_price_amount/);
   assert.match(ingest, /currency:\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
-  assert.match(trading, /Source price: \$\{listing\.currency\}/);
+  assert.match(trading, /Posted price: \$\{listing\.currency\}/);
   assert.doesNotMatch(trading, /USD conversion unavailable/);
   assert.doesNotMatch(trading, /Exact source currency is being verified/);
 });
