@@ -880,8 +880,13 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           setEvidenceError('Listing evidence did not match the selected record.');
           return;
         }
-        const imageUrls = Array.isArray(publicListing.image_urls) ? publicListing.image_urls : [];
+        const imageUrls = Array.isArray(publicListing.image_urls) && publicListing.image_urls.length
+          ? publicListing.image_urls
+          : Array.isArray(tradingListing.image_urls) && tradingListing.image_urls.length
+            ? tradingListing.image_urls
+            : (listing.image_urls || []);
         setEvidence({
+          ...listing,
           ...tradingListing,
           ...publicListing,
           id: listing.id,
