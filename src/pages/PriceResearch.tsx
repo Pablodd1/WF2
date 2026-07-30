@@ -72,6 +72,9 @@ interface ListingDetailData {
   accessories: string[];
   image_urls: string[];
   has_images: boolean;
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_label?: string | null;
+  image_evidence_notice?: string | null;
   region: string | null;
   source_type: string | null;
   listing_status: string | null;
@@ -343,28 +346,36 @@ export default function PriceResearch() {
   const [pModel, setPModel] = useState('');
   const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; analytics_ready?: boolean; sample_capped?: boolean; avg_price: number | null }[]>([]);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
+  const [pickerError, setPickerError] = useState('');
 
   const loadModels = useCallback(async (brand: string) => {
-    setPBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery('');
+    setPBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setPickerError('');
     if (!brand) return;
     setPLoading('models');
     try {
       const r = await fetch(`/api/catalog-models?brand=${encodeURIComponent(brand)}`);
       const d = await r.json();
-      if (d.success) setPModels(d.models || []);
+      if (!r.ok || !d.success) {
+        setPickerError(d.error || 'Models are temporarily unavailable');
+        return;
+      }
+      setPModels(d.models || []);
     } catch { /* ignore — direct search still works */ }
     finally { setPLoading(''); }
   }, []);
 
   const loadRefs = useCallback(async (brand: string, model: string) => {
-    setPModel(model); setPRefs([]);
+    setPModel(model); setPRefs([]); setPickerError('');
     if (!brand || !model) return;
     setPLoading('refs');
     try {
       const r = await fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`);
       const d = await r.json();
-      if (d.success) setPRefs(d.references || []);
-    } catch { /* ignore */ }
+      if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily unavailable');
+      setPRefs(d.references || []);
+    } catch (requestError) {
+      setPickerError(requestError instanceof Error ? requestError.message : 'References are temporarily unavailable');
+    }
     finally { setPLoading(''); }
   }, []);
 
@@ -670,7 +681,8 @@ export default function PriceResearch() {
           )}
 
           {pLoading === 'models' && <div style={{ fontSize: 13, color: MUTED }}>Loading models…</div>}
-          {pBrand && !pModel && pLoading !== 'models' && pModels.length === 0 && (
+          {pickerError && <div role="alert" style={{ fontSize: 13, color: RED, marginBottom: 12 }}>{pickerError}</div>}
+          {pBrand && !pModel && pLoading !== 'models' && !pickerError && pModels.length === 0 && (
             <div style={{ fontSize: 13, color: MUTED }}>No cataloged models were returned. Search a known reference above.</div>
           )}
 
@@ -700,7 +712,7 @@ export default function PriceResearch() {
           )}
 
           {pLoading === 'refs' && <div style={{ fontSize: 13, color: MUTED }}>Loading references…</div>}
-          {pBrand && pModel && pLoading !== 'refs' && pRefs.length === 0 && (
+          {pBrand && pModel && pLoading !== 'refs' && !pickerError && pRefs.length === 0 && (
             <div style={{ fontSize: 13, color: MUTED }}>No approved listing evidence was returned for this model.</div>
           )}
 
@@ -1424,7 +1436,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
               <div style={{ position: 'sticky', top: 84 }}>
                 <div style={{ minHeight: images.length ? 500 : 260, height: images.length ? 'min(68vh, 680px)' : 260, background: '#e5e7eb', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 10 }}>
                   {images[activeImage] ? (
-                    <img src={images[activeImage]} alt={`${detail.brand} ${detail.reference} listing`} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
+                    <img src={images[activeImage]} alt={`${detail.brand} ${detail.reference} ${detail.image_evidence_type === 'REFERENCE_IMAGE' ? 'reference' : 'listing'} image`} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
                   ) : (
                     <div style={{ maxWidth: 280, textAlign: 'center', color: MUTED, padding: 24 }}>
                       <ImageOff size={42} style={{ margin: '0 auto 12px' }} />
@@ -1433,6 +1445,11 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                     </div>
                   )}
                 </div>
+                {images.length > 0 && detail.image_evidence_notice && (
+                  <div style={{ marginTop: 10, color: MUTED, fontSize: 12, lineHeight: 1.5 }}>
+                    <strong style={{ color: NAVY }}>{detail.image_evidence_label || 'Image evidence'}:</strong> {detail.image_evidence_notice}
+                  </div>
+                )}
                 {images.length > 1 && <div className="flex gap-2" style={{ marginTop: 10, overflowX: 'auto' }}>{images.map((url, index) => <button type="button" key={url} onClick={() => setActiveImage(index)} aria-label={`Show image ${index + 1}`} style={{ width: 64, height: 64, border: `2px solid ${index === activeImage ? GOLD : 'transparent'}`, background: WHITE, padding: 2, flexShrink: 0, cursor: 'pointer' }}><img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></button>)}</div>}
               </div>
             </section>
@@ -1451,7 +1468,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                   ? `$${Number(displayPrice).toLocaleString()}`
                   : detail.price_raw != null && detail.currency
                     ? `${detail.currency} ${Number(detail.price_raw).toLocaleString()}`
-                    : 'Price under review'}
+                    : 'Price not available for analytics'}
                 <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>
                   {hasDisplayPrice ? ' USD asking price' : ' · excluded from averages'}
                 </span>
@@ -1543,7 +1560,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                     </div>
                   </>
                 ) : (
-                  <div style={{ color: MUTED, fontSize: 13 }}>Poster verification is pending. The person or dealer will appear only after this exact listing is linked to a verified WatchFacts profile. No identity or contact data is guessed.</div>
+                  <div style={{ color: MUTED, fontSize: 13 }}>Poster data is not available for this listing. No identity or contact data is guessed.</div>
                 )}
               </DetailCard>
 
@@ -1565,7 +1582,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
               <DetailCard title="Watch details">
                 <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
                   {observedDate && <DetailField label="Observed" value={observedDate} />}
-                  <DetailField label="Asking price as posted" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
+                  <DetailField label="Asking price as posted" value={detail.price_raw != null && detail.currency ? `${detail.price_raw} ${detail.currency}` : null} />
                   <DetailField label="Condition" value={detail.condition} />
                   <DetailField label="Model" value={detail.model || null} />
                   <DetailField label="Dial" value={detail.dial_color} />

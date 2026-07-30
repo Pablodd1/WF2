@@ -1,12 +1,12 @@
 # WatchFacts CTO Control Center
 
-**Control date:** July 28, 2026
-**Assignment mode:** released customer UI; evidence-first data operations remain
-gated
-**Current release decision:** keep the currently verified Rolex/Patek customer
-inventory live through bounded database pagination; route every unresolved row
-to its exact human-review disposition. Do not bulk-promote normalization,
-bundles, images, sellers, or duplicates.
+**Control date:** July 30, 2026
+**Assignment mode:** Panerai client-readiness release; evidence-first data
+operations remain gated
+**Current release decision:** publish the exact owner-reviewed Panerai workbook
+cohort and the current reviewed Zenith cohort through bounded, deduplicated
+customer reads. Do not publish Rolex or Patek from the discarded release.
+Do not bulk-promote normalization, bundles, images, sellers, or duplicates.
 
 **Infrastructure update:** the upgraded Supabase and Railway queue path has now
 exactly reconciled every raw-evidence-eligible record. Four Railway workers with
@@ -19,7 +19,53 @@ It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
 
-## July 28 release record and active bottlenecks
+## July 30 Panerai client-readiness release
+
+The Panerai release input is the already materialized, owner-reviewed
+`PANERAI_REVIEWED_XLSX_20260729` cohort. Its immutable scope is:
+
+| Release measure | Exact controlled count | Customer treatment |
+| --- | ---: | --- |
+| Reviewed source records | 99 | Retained unchanged |
+| Unique raw listing messages | 92 | One public card per deterministic repost signature |
+| Exact duplicate raw-message groups | 7 | Reposts remain in evidence; duplicate public cards are suppressed |
+| WTB records | 2 | Trading Floor only |
+| WTS records | 97 | Trading Floor; Price Research retains every row as evidence |
+| Approved Panerai references | 71 | Browse and direct reference search |
+| Records with reviewed display imagery | 99 | Displayed as reference imagery, not seller photography |
+| Original DigitalOcean listing-photo matches in this cohort | 0 | No original-photo claim is made |
+
+The customer image rule is explicit: the Panerai workbook uses online
+model-reference imagery where exact source listing photography is unavailable.
+Every such image is labeled **Reference image** with the notice that it is not
+the seller's original listing photo. This owner-authorized presentation does
+not create image lineage and does not change the immutable raw message.
+
+Price Research uses one bounded read of the 99 reviewed record IDs for Panerai
+model/reference discovery and one bounded exact-reference read for analytics.
+It does not fan out one database query per catalog reference. Owner-reviewed
+brand, model, reference, and dial values may support identity display, but
+prices enter averages only when raw-message currency and FX evidence pass the
+existing deterministic rules. Missing or ambiguous price evidence remains
+visible as listing evidence and is not averaged.
+
+Trading Floor orders images first and then the highest customer-safe price,
+uses 24-row mobile pages, suppresses deterministic repost cards without
+deleting evidence, and fails closed if verified inventory is unavailable.
+POST ITEM routes to the moderated internal dealer submission workflow at
+`/dealer/post`.
+
+**Release verification required before calling this live:** production build,
+focused release/security tests, API readback for Panerai inventory/models/
+references/direct Price Research/detail, desktop and mobile browser QA, and
+production deployment readback. The post-deployment counts must come from the
+deduplicated customer API, not the 99-row source count.
+
+## July 28 historical release record and active bottlenecks
+
+The Rolex/Patek counts in this section are retained as historical evidence and
+are superseded for the current customer release by the July 30 Panerai/Zenith
+decision above.
 
 **Released customer-facing work:** PRs #176 through #181 are merged. They add
 advisory direct-image delivery for review only, the Price Research live release
@@ -29,7 +75,7 @@ detail view no longer requests or displays Price Research analytics; those
 analytics remain in Price Research. The home footer now distinguishes Curated
 Luxury marketplace from WatchFacts market intelligence.
 
-**Production customer inventory readback:** 110,178 verified Rolex/Patek
+**Historical July 28 production inventory readback:** 110,178 verified Rolex/Patek
 Trading Floor listings are customer-visible: 105,974 Rolex and 4,204 Patek
 Philippe. This is the complete currently publishable two-brand set, not a claim
 that every raw archive row is normalized, image-verified, seller-verified, or

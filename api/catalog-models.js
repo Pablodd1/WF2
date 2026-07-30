@@ -6,19 +6,77 @@
  * showing a reference. Uncatalogued references remain directly searchable and
  * are never presented as model names.
  */
-const { listCatalogReferences } = require('./_lib/catalog');
+const { listCatalogReferences, lookupCatalog } = require('./_lib/catalog');
 const { getClient } = require('./_lib/supabase');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
+  REVIEWED_PANERAI_RECORD_IDS,
+  REVIEWED_PANERAI_SOURCE,
   REVIEWED_ZENITH_RECORD_END,
   REVIEWED_ZENITH_RECORD_START,
   REVIEWED_ZENITH_SOURCE,
   isPublicationReferenceAllowed,
+  isReleaseListingEligible,
 } = require('./_lib/publication-references.cjs');
 
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
-const ZENITH_REFERENCE_ONLY_MODEL = 'Reference-only listings';
+const REFERENCE_ONLY_MODEL = 'Reference-only listings';
+const FOREIGN_BRAND_NAMES = [
+  'Audemars Piguet',
+  'Cartier',
+  'IWC',
+  'Omega',
+  'Patek Philippe',
+  'Piaget',
+  'Rolex',
+  'Tudor',
+  'Vacheron Constantin',
+];
+
+function reviewedWorkbookModel(row, brand) {
+  const catalog = lookupCatalog(row.reference, brand);
+  if (catalog?.found && catalog.model) return String(catalog.model).trim();
+  const claimed = String(row.model || '').trim();
+  const foreignBrand = FOREIGN_BRAND_NAMES.some(name =>
+    name.toLowerCase() !== brand.toLowerCase()
+    && claimed.toLowerCase().includes(name.toLowerCase()));
+  return claimed && !foreignBrand ? claimed : REFERENCE_ONLY_MODEL;
+}
+
+function summarizeReviewedModels(rows, brand) {
+  const models = new Map();
+  for (const row of rows) {
+    if (!row.reference) continue;
+    const model = reviewedWorkbookModel(row, brand);
+    const current = models.get(model) || { references: new Set(), listing_count: 0 };
+    current.references.add(row.reference);
+    current.listing_count += 1;
+    models.set(model, current);
+  }
+  return [...models.entries()]
+    .map(([model, value]) => ({
+      model,
+      reference_count: value.references.size,
+      listing_count: value.listing_count,
+    }))
+    .sort((a, b) => b.listing_count - a.listing_count || a.model.localeCompare(b.model));
+}
+
+async function loadReviewedPaneraiModels() {
+  const client = getClient();
+  const { data, error } = await client
+    .from('price_research_verified_source')
+    .select('id,brand,model,reference,source,verdict,confidence,listing_type,listing_status')
+    .in('id', REVIEWED_PANERAI_RECORD_IDS)
+    .eq('brand', 'Panerai')
+    .eq('source', REVIEWED_PANERAI_SOURCE)
+    .eq('verdict', 'APPROVED')
+    .gte('confidence', 90)
+    .eq('listing_type', 'WTS');
+  if (error) throw error;
+  return summarizeReviewedModels((data || []).filter(isReleaseListingEligible), 'Panerai');
+}
 
 async function loadReviewedZenithModels() {
   const client = getClient();
@@ -39,22 +97,7 @@ async function loadReviewedZenithModels() {
     rows.push(...data);
     if (data.length < 1000) break;
   }
-  const models = new Map();
-  for (const row of rows) {
-    if (!row.reference) continue;
-    const model = String(row.model || '').trim() || ZENITH_REFERENCE_ONLY_MODEL;
-    if (!models.has(model)) models.set(model, new Set());
-    if (row.reference) models.get(model).add(row.reference);
-  }
-  return [...models.entries()]
-    .map(([model, references]) => ({
-      model,
-      reference_count: references.size,
-      listing_count: rows.filter(row => (
-        (String(row.model || '').trim() || ZENITH_REFERENCE_ONLY_MODEL) === model
-      )).length,
-    }))
-    .sort((a, b) => b.listing_count - a.listing_count || a.model.localeCompare(b.model));
+  return summarizeReviewedModels(rows, 'Zenith');
 }
 
 module.exports = async function handler(req, res) {
@@ -74,6 +117,19 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    if (brand.toLowerCase() === 'panerai') {
+      const out = await loadReviewedPaneraiModels();
+      const payload = {
+        success: true,
+        brand: 'Panerai',
+        model_count: out.length,
+        catalog_reference_count: out.reduce((sum, item) => sum + item.reference_count, 0),
+        models: out,
+        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (brand.toLowerCase() === 'zenith') {
       const out = await loadReviewedZenithModels();
       const payload = {

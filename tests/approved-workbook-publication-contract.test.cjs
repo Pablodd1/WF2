@@ -37,6 +37,24 @@ test('reviewed workbook importer retains original currency beside approved USD',
   assert.match(importer, /price_usd: row\.price_usd/);
   assert.match(importer, /currency: sourcePrice\?\.currency_original/);
   assert.match(importer, /OWNER_APPROVED_CONTACT_PUBLIC/);
+  assert.match(importer, /REFERENCE_IMAGE_ONLY/);
+  assert.match(importer, /REFERENCE_ONLY_NOT_SELLER_PHOTO/);
+  assert.match(importer, /p_decision: 'VISUALLY_VERIFIED'[\s\S]*public_image_evidence_type: 'REFERENCE_IMAGE'/);
+});
+
+test('Panerai reference images are disclosed on both customer surfaces', () => {
+  const provenance = read('api/_lib/public-image-provenance.cjs');
+  const ingest = read('api/ingest.js');
+  const detail = read('api/price-research-listing.js');
+  const floor = read('src/pages/TradingFloor.tsx');
+  const research = read('src/pages/PriceResearch.tsx');
+
+  assert.match(provenance, /REVIEWED_PANERAI_SOURCE[\s\S]*REFERENCE_IMAGE/);
+  assert.match(provenance, /not the seller’s original listing photo/);
+  assert.match(ingest, /publicImageProvenance\(resolved\)/);
+  assert.match(detail, /publicImageProvenance\(customerListing\)/);
+  assert.match(floor, /Reference image · not seller photo/);
+  assert.match(research, /detail\.image_evidence_notice/);
 });
 
 test('Zenith workbook importer is hash locked and separates visual conflicts', () => {

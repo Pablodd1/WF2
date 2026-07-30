@@ -416,6 +416,7 @@ function watchRecord(row) {
   const flags = new Set(Array.isArray(existing.flags) ? existing.flags : []);
   flags.add('HUMAN_REVIEWED_WORKBOOK');
   flags.add('USER_CONFIRMED_FOR_PUBLICATION_20260729');
+  flags.add('REFERENCE_IMAGE_ONLY');
   if (row.seller_phone) flags.add('OWNER_APPROVED_CONTACT_PUBLIC');
   if (row.price_usd == null) flags.add('MISSING_PRICE');
   if (/Partial/i.test(row.verification_status)) flags.add('CATALOG_PARTIAL_HUMAN_APPROVED');
@@ -452,6 +453,7 @@ function watchRecord(row) {
       normalized_price_currency: row.price_usd == null ? null : 'USD',
       source_price_text: sourcePrice?.raw_price_text || null,
       source_price_currency_evidence: sourcePrice?.currency_evidence || null,
+      image_usage: 'REFERENCE_ONLY_NOT_SELLER_PHOTO',
     },
     human_edited: true,
     edit_source: `${SOURCE}:${row.workbook_sha256}:${row.row_number}`,
@@ -756,7 +758,7 @@ async function run() {
         p_record_id: row.record_id,
         p_decision: 'VISUALLY_VERIFIED',
         p_operator_id: 'jaismel_reviewed_workbook_20260729',
-        p_reason: 'Owner supplied revised workbook with a confirmed final catalog image.',
+        p_reason: 'Owner authorized the reviewed online model image for reference display only; it is not a seller listing photo.',
         p_identity_snapshot: {
           brand: row.brand,
           model: row.model,
@@ -764,7 +766,8 @@ async function run() {
           dial_color: row.dial_color,
         },
         p_evidence: {
-          visual_match: 'MATCH',
+          visual_match: 'REFERENCE_ONLY',
+          public_image_evidence_type: 'REFERENCE_IMAGE',
           source: SOURCE,
           workbook_sha256: row.workbook_sha256,
           worksheet_row: row.row_number,

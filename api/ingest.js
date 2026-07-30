@@ -42,6 +42,7 @@ const {
   publicationReferences,
 } = require('./_lib/publication-references.cjs');
 const { repostSignature } = require('./_lib/repost-deduplication.cjs');
+const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -486,9 +487,8 @@ async function loadFullReviewedBrandCursorPage({
         image_urls: verified?.image_urls || [],
       };
     });
-    const matched = sortTradingItems(controlledRows.map(resolved => ({ resolved })))
-      .map(item => item.resolved)
-      .filter(record => matchesStrictReleaseFilters(record, {
+    const controlledItems = sortTradingItems(controlledRows.map(resolved => ({ resolved })))
+      .filter(item => matchesStrictReleaseFilters(item.resolved, {
         listingType,
         itemType,
         requestedBrand,
@@ -496,7 +496,9 @@ async function loadFullReviewedBrandCursorPage({
         region,
         search,
       }))
-      .filter(record => !imagesOnly || record.has_images !== false);
+      .filter(item => !imagesOnly || item.resolved.has_images !== false);
+    const matched = deduplicateTradingItems(controlledItems)
+      .map(item => item.resolved);
     totalCount = matched.length;
     const offset = Number.isSafeInteger(cursor?.offset)
       ? cursor.offset
@@ -610,6 +612,7 @@ async function loadFullReviewedBrandCursorPage({
     if (resolved.listing_type !== 'WTS' || priceVerified) {
       return {
         ...safe,
+        ...publicImageProvenance(resolved),
         price_evidence_status: resolved.listing_type === 'WTS'
           ? (reviewedWorkbookPrice ? 'HUMAN_APPROVED_WORKBOOK' : normalized.analytics_currency_status)
           : null,
@@ -617,6 +620,7 @@ async function loadFullReviewedBrandCursorPage({
     }
     return {
       ...safe,
+      ...publicImageProvenance(resolved),
       data_quality_issues: [...new Set([
         ...(safe.data_quality_issues || []),
         normalized.analytics_currency_status,

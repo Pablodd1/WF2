@@ -7,7 +7,7 @@ function publicationBrands(value = process.env.PUBLICATION_BRANDS) {
     .split(/[|,]/)
     .map(brand => brand.trim())
     .filter(Boolean);
-  if (!configured.length) return [];
+  if (!configured.length) return [...CONTROLLED_FILE_RELEASE_BRANDS];
   return [...new Set([
     ...configured,
     ...CONTROLLED_FILE_RELEASE_BRANDS,
@@ -16,7 +16,6 @@ function publicationBrands(value = process.env.PUBLICATION_BRANDS) {
 
 function isPublicationBrandAllowed(brand, value = process.env.PUBLICATION_BRANDS) {
   const allowed = publicationBrands(value);
-  if (!allowed.length) return true;
   const normalized = String(brand || '').trim().toLowerCase();
   return allowed.some(candidate => candidate.toLowerCase() === normalized);
 }

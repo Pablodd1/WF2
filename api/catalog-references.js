@@ -10,6 +10,8 @@ const { listCatalogReferences, listEquivalentReferences, lookupCatalog } = requi
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
+  REVIEWED_PANERAI_RECORD_IDS,
+  REVIEWED_PANERAI_SOURCE,
   REVIEWED_ZENITH_RECORD_END,
   REVIEWED_ZENITH_RECORD_START,
   REVIEWED_ZENITH_SOURCE,
@@ -26,6 +28,8 @@ const REFERENCE_SAMPLE_LIMIT = 1000;
 const MINIMUM_ANALYTICS_SAMPLE = 5;
 const LOOKUP_CONCURRENCY = 8;
 const ZENITH_REFERENCE_ONLY_MODEL = 'Reference-only listings';
+const PANERAI_REFERENCE_ONLY_MODEL = 'Reference-only listings';
+const FOREIGN_ZENITH_MODEL = /\b(?:Audemars Piguet|Cartier|IWC|Omega|Patek Philippe|Piaget|Rolex|Tudor|Vacheron Constantin)\b/i;
 
 async function mapWithConcurrency(items, concurrency, mapper) {
   const results = new Array(items.length);
@@ -90,6 +94,86 @@ async function loadReferenceEvidence(client, brand, entry) {
   };
 }
 
+function reviewedPaneraiModel(row) {
+  const catalog = lookupCatalog(row.reference, 'Panerai');
+  return catalog?.found && catalog.model
+    ? String(catalog.model).trim()
+    : String(row.model || '').trim() || PANERAI_REFERENCE_ONLY_MODEL;
+}
+
+function reviewedZenithModel(row) {
+  const catalog = lookupCatalog(row.reference, 'Zenith');
+  if (catalog?.found && catalog.model) return String(catalog.model).trim();
+  const claimed = String(row.model || '').trim();
+  return claimed && !FOREIGN_ZENITH_MODEL.test(claimed)
+    ? claimed
+    : ZENITH_REFERENCE_ONLY_MODEL;
+}
+
+async function loadReviewedPaneraiReferences(client, requestedModel) {
+  const { data, error } = await client
+    .from('price_research_verified_source')
+    .select('id,brand,model,reference,price_raw,price_usd,currency,dial_color,condition,raw_message,flags,confidence,verdict,dealer_id,source,listing_type,listing_status')
+    .in('id', REVIEWED_PANERAI_RECORD_IDS)
+    .eq('brand', 'Panerai')
+    .eq('source', REVIEWED_PANERAI_SOURCE)
+    .eq('verdict', 'APPROVED')
+    .gte('confidence', MIN_RELEASE_CONFIDENCE)
+    .eq('listing_type', 'WTS');
+  if (error) throw error;
+
+  const grouped = new Map();
+  for (const row of (data || []).filter(row => (
+    isReleaseListingEligible(row)
+    && row.reference
+    && reviewedPaneraiModel(row) === requestedModel
+  ))) {
+    const members = grouped.get(row.reference) || [];
+    members.push(row);
+    grouped.set(row.reference, members);
+  }
+
+  return [...grouped.entries()].map(([reference, members]) => {
+    const catalog = lookupCatalog(reference, 'Panerai');
+    const eligible = members
+      .map(row => {
+        const normalized = normalizeMarketRow(
+          row,
+          listEquivalentReferences(reference, 'Panerai'),
+        );
+        return {
+          ...normalized,
+          owner_reviewed_identity: true,
+          price_usd: normalized.analytics_price_usd,
+          bundle_candidate_count: 1,
+        };
+      })
+      .filter(row => !classifyResearchEligibility(row, catalog));
+    const { uniqueRows: qualified } = deduplicateReposts(eligible);
+    const { uniqueRows: uniqueMembers } = deduplicateReposts(members);
+    const dialCounts = new Map();
+    for (const row of uniqueMembers) {
+      const dial = String(row.dial_color || '').trim();
+      if (dial) dialCounts.set(dial, (dialCounts.get(dial) || 0) + 1);
+    }
+    const sum = qualified.reduce((total, row) => total + Number(row.price_usd), 0);
+    return {
+      reference,
+      listing_count: uniqueMembers.length,
+      eligible_observation_count: qualified.length,
+      analytics_ready: qualified.length >= MINIMUM_ANALYTICS_SAMPLE,
+      sample_capped: false,
+      avg_price: qualified.length >= MINIMUM_ANALYTICS_SAMPLE
+        ? Math.round(sum / qualified.length)
+        : null,
+      dial_colors: [...dialCounts.entries()]
+        .map(([dial_color, count]) => ({ dial_color, count }))
+        .sort((a, b) => b.count - a.count),
+      identity_source: catalog?.found ? 'CATALOG_OR_OWNER_REVIEWED' : 'OWNER_REVIEWED_WORKBOOK',
+    };
+  }).sort((a, b) => b.listing_count - a.listing_count || a.reference.localeCompare(b.reference));
+}
+
 async function loadReviewedZenithReferences(client, requestedModel) {
   const rows = [];
   for (let from = 0; ; from += 1000) {
@@ -110,7 +194,7 @@ async function loadReviewedZenithReferences(client, requestedModel) {
     if (data.length < 1000) break;
   }
   const modelRows = rows.filter(row => (
-    (String(row.model || '').trim() || ZENITH_REFERENCE_ONLY_MODEL) === requestedModel
+    reviewedZenithModel(row) === requestedModel
     && row.reference
   ));
   const grouped = new Map();
@@ -180,6 +264,19 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    if (brand.toLowerCase() === 'panerai') {
+      const out = await loadReviewedPaneraiReferences(client, model);
+      const payload = {
+        success: true,
+        brand: 'Panerai',
+        model,
+        reference_count: out.length,
+        references: out,
+        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+      };
+      _cache.set(cacheKey, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (brand.toLowerCase() === 'zenith') {
       const out = await loadReviewedZenithReferences(client, model);
       const payload = {
