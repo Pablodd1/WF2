@@ -29,7 +29,8 @@ test('Trading Floor uses the same safe listing evidence source as Price Research
   assert.match(research, /payload\.listing\?\.id !== row\.id/);
   assert.match(trading, /evidence\?\.image_urls/);
   assert.match(trading, /Array\.isArray\(publicListing\.image_urls\)/);
-  assert.doesNotMatch(trading, /tradingListing\.image_urls/);
+  assert.match(trading, /const imageSource = Array\.isArray\(publicListing\.image_urls\)/);
+  assert.match(trading, /image_evidence_notice: imageSource\.image_evidence_notice/);
   assert.match(research, /detail\?\.image_urls/);
   for (const api of [tradingApi, researchDetailApi]) {
     assert.match(api, /rpc\('verified_listing_thumbnail'/);
