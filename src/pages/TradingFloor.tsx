@@ -859,15 +859,17 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
     : listing, [evidence, listing]);
   const meta = useMemo(() => getListingMeta(detailListing), [detailListing]);
   const images = useMemo(() => {
-    const candidates = evidence?.image_urls?.length
-      ? evidence.image_urls
-      : listing.image_urls?.length
-        ? listing.image_urls
-        : listing.thumbnail_url
-          ? [listing.thumbnail_url]
-          : [];
+    const candidates = evidence
+      ? evidence.has_images && evidence.image_urls?.length
+        ? evidence.image_urls
+        : []
+      : hasListingImage(listing)
+        ? listing.image_urls?.length
+          ? listing.image_urls
+          : [listing.thumbnail_url]
+        : [];
     return candidates.map(value => String(value || '').trim()).filter(Boolean);
-  }, [evidence, listing.image_urls, listing.thumbnail_url]);
+  }, [evidence, listing]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -910,6 +912,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           price_raw: tradingListing.price_raw ?? listing.price_raw,
           currency: tradingListing.currency ?? listing.currency,
           raw_message: publicListing.raw_message || null,
+          has_images: imageUrls.length > 0,
           image_urls: imageUrls,
           image_evidence_type: imageSource.image_evidence_type,
           image_evidence_label: imageSource.image_evidence_label,
