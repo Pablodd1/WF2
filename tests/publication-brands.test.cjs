@@ -36,7 +36,9 @@ test('reviewed Panerai release can be added without opening other brands', () =>
   );
 });
 
-test('an unset release configuration preserves the full catalog', () => {
-  assert.equal(isPublicationBrandAllowed('Audemars Piguet', ''), true);
-  assert.equal(publicationBrandPostgrestFilter(''), null);
+test('an unset release configuration fails closed to controlled workbook brands', () => {
+  assert.deepEqual(publicationBrands(''), ['Panerai', 'Zenith']);
+  assert.equal(isPublicationBrandAllowed('Audemars Piguet', ''), false);
+  assert.equal(isPublicationBrandAllowed('Panerai', ''), true);
+  assert.equal(publicationBrandPostgrestFilter(''), 'in.("Panerai","Zenith")');
 });

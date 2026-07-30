@@ -3,6 +3,7 @@ const test = require('node:test');
 
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-server-key';
+process.env.PUBLICATION_BRANDS = 'Rolex|Patek Philippe|Panerai|Zenith';
 
 const handler = require('../api/ingest.js');
 

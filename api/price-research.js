@@ -153,12 +153,16 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     && equivalentKeys.has(normRef(row.reference)));
   let suppressedIds;
   try {
-    suppressedIds = await loadAnalyticsSuppressedIds(client, demandRows.map(row => row.id));
+    suppressedIds = sourceTable === 'price_research_verified_source'
+      ? new Set()
+      : await loadAnalyticsSuppressedIds(client, demandRows.map(row => row.id));
   } catch {
     return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
   }
   demandRows = demandRows.filter(row => !suppressedIds.has(String(row.id)));
-  const shadowBundleIds = await loadShadowBundleParentIds(client, demandRows);
+  const shadowBundleIds = sourceTable === 'price_research_verified_source'
+    ? new Set()
+    : await loadShadowBundleParentIds(client, demandRows);
   const eligibleBeforeReposts = demandRows
     .map(row => ({ ...row, bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds) }))
     .map(row => ({ ...row, owner_reviewed_identity: isOwnerReviewedWorkbookRow(row) }))
@@ -467,7 +471,9 @@ module.exports = async function handler(req, res) {
       isReleaseListingEligible(row)
       && String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
       && equivalentKeys.has(normRef(row.reference)));
-    const shadowBundleIds = await loadShadowBundleParentIds(client, rows);
+    const shadowBundleIds = controlledPaneraiRelease
+      ? new Set()
+      : await loadShadowBundleParentIds(client, rows);
 
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
@@ -486,10 +492,12 @@ module.exports = async function handler(req, res) {
     // The strict view excludes reviewed duplicates in Postgres. Recheck only
     // this bounded cohort so a deployment-order or lookup failure is
     // unavailable rather than silently publishing a suppressed observation.
-    const analyticsSuppressedIds = await loadAnalyticsSuppressedIds(
-      client,
-      normalizedRows.map(row => row.id)
-    );
+    const analyticsSuppressedIds = controlledPaneraiRelease
+      ? new Set()
+      : await loadAnalyticsSuppressedIds(
+          client,
+          normalizedRows.map(row => row.id)
+        );
     const duplicateSuppressedRows = normalizedRows.filter(row => analyticsSuppressedIds.has(String(row.id)));
     const analyticsRows = normalizedRows.filter(row => !analyticsSuppressedIds.has(String(row.id)));
     const bundleParentExcludedCount = analyticsRows.filter(row => row.bundle_candidate_count > 1).length;
