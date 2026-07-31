@@ -1,0 +1,108 @@
+name: Apply reviewed workbook source-review inventory
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_REVIEWED_WORKBOOK_INVENTORY to continue
+        required: true
+        type: string
+
+concurrency:
+  group: reviewed-workbook-inventory-release
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ inputs.confirmation == 'APPLY_REVIEWED_WORKBOOK_INVENTORY' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PGPASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+
+      - name: Apply allowlisted source-review migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          migration="supabase/migrations/20260731120000_reviewed_workbook_live_review.sql"
+          test -f "$migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$migration"
+
+      - name: Verify isolation, reconciliation, and indexes
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          SET statement_timeout = '60s';
+          DO $$
+          BEGIN
+            IF to_regclass('public.reviewed_workbook_inventory') IS NULL
+              OR to_regclass('public.reviewed_workbook_import_checkpoints') IS NULL THEN
+              RAISE EXCEPTION 'Reviewed workbook source-review schema is incomplete';
+            END IF;
+            IF has_table_privilege('anon', 'public.reviewed_workbook_inventory', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.reviewed_workbook_inventory', 'SELECT')
+              OR has_table_privilege('anon', 'public.reviewed_workbook_import_checkpoints', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.reviewed_workbook_import_checkpoints', 'SELECT') THEN
+              RAISE EXCEPTION 'Private workbook evidence is directly readable';
+            END IF;
+            IF NOT has_table_privilege('service_role', 'public.reviewed_workbook_inventory', 'SELECT')
+              OR NOT has_table_privilege('service_role', 'public.reviewed_workbook_inventory', 'INSERT')
+              OR NOT has_table_privilege('service_role', 'public.reviewed_workbook_import_checkpoints', 'UPDATE') THEN
+              RAISE EXCEPTION 'Service role lacks required source-review privileges';
+            END IF;
+            IF (
+              SELECT count(*)
+              FROM pg_indexes
+              WHERE schemaname = 'public'
+                AND indexname IN (
+                  'idx_reviewed_workbook_inventory_brand_image_price',
+                  'idx_reviewed_workbook_inventory_reference',
+                  'idx_reviewed_workbook_inventory_source',
+                  'idx_reviewed_workbook_checkpoints_brand_status'
+                )
+            ) <> 4 THEN
+              RAISE EXCEPTION 'Reviewed workbook indexes are incomplete';
+            END IF;
+          END
+          $$;
+          SQL
+
+          {
+            echo "## Reviewed workbook source-review inventory"
+            echo
+            echo "- Service-only evidence tables created."
+            echo "- Direct anon/authenticated access: denied."
+            echo "- watch_records writes: 0."
+            echo "- Ready for the checkpointed local importer."
+          } >> "$GITHUB_STEP_SUMMARY"

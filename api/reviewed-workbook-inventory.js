@@ -1,0 +1,139 @@
+const { getClient } = require('./_lib/supabase');
+
+const PAGE_SIZE_MAX = 100;
+const DEFAULT_PAGE_SIZE = 48;
+
+function cleanFilter(value, maxLength) {
+  return String(value || '')
+    .trim()
+    .slice(0, maxLength)
+    .replace(/[(),.%*]/g, ' ');
+}
+
+function normalizeReference(value) {
+  return cleanFilter(value, 80).toUpperCase().replace(/[\s-]+/g, '');
+}
+
+async function loadSummary(client) {
+  const { data, error } = await client
+    .from('reviewed_workbook_import_checkpoints')
+    .select(
+      'source_file_sha256,source_file,brand_scope,expected_rows,rows_scanned,rows_inserted,rows_duplicate_held,rows_errors,status',
+    )
+    .order('brand_scope', { ascending: true });
+  if (error) throw error;
+  const files = data || [];
+  const brands = new Map();
+  const summary = {
+    files_total: files.length,
+    files_complete: 0,
+    source_rows: 0,
+    rows_scanned: 0,
+    canonical_listings: 0,
+    duplicate_rows_held: 0,
+    errors: 0,
+  };
+  for (const file of files) {
+    summary.files_complete += Number(file.status === 'COMPLETE');
+    summary.source_rows += Number(file.expected_rows || 0);
+    summary.rows_scanned += Number(file.rows_scanned || 0);
+    summary.canonical_listings += Number(file.rows_inserted || 0);
+    summary.duplicate_rows_held += Number(file.rows_duplicate_held || 0);
+    summary.errors += Number(file.rows_errors || 0);
+    const brand = brands.get(file.brand_scope) || {
+      brand: file.brand_scope,
+      files: 0,
+      files_complete: 0,
+      source_rows: 0,
+      canonical_listings: 0,
+      duplicate_rows_held: 0,
+    };
+    brand.files += 1;
+    brand.files_complete += Number(file.status === 'COMPLETE');
+    brand.source_rows += Number(file.expected_rows || 0);
+    brand.canonical_listings += Number(file.rows_inserted || 0);
+    brand.duplicate_rows_held += Number(file.rows_duplicate_held || 0);
+    brands.set(file.brand_scope, brand);
+  }
+  return {
+    ...summary,
+    reconciled: summary.rows_scanned
+      === summary.canonical_listings + summary.duplicate_rows_held + summary.errors,
+    brands: [...brands.values()].sort((left, right) =>
+      right.canonical_listings - left.canonical_listings),
+  };
+}
+
+module.exports = async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+  try {
+    const client = getClient();
+    const requestedPage = Number.parseInt(String(req.query?.page || '1'), 10);
+    const requestedPageSize = Number.parseInt(
+      String(req.query?.pageSize || DEFAULT_PAGE_SIZE),
+      10,
+    );
+    const page = Number.isInteger(requestedPage) ? Math.max(1, requestedPage) : 1;
+    const pageSize = Number.isInteger(requestedPageSize)
+      ? Math.min(Math.max(requestedPageSize, 12), PAGE_SIZE_MAX)
+      : DEFAULT_PAGE_SIZE;
+    const brand = cleanFilter(req.query?.brand, 80);
+    const reference = normalizeReference(req.query?.reference || req.query?.q);
+    const sourceFile = cleanFilter(req.query?.sourceFile, 180);
+    const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize - 1;
+    const columns = [
+      'id,source_file,source_row_number,source_record_id,posting_date,posted_by',
+      'phone_number,raw_message,listing_type,brand_scope,supplied_brand',
+      'canonical_brand,model,raw_reference,normalized_reference,catalog_reference',
+      'catalog_model,dial_color,catalog_dial,condition,workbook_price_usd',
+      'source_price_amount,source_price_text,source_currency,price_evidence_status',
+      'verification_tier,confidence,verification_status,user_image_url',
+      'display_image_url,has_image,image_evidence_type',
+      'review_reasons',
+    ].join(',');
+    let query = client
+      .from('reviewed_workbook_inventory')
+      .select(columns, { count: 'estimated' })
+      .order('has_image', { ascending: false })
+      .order('workbook_price_usd', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(start, end);
+    if (brand) query = query.eq('brand_scope', brand);
+    if (reference) query = query.eq('normalized_reference', reference);
+    if (sourceFile) query = query.eq('source_file', sourceFile);
+    if (imagesOnly) query = query.not('display_image_url', 'is', null);
+    const [{ data, count, error }, summary] = await Promise.all([
+      query,
+      loadSummary(client),
+    ]);
+    if (error) throw error;
+    return res.status(200).json({
+      status: 'ok',
+      page,
+      pageSize,
+      count: (data || []).length,
+      total: Number(count || 0),
+      hasMore: start + (data || []).length < Number(count || 0),
+      records: data || [],
+      summary,
+      priceResearchRule:
+        'Only SOURCE_EXPLICIT_USD_MATCH rows may be considered for Price Research; workbook USD values remain review evidence.',
+    });
+  } catch (error) {
+    console.error('[reviewed-workbook-inventory] error:', error.message);
+    return res.status(503).json({
+      status: 'error',
+      error: 'Reviewed workbook inventory is temporarily unavailable',
+    });
+  }
+};
+
+module.exports.cleanFilter = cleanFilter;
+module.exports.loadSummary = loadSummary;
+module.exports.normalizeReference = normalizeReference;
