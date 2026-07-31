@@ -1,12 +1,14 @@
 # WatchFacts CTO Control Center
 
 **Control date:** July 30, 2026
-**Assignment mode:** Panerai client-readiness release; evidence-first data
-operations remain gated
-**Current release decision:** publish the exact owner-reviewed Panerai workbook
-cohort and the current reviewed Zenith cohort through bounded, deduplicated
-customer reads. Do not publish Rolex or Patek from the discarded release.
-Do not bulk-promote normalization, bundles, images, sellers, or duplicates.
+**Assignment mode:** Panerai/Zenith production remains controlled; the new
+owner-reviewed Patek, Rolex, and Audemars workbook collection is in
+shadow-canary release preparation
+**Current release decision:** keep the exact owner-reviewed Panerai workbook
+cohort and reviewed Zenith cohort live through bounded, deduplicated customer
+reads. Do not reuse the discarded Rolex/Patek release. Do not bulk-publish the
+new three-brand workbooks until their signed canary is persisted to an
+explicitly configured shadow target and reconciled by readback.
 
 **Infrastructure update:** the upgraded Supabase and Railway queue path has now
 exactly reconciled every raw-evidence-eligible record. Four Railway workers with
@@ -18,6 +20,45 @@ This is the single navigation and decision index for the current project state.
 It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
+
+## July 30 three-brand reviewed workbook intake
+
+The current authoritative handoff is
+[`THREE_BRAND_REVIEWED_WORKBOOK_RELEASE_2026-07-30.md`](THREE_BRAND_REVIEWED_WORKBOOK_RELEASE_2026-07-30.md).
+It supersedes older estimates for the owner-supplied Patek Philippe, Rolex, and
+Audemars Piguet workbook folder.
+
+| Control measure | Verified result |
+| --- | ---: |
+| In-scope workbooks | 296 |
+| Input rows | 7,630,906 |
+| Distinct rows after exact brand-aware dedupe | 6,108,416 |
+| Exact duplicate copies held | 1,522,490 |
+| Complete identity before dedupe | 7,510,497 |
+| Source-proven Price Research candidates before remaining gates | 105,624 |
+| Database writes from the full audit | 0 |
+
+The 100,000-row mixed-brand local canary reconciles exactly:
+
+| Canary disposition | Rows |
+| --- | ---: |
+| Trading Floor ready | 96,332 |
+| Also Price Research ready | 821 |
+| Focused identity review | 3,388 |
+| Exact duplicate copies held | 280 |
+| Errors / database writes | 0 / 0 |
+
+The canary ran deterministic normalization `v4.2-line-condition` at 634.16
+rows/second. The supplied reviewed workbook remains the identity authority;
+parser disagreements are retained as audit flags rather than silently
+overwriting owner-reviewed fields. True multi-listings and missing required
+identity remain held.
+
+Draft PR [#205](https://github.com/Pablodd1/wf/pull/205) contains the
+reproducible local audit/canary and an additive, empty-on-create three-brand
+verified cache. The cache cutover is disabled by default. Apply the migration,
+persist and read back the signed canary, refresh the cache, and only then set
+`THREE_BRAND_RELEASE_CACHE=true`.
 
 ## July 30 Panerai client-readiness release
 

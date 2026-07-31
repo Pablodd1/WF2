@@ -12,6 +12,8 @@ test('Price Research distinguishes live Trading Floor inventory from price-eligi
   const api = read('api/live-release-summary.js');
   const page = read('src/pages/PriceResearch.tsx');
 
+  assert.match(api, /THREE_BRAND_RELEASE_CACHE === 'true'/);
+  assert.match(api, /three_brand_verified_trading_release_cache/);
   assert.match(api, /two_brand_verified_trading_release_cache/);
   assert.match(api, /count: 'exact', head: true/);
   assert.match(api, /publicationBrands\(\)/);

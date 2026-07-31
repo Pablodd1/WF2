@@ -507,6 +507,9 @@ async function loadFullReviewedBrandCursorPage({
     nextOffset = offset + selected.length;
     hasMore = nextOffset < matched.length;
   } else {
+    const reviewedReleaseCache = process.env.THREE_BRAND_RELEASE_CACHE === 'true'
+      ? 'three_brand_verified_trading_release_cache'
+      : 'two_brand_verified_trading_release_cache';
     const candidateLimit = Math.min(Math.max(pageSize * 5, 50), 500);
     const start = Number.isSafeInteger(cursor?.offset)
       ? cursor.offset
@@ -531,7 +534,7 @@ async function loadFullReviewedBrandCursorPage({
     if (parsedSearch.brand && !requestedBrand) params.set('brand', `ilike.${parsedSearch.brand}`);
     if (parsedSearch.dial) params.set('dial_color', `ilike.${parsedSearch.dial}`);
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/two_brand_verified_trading_release_cache?${params.toString()}`,
+      `${supabaseUrl}/rest/v1/${reviewedReleaseCache}?${params.toString()}`,
       {
         headers: {
           apikey: readKey,
@@ -541,7 +544,7 @@ async function loadFullReviewedBrandCursorPage({
         },
       },
     );
-    if (!response.ok) throw new Error(`full reviewed brand release returned ${response.status}`);
+    if (!response.ok) throw new Error(`reviewed release cache returned ${response.status}`);
     const candidateRows = await response.json();
     const matched = candidateRows.filter(record => matchesStrictReleaseFilters(record, {
       listingType,
