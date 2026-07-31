@@ -56,6 +56,7 @@
     "normalize:watches-only-report": "node tools/intake/normalize-watches-only-report.cjs",
     "audit:three-brand-workbooks": "node tools/intake/audit-three-brand-workbooks.cjs",
     "canary:three-brand-workbooks": "node tools/intake/build-three-brand-shadow-canary.cjs",
+    "import:reviewed-workbook-inventory": "node tools/intake/import-reviewed-workbook-inventory.cjs",
     "reconcile:kimi-price-canary": "node tools/external-audit/reconcile-kimi-price-canary.cjs",
     "inspect:price-review-ledger": "node tools/external-audit/inspect-price-review-ledger.cjs",
     "export:live-price-audit": "node tools/external-audit/export-live-price-audit-input.cjs",
