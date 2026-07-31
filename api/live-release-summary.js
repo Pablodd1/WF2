@@ -55,6 +55,9 @@ async function loadSummary() {
   const client = getClient();
   const configuredBrands = publicationBrands();
   const brands = configuredBrands.length ? configuredBrands : DEFAULT_BRANDS;
+  const reviewedReleaseCache = process.env.THREE_BRAND_RELEASE_CACHE === 'true'
+    ? 'three_brand_verified_trading_release_cache'
+    : 'two_brand_verified_trading_release_cache';
   const results = await Promise.all(brands.map(async brand => {
     if (['Panerai', 'Zenith'].includes(brand)) {
       const rows = (await loadControlledRows(client, brand))
@@ -65,7 +68,7 @@ async function loadSummary() {
       };
     }
     const query = client
-      .from('two_brand_verified_trading_release_cache')
+      .from(reviewedReleaseCache)
       .select('id', { count: 'exact', head: true })
       .eq('brand', brand);
     const { count, error } = await query;

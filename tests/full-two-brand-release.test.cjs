@@ -45,7 +45,9 @@ test('full-brand Trading Floor uses a service-only deduplicated keyset source', 
   assert.match(cacheMigration, /CREATE MATERIALIZED VIEW IF NOT EXISTS public\.two_brand_verified_trading_release_cache/);
   assert.match(cacheMigration, /FROM public\.two_brand_verified_trading_release/);
   assert.match(cacheMigration, /GRANT SELECT ON public\.two_brand_verified_trading_release_cache TO service_role/);
-  assert.match(ingest, /rest\/v1\/two_brand_verified_trading_release_cache/);
+  assert.match(ingest, /THREE_BRAND_RELEASE_CACHE === 'true'/);
+  assert.match(ingest, /three_brand_verified_trading_release_cache/);
+  assert.match(ingest, /two_brand_verified_trading_release_cache/);
   assert.match(ingest, /loadVerifiedPublicListings\([\s\S]*selected\.map\(row => row\.id\)/);
   assert.match(ingest, /select: 'id,raw_message'[\s\S]*raw price evidence read returned/);
   assert.match(ingest, /normalizeMarketRow\(\s*\{\s*\.\.\.resolved,\s*raw_message: verified\?\.raw_message \|\| null/);
