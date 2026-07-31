@@ -310,17 +310,26 @@ async function upsertCheckpoint(client, payload) {
 async function importBatch(client, rows) {
   const unique = [...new Map(rows.map(row => [row.content_hash, row])).values()];
   const localDuplicates = rows.length - unique.length;
-  const { data, error } = await client
-    .from(INVENTORY_TABLE)
-    .upsert(unique, { onConflict: 'content_hash', ignoreDuplicates: true })
-    .select('id');
-  if (error) throw error;
-  const inserted = (data || []).length;
-  return {
-    input: rows.length,
-    inserted,
-    duplicates: localDuplicates + unique.length - inserted,
-  };
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const { data, error } = await client
+      .from(INVENTORY_TABLE)
+      .upsert(unique, { onConflict: 'content_hash', ignoreDuplicates: true })
+      .select('id');
+    if (!error) {
+      const inserted = (data || []).length;
+      return {
+        input: rows.length,
+        inserted,
+        duplicates: localDuplicates + unique.length - inserted,
+      };
+    }
+    const retryable = error.code === '40P01'
+      || error.code === '55P03'
+      || /deadlock|timeout|temporarily unavailable|service unavailable/i.test(error.message);
+    if (!retryable || attempt === 5) throw error;
+    await new Promise(resolve => setTimeout(resolve, 250 * (2 ** attempt)));
+  }
+  throw new Error('unreachable import retry state');
 }
 
 async function run() {
