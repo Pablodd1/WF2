@@ -8,7 +8,6 @@ const HEADER_LINKS = [
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'WANT TO BUY', to: '/trading?type=WTB' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
-  { label: 'SOURCE REVIEW', to: '/source-review' },
   { label: 'POST ITEM', to: '/dealer/post' },
   { label: 'ACCOUNT', to: '/dealer/account/profile' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
