@@ -620,13 +620,50 @@ module.exports = async function handler(req, res) {
       : buildMarketForecast(includedRows);
     const forecast = forecastCandidate;
 
-    // ── Dial analysis: EVERY dial color found in real listings (rule: all must show) ──
+    // ── Dial analysis with family rollup + min-5 gate + catalog cross-reference ──
+    // Family map: normalize variant names to canonical families
+    const DIAL_FAMILY = {
+      'blue arabic': 'Blue', 'blue index': 'Blue', 'blue diamond': 'Blue', 'blue roman': 'Blue',
+      'sunburst blue': 'Blue', 'navy blue': 'Blue', 'ice blue': 'Ice Blue', 'tiffany blue': 'Tiffany Blue',
+      'dark blue': 'Blue', 'light blue': 'Blue',
+      'cream white': 'White', 'ivory white': 'White', 'arctic white': 'White',
+      'mother of pearl': 'Mother of Pearl', 'mop': 'Mother of Pearl',
+      'white mother of pearl': 'Mother of Pearl', 'black mother of pearl': 'Mother of Pearl',
+      'black index': 'Black', 'black roman': 'Black', 'black diamond': 'Black',
+      'choco': 'Chocolate', 'chocolate': 'Chocolate', 'coffee': 'Chocolate',
+      'gold diamond': 'Gold', 'rose gold': 'Gold', 'pave diamond': 'Diamond',
+      'pave': 'Diamond', 'paved': 'Diamond',
+      'champ': 'Champagne', 'champagne': 'Champagne',
+      'slate': 'Grey', 'anthracite': 'Grey',
+      'candy': 'Pink', 'candy pink': 'Pink', 'lavender': 'Purple',
+      'green index': 'Green', 'olive green': 'Green', 'olive': 'Green',
+    };
+
+    function dialToFamily(dialColor) {
+      if (!dialColor) return 'Unspecified';
+      const key = String(dialColor).trim().toLowerCase();
+      if (DIAL_FAMILY[key]) return DIAL_FAMILY[key];
+      // If the dial is a known base color, keep it
+      const baseColors = ['black', 'white', 'blue', 'green', 'silver', 'grey', 'gray',
+        'brown', 'pink', 'red', 'yellow', 'purple', 'orange', 'gold', 'salmon',
+        'champagne', 'rhodium', 'meteorite', 'skeleton', 'bronze', 'cream',
+        'beige', 'panda', 'wimbledon', 'tiffany', 'platinum'];
+      for (const base of baseColors) {
+        if (key === base || key.startsWith(base + ' ') || key.startsWith(base + '/')) {
+          return base.charAt(0).toUpperCase() + base.slice(1);
+        }
+      }
+      // Unknown custom — keep original but flag as low-signal
+      return String(dialColor).trim();
+    }
+
     const dialMap = {};
     const dialAnalysisRows = marketRows;
     dialAnalysisRows.forEach(r => {
-      const dial = r.dial_color || 'Unspecified';
-      const key = String(dial).trim().toLowerCase();
-      if (!dialMap[key]) dialMap[key] = { dial_color: String(dial).trim(), rows: [] };
+      const rawDial = r.dial_color || 'Unspecified';
+      const family = dialToFamily(rawDial);
+      const key = family.toLowerCase();
+      if (!dialMap[key]) dialMap[key] = { dial_color: family, rows: [] };
       dialMap[key].rows.push(r);
     });
     const dial_analysis = Object.values(dialMap)
@@ -642,6 +679,7 @@ module.exports = async function handler(req, res) {
         };
       })
       .filter(Boolean)
+      .filter(d => d.count >= 5)  // min-5 gate: only show dial families with 5+ listings
       .sort((a, b) => b.count - a.count);
     const dialColors = dial_analysis.map(d => d.dial_color);
 
