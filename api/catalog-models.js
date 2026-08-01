@@ -168,3 +168,4 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Failed to load models', detail: err.message });
   }
 };
+// force recompile Sat Aug  1 19:01:51 EDT 2026
