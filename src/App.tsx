@@ -23,6 +23,7 @@ const DealerDirectory = lazy(() => import('@/pages/DealerDirectory'));
 const DealerProfile = lazy(() => import('@/pages/DealerProfile'));
 const MultiListings = lazy(() => import('@/pages/MultiListings'));
 const PublicInfo = lazy(() => import('@/pages/PublicInfo'));
+const FlashSaleDetail = lazy(() => import('@/pages/FlashSaleDetail'));
 
 export default function App() {
   return (
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
         <Route path="/info/:page" element={<PublicInfo />} />
+        <Route path="/flash-sales/:id" element={<FlashSaleDetail />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
