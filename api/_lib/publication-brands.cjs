@@ -16,18 +16,13 @@ function publicationBrands(value = process.env.PUBLICATION_BRANDS) {
 }
 
 function isPublicationBrandAllowed(brand, value = process.env.PUBLICATION_BRANDS) {
-  const allowed = publicationBrands(value);
-  // Empty list = all brands allowed (open access)
-  if (!allowed.length) return true;
-  const normalized = String(brand || '').trim().toLowerCase();
-  return allowed.some(candidate => candidate.toLowerCase() === normalized);
+  // OPEN ACCESS — all brands are publicly searchable regardless of env var.
+  return true;
 }
 
 function publicationBrandPostgrestFilter(value = process.env.PUBLICATION_BRANDS) {
-  const allowed = publicationBrands(value);
-  // Empty list = no filter (all brands returned)
-  if (!allowed.length) return null;
-  return `in.(${allowed.map(brand => `"${brand.replaceAll('"', '')}"`).join(',')})`;
+  // OPEN ACCESS — no brand filter applied.
+  return null;
 }
 
 module.exports = {

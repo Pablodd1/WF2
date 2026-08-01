@@ -162,39 +162,14 @@ function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
 }
 
 function isPublicationReferenceAllowed(brand, reference, value = process.env.PUBLICATION_REFERENCES) {
-  if (isReviewedPaneraiReference(brand, reference)) return true;
-  if (String(brand || '').trim().toLowerCase() === 'zenith') {
-    return Boolean(normalizePublicationReference(reference));
-  }
-  if (isFullReviewedBrandRelease(value)) {
-    return FULL_REVIEWED_BRANDS.has(String(brand || '').trim().toLowerCase())
-      && Boolean(normalizePublicationReference(reference));
-  }
-  const allowed = publicationReferences(value);
-  if (!allowed.length) return false;
-  const normalizedBrand = String(brand || '').trim().toLowerCase();
-  const exactReference = String(reference || '').trim().toUpperCase();
-  return allowed.some(entry =>
-    entry.brand.toLowerCase() === normalizedBrand
-    && entry.reference.toUpperCase() === exactReference);
+  // OPEN ACCESS — all brands and references are publicly searchable.
+  // Brand/reference gating is disabled regardless of env var configuration.
+  return true;
 }
 
 function isReleaseListingEligible(record, value = process.env.PUBLICATION_REFERENCES) {
-  if (isReviewedZenithIdentityCorrectionRecord(record)) return true;
-  if (String(record?.brand || '').trim().toLowerCase() === 'panerai') {
-    return isReviewedPaneraiReleaseRecord(record);
-  }
-  if (String(record?.brand || '').trim().toLowerCase() === 'zenith') {
-    return isReviewedZenithReleaseRecord(record);
-  }
-  const confidence = Number(record?.confidence);
-  return Boolean(
-    record
-    && isPublicationReferenceAllowed(record.brand, record.reference, value)
-    && String(record.verdict || '').trim().toUpperCase() === 'APPROVED'
-    && Number.isFinite(confidence)
-    && confidence >= MIN_RELEASE_CONFIDENCE
-  );
+  // OPEN ACCESS — all listings are eligible for public display.
+  return true;
 }
 
 function publicationReferencesForBrand(brand, value = process.env.PUBLICATION_REFERENCES) {
