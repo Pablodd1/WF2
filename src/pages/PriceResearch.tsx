@@ -463,8 +463,16 @@ export default function PriceResearch() {
     }
   }, []);
 
+  // ── Per-model market stats (min-5 exposure, avg + date range) ──
+  interface ModelStats {
+    total: number; wts: number; wtb: number;
+    stats: { avg: number; median: number; min: number; max: number } | null;
+    first_seen: string | null; last_seen: string | null;
+  }
+  const [mStats, setMStats] = useState<ModelStats | null>(null);
+
   const loadModels = useCallback(async (brand: string) => {
-    setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setPickerError('');
+setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setPickerError(''); setMStats(null);
     if (!brand) return;
     setPLoading('models');
     try {
@@ -480,14 +488,21 @@ export default function PriceResearch() {
   }, []);
 
   const loadRefs = useCallback(async (brand: string, model: string) => {
-    setPModel(model); setPRefs([]); setPickerError('');
+setPModel(model); setPRefs([]); setPickerError(''); setMStats(null);
     if (!brand || !model) return;
     setPLoading('refs');
     try {
-      const r = await fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`);
+      const [r, ms] = await Promise.all([
+        fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`),
+        fetch(`/api/model-stats?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`).catch(() => null),
+      ]);
       const d = await r.json();
-      if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily unavailable');
+if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily unavailable');
       setPRefs(d.references || []);
+      if (ms) {
+        const md = await ms.json().catch(() => null);
+        if (md?.success) setMStats({ total: md.total, wts: md.wts, wtb: md.wtb, stats: md.stats, first_seen: md.first_seen, last_seen: md.last_seen });
+      }
     } catch (requestError) {
       setPickerError(requestError instanceof Error ? requestError.message : 'References are temporarily unavailable');
     }
@@ -834,6 +849,55 @@ export default function PriceResearch() {
           {pLoading === 'refs' && <div style={{ fontSize: 13, color: MUTED }}>Loading references…</div>}
           {pBrand && pModel && pLoading !== 'refs' && !pickerError && pRefs.length === 0 && (
             <div style={{ fontSize: 13, color: MUTED }}>No approved listing evidence was returned for this model.</div>
+          )}
+
+          {/* ── Model market stats panel (min-5 exposure) ── */}
+          {mStats && mStats.stats && (
+            <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 16, marginBottom: 14 }}>
+              <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
+                <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>
+                  {pBrand} {pModel} — Market Overview
+                </div>
+                <div style={{ fontSize: 11, color: MUTED }}>
+                  {mStats.first_seen && mStats.last_seen && (
+                    <>Data: {mStats.first_seen.split('T')[0]} → {mStats.last_seen.split('T')[0]}</>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3" style={{ fontSize: 12 }}>
+                <div>
+                  <div style={{ color: MUTED }}>Avg Price</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: GREEN }}>${mStats.stats.avg.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: MUTED }}>Median</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: NAVY }}>${mStats.stats.median.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: MUTED }}>Range</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: TEXT, marginTop: 4 }}>
+                    ${mStats.stats.min.toLocaleString()} – ${mStats.stats.max.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: MUTED }}>WTS (For Sale)</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{mStats.wts.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: MUTED }}>WTB (Demand)</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: BLUE }}>{mStats.wtb.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: MUTED }}>WTB/WTS Ratio</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: mStats.wts > 0 && (mStats.wtb / mStats.wts) > 1 ? RED : GREEN }}>
+                    {mStats.wts > 0 ? (mStats.wtb / mStats.wts).toFixed(2) : '—'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: 10, color: MUTED, marginTop: 10, fontStyle: 'italic' }}>
+                IQR-filtered · only references with 5+ real listings included
+              </div>
+            </div>
           )}
 
           {/* Reference cards */}
