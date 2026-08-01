@@ -7,7 +7,7 @@ const directPath = window.location.pathname.replace(/\/+$/, '') || '/';
 const appRoutePrefixes = [
   '/admin', '/analytics', '/clean', '/dashboard', '/dealer', '/demand',
   '/demo', '/demo-mode', '/info', '/insight', '/multi-listings',
-  '/price-research', '/reprocess', '/review', '/review-queue', '/source-review', '/trading',
+  '/price-research', '/reprocess', '/review', '/review-queue', '/trading',
 ];
 
 // HashRouter is retained for compatibility with the existing deployment. Turn

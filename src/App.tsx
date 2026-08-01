@@ -23,7 +23,6 @@ const DealerDirectory = lazy(() => import('@/pages/DealerDirectory'));
 const DealerProfile = lazy(() => import('@/pages/DealerProfile'));
 const MultiListings = lazy(() => import('@/pages/MultiListings'));
 const PublicInfo = lazy(() => import('@/pages/PublicInfo'));
-const ReviewedWorkbookInventory = lazy(() => import('@/pages/ReviewedWorkbookInventory'));
 
 export default function App() {
   return (
@@ -38,7 +37,6 @@ export default function App() {
         <Route path="/dashboard" element={<DealerGate allowedRoles={['admin']}><OperationsDashboard /></DealerGate>} />
         <Route path="/dashboard/legacy" element={<Navigate to="/dashboard" replace />} />
         <Route path="/trading" element={<TradingFloor />} />
-        <Route path="/source-review" element={<ReviewedWorkbookInventory />} />
         <Route path="/analytics" element={<DealerGate><SourceAnalytics /></DealerGate>} />
         <Route path="/analytics/legacy" element={<Navigate to="/analytics" replace />} />
         <Route path="/analytics-dashboard" element={<Navigate to="/analytics" replace />} />

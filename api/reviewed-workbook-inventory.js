@@ -1,4 +1,4 @@
-const { getClient } = require('./_lib/supabase');
+const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 
 const PAGE_SIZE_MAX = 100;
 const DEFAULT_PAGE_SIZE = 48;
@@ -103,13 +103,16 @@ function resolvePageWindow({ page, pageSize, total, canReverse }) {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  res.setHeader('Cache-Control', 'private, no-store');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
+  const authorization = await authorizeDealer(req, res, new Set(['reviewer', 'admin']));
+  if (authorization.error) {
+    return res.status(authorization.status).json({ error: authorization.error });
+  }
+
   try {
-    const client = getClient();
+    const client = authorization.client;
     const requestedPage = Number.parseInt(String(req.query?.page || '1'), 10);
     const requestedPageSize = Number.parseInt(
       String(req.query?.pageSize || DEFAULT_PAGE_SIZE),

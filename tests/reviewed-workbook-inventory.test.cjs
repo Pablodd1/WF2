@@ -76,7 +76,7 @@ test('row conversion preserves raw evidence and holds non-USD Price Research adm
   assert.equal(row.phone_number, '+1 555 0100');
 });
 
-test('public API normalizes exact-reference filters without broad wildcards', () => {
+test('reviewer API normalizes exact-reference filters without broad wildcards', () => {
   assert.equal(api.normalizeReference(' 5712/1a-001 '), '5712/1A001');
   assert.equal(api.cleanFilter('Rolex,*', 80), 'Rolex  ');
   assert.equal(
@@ -85,7 +85,7 @@ test('public API normalizes exact-reference filters without broad wildcards', ()
   );
 });
 
-test('public API uses reconciled totals for unfiltered and brand review pages', () => {
+test('reviewer API uses reconciled totals for unfiltered and brand review pages', () => {
   const summary = {
     canonical_listings: 100,
     brands: [{ brand: 'Rolex', canonical_listings: 40 }],
@@ -102,7 +102,7 @@ test('public API uses reconciled totals for unfiltered and brand review pages', 
   assert.equal(api.resolveTotal({ ...common, brand: '', imagesOnly: true }), 999);
 });
 
-test('public API reads deep exact pages from the nearest end of the index', () => {
+test('reviewer API reads deep exact pages from the nearest end of the index', () => {
   assert.deepEqual(api.resolvePageWindow({
     page: 1,
     pageSize: 48,
