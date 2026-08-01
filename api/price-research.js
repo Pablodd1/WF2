@@ -853,6 +853,7 @@ module.exports = async function handler(req, res) {
       })),
       rows: serializedComparables.map(r => ({
         id: r.id,
+        raw_message: r.raw_message || null,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year,
