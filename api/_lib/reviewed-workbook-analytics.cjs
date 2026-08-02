@@ -21,7 +21,7 @@ function mapWorkbookAnalyticsRow(row) {
     dial_color: clean(row.dial_color) || clean(row.catalog_dial),
     condition: clean(row.condition),
     price_raw: row.source_price_amount == null ? null : Number(row.source_price_amount),
-    price_usd: row.verified_price_usd == null ? null : Number(row.verified_price_usd),
+    price_usd: Number(row.verified_price_usd) || Number(row.workbook_price_usd) || null,
     currency: clean(row.source_currency),
     raw_message: clean(row.raw_message),
     flags: {},
@@ -53,7 +53,7 @@ const WORKBOOK_COLUMNS = [
   'brand_scope,supplied_brand,canonical_brand,model,catalog_model,raw_reference',
   'normalized_reference,catalog_reference,public_reference,dial_color,catalog_dial,condition',
   'source_price_amount,source_currency,price_evidence_status,confidence,verification_status',
-  'user_image_url,front_image,imported_at,has_exact_source_image,has_verified_usd_price,verified_price_usd',
+  'user_image_url,front_image,workbook_price_usd,verified_price_usd,imported_at,has_exact_source_image,has_verified_usd_price',
   'reference_search_key,has_complete_identity',
 ].join(',');
 
