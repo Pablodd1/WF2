@@ -8,7 +8,10 @@ function clean(value) {
 }
 
 function mapWorkbookAnalyticsRow(row) {
-  const exactImage = row.has_exact_source_image === true ? clean(row.user_image_url) : null;
+  // Images: prefer exact source match, fall back to user_image_url if present.
+  // reviewed-market-inventory uses has_images as the gating flag —
+  // has_exact_source_image is a stricter subset that may not be set.
+  const exactImage = clean(row.user_image_url) || null;
   return {
     id: row.id,
     brand: clean(row.supplied_brand) || clean(row.canonical_brand) || clean(row.brand_scope),
