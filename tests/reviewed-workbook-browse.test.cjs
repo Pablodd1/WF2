@@ -10,15 +10,26 @@ const {
 } = require('../api/_lib/reviewed-workbook-browse.cjs');
 
 const rows = [
-  { id: '1', model: 'PanoMaticInverse', public_reference: '90-03-64-64-04', dial_color: 'Skeleton', listing_type: 'WTS' },
-  { id: '2', model: 'PanoMaticInverse', public_reference: '90-03-64-64-04', dial_color: 'Black', listing_type: 'WTS' },
-  { id: '3', model: 'Senator', public_reference: '1-49-13-15-15-04', dial_color: 'Skeleton', listing_type: 'WTS' },
+  { id: '1', brand_scope: 'Glashütte Original', model: 'PanoMaticInverse', public_reference: '90-03-64-64-04', dial_color: 'Skeleton', listing_type: 'WTS' },
+  { id: '2', brand_scope: 'Glashütte Original', model: 'PanoMaticInverse', public_reference: '90-03-64-64-04', dial_color: 'Black', listing_type: 'WTS' },
+  { id: '3', brand_scope: 'Glashütte Original', model: 'Senator', public_reference: '1-49-13-15-15-04', dial_color: 'Skeleton', listing_type: 'WTS' },
 ];
 
 test('reviewed workbook brands without a local catalog still expose their real models', () => {
   assert.deepEqual(summarizeReviewedWorkbookModels(rows), [
     { model: 'PanoMaticInverse', reference_count: 1, listing_count: 2 },
     { model: 'Senator', reference_count: 1, listing_count: 1 },
+  ]);
+});
+
+test('foreign brands, dates, and numeric tokens never become customer model names', () => {
+  const contaminated = [
+    { brand_scope: 'Glashütte Original', model: 'A. Lange & Söhne Classic / Vintage', public_reference: 'A1' },
+    { brand_scope: 'Glashütte Original', model: '2026/1', public_reference: 'A2' },
+    { brand_scope: 'Glashütte Original', model: '91560', public_reference: 'A3' },
+  ];
+  assert.deepEqual(summarizeReviewedWorkbookModels(contaminated), [
+    { model: 'Reference-only listings', reference_count: 3, listing_count: 3 },
   ]);
 });
 
