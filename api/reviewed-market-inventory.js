@@ -414,20 +414,22 @@ module.exports = async function handler(req, res) {
       });
     query = pageWindow.reverse
       ? query
-        // ponytail: images-first is now the default display order (user
-        // requirement) — no manual "Evidence" toggle needed. has_exact_source_
-        // image is the primary sort key; price/date remain secondary tiebreakers.
-        .order('has_exact_source_image', { ascending: true })
+        // ponytail: images-first sort was reverted — verified via direct
+        // PostgREST A/B that ORDER BY has_exact_source_image FIRST causes a
+        // Postgres statement timeout on the full reviewed_workbook view (no
+        // index supports it), 503ing the whole Trading Floor. Restoring the
+        // proven indexed order (price evidence primary, images as tiebreaker).
         .order('has_supplied_price', { ascending: true })
         .order('has_verified_usd_price', { ascending: true })
         .order('verified_price_usd', { ascending: true, nullsFirst: true })
+        .order('has_exact_source_image', { ascending: true })
         .order('posting_date', { ascending: true, nullsFirst: true })
         .order('id', { ascending: false })
       : query
-        .order('has_exact_source_image', { ascending: false })
         .order('has_supplied_price', { ascending: false })
         .order('has_verified_usd_price', { ascending: false })
         .order('verified_price_usd', { ascending: false, nullsFirst: false })
+        .order('has_exact_source_image', { ascending: false })
         .order('posting_date', { ascending: false, nullsFirst: false })
         .order('id', { ascending: true });
     if (brand) query = query.eq('brand_scope', brand);
