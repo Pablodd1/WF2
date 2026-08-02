@@ -22,6 +22,10 @@ const priceEvidenceOrderMigration = fs.readFileSync(
   path.join(__dirname, '../supabase/migrations/20260802173000_reviewed_workbook_price_evidence_order.sql'),
   'utf8',
 );
+const priceEvidenceIndexMatchMigration = fs.readFileSync(
+  path.join(__dirname, '../supabase/migrations/20260802180000_reviewed_workbook_price_evidence_index_match.sql'),
+  'utf8',
+);
 const workflow = fs.readFileSync(
   path.join(__dirname, '../.github/workflows/reviewed-workbook-inventory-release.yml'),
   'utf8',
@@ -348,6 +352,17 @@ test('evidence-aware indexes never rank ambiguous workbook amounts as verified U
   assert.match(priceEvidenceOrderMigration, /DROP INDEX CONCURRENTLY IF EXISTS[\s\S]*idx_reviewed_workbook_inventory_price_first/);
   assert.match(workflow, /20260802173000_reviewed_workbook_price_evidence_order\.sql/);
   assert.match(workflow, /to_regclass\('public\.reviewed_workbook_market_source_v2'\)/);
+});
+
+test('production order indexes exactly match the inlined supplied-price view expression', () => {
+  assert.doesNotMatch(priceEvidenceIndexMatchMigration, /\bBEGIN\b|\bCOMMIT\b/i);
+  assert.match(priceEvidenceIndexMatchMigration, /idx_reviewed_workbook_market_price_evidence_order_v2/);
+  assert.match(priceEvidenceIndexMatchMigration, /idx_reviewed_workbook_market_type_price_evidence_order_v2[\s\S]*listing_type/);
+  assert.match(priceEvidenceIndexMatchMigration, /COALESCE\([\s\S]*workbook_price_usd > 0 OR source_price_amount > 0,[\s\S]*false[\s\S]*\)\s*\) DESC/);
+  assert.doesNotMatch(priceEvidenceIndexMatchMigration, /COALESCE\(workbook_price_usd > 0, false\)[\s\S]*OR COALESCE\(source_price_amount > 0, false\)/);
+  assert.match(priceEvidenceIndexMatchMigration, /ANALYZE public\.reviewed_workbook_inventory/);
+  assert.match(workflow, /20260802180000_reviewed_workbook_price_evidence_index_match\.sql/);
+  assert.match(workflow, /idx_reviewed_workbook_market_price_evidence_order_v2/);
 });
 
 test('service-only evidence view keeps strict identity while reusing v1 indexes', () => {
