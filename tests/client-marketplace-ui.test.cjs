@@ -80,7 +80,7 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.doesNotMatch(floor, /Data under review/);
   assert.doesNotMatch(floor, /Price under review/);
   assert.doesNotMatch(floor, /Exact source currency is being verified/);
-  assert.match(floor, /setListings\(nextListings\)/);
+  assert.match(floor, /setListings\(\[\.\.\.withImages, \.\.\.withoutImages\]\)/);
   assert.match(floor, /aria-label="Trading Floor pages"/);
   assert.match(floor, /Page \{cursorHistory\.length \+ 1\}/);
   assert.match(floor, /onUnavailable=\{\(\) => setImageAvailable\(false\)\}/);

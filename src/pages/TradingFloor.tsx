@@ -308,7 +308,15 @@ export default function TradingFloor() {
           setReleaseBrands(data.publicationBrands);
         }
         const nextListings = data.records || [];
-        setListings(nextListings);
+        // ponytail: server-side images-first ORDER BY was reverted (df046c8)
+        // because ORDER BY has_exact_source_image FIRST hits a Postgres
+        // statement timeout on the unindexed view. Deliver the user's
+        // images-first requirement client-side instead — stable partition of
+        // each fetched page preserves the server's price-evidence ordering
+        // within each group.
+        const withImages = nextListings.filter(hasListingImage);
+        const withoutImages = nextListings.filter(listing => !hasListingImage(listing));
+        setListings([...withImages, ...withoutImages]);
         const parsedTotal = data.total == null ? null : Number(data.total);
         setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
         setTotalIsEstimate(parsedTotal !== null && Boolean(data.totalIsEstimate));

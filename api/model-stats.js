@@ -11,21 +11,12 @@
  * returned when backed by >= 5 real priced listings — matches the
  * Price Research min-bucket rule so no stat is shown on thin data.
  */
-const fs = require('fs');
-const path = require('path');
 const { getClient } = require('./_lib/supabase');
 const { setCorsHeaders } = require('./_lib/cors');
+const { listCatalogReferences } = require('./_lib/catalog');
 
 const MIN_BUCKET = 5;
 const SANITY_FLOOR = 500;
-
-let catalog = null;
-function loadCatalog() {
-  if (!catalog) {
-    catalog = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', 'catalog.json'), 'utf-8'));
-  }
-  return catalog;
-}
 
 function stats(prices) {
   if (!prices.length) return null;
@@ -57,15 +48,13 @@ module.exports = async function handler(req, res) {
   if (!brand || !model) return res.status(400).json({ error: 'brand and model required' });
 
   try {
-    const cat = loadCatalog();
-    const brandLower = brand.toLowerCase();
+    // ponytail: was fs.readFileSync(process.cwd()/public/catalog.json) —
+    // crashed in the Vercel lambda (FUNCTION_INVOCATION_FAILED) because the
+    // asset isn't reliably traced per-function. Route through _lib/catalog,
+    // the same loader the (working) catalog-models endpoint uses.
     const modelLower = model.toLowerCase();
-
-    // All references belonging to this brand+model per catalog
-    const refs = cat
-      .filter(e => e.brand && e.brand.toLowerCase().includes(brandLower)
-                && e.model && e.model.toLowerCase() === modelLower
-                && e.reference)
+    const refs = listCatalogReferences(brand)
+      .filter(e => e.model && e.model.toLowerCase() === modelLower)
       .map(e => e.reference);
 
     if (refs.length === 0) {

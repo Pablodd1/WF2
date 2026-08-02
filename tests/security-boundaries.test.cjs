@@ -155,14 +155,17 @@ test('Price Research shows contact-redacted source evidence and only verified se
   assert.match(page, /Dealer activity is not available until an applied-lineage aggregate is verified/);
 });
 
-test('Price Research only returns excluded observation rows to reviewers and admins', () => {
+test('Price Research returns outlier analytics publicly (no auth gate)', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const route = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
-  assert.match(route, /\['admin', 'reviewer'\]\.includes\(auth\.role\)/);
+  // 2026-08-01 product decision (adaa4e9, 0b92aa3, 0e51450): Price Research
+  // is public — outliers/liquidity/graphics are customer-facing analytics.
+  // Guard against the auth gate regression recurring (it did once, in c1f6490).
+  assert.doesNotMatch(route, /authorizeDealer\(req, res\)/);
+  assert.match(route, /const canReviewExcludedEvidence = true/);
   assert.match(route, /outlier_rows: canReviewExcludedEvidence \?/);
   assert.match(route, /Cache-Control', 'no-store/);
-  assert.match(route, /Vary', 'Cookie/);
 });
 
 test('Trading Floor click-through shows source evidence and only verified seller analytics', () => {
