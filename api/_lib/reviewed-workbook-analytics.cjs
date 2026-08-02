@@ -11,7 +11,7 @@ function mapWorkbookAnalyticsRow(row) {
   // Images: prefer exact source match, fall back to user_image_url if present.
   // reviewed-market-inventory uses has_images as the gating flag —
   // has_exact_source_image is a stricter subset that may not be set.
-  const exactImage = clean(row.user_image_url) || null;
+  const imageUrl = clean(row.front_image) || clean(row.user_image_url) || null;
   return {
     id: row.id,
     brand: clean(row.supplied_brand) || clean(row.canonical_brand) || clean(row.brand_scope),
@@ -42,9 +42,9 @@ function mapWorkbookAnalyticsRow(row) {
     workbook_source_file: clean(row.source_file),
     workbook_source_row_number: row.source_row_number == null ? null : Number(row.source_row_number),
     workbook_source_record_id: clean(row.source_record_id),
-    thumbnail_url: exactImage,
-    image_urls: exactImage ? [exactImage] : [],
-    has_images: Boolean(exactImage),
+    thumbnail_url: imageUrl,
+    image_urls: imageUrl ? [imageUrl] : [],
+    has_images: Boolean(imageUrl),
   };
 }
 
@@ -53,7 +53,7 @@ const WORKBOOK_COLUMNS = [
   'brand_scope,supplied_brand,canonical_brand,model,catalog_model,raw_reference',
   'normalized_reference,catalog_reference,public_reference,dial_color,catalog_dial,condition',
   'source_price_amount,source_currency,price_evidence_status,confidence,verification_status',
-  'user_image_url,imported_at,has_exact_source_image,has_verified_usd_price,verified_price_usd',
+  'user_image_url,front_image,imported_at,has_exact_source_image,has_verified_usd_price,verified_price_usd',
   'reference_search_key,has_complete_identity',
 ].join(',');
 
