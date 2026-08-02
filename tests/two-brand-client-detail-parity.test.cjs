@@ -71,7 +71,6 @@ test('Trading Floor detail prices require verified USD or preserve the source pr
   assert.doesNotMatch(trading, /price_usd: tradingListing\.price_usd/);
   assert.doesNotMatch(trading, /Price under review/);
   assert.doesNotMatch(trading, /Price on request/);
-  assert.match(trading, /Reviewed price:/);
   assert.match(trading, /Workbook-reviewed USD - not in averages/);
   assert.match(trading, /Posted by/);
   assert.match(trading, /getListingMeta\(listing\)/);

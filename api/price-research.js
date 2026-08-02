@@ -23,7 +23,8 @@ const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
 const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
-const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
+// ponytail: authorizeDealer no longer gates this public endpoint (see handler
+// below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
@@ -229,11 +230,15 @@ module.exports = async function handler(req, res) {
   res.setHeader('Vary', 'Cookie');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed.' });
 
-  const auth = await authorizeDealer(req, res);
-  if (auth.error) {
-    return res.status(auth.status).json({ error: auth.status === 503 ? 'Price Research authentication is unavailable.' : 'Sign in is required to access Price Research.' });
-  }
-  const canReviewExcludedEvidence = ['admin', 'reviewer'].includes(auth.role);
+  // ponytail: Price Research is intentionally public (see commits adaa4e9,
+  // 0b92aa3, 0e51450 on 2026-08-01 — "remove DealerGate from Price Research,
+  // now public/free access, no login required"). A later same-day merge
+  // (c1f6490, bundled into an unrelated MariaDB ingest commit) accidentally
+  // reintroduced this auth gate, breaking reference drill-down for every
+  // unauthenticated visitor (401 surfaced as a broken page on click).
+  // Outlier/graphics/liquidity evidence is customer-facing analytics, not an
+  // admin-only review surface.
+  const canReviewExcludedEvidence = true;
 
   const rawRef = (req.query.reference || '').trim();
   let brand = (req.query.brand || '').trim();

@@ -52,7 +52,11 @@ export default function App() {
         <Route path="/multi-listings" element={<DealerGate allowedRoles={['admin']}><MultiListings /></DealerGate>} />
         <Route path="/dealers" element={<DealerGate><DealerDirectory /></DealerGate>} />
         <Route path="/dealers/:dealerId" element={<DealerProfile />} />
-        <Route path="/price-research" element={<DealerGate><PriceResearch /></DealerGate>} />
+        {/* ponytail: Price Research is public (adaa4e9, 0b92aa3, 0e51450 —
+            2026-08-01 "remove DealerGate ... now public/free access, no
+            login required"). c1f6490 re-wrapped it in DealerGate the same
+            day by accident, showing the login page to every visitor. */}
+        <Route path="/price-research" element={<PriceResearch />} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
         <Route path="/info/:page" element={<PublicInfo />} />

@@ -407,12 +407,6 @@ export default function TradingFloor() {
                 }} />
               ))}
             </FilterGroup>
-            <FilterGroup label="Evidence">
-              <FilterChoice active={imagesOnly} label="Source images only" onClick={() => {
-                resetResults();
-                updateViewParams({ images: imagesOnly ? null : 'true' });
-              }} />
-            </FilterGroup>
           </div>
 
           <CurrencyConverter compact />
@@ -605,9 +599,6 @@ function MobileFilterSheet({
             {INTENT_OPTIONS.map(option => (
               <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
             ))}
-          </FilterGroup>
-          <FilterGroup label="Evidence">
-            <FilterChoice active={draftImagesOnly} label="Source images only" onClick={() => setDraftImagesOnly(value => !value)} />
           </FilterGroup>
           {!['all', 'watches'].includes(draftCategory) && (
             <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
@@ -956,7 +947,7 @@ function getListingMeta(listing: ListingRecord) {
     : sourcePrice || (workbookPriceNeedsReview
       ? 'Price requires review'
       : reviewedWorkbookUsd !== null
-        ? `Reviewed price: ${formatUsdPrice(reviewedWorkbookUsd)}`
+        ? formatUsdPrice(reviewedWorkbookUsd)
         : 'Price not provided');
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'

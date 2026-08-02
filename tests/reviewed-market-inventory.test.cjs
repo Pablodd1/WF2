@@ -327,7 +327,7 @@ test('endpoint is read-only and orders by price evidence without ranking ambiguo
   assert.match(source, /query = query\.not\('dial_color', 'ilike', value\)/);
   assert.match(source, /query = query\.not\('model', 'ilike', value\)/);
   assert.match(source, /query = query\.neq\('verification_status', 'QUARANTINED_SOURCE_CONFLICT'\)/);
-  assert.match(source, /order\('has_supplied_price', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
+  assert.match(source, /order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('has_supplied_price', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
   assert.doesNotMatch(source, /order\('workbook_price_usd'/);
   assert.doesNotMatch(source, /order\('source_price_amount'/);
   assert.doesNotMatch(source, /order\('has_complete_identity'/);

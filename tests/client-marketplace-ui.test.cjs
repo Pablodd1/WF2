@@ -73,7 +73,6 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.match(floor, /'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'/);
   assert.match(floor, /fetch\(`\/api\/reviewed-market-inventory\?/);
   assert.doesNotMatch(floor, /fetch\(`\/api\/ingest\?/);
-  assert.match(floor, /Source images only/);
   assert.match(floor, /params\.set\('images', 'true'\)/);
   assert.match(floor, /Source-confirmed USD first; other supplied prices next; no-price requests last\./);
   assert.match(floor, /Price requires review/);
