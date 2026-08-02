@@ -4,6 +4,22 @@ const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
 const PAGE_SIZE = 1000;
 const MAX_ROWS_PER_BRAND = 10000;
 const MINIMUM_ANALYTICS_SAMPLE = 5;
+const REFERENCE_ONLY_MODEL = 'Reference-only listings';
+const KNOWN_WATCH_BRANDS = [
+  'A. Lange & Söhne',
+  'Audemars Piguet',
+  'Cartier',
+  'IWC',
+  'Omega',
+  'Panerai',
+  'Patek Philippe',
+  'Piaget',
+  'Richard Mille',
+  'Rolex',
+  'Tudor',
+  'Vacheron Constantin',
+  'Zenith',
+];
 
 function clean(value) {
   const text = String(value || '').trim();
@@ -11,7 +27,16 @@ function clean(value) {
 }
 
 function rowModel(row) {
-  return clean(row.catalog_model) || clean(row.model) || 'Reference-only listings';
+  const claimed = clean(row.catalog_model) || clean(row.model);
+  if (!claimed || /^\d+$/.test(claimed) || /^\d{4}[/-]\d{1,2}$/.test(claimed)) {
+    return REFERENCE_ONLY_MODEL;
+  }
+  const ownerBrand = clean(row.brand_scope).toLowerCase();
+  const foreignBrand = KNOWN_WATCH_BRANDS.some(brand => (
+    brand.toLowerCase() !== ownerBrand
+    && claimed.toLowerCase().includes(brand.toLowerCase())
+  ));
+  return foreignBrand ? REFERENCE_ONLY_MODEL : claimed;
 }
 
 function rowReference(row) {
@@ -28,6 +53,7 @@ async function loadReviewedWorkbookBrandRows(client, brand) {
       .from(MARKET_SOURCE_VIEW)
       .select([
         'id',
+        'brand_scope',
         'model',
         'catalog_model',
         'public_reference',
