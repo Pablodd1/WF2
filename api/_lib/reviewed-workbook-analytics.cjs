@@ -66,7 +66,9 @@ async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys,
     .eq('brand_scope', clean(brand))
     .in('reference_search_key', keys)
     .eq('has_complete_identity', true)
-    .eq('has_verified_usd_price', true)
+    // Removed .eq('has_verified_usd_price', true) — include image-backed rows
+    // without verified price so images are available in the analytics feed.
+    // Price eligibility is handled downstream by classifyResearchEligibility.
     .eq('listing_type', 'WTS')
     .order('posting_date', { ascending: false, nullsFirst: false })
     .order('id', { ascending: true })
