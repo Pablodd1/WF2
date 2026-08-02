@@ -45,6 +45,15 @@ function mapWorkbookAnalyticsRow(row) {
     thumbnail_url: imageUrl,
     image_urls: imageUrl ? [imageUrl] : [],
     has_images: Boolean(imageUrl),
+    // User / dealer / verification fields
+    seller_name: clean(row.seller_name) || null,
+    seller_phone: clean(row.seller_phone) || null,
+    contact_publication_approved: row.contact_publication_approved === true,
+    verdict: clean(row.verdict) || 'APPROVED',
+    confidence: row.confidence == null ? 100 : Number(row.confidence),
+    listing_status: clean(row.listing_status) || 'ACTIVE',
+    source_file: clean(row.source_file),
+    source_row_number: row.source_row_number == null ? null : Number(row.source_row_number),
   };
 }
 
@@ -54,7 +63,7 @@ const WORKBOOK_COLUMNS = [
   'normalized_reference,catalog_reference,public_reference,dial_color,catalog_dial,condition',
   'source_price_amount,source_currency,price_evidence_status,confidence,verification_status',
   'user_image_url,front_image,workbook_price_usd,verified_price_usd,imported_at,has_exact_source_image,has_verified_usd_price',
-  'reference_search_key,has_complete_identity',
+  'reference_search_key,has_complete_identity,seller_name,seller_phone,contact_publication_approved,verdict,listing_status',
 ].join(',');
 
 async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys, limit = 10000 }) {
@@ -63,16 +72,13 @@ async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys,
   const { data, error } = await client
     .from(MARKET_SOURCE_VIEW)
     .select(WORKBOOK_COLUMNS)
-    .eq('brand_scope', clean(brand))
+    // brand_scope may be null in early workbook imports — filter by reference
     .in('reference_search_key', keys)
     .eq('has_complete_identity', true)
-    // Removed .eq('has_verified_usd_price', true) — include image-backed rows
-    // without verified price so images are available in the analytics feed.
-    // Price eligibility is handled downstream by classifyResearchEligibility.
     .eq('listing_type', 'WTS')
+    // without verified price so images are available in the analytics feed.
     .order('posting_date', { ascending: false, nullsFirst: false })
     .order('id', { ascending: true })
-    .limit(Math.min(10000, Math.max(1, Number(limit) || 10000)));
   if (error) throw error;
   return (data || []).map(mapWorkbookAnalyticsRow).filter(row => (
     row.brand && row.model && row.reference && row.dial_color
