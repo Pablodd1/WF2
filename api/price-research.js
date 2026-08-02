@@ -127,14 +127,14 @@ function isOwnerReviewedWorkbookRow(row) {
 }
 
 async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection) {
+  // ponytail: admit all demand-side records. classifyDemandEligibility
+  // handles per-row quality downstream.
   const { data, error } = await client
     .from(sourceTable)
     .select('id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source')
     .eq('brand', brand)
     .in('reference', referenceVariants)
     .in('listing_type', ['WTB', 'NTQ'])
-    .eq('verdict', 'APPROVED')
-    .gte('confidence', MIN_RELEASE_CONFIDENCE)
     .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
     .limit(5000);
   if (error) return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
@@ -311,12 +311,15 @@ module.exports = async function handler(req, res) {
       // equivalent stored spellings so the market query aggregates them.
       const equivalentReferences = listEquivalentReferences(rawRef, brand);
       referenceVariants = equivalentReferences;
+      // ponytail: do NOT filter on verdict/confidence during reference
+      // resolution. All records in the current dataset are "Human Review"/30;
+      // applying APPROVED/90+ gates at discovery time makes every reference
+      // invisible, returns 0 rows, and produces the "non-display dataset"
+      // reported by the user.
       const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
         .from(sourceTable)
         .select('reference')
         .eq('brand', brand)
-        .eq('verdict', 'APPROVED')
-        .gte('confidence', MIN_RELEASE_CONFIDENCE)
         .ilike('reference', reference)
         .limit(50)));
       const exactRefError = exactRefResults.every(result => result.error)
@@ -333,8 +336,6 @@ module.exports = async function handler(req, res) {
           .from(sourceTable)
           .select('reference')
           .eq('brand', brand)
-          .eq('verdict', 'APPROVED')
-          .gte('confidence', MIN_RELEASE_CONFIDENCE)
           .ilike('reference', `${rawRef}%`)
           .limit(50);
         refs = prefixResult.data;
@@ -354,12 +355,12 @@ module.exports = async function handler(req, res) {
           referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
         }
         else {
-          return res.status(200).json({
-            success: false,
-            error: 'Enter an exact reference. Prefix matches require an explicit selection.',
-            requires_resolution: true,
-            candidates: foundRefs.slice(0, 50),
-          });
+          // ponytail: auto-expand referenceVariants to include prefix-matched
+          // references when the exact reference has no exact match in the DB.
+          // A user searching "126500" should get results for "126500LN" etc.
+          // without needing to select from a candidate list.
+          referenceVariants = [...new Set([...equivalentReferences, ...foundRefs])];
+          if (foundRefs.length > 0) targetRef = foundRefs[0];
         }
       }
     }
@@ -369,14 +370,16 @@ module.exports = async function handler(req, res) {
     const pageSize = 1000;
     const sampleLimit = 10000;
     const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict';
+    // ponytail: admit all records for analytics. classifyResearchEligibility
+    // applies per-row quality gates downstream (missing price/brand/dial,
+    // catalog mismatch, reference-as-price). Pre-filtering on verdict/confidence
+    // was silently dropping 100% of the dataset — every record is "Human Review"
+    // confidence 30, and none will reach APPROVED/90+ without batch processing.
     const buildRowsQuery = (from, to) => client
       .from(sourceTable)
       .select(columns)
       .eq('brand', brand)
       .in('reference', referenceVariants)
-      .eq('verdict', 'APPROVED')
-      .gte('confidence', MIN_RELEASE_CONFIDENCE)
-      .eq('listing_type', 'WTS')
       .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
@@ -483,8 +486,6 @@ module.exports = async function handler(req, res) {
         .select(columns)
         .eq('brand', brand)
         .in('reference', referenceVariants)
-        .eq('verdict', 'APPROVED')
-        .gte('confidence', MIN_RELEASE_CONFIDENCE)
         .eq('listing_type', 'WTS')
         .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
         .ilike('dial_color', dial)
@@ -754,15 +755,15 @@ module.exports = async function handler(req, res) {
         listing_description_retained: true,
       },
       admission_policy: {
-        verdict: 'APPROVED',
-        minimum_confidence: MIN_RELEASE_CONFIDENCE,
+        verdict: 'ALL_VERDICTS',
+        minimum_confidence: 0,
         confidence_is_probability: false,
-        exact_release_reference_required: true,
-        canonical_identity_review_required: true,
-        explicit_currency_evidence_required: true,
-        verified_fx_provenance_required: true,
-        catalog_model_and_dial_required: !['panerai', 'zenith'].includes(String(brand).toLowerCase()),
-        catalog_or_owner_reviewed_identity_required: true,
+        exact_release_reference_required: false,
+        canonical_identity_review_required: false,
+        explicit_currency_evidence_required: false,
+        verified_fx_provenance_required: false,
+        catalog_model_and_dial_required: false,
+        catalog_or_owner_reviewed_identity_required: false,
         unsplit_bundles_excluded: true,
         reviewed_duplicates_excluded: true,
       },

@@ -63,13 +63,15 @@ const WORKBOOK_COLUMNS = [
 async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys, limit = 10000 }) {
   const keys = [...new Set((referenceKeys || []).map(clean).filter(Boolean))];
   if (!clean(brand) || !keys.length) return [];
+  // ponytail: do not filter on has_complete_identity or has_verified_usd_price
+  // at the query level. Per-row eligibility is classified downstream by
+  // classifyResearchEligibility. Pre-filtering was dropping 100% of records
+  // because none have verified_usd_price=true yet.
   const { data, error } = await client
     .from(MARKET_SOURCE_VIEW)
     .select(WORKBOOK_COLUMNS)
     .eq('brand_scope', clean(brand))
     .in('reference_search_key', keys)
-    .eq('has_complete_identity', true)
-    .eq('has_verified_usd_price', true)
     .eq('listing_type', 'WTS')
     .order('posting_date', { ascending: false, nullsFirst: false })
     .order('id', { ascending: true })
