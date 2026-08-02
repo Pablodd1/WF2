@@ -416,7 +416,7 @@ export default function PriceResearch() {
 
   // ── Drill-down picker state (brand → model → reference) ──
   const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
-  const [pBrand, setPBrand] = useState('');
+  const [pBrand, setPBrand] = useState(initialBrand);
   const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
   const [pModel, setPModel] = useState('');
@@ -538,6 +538,10 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load reviewed inventory brands:', error); });
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (initialBrand && !initialReference) void loadModels(initialBrand);
+  }, [initialBrand, initialReference, loadModels]);
 
   const openListing = useCallback(async (row: RowData) => {
     listingRequestRef.current.controller?.abort();
@@ -729,7 +733,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 <select
                   aria-label="Watch brand"
                   value={queryBrand}
-                  onChange={event => setQueryBrand(event.target.value)}
+                  onChange={event => void loadModels(event.target.value)}
                   className="h-11 w-full rounded-md border border-white/20 bg-[#1a1a20] px-3 text-sm text-white outline-none focus:border-[#c9a03a]"
                 >
                   <option value="">Select brand</option>

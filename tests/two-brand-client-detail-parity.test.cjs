@@ -28,7 +28,7 @@ test('Trading Floor uses only the reviewed inventory evidence returned for its p
   assert.doesNotMatch(trading, /\/api\/(?:price-research-listing|trading-listing|listing-contact)\?id=/);
   assert.match(research, /payload\.listing\?\.id !== row\.id/);
   assert.match(trading, /\/api\/reviewed-seller-summary\?id=/);
-  assert.match(trading, /listing\.image_evidence_notice/);
+  assert.doesNotMatch(trading, /\{listing\.image_evidence_notice &&|EvidenceIndicators/);
   assert.match(trading, /SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE/);
   assert.match(research, /detail\?\.image_urls/);
   for (const api of [tradingApi, researchDetailApi]) {

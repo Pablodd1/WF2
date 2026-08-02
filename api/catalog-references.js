@@ -9,6 +9,10 @@ const { getClient } = require('./_lib/supabase');
 const { listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
+  loadReviewedWorkbookBrandRows,
+  summarizeReviewedWorkbookReferences,
+} = require('./_lib/reviewed-workbook-browse.cjs');
+const {
   MIN_RELEASE_CONFIDENCE,
   REVIEWED_PANERAI_RECORD_IDS,
   REVIEWED_PANERAI_SOURCE,
@@ -252,9 +256,6 @@ module.exports = async function handler(req, res) {
   const brand = (req.query.brand || '').trim();
   const model = (req.query.model || '').trim();
   if (!brand || !model) return res.status(400).json({ error: 'brand and model required' });
-  if (!isPublicationBrandAllowed(brand)) {
-    return res.status(404).json({ error: 'Brand is not included in this release' });
-  }
 
   const cacheKey = `${brand}|${model}`;
   const cached = _cache.get(cacheKey);
@@ -264,6 +265,23 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    if (!isPublicationBrandAllowed(brand)) {
+      const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
+      if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe reference browsing' });
+      const out = summarizeReviewedWorkbookReferences(rows, model, false);
+      const payload = {
+        success: true,
+        brand,
+        model,
+        reference_count: out.length,
+        references: out,
+        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        sample_capped: false,
+      };
+      _cache.set(cacheKey, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (brand.toLowerCase() === 'panerai') {
       const out = await loadReviewedPaneraiReferences(client, model);
       const payload = {

@@ -63,7 +63,7 @@ test('Trading Floor withholds reference-only images while preserving provenance 
   assert.doesNotMatch(floor, /Reference image · not seller photo/);
   assert.match(floor, /onError=\{onUnavailable\}/);
   assert.doesNotMatch(floor, /publicListing\.image_urls|tradingListing\.image_urls/);
-  assert.match(floor, /listing\.image_evidence_notice/);
+  assert.doesNotMatch(floor, /\{listing\.image_evidence_notice &&/);
   assert.match(research, /detail\.image_evidence_notice/);
   assert.match(research, /sourceImageEvidence = \['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'\]/);
 });

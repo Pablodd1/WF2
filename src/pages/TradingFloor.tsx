@@ -675,7 +675,6 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         >
           {meta.title}
         </button>
-        <EvidenceIndicators listing={listing} imageVisible={cardHasImage} priceEvidenceLabel={meta.priceEvidenceLabel} />
         {cleanValue(listing.seller_name) && (
           <div className="mt-3 text-sm" style={{ color: MUTED }}>
             Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name)}</span>
@@ -757,9 +756,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             className="h-[420px] w-full rounded-sm object-contain sm:h-[540px] lg:h-[648px]"
             onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
           />
-          {listing.image_evidence_notice && (
-            <p className="px-2 py-3 text-xs leading-5" style={{ color: MUTED }}>{listing.image_evidence_notice}</p>
-          )}
           {images.length > 1 && (
             <div className="mt-2 flex gap-2 overflow-x-auto">
               {images.map((url, index) => (
@@ -797,7 +793,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
           <div className="mt-6">
             <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
-            <EvidenceIndicators listing={listing} imageVisible={images.length > 0} priceEvidenceLabel={meta.priceEvidenceLabel} />
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
@@ -888,23 +883,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
 function ContactMetric({ label, value }: { label: string; value: number }) {
   return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{Number(value || 0).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
-}
-
-function EvidenceIndicators({ listing, imageVisible, priceEvidenceLabel }: { listing: ListingRecord; imageVisible: boolean; priceEvidenceLabel: string }) {
-  const labels = [
-    priceEvidenceLabel,
-    imageVisible ? 'Source-supplied listing image' : '',
-    cleanValue(listing.seller_name) || cleanValue(listing.seller_phone) ? 'Source contact supplied' : '',
-  ].filter(Boolean);
-  return labels.length > 0 ? (
-    <div className="mt-3 flex flex-wrap gap-2" aria-label="Listing evidence">
-      {labels.map(label => (
-        <span key={label} className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ borderColor: BORDER, color: MUTED }}>
-          {label}
-        </span>
-      ))}
-    </div>
-  ) : null;
 }
 
 function sourcePosterContact(listing: ListingRecord): ListingContact | null {
