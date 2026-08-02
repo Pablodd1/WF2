@@ -81,6 +81,7 @@ interface ListingRecord {
   region: string | null;
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
+  multi_listing?: boolean;
   raw_message?: string | null;
   raw_line?: string | null;
   description?: string | null;
@@ -1128,6 +1129,15 @@ function sourcePosterContact(listing: ListingRecord): ListingContact | null {
 function ListingImage({ listing, className, onUnavailable }: { listing: ListingRecord; className: string; onUnavailable: () => void }) {
   const meta = getListingMeta(listing);
   const imageUrl = listing.thumbnail_url || listing.image_urls?.find(Boolean);
+
+  // ponytail: multi-listing children show a badge, not the parent's multi-watch image
+  if (listing.multi_listing) {
+    return (
+      <div className={`${className} rounded-sm flex items-center justify-center bg-bg-elevated`}>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-gold-primary">Multi-Listing</span>
+      </div>
+    );
+  }
 
   return imageUrl ? (
     <img

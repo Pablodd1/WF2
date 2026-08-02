@@ -62,6 +62,7 @@ interface ReviewItem {
   status: 'pending' | 'approved' | 'rejected';
   submittedAt: string;
   imageUrl?: string;
+  multiListing?: boolean;
   listingTitle: string;
   reviewReasons: string[];
   disposition: 'HUMAN_REVIEW' | 'READY_FOR_HUMAN_APPROVAL' | 'CATALOG_CONFIRMATION_REQUIRED';
@@ -175,6 +176,9 @@ interface UnbundledQueueApiItem {
   seller_contact_available?: boolean;
   original_posted_at?: string | null;
   front_image?: string | null;
+  multi_listing?: boolean;
+  recycle_image_url?: string | null;
+  isUnbundledChild?: boolean;
   seller_lineage_status?: string | null;
 }
 
@@ -1822,6 +1826,7 @@ export default function ReviewQueue() {
               reviewReasons: [
                 ...flags.filter(flag => flag.startsWith('REVIEW:') || flag.startsWith('BLOCKER:')),
                 ...(item.dealerAttributionMissing ? ['DEALER_ATTRIBUTION_MISSING'] : []),
+              ...(item.multi_listing ? ['MULTI_LISTING'] : []),
               ],
               disposition: ready ? 'READY_FOR_HUMAN_APPROVAL' : 'HUMAN_REVIEW',
               priority: ready ? 30 : 90,
@@ -1830,12 +1835,15 @@ export default function ReviewQueue() {
                 ...(item.field_confidence || {}),
                 ...(item.seller_lineage_status ? { seller_lineage_status: item.seller_lineage_status } : {}),
                 ...(item.seller_contact_available ? { seller_contact_available: true } : {}),
-                ...(item.front_image ? { front_image: item.front_image } : {}),
+                // ponytail: multi-listing children show no front_image, but recycle_image_url is preserved for admin
+                ...(item.recycle_image_url ? { recycle_image_url: item.recycle_image_url } : {}),
               },
               sellerName: item.seller_name || String(item.field_confidence?.seller_name || '') || null,
               sellerPhone: item.seller_phone || String(item.field_confidence?.seller_phone || '') || null,
               originalPostedAt: item.original_posted_at || item.created_at || null,
-              imageUrl: item.front_image || undefined,
+              // ponytail: multi-listing children get no imageUrl — image suppressed to avoid wrong-watch misattribution
+              imageUrl: item.multi_listing ? undefined : (item.front_image || undefined),
+              multiListing: item.multi_listing || false,
               source: String(item.source || '') || null,
               condition: item.condition || null,
               year: item.year ?? null,

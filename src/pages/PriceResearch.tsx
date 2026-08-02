@@ -195,6 +195,7 @@ interface ReviewedMarketRecord {
   thumbnail_url?: string | null;
   image_url?: string | null;
   image_urls?: string[] | null;
+  multi_listing?: boolean;
   review_reasons?: string[] | null;
   seller_analytics?: {
     total_posts?: number | null;
@@ -1673,7 +1674,14 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
 
   return (
     <article style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 18, background: WHITE, minWidth: 0 }}>
-      <ReviewedEvidenceImage src={imageUrl} alt={`${title} original listing image`} />
+      {/* ponytail: multi-listing children show a badge, not the parent's multi-watch image */}
+      {record.multi_listing ? (
+        <div style={{ height: 270, background: '#f1f3f5', borderRadius: 8, marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#C9A96E' }}>Multi-Listing</span>
+        </div>
+      ) : (
+        <ReviewedEvidenceImage src={imageUrl} alt={`${title} original listing image`} />
+      )}
       <div style={{ color: GOLD, fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>
         {record.listing_type || 'Listing'}{record.condition ? ` · ${record.condition}` : ''}
       </div>
