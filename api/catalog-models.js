@@ -119,6 +119,39 @@ module.exports = async function handler(req, res) {
 
   try {
     if (!isPublicationBrandAllowed(brand)) {
+      // ponytail: prefer the preaggregated in-memory catalog index. The
+      // per-request reviewed-workbook row scan times out on large brands
+      // (Richard Mille hit the 10k-row cap -> 503; Cartier hit the Postgres
+      // statement timeout -> 500). Scan only as last resort for brands with
+      // no catalog coverage.
+      // ponytail: browse index shows ALL catalogued brand references — model
+      // names + reference numbers are catalog metadata, not market evidence.
+      // The reviewed-reference allowlist gates analytics display downstream,
+      // not the browse tree (gating here emptied RM/Cartier back into the
+      // timeout-prone DB scan).
+      const catalogReferences = listCatalogReferences(brand);
+      if (catalogReferences.length) {
+        const models = new Map();
+        for (const entry of catalogReferences) {
+          if (!entry.model) continue;
+          if (!models.has(entry.model)) models.set(entry.model, new Set());
+          models.get(entry.model).add(entry.reference);
+        }
+        const out = [...models.entries()]
+          .map(([model, refs]) => ({ model, reference_count: refs.size }))
+          .sort((a, b) => b.reference_count - a.reference_count || a.model.localeCompare(b.model));
+        const payload = {
+          success: true,
+          brand,
+          model_count: out.length,
+          catalog_reference_count: catalogReferences.length,
+          models: out,
+          identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+          sample_capped: false,
+        };
+        _cache.set(brand, { at: Date.now(), payload });
+        return res.status(200).json(payload);
+      }
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(getClient(), brand);
       if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
       if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe model browsing' });

@@ -75,10 +75,11 @@ async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys,
     .order('id', { ascending: true })
     .limit(Math.min(10000, Math.max(1, Number(limit) || 10000)));
   if (error) throw error;
-  return (data || []).map(mapWorkbookAnalyticsRow).filter(row => (
-    row.brand && row.model && row.reference && row.dial_color
-      && Number.isFinite(row.price_usd) && row.price_usd > 0
-  ));
+  // ponytail: never silently drop partial-evidence rows here. Missing
+  // brand/model/ref/dial/price is classified and COUNTED downstream by
+  // classifyResearchEligibility in price-research.js — pre-filtering made
+  // those listings vanish from both market and analytics populations.
+  return (data || []).map(mapWorkbookAnalyticsRow);
 }
 
 async function loadReviewedWorkbookListing(client, id) {

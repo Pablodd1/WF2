@@ -766,6 +766,14 @@ module.exports = async function handler(req, res) {
       listing_count: listedRows.length,
       eligible_observation_count: listedRows.length,
       unique_offer_count: listedRows.length,
+      // ponytail: two-population transparency. market_listings_count is the
+      // full brand+reference population BEFORE analytics gating; analytics_
+      // eligible_count is what survived classifyResearchEligibility + repost
+      // dedup. Never collapse these — currency-pending/partial rows must be
+      // visible as a count even when excluded from stats.
+      market_listings_count: analyticsRows.length,
+      analytics_eligible_count: marketRows.length,
+      analytics_excluded_count: analyticsRows.length - marketRows.length,
       repost_count: repostRows.filter(row => matchesSelection(row, selection)).length,
       sampledListings: rows.length,
       sampleCapped: baseSampleCount >= sampleLimit,
