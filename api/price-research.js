@@ -375,15 +375,28 @@ module.exports = async function handler(req, res) {
     // catalog mismatch, reference-as-price). Pre-filtering on verdict/confidence
     // was silently dropping 100% of the dataset — every record is "Human Review"
     // confidence 30, and none will reach APPROVED/90+ without batch processing.
-    const buildRowsQuery = (from, to) => client
-      .from(sourceTable)
-      .select(columns)
-      .eq('brand', brand)
-      .in('reference', referenceVariants)
-      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .range(from, to);
+    //
+    // When referenceVariants only contains the exact user input (no catalog
+    // or DB-confirmed variants found), use ilike prefix match so "126500"
+    // finds "126500LN", "126500LNA", etc. Once we have real stored refs,
+    // switch to exact .in() match.
+    const usePrefixMatch = referenceVariants.length === 1 && referenceVariants[0] === rawRef;
+    const buildRowsQuery = (from, to) => {
+      let query = client
+        .from(sourceTable)
+        .select(columns)
+        .eq('brand', brand)
+        .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to);
+      if (usePrefixMatch) {
+        query = query.ilike('reference', `${rawRef}%`);
+      } else {
+        query = query.in('reference', referenceVariants);
+      }
+      return query;
+    };
 
     // Avoid a filtered COUNT over the multi-million-row table. Fetch bounded,
     // deterministic pages in parallel and report whether the sample hit its cap.
