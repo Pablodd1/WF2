@@ -7,7 +7,6 @@ const HEADER_LINKS = [
   { label: 'HOME', to: '/' },
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
-  { label: 'TELEGRAM TEST', to: '/telegram-test' },
   { label: 'DEALER LOGIN', to: '/dealer-login' },
   { label: 'POST ITEM', to: '/dealer/post' },
   { label: 'ACCOUNT', to: '/dealer/account/profile' },
