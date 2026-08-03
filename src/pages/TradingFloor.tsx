@@ -84,6 +84,10 @@ interface ListingRecord {
   raw_message_truncated?: boolean;
   seller_name?: string | null;
   seller_phone?: string | null;
+  location?: string | null;
+  seller_country?: string | null;
+  posted_by?: string | null;
+  phone_number?: string | null;
   source_file?: string | null;
   source_row_number?: number | null;
 }
@@ -676,9 +680,17 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         >
           {meta.title}
         </button>
-        {cleanValue(listing.seller_name) && (
-          <div className="mt-3 text-sm" style={{ color: MUTED }}>
-            Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name)}</span>
+        {(cleanValue(listing.seller_name) || (listing as any)['Posted By'] || listing.location || listing.seller_country) && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm" style={{ color: MUTED }}>
+            <div>
+              Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || (listing as any)['Posted By'] || 'Dealer'}</span>
+            </div>
+            {(listing.location || listing.seller_country || (listing as any)['Location']) && (
+              <div className="flex items-center gap-1.5 rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-[#D4B87A]">
+                <Globe2 size={12} />
+                <span>{listing.location || listing.seller_country || (listing as any)['Location']}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -822,6 +834,12 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               {(contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone) && (
                 <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
                   {contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone}
+                </div>
+              )}
+              {(listing.location || listing.seller_country || (listing as any)['Location']) && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-white/70">
+                  <Globe2 size={13} className="text-[#D4B87A]" />
+                  <span>{listing.location || listing.seller_country || (listing as any)['Location']}</span>
                 </div>
               )}
               {sellerAnalytics && (
