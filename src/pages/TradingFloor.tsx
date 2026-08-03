@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -9,6 +9,7 @@ import {
   List,
   MessageCircle,
   Search,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { LuxFiBanner } from '../components/LuxFiBanner';
@@ -913,6 +914,20 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               Original source text evidence is currently loading or unavailable.
             </p>
           )}
+        </div>
+
+        <div className="rounded-md border p-6" style={{ borderColor: BORDER, background: SURFACE }}>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Market Intelligence</h2>
+          <p className="mt-1 text-sm" style={{ color: MUTED }}>
+            Research historical asking prices, WTB demand signals, and market trends for this model reference.
+          </p>
+          <Link
+            to={`/price-research?q=${encodeURIComponent(listing.reference || listing.model || '')}&brand=${encodeURIComponent(listing.brand || '')}`}
+            className="mt-4 flex h-11 items-center justify-center gap-2 rounded-md font-semibold text-black transition hover:opacity-90"
+            style={{ background: GOLD }}
+          >
+            <TrendingUp size={16} /> Research Market & Prices
+          </Link>
         </div>
 
       </div>

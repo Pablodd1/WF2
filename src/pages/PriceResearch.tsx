@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, Loader2, MessageCircle, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, Loader2, MessageCircle, Search, Store, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
@@ -991,14 +991,24 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               <div style={{ fontSize: 13, color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
                 {data.brand}
               </div>
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
-                {data.model ? (
-                  <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
-                ) : (
-                  <span style={{ fontSize: 13, color: MUTED }}>Model pending catalog confirmation</span>
-                )}
-                <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{displayRef}</span>
-                {data.collection && <span style={{ fontSize: 13, color: MUTED }}>{data.collection}</span>}
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  {data.model ? (
+                    <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
+                  ) : (
+                    <span style={{ fontSize: 13, color: MUTED }}>Model pending catalog confirmation</span>
+                  )}
+                  <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{displayRef}</span>
+                  {data.collection && <span style={{ fontSize: 13, color: MUTED }}>{data.collection}</span>}
+                </div>
+                <Link
+                  to={`/trading?brand=${encodeURIComponent(data.brand)}&q=${encodeURIComponent(data.reference)}`}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 shadow-sm"
+                  style={{ background: '#D4B87A' }}
+                >
+                  <Store size={16} />
+                  <span>View Inventory on Trading Floor</span>
+                </Link>
               </div>
             </div>
 
