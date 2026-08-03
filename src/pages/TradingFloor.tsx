@@ -143,9 +143,12 @@ function hasListingImage(listing: ListingRecord) {
   return false;
 }
 
-/** Normal (non-unbundled) listing — should appear before workbook-generated summaries */
-function isNormalListing(listing: ListingRecord) {
-  return listing.raw_message_scope !== 'normalized_summary';
+/** Detects bundle/multi-watch listings */
+function isBundleListing(listing: ListingRecord) {
+  if (listing.raw_message_scope === 'normalized_summary') return true;
+  if (listing.model && /multiple|multi|mixed/i.test(listing.model)) return true;
+  if (listing.dial_color && /multiple|multi|mixed/i.test(listing.dial_color)) return true;
+  return false;
 }
 
 /** Plausible price range for luxury watches */
@@ -333,11 +336,11 @@ export default function TradingFloor() {
         const tier3: ListingRecord[] = [];
         const tier4: ListingRecord[] = [];
         for (const listing of nextListings) {
-          const normal = isNormalListing(listing);
+          const isBundle = isBundleListing(listing);
           const hasImg = hasListingImage(listing);
-          if (normal && hasImg) tier1.push(listing);
-          else if (normal && !hasImg) tier2.push(listing);
-          else if (!normal && hasImg) tier3.push(listing);
+          if (!isBundle && hasImg) tier1.push(listing);
+          else if (!isBundle && !hasImg) tier2.push(listing);
+          else if (isBundle && hasImg) tier3.push(listing);
           else tier4.push(listing);
         }
         setListings([...tier1, ...tier2, ...tier3, ...tier4]);
@@ -723,9 +726,21 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
       {(listing.raw_message || listing.raw_line || listing.description) && (
         <div className="mt-3.5 rounded border border-white/10 bg-[#0A0B0E] p-2.5 text-xs text-white/70">
-          <div className="mb-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-[#D4B87A]">
-            <span>RAW Message</span>
-            <span className="text-[9px] text-white/40">Untouched</span>
+          <div className="mb-2 flex items-center justify-between">
+            {listing.raw_message_scope === 'normalized_summary' ? (
+              <span className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-500">
+                📋 Workbook Summary
+              </span>
+            ) : listing.raw_message_scope === 'stored_source_message' ? (
+              <span className="inline-flex items-center gap-1.5 rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-500">
+                💬 Source Message
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/60">
+                📄 Message
+              </span>
+            )}
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-white/40">Untouched</span>
           </div>
           <div className="line-clamp-3 font-mono text-[11px] leading-relaxed text-white/80 whitespace-pre-wrap">
             {listing.raw_message || listing.raw_line || listing.description}
@@ -920,8 +935,23 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Original listing</h2>
-          <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
-            Raw Source Message (Untouched & Complete)
+          <div className="mt-3 flex items-center gap-2">
+            {listing.raw_message_scope === 'normalized_summary' ? (
+              <span className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-500">
+                📋 Workbook Summary
+              </span>
+            ) : listing.raw_message_scope === 'stored_source_message' ? (
+              <span className="inline-flex items-center gap-1.5 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
+                💬 Source Message
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white/60">
+                📄 Message
+              </span>
+            )}
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
+              (Untouched & Complete)
+            </span>
           </div>
           {listing.raw_message || (listing as any).raw_line || (listing as any).description ? (
             <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>
@@ -1016,9 +1046,11 @@ function RegionLabel({ region }: { region: string }) {
   );
 }
 
-function isPricePlausible(price: number | null) {
+function isPricePlausible(price: number | null, isWorkbookPrice: boolean = false, reviewReason?: string | null) {
   if (price === null) return false;
-  return price >= MIN_PLAUSIBLE_PRICE_USD && price <= MAX_PLAUSIBLE_PRICE_USD;
+  if (price < MIN_PLAUSIBLE_PRICE_USD || price > MAX_PLAUSIBLE_PRICE_USD) return false;
+  if (isWorkbookPrice && price > 10_000_000 && !reviewReason) return false;
+  return true;
 }
 
 function getListingMeta(listing: ListingRecord) {
@@ -1029,28 +1061,26 @@ function getListingMeta(listing: ListingRecord) {
   const workbookPriceNeedsReview = Boolean(cleanValue(listing.workbook_price_review_reason));
   const sourcePrice = formatSourcePrice(listing);
   // Price sanity check — flag implausible values
-  const verifiedPlausible = isPricePlausible(verifiedUsd);
-  const workbookPlausible = isPricePlausible(reviewedWorkbookUsd);
-  const priceLabel = verifiedUsd !== null && verifiedPlausible
-    ? formatUsdPrice(verifiedUsd)
-    : verifiedUsd !== null && !verifiedPlausible
-      ? 'Price under review'
-      : sourcePrice || (workbookPriceNeedsReview
+  const verifiedPlausible = isPricePlausible(verifiedUsd, false);
+  const workbookPlausible = isPricePlausible(reviewedWorkbookUsd, true, listing.workbook_price_review_reason);
+  
+  const priceLabel = verifiedUsd !== null
+    ? (verifiedPlausible ? formatUsdPrice(verifiedUsd) : 'Price under review')
+    : reviewedWorkbookUsd !== null
+      ? (workbookPlausible ? formatUsdPrice(reviewedWorkbookUsd) : 'Price under review')
+      : workbookPriceNeedsReview
         ? 'Price requires review'
-        : reviewedWorkbookUsd !== null && workbookPlausible
-          ? formatUsdPrice(reviewedWorkbookUsd)
-          : reviewedWorkbookUsd !== null && !workbookPlausible
-            ? 'Price under review'
-            : 'Price not provided');
+        : sourcePrice || 'Price not provided';
+
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'
-    : sourcePrice
-      ? 'Original source price · no USD conversion'
+    : reviewedWorkbookUsd !== null
+      ? 'Workbook-reviewed USD - not in averages'
       : workbookPriceNeedsReview
         ? 'Workbook price anomaly - held for review'
-      : reviewedWorkbookUsd !== null
-        ? 'Workbook-reviewed USD - not in averages'
-        : 'Price not provided';
+        : sourcePrice
+          ? 'Original source price · no USD conversion'
+          : 'Price not provided';
   const title = buildListingTitle(listing);
 
   return {
