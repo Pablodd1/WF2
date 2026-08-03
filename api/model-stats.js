@@ -3,19 +3,19 @@
  *
  * Per-model market stats for Price Research drill-down:
  *   - total listings, WTS count, WTB count
- *   - avg / median / min / max price (IQR-filtered, min-5 gate)
+ *   - avg / median / min / max price (IQR-filtered, min-2 gate)
  *   - date range covered (first_seen → last_seen)
- *   - per-reference breakdown (only refs with >= 5 priced listings exposed)
+ *   - per-reference breakdown (only refs with >= 2 priced listings exposed)
  *
- * "min-5 exposure": any aggregate bucket (model or reference) is only
- * returned when backed by >= 5 real priced listings — matches the
+ * "min-2 exposure": any aggregate bucket (model or reference) is only
+ * returned when backed by >= 2 real priced listings — matches the
  * Price Research min-bucket rule so no stat is shown on thin data.
  */
 const { getClient } = require('./_lib/supabase');
 const { setCorsHeaders } = require('./_lib/cors');
 const { listCatalogReferences } = require('./_lib/catalog');
 
-const MIN_BUCKET = 5;
+const MIN_BUCKET = 2;
 const SANITY_FLOOR = 500;
 
 function stats(prices) {
@@ -35,8 +35,8 @@ function iqrFilter(prices) {
   const q1 = sorted[Math.floor(sorted.length * 0.25)];
   const q3 = sorted[Math.floor(sorted.length * 0.75)];
   const iqr = q3 - q1;
-  const lo = Math.max(q1 - 1.5 * iqr, SANITY_FLOOR);
-  const hi = q3 + 1.5 * iqr;
+  const lo = Math.max(q1 - 3.0 * iqr, SANITY_FLOOR);
+  const hi = q3 + 3.0 * iqr;
   return sorted.filter(p => p >= lo && p <= hi);
 }
 
@@ -102,7 +102,7 @@ module.exports = async function handler(req, res) {
     const first_seen = dates[0] || null;
     const last_seen = dates[dates.length - 1] || null;
 
-    // Per-reference breakdown with min-5 gate
+    // Per-reference breakdown with min-2 gate
     const byRef = {};
     for (const r of priced) {
       if (!byRef[r.reference]) byRef[r.reference] = { prices: [], dates: [] };

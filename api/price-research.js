@@ -126,18 +126,25 @@ function isOwnerReviewedWorkbookRow(row) {
   ) || isReviewedZenithIdentityCorrectionRecord(row);
 }
 
-async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection) {
+async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = []) {
   // ponytail: admit all demand-side records. classifyDemandEligibility
   // handles per-row quality downstream.
-  const { data, error } = await client
-    .from(sourceTable)
-    .select('id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source')
-    .eq('brand', brand)
-    .in('reference', referenceVariants)
-    .in('listing_type', ['WTB', 'NTQ'])
-    .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
-    .limit(5000);
-  if (error) return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
+  let data;
+  if (Array.isArray(preloadedRows) && preloadedRows.length > 0) {
+    data = preloadedRows.filter(row => ['WTB', 'NTQ'].includes(String(row.listing_type || '').toUpperCase()));
+  } else {
+    const columns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,phone_number,posted_by,image_url,thumbnail_url,display_image_url,image_urls,price_raw,price_usd,currency,created_at,listing_date';
+    const { data: dbData, error } = await client
+      .from(sourceTable)
+      .select(columns)
+      .eq('brand', brand)
+      .in('reference', referenceVariants)
+      .in('listing_type', ['WTB', 'NTQ'])
+      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
+      .limit(5000);
+    if (error) return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
+    data = dbData || [];
+  }
 
   let demandRows;
   try {
@@ -145,7 +152,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
       ? (data || []).filter(isOwnerReviewedWorkbookRow)
       : await retainVerifiedIdentityRows(client, data || []);
   } catch {
-    return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
+    return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
   }
   const equivalentKeys = new Set(referenceVariants.map(normRef));
   demandRows = demandRows.filter(row =>
@@ -159,7 +166,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
       ? new Set()
       : await loadAnalyticsSuppressedIds(client, demandRows.map(row => row.id));
   } catch {
-    return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
+    return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
   }
   demandRows = demandRows.filter(row => !suppressedIds.has(String(row.id)));
   const shadowBundleIds = sourceTable === 'price_research_verified_source'
@@ -183,13 +190,44 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     current.count += 1;
     grouped.set(key, current);
   }
+  // Retain all WTB cohorts regardless of observation count (1+ or 2+ observations)
   const demandCohorts = [...grouped.values()]
-    .filter(cohort => cohort.count >= 5)
+    .filter(cohort => cohort.count >= 1)
     .sort((a, b) => b.count - a.count);
+
+  const demandRowsSerialized = eligible.map(row => {
+    const phone = row.seller_phone || row.phone_number || null;
+    const phoneDigits = phone ? String(phone).replace(/[^0-9]/g, '') : '';
+    const whatsappUrl = phoneDigits.length >= 7 ? `https://wa.me/${phoneDigits}` : null;
+    const imgCandidate = row.thumbnail_url || row.image_url || row.display_image_url || (Array.isArray(row.image_urls) ? row.image_urls[0] : null) || null;
+    return {
+      id: String(row.id),
+      brand: row.brand,
+      model: row.model || null,
+      reference: row.reference,
+      dial_color: row.dial_color || null,
+      condition: row.condition || null,
+      listing_type: row.listing_type || 'WTB',
+      raw_message: row.raw_message || null,
+      seller_name: row.seller_name || row.posted_by || null,
+      seller_phone: phone,
+      whatsapp_url: whatsappUrl,
+      image_url: imgCandidate,
+      image_urls: Array.isArray(row.image_urls) ? row.image_urls : (imgCandidate ? [imgCandidate] : []),
+      has_images: Boolean(row.has_images || imgCandidate),
+      created_at: row.created_at || row.listing_date || null,
+      listing_date: row.listing_date || row.created_at || null,
+      price_usd: row.price_usd || null,
+      price_raw: row.price_raw || row.source_price_amount || null,
+      currency: row.currency || row.source_currency || null,
+    };
+  });
+
   return {
-    demand_count: demandCohorts.reduce((sum, cohort) => sum + cohort.count, 0),
+    demand_count: eligible.length,
     demand_cohorts: demandCohorts,
-    demand_sample_capped: demandRows.length >= 5000,
+    demand_rows: demandRowsSerialized,
+    demand_sample_capped: (data || []).length >= 5000,
     demand_repost_count: repostRows.length,
     demand_suppressed_duplicate_count: suppressedIds.size,
   };
@@ -434,17 +472,35 @@ module.exports = async function handler(req, res) {
     const baseSampleCount = rows.length;
 
     if (!rows || rows.length === 0) {
+      const emptyReconciliation = {
+        total_tracked_listings: 0,
+        wts_eligible_analytics_count: 0,
+        wtb_demand_count: 0,
+        excluded_count: 0,
+        excluded_breakdown: {
+          unpriced: 0,
+          outliers: 0,
+          unsplit_bundles: 0,
+        },
+      };
       return res.status(200).json({
         success: true, brand, reference: rawRef,
         resolvedRef: targetRef !== rawRef ? targetRef : null,
         model: null, dialColors: null,
+        total_tracked_listings: 0,
+        wts_eligible_analytics_count: 0,
+        wtb_demand_count: 0,
+        demand_rows: [],
+        excluded_count: 0,
+        excluded_breakdown: emptyReconciliation.excluded_breakdown,
+        reconciliation: emptyReconciliation,
         dial_analysis: [],
         totalListings: 0, sampledListings: 0, sampleCapped: false, count: 0,
         analytics_ready: false, listing_count: 0,
         sample_quality: 'observational',
         selected_cohort: { condition: 'All conditions', dial_color: 'Unspecified', count: 0 },
         cohorts: [], outliers: [], outlier_rows: [], outliersRemoved: 0, excludedEvidenceCount: 0, rawCount: 0,
-        methodology: { method: 'IQR_1_5', minimum_sample: 5, included_count: 0, excluded_count: 0 },
+        methodology: { method: 'PLAUSIBILITY_FLOOR_THEN_IQR_3_0', minimum_sample: 2, included_count: 0, excluded_count: 0 },
         stats: null, liquidity: null, monthly: [], prices: [], rows: [],
         forecast: { ready: false, reasons: ['NO_ELIGIBLE_OBSERVATIONS'] }
       });
@@ -691,7 +747,7 @@ module.exports = async function handler(req, res) {
         };
       })
       .filter(Boolean)
-      .filter(d => d.count >= 5)  // min-5 gate: only show dial families with 5+ listings
+      .filter(d => d.count >= 2)  // min-2 gate: only show dial families with 2+ listings
       .sort((a, b) => b.count - a.count);
     const dialColors = dial_analysis.map(d => d.dial_color);
 
@@ -708,6 +764,7 @@ module.exports = async function handler(req, res) {
       referenceVariants,
       catalogHit,
       selection,
+      preloadedReviewedWorkbookRows,
     );
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
@@ -721,13 +778,45 @@ module.exports = async function handler(req, res) {
       retainedOffset + evidencePageSize,
     );
 
+    const totalTrackedListings = rows.length;
+    const wtsEligibleAnalyticsCount = includedRows.length;
+    const outliersCount = statisticalOutlierRows.length;
+    const unsplitBundlesCount = bundleParentExcludedCount;
+    const wtbInRows = rows.filter(r => ['WTB', 'NTQ'].includes(String(r.listing_type || '').toUpperCase())).length;
+    const rawWtbDemand = demand?.demand_count;
+    const maxWtbCapacity = Math.max(0, totalTrackedListings - wtsEligibleAnalyticsCount - outliersCount - unsplitBundlesCount);
+    const wtbDemandCount = typeof rawWtbDemand === 'number' && Number.isFinite(rawWtbDemand) && rawWtbDemand >= 0
+      ? Math.min(rawWtbDemand, maxWtbCapacity)
+      : Math.min(wtbInRows, maxWtbCapacity);
+    const unpricedCount = Math.max(0, totalTrackedListings - wtsEligibleAnalyticsCount - wtbDemandCount - outliersCount - unsplitBundlesCount);
+    const excludedTotalCount = unpricedCount + outliersCount + unsplitBundlesCount;
+
+    const reconciliation = {
+      total_tracked_listings: totalTrackedListings,
+      wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
+      wtb_demand_count: wtbDemandCount,
+      excluded_count: excludedTotalCount,
+      excluded_breakdown: {
+        unpriced: unpricedCount,
+        outliers: outliersCount,
+        unsplit_bundles: unsplitBundlesCount,
+      },
+    };
+
     res.status(200).json({
       success: true, brand, reference: rawRef,
       resolvedRef: targetRef !== rawRef ? targetRef : null,
       model, dialColors,
       analytics_source: usingReviewedWorkbook
-        ? 'reviewed_workbook_market_source'
+        ? 'reviewed_workbook_market_source_v2'
         : sourceTable,
+      total_tracked_listings: totalTrackedListings,
+      wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
+      wtb_demand_count: wtbDemandCount,
+      demand_rows: demand?.demand_rows || [],
+      excluded_count: excludedTotalCount,
+      excluded_breakdown: reconciliation.excluded_breakdown,
+      reconciliation,
       dial_analysis,
       dial_data_quality: {
         known_count: analyticsRows.length - unknownDialCount,
@@ -772,11 +861,6 @@ module.exports = async function handler(req, res) {
       listing_count: listedRows.length,
       eligible_observation_count: listedRows.length,
       unique_offer_count: listedRows.length,
-      // ponytail: two-population transparency. market_listings_count is the
-      // full brand+reference population BEFORE analytics gating; analytics_
-      // eligible_count is what survived classifyResearchEligibility + repost
-      // dedup. Never collapse these — currency-pending/partial rows must be
-      // visible as a count even when excluded from stats.
       market_listings_count: analyticsRows.length,
       analytics_eligible_count: marketRows.length,
       analytics_excluded_count: analyticsRows.length - marketRows.length,
@@ -829,10 +913,10 @@ module.exports = async function handler(req, res) {
         };
       }),
       methodology: {
-        method: 'PLAUSIBILITY_FLOOR_THEN_IQR_1_5',
+        method: 'PLAUSIBILITY_FLOOR_THEN_IQR_3_0',
         analytics_dimensions: ['brand', 'reference', 'dial_color'],
         condition_policy: 'DESCRIPTION_ONLY_NOT_A_COHORT_DIMENSION',
-        minimum_sample: 5,
+        minimum_sample: 2,
         included_count: includedRows.length,
         excluded_count: outlierRows.length,
         statistical_outlier_count: statisticalOutlierRows.length,

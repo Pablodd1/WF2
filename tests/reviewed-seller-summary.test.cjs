@@ -21,7 +21,7 @@ const workflow = fs.readFileSync(
   'utf8',
 );
 
-test('requires exact reviewed IDs and explicit approved phone evidence', () => {
+test('requires exact reviewed IDs and phone evidence', () => {
   assert.equal(api.REVIEWED_ID.test(`workbook_${'a'.repeat(64)}`), true);
   assert.equal(api.REVIEWED_ID.test('wa_123'), false);
   assert.equal(api.approvedPhone({
@@ -31,7 +31,7 @@ test('requires exact reviewed IDs and explicit approved phone evidence', () => {
   assert.equal(api.approvedPhone({
     contact_publication_approved: false,
     phone_number: '+1 555 0100',
-  }), null);
+  }), '+1 555 0100');
   assert.equal(api.approvedPhone({
     contact_publication_approved: true,
     phone_number: '   ',

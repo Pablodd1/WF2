@@ -77,7 +77,7 @@ export async function enrichRecords(
     record: p,
   }));
 
-  const { outliers } = applyIQRFiltering(forIqr, 5);
+  const { outliers } = applyIQRFiltering(forIqr, 2);
   const outlierSet = new Set(outliers.map((o) => o.record.raw.id));
 
   // Step 3: Build enriched records

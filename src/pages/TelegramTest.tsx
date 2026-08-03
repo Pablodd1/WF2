@@ -4,6 +4,7 @@ import {
   Sparkles, ExternalLink, Filter, MessageSquare, AlertCircle, Eye, Edit3
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { MarketNav } from '../components/MarketNav';
 
 interface StagedListing {
   id: string;
@@ -158,7 +159,9 @@ export default function TelegramTest() {
   const approvedCount = listings.filter(i => i.status === 'APPROVED').length;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 md:p-8">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+      <MarketNav />
+      <div className="p-4 md:p-8">
       {/* Header Bar */}
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-slate-800 pb-6">
         <div>
@@ -405,6 +408,7 @@ export default function TelegramTest() {
         </div>
 
       </div>
+    </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { MarketNav } from '@/components/MarketNav';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { Footer } from '@/components/Footer';
 import { JoinGroupsCta } from '@/components/JoinGroupsCta';
 import { Package, FileText, User, Globe, Shield, ArrowLeft } from 'lucide-react';
@@ -88,9 +89,17 @@ export default function FlashSaleDetail() {
       <MarketNav />
 
       <div className="max-w-5xl mx-auto px-4 py-6">
-        <Link to="/trading" className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#C9A96E] mb-6 transition-colors">
-          <ArrowLeft size={14} /> Back to Trading Floor
-        </Link>
+        <div className="mb-6">
+          <Breadcrumb
+            items={[
+              { label: 'Home', to: '/' },
+              { label: 'Trading Floor', to: '/trading' },
+              { label: listing?.brand ? `${listing.brand} ${listing.reference || ''}`.trim() : `Listing ${id}` },
+            ]}
+            backTo="/trading"
+            backLabel="Back to Trading Floor"
+          />
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* POST INFO */}

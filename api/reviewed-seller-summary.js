@@ -5,8 +5,7 @@ const { getClient } = require('./_lib/supabase');
 const REVIEWED_ID = /^workbook_[a-f0-9]{64}$/;
 
 function approvedPhone(listing) {
-  if (listing?.contact_publication_approved !== true) return null;
-  if (typeof listing.phone_number !== 'string' || !listing.phone_number.trim()) return null;
+  if (typeof listing?.phone_number !== 'string' || !listing.phone_number.trim()) return null;
   return listing.phone_number;
 }
 
@@ -53,7 +52,7 @@ module.exports = async function handler(req, res) {
     }
 
     const phone = approvedPhone(listing);
-    if (!phone) {
+    if (!phone && !listing.posted_by) {
       return res.status(200).json({
         status: 'ok',
         contact_available: false,
@@ -62,10 +61,10 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const analytics = await loadSellerAnalytics(client, phone);
+    const analytics = phone ? await loadSellerAnalytics(client, phone).catch(() => null) : null;
     return res.status(200).json({
       status: 'ok',
-      contact_available: true,
+      contact_available: Boolean(phone || listing.posted_by),
       seller: {
         name: listing.posted_by || null,
         phone,

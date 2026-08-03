@@ -8,6 +8,8 @@ const HEADER_LINKS = [
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'WANT TO BUY', to: '/trading?type=WTB' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
+  { label: 'TELEGRAM TEST', to: '/telegram-test' },
+  { label: 'DEALER LOGIN', to: '/dealer-login' },
   { label: 'POST ITEM', to: '/dealer/post' },
   { label: 'ACCOUNT', to: '/dealer/account/profile' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
@@ -58,7 +60,7 @@ export function MarketHeader({ compact = false, className = '', landing = false,
                     ? location.pathname.startsWith(link.to.split('?')[0])
                     : false;
             const className = [
-              'flex h-11 shrink-0 items-center justify-center gap-1 border px-3 text-center text-[10px] font-semibold transition-colors sm:gap-1.5 sm:px-4 sm:text-[11px]',
+              'flex h-11 shrink-0 items-center justify-center gap-1 border px-3 text-center text-[10px] font-semibold transition-colors whitespace-nowrap sm:gap-1.5 sm:px-4 sm:text-[11px]',
               active
                 ? 'border-[#d4b87a] bg-[#d4b87a] text-black'
                 : 'border-white/15 bg-white/[0.03] text-white/78 hover:border-[#d4b87a]/70 hover:text-white',

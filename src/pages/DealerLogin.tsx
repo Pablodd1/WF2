@@ -1,6 +1,7 @@
 import { ArrowLeft, LockKeyhole } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { MarketNav } from '../components/MarketNav';
 
 type DealerRole = 'dealer' | 'reviewer' | 'admin';
 
@@ -112,8 +113,10 @@ export default function DealerLogin() {
   }
 
   return (
-    <main className="min-h-screen bg-[#09090d] px-5 py-8 text-white">
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col">
+    <main className="min-h-screen bg-[#09090d] text-white">
+      <MarketNav />
+      <div className="px-5 py-8">
+        <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-5xl flex-col">
         <Link to="/" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> Curated Luxury</Link>
         <div className="flex flex-1 items-center justify-center py-10">
           <section className="w-full max-w-[420px] border border-white/12 bg-[#111118] p-6 sm:p-8">
@@ -146,6 +149,7 @@ export default function DealerLogin() {
             )}
           </section>
         </div>
+      </div>
       </div>
     </main>
   );

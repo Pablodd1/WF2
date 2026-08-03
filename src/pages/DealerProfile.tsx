@@ -2,6 +2,7 @@ import { ArrowLeft, BadgeCheck, CalendarDays, MessageCircle, Star, Users } from 
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { MarketNav } from '@/components/MarketNav';
+import { Breadcrumb } from '@/components/Breadcrumb';
 
 interface ProfilePayload {
   dealer: {
@@ -39,7 +40,17 @@ export default function DealerProfile() {
       <MarketNav />
       <section className="border-b border-white/10 px-5 py-10 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-6xl">
-          <Link to="/trading" className="inline-flex items-center gap-2 text-xs text-white/50 hover:text-white"><ArrowLeft size={14} /> Trading Floor</Link>
+          <Breadcrumb
+            dark
+            items={[
+              { label: 'Home', to: '/' },
+              { label: 'Trading Floor', to: '/trading' },
+              { label: 'Dealers', to: '/dealers' },
+              { label: name },
+            ]}
+            backTo="/trading"
+            backLabel="Back to Trading Floor"
+          />
           <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
             <div className="flex items-start gap-5">
               <div className="grid h-20 w-20 shrink-0 place-items-center border border-[#c9a96e]/35 bg-[#111118] text-2xl text-[#c9a96e]">

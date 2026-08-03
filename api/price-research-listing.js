@@ -91,8 +91,24 @@ module.exports = async function handler(req, res) {
     if (!strictGate) {
       const workbookListing = await loadReviewedWorkbookListing(client, id);
       if (workbookListing) {
-        const redactedSource = redactPublicSource(workbookListing.raw_message || '').trim();
-        const publicSource = redactedSource.slice(0, 12_000);
+        const publicSource = String(workbookListing.raw_message || '').trim();
+        let dialColor = workbookListing.dial_color;
+        if ((!dialColor || dialColor === 'UNKNOWN') && (workbookListing.has_images || workbookListing.thumbnail_url || workbookListing.image_urls?.length)) {
+          const imageUrl = workbookListing.thumbnail_url || workbookListing.image_urls?.[0];
+          try {
+            const { resolveDialWithVisionFallback } = require('./_lib/dial-normalization.cjs');
+            const visionResolved = await resolveDialWithVisionFallback({
+              sourceDial: dialColor,
+              rawText: publicSource,
+              imageUrl,
+              textReference: workbookListing.reference,
+              textBrand: workbookListing.brand,
+            });
+            if (visionResolved?.value) dialColor = visionResolved.value;
+          } catch (e) {
+            console.warn('[price-research-listing] vision fallback error:', e.message);
+          }
+        }
         return res.status(200).json({
           success: true,
           listing: {
@@ -100,7 +116,7 @@ module.exports = async function handler(req, res) {
             brand: workbookListing.brand,
             model: workbookListing.model,
             reference: workbookListing.reference,
-            dial_color: workbookListing.dial_color,
+            dial_color: dialColor,
             condition: workbookListing.condition,
             price_raw: workbookListing.source_price_amount,
             price_usd: workbookListing.price_usd,
@@ -108,7 +124,7 @@ module.exports = async function handler(req, res) {
             currency: workbookListing.source_currency || 'USD',
             raw_message: publicSource || null,
             raw_message_scope: publicSource ? 'reviewed_workbook_source' : 'unavailable',
-            raw_message_truncated: redactedSource.length > publicSource.length,
+            raw_message_truncated: false,
             source_message_available_to_reviewers: Boolean(workbookListing.raw_message),
             created_at: workbookListing.created_at,
             listing_date: workbookListing.listing_date,
@@ -223,10 +239,27 @@ module.exports = async function handler(req, res) {
       && Number.isFinite(Number(normalized.analytics_price_usd))
       && Number(normalized.analytics_price_usd) > 0;
     const priceIssues = priceVerified
-      ? customerListing.data_quality_issues
+      ? (customerListing.data_quality_issues || [])
       : [...new Set([...(customerListing.data_quality_issues || []), normalized.analytics_currency_status])];
     const redactedSource = redactPublicSource(rawSource.text).trim();
-    const publicSource = redactedSource.slice(0, 12_000);
+    const publicSource = redactedSource;
+    let dialColor = customerListing.dial_color;
+    if ((!dialColor || dialColor === 'UNKNOWN') && (customerListing.has_images || customerListing.image_urls?.length)) {
+      const imageUrl = customerListing.thumbnail_url || customerListing.image_urls?.[0];
+      try {
+        const { resolveDialWithVisionFallback } = require('./_lib/dial-normalization.cjs');
+        const visionResolved = await resolveDialWithVisionFallback({
+          sourceDial: dialColor,
+          rawText: publicSource,
+          imageUrl,
+          textReference: customerListing.reference,
+          textBrand: customerListing.brand,
+        });
+        if (visionResolved?.value) dialColor = visionResolved.value;
+      } catch (e) {
+        console.warn('[price-research-listing] vision fallback error:', e.message);
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -242,13 +275,13 @@ module.exports = async function handler(req, res) {
         currency: priceVerified ? 'USD' : normalized.source_currency || null,
         raw_message: publicSource || null,
         raw_message_scope: publicSource ? rawSource.scope : 'unavailable',
-        raw_message_truncated: redactedSource.length > publicSource.length,
+        raw_message_truncated: false,
         source_message_available_to_reviewers: Boolean(rawSource.text),
         created_at: customerListing.created_at,
         listing_date: customerListing.listing_date,
         condition: customerListing.condition,
         source: customerListing.source,
-        dial_color: customerListing.dial_color,
+        dial_color: dialColor,
         year: customerListing.year,
         listing_type: customerListing.listing_type,
         accessories: normalizeAccessories(customerListing.accessories),

@@ -896,12 +896,12 @@ Output MUST be a valid JSON object with these exact keys: reference, brand, dial
  * Canonical IQR outlier test.
  * @param {number}   price      - Price under test (USD).
  * @param {number[]} prices     - Reference pool (USD).
- * @param {number}   [mult=1.5] - IQR fence multiplier (use 3 for Richard Mille).
+ * @param {number}   [mult=3.0] - IQR fence multiplier (use 3 for Richard Mille).
  * @param {number}   [tol=0.10] - Tolerance fraction applied to clean min/max.
  * @returns {boolean}
  */
-function priceIsOutlier(price, prices, mult = 1.5, tol = 0.10) {
-  if (prices.length < 5) return false;
+function priceIsOutlier(price, prices, mult = 3.0, tol = 0.10) {
+  if (prices.length < 2) return false;
   const sorted = [...prices].sort((a, b) => a - b);
   const q1 = sorted[Math.floor(sorted.length * 0.25)];
   const q3 = sorted[Math.floor(sorted.length * 0.75)];
@@ -909,7 +909,7 @@ function priceIsOutlier(price, prices, mult = 1.5, tol = 0.10) {
   const lowBound  = q1 - mult * iqr;
   const highBound = q3 + mult * iqr;
   const clean = sorted.filter(p => p >= lowBound && p <= highBound);
-  if (clean.length < 5) return false;
+  if (clean.length < 2) return false;
   const cq1 = clean[Math.floor(clean.length * 0.25)];
   const cq3 = clean[Math.floor(clean.length * 0.75)];
   const ciqr = cq3 - cq1;
@@ -946,15 +946,15 @@ function _brandBucketKey(brand) {
  * Rules:
  *  - RICHARD_MILLE  → mult = 3.0  (prices span $50k–$5 M)
  *  - PATEK_PHILIPPE high complications (52xx, 53xx, 57xx) → tol = 0.30 (20 pp on top of base 10 pp)
- *  - All others     → mult = 1.5, tol = 0.10 (default)
+ *  - All others     → mult = 3.0, tol = 0.10 (default)
  */
 function _iqrParams(brandBucket, ref) {
   if (brandBucket === 'RICHARD_MILLE') return { mult: 3.0, tol: 0.10 };
   if (brandBucket === 'PATEK_PHILIPPE') {
     const refNum = String(ref || '').replace(/[^0-9]/g, '').slice(0, 4);
-    if (/^5[237]/.test(refNum)) return { mult: 1.5, tol: 0.30 }; // 52xx, 53xx, 57xx
+    if (/^5[237]/.test(refNum)) return { mult: 3.0, tol: 0.30 }; // 52xx, 53xx, 57xx
   }
-  return { mult: 1.5, tol: 0.10 };
+  return { mult: 3.0, tol: 0.10 };
 }
 
 /**
@@ -978,7 +978,7 @@ function priceIsOutlierBranded(price, brand, ref, catalogEntry) {
     const allRefPrices = [];
     for (const d of catalogEntry.dials.values()) allRefPrices.push(...d.prices);
 
-    if (allRefPrices.length >= 5) {
+    if (allRefPrices.length >= 2) {
       return {
         outlier:  priceIsOutlier(price, allRefPrices, mult, tol),
         pool:     `ref:${ref}`,
@@ -1007,7 +1007,7 @@ function priceIsOutlierBranded(price, brand, ref, catalogEntry) {
     }
   }
 
-  if (brandPrices.length >= 5) {
+  if (brandPrices.length >= 2) {
     return {
       outlier:  priceIsOutlier(price, brandPrices, mult, tol),
       pool:     `brand:${brandBucket}`,
@@ -1108,7 +1108,7 @@ async function analyzeOne(chunk, ctx) {
   if (originalPrice) {
     const usdPrice = toUSD(originalPrice, currency);
     const { outlier, pool, poolSize } = priceIsOutlierBranded(usdPrice, brand, reference, catalogEntry);
-    if (poolSize >= 5) {
+    if (poolSize >= 2) {
       if (outlier) {
         outlierFlag = 'PRICE_OUTLIER';
         confidence = Math.min(confidence, 60);
@@ -1117,7 +1117,7 @@ async function analyzeOne(chunk, ctx) {
         stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { priceUSD: usdPrice, pool, poolSize }, note: `Price within normal range [pool: ${pool}]` });
       }
     } else {
-      stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { pool, poolSize }, note: `Insufficient data for IQR (${poolSize} < 5 points) [pool: ${pool}]` });
+      stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { pool, poolSize }, note: `Insufficient data for IQR (${poolSize} < 2 points) [pool: ${pool}]` });
     }
   }
 

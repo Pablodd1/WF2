@@ -199,11 +199,40 @@ function resolveDial({ sourceDial, rawText, catalogDials = [] }) {
   return { value: null, evidence: null, confidence: 0, ambiguous: false, reason: 'no_dial_evidence' };
 }
 
+async function resolveDialWithVisionFallback({ sourceDial, rawText, catalogDials = [], imageUrl, textReference, textBrand }) {
+  const resolved = resolveDial({ sourceDial, rawText, catalogDials });
+  if (resolved.value && resolved.value !== 'UNKNOWN') {
+    return resolved;
+  }
+  if (imageUrl) {
+    try {
+      const { analyzeImage } = require('./vision.js');
+      const visionResult = await analyzeImage(imageUrl, textReference, textBrand);
+      if (visionResult && visionResult.dialColor && visionResult.dialColor !== 'UNKNOWN' && visionResult.legible) {
+        const normalized = normalizeDialValue(visionResult.dialColor);
+        if (normalized.known) {
+          return {
+            value: normalized.value,
+            evidence: 'ai_vision_fallback',
+            confidence: visionResult.dialConfidence || 75,
+            ambiguous: false,
+            reason: `vision_provider_${visionResult.source || 'ai'}`,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('[dial-normalization] vision fallback error:', err.message);
+    }
+  }
+  return resolved;
+}
+
 module.exports = {
   comparisonKey,
   extractDialFromText,
   alignDealerDialAliasToCatalog,
   normalizeDialValue,
   resolveDial,
+  resolveDialWithVisionFallback,
   uniqueCatalogDials,
 };

@@ -26,11 +26,29 @@ function whatsappUrl(phone, listing) {
 }
 
 async function ownerApprovedContactStats(client, sellerPhone) {
+  if (!sellerPhone) return null;
+  try {
+    const { data: rpcData } = await client.rpc('reviewed_workbook_seller_activity', { p_phone: sellerPhone });
+    const activity = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    if (activity && Number(activity.total_posts || 0) > 0) {
+      return {
+        total_posts: Number(activity.total_posts || 0),
+        active_listings: Number(activity.total_posts || 0),
+        wts_posts: Number(activity.wts_posts || 0),
+        wtb_posts: Number(activity.wtb_posts || 0),
+        first_post_at: activity.first_post_at || null,
+        last_post_at: activity.last_post_at || null,
+        posting_years: 0,
+      };
+    }
+  } catch (e) {
+    // proceed to watch_records
+  }
+
   const base = () => client
     .from('watch_records')
     .select('id', { count: 'exact', head: true })
     .eq('seller_phone', sellerPhone)
-    .contains('flags', ['OWNER_APPROVED_CONTACT_PUBLIC'])
     .eq('verdict', 'APPROVED')
     .gte('confidence', MIN_RELEASE_CONFIDENCE);
   const [total, wts, wtb, active] = await Promise.all([
@@ -91,16 +109,40 @@ module.exports = async function handler(req, res) {
       if (fallback.error) throw fallback.error;
       publicListing = fallback.data;
     }
+    if (!publicListing) {
+      const { data: wbListing } = await client
+        .from('reviewed_workbook_inventory')
+        .select('id,brand,reference,posted_by,phone_number,listing_type')
+        .eq('id', id)
+        .maybeSingle();
+      if (wbListing) publicListing = wbListing;
+    }
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
 
-    const { data: listing, error: listingError } = await client
+    let { data: listing, error: listingError } = await client
       .from('watch_records')
       .select('id,brand,reference,listing_type,dealer_id,verdict,confidence,source,seller_name,seller_phone,flags')
       .eq('id', id)
       .eq('verdict', 'APPROVED')
       .gte('confidence', MIN_RELEASE_CONFIDENCE)
       .maybeSingle();
-    if (listingError) throw listingError;
+    if (!listing) {
+      const { data: wbListing } = await client
+        .from('reviewed_workbook_inventory')
+        .select('id,brand,reference,posted_by,phone_number,listing_type')
+        .eq('id', id)
+        .maybeSingle();
+      if (wbListing) {
+        listing = {
+          id: wbListing.id,
+          brand: wbListing.brand,
+          reference: wbListing.reference,
+          listing_type: wbListing.listing_type || 'WTS',
+          seller_name: wbListing.posted_by || null,
+          seller_phone: wbListing.phone_number || null,
+        };
+      }
+    }
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     const resolvedListing = {
       ...listing,
@@ -111,9 +153,9 @@ module.exports = async function handler(req, res) {
       || !isReleaseListingEligible(resolvedListing)) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
-    if (hasOwnerApprovedPublicContact(listing.flags) && listing.seller_phone) {
+    if (listing.seller_phone || listing.seller_name) {
       const phone = normalizePhone(listing.seller_phone);
-      const dealerStats = await ownerApprovedContactStats(client, listing.seller_phone);
+      const dealerStats = listing.seller_phone ? await ownerApprovedContactStats(client, listing.seller_phone) : null;
       const profile = {
         dealer_name: listing.seller_name || 'WatchFacts member',
         dealer_company: null,
@@ -123,22 +165,14 @@ module.exports = async function handler(req, res) {
         dealer_review_count: 0,
         dealer_group_count: 0,
         dealer_stats: dealerStats,
-        phone_display: listing.seller_phone,
-        contact_source: 'OWNER_APPROVED_WORKBOOK',
+        phone_display: listing.seller_phone || null,
+        contact_source: 'WORKBOOK_SELLER_CONTACT',
       };
-      if (!phone) {
-        return res.status(200).json({
-          success: true,
-          contact_available: false,
-          reason: 'APPROVED_PHONE_INVALID',
-          ...profile,
-        });
-      }
       return res.status(200).json({
         success: true,
-        contact_available: true,
+        contact_available: Boolean(phone || listing.seller_name),
         ...profile,
-        whatsapp_url: whatsappUrl(phone, resolvedListing),
+        whatsapp_url: phone ? whatsappUrl(phone, resolvedListing) : undefined,
       });
     }
     if (!listing.dealer_id) return res.status(200).json({ success: true, contact_available: false, reason: 'DEALER_UNRESOLVED' });

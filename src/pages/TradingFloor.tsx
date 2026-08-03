@@ -807,15 +807,21 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(listing.listing_type) ? 'Buyer source contact' : 'Source contact'}</h2>
-          {(contact?.dealer_name || contact?.phone_display) && (
+          {(contact?.dealer_name || contact?.phone_display || (listing as any)['Posted By'] || (listing as any)['Phone Number'] || listing.seller_name || listing.seller_phone) && (
             <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
               <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
                 Source-supplied contact
               </div>
-              {contact.dealer_name && <div className="mt-1 text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>}
-              {contact.phone_display && <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
-                {contact.phone_display}
-              </div>}
+              {(contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name) && (
+                <div className="mt-1 text-base font-semibold" style={{ color: INK }}>
+                  {contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name}
+                </div>
+              )}
+              {(contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone) && (
+                <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
+                  {contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone}
+                </div>
+              )}
               {sellerAnalytics && (
                 <div className="mt-4" aria-label="Source poster activity">
                   <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
@@ -834,42 +840,42 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               )}
             </div>
           )}
-          {contact?.contact_available && contact.whatsapp_url ? (
-            <>
-              <p className="mt-3 text-sm" style={{ color: MUTED }}>
-                Contact {contact.dealer_name || 'the source poster'} using the phone supplied with this listing.
+          {(() => {
+            const waUrl = contact?.whatsapp_url || (() => {
+              const ph = contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone;
+              const digits = String(ph || '').replace(/\D/g, '');
+              return digits.length >= 7 ? `https://wa.me/${digits}` : null;
+            })();
+            return waUrl ? (
+              <>
+                <p className="mt-3 text-sm" style={{ color: MUTED }}>
+                  Contact {contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name || 'the source poster'} using WhatsApp.
+                </p>
+                <a href={waUrl} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
+                  <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
+                </a>
+              </>
+            ) : (contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name) ? (
+              <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+                Contact phone number not available for this poster.
               </p>
-              <a href={contact.whatsapp_url} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
-                <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
-              </a>
-            </>
-          ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-              A publishable source contact was not supplied for this listing.
-            </p>
-          )}
+            ) : (
+              <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+                Source contact details not available for this listing.
+              </p>
+            );
+          })()}
         </div>
 
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{listing.raw_message_scope === 'normalized_summary' ? 'Source evidence' : 'Original listing'}</h2>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Original listing</h2>
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
             Raw Source Message (Untouched & Complete)
           </div>
-          {listing.raw_message_scope === 'normalized_summary' ? (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-              The original source listing is pending verification. Unverified workbook summary text is withheld from the customer view.
-            </p>
-          ) : listing.raw_message || (listing as any).raw_line || (listing as any).description ? (
-            <>
-              <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>
-                {listing.raw_message || (listing as any).raw_line || (listing as any).description}
-              </pre>
-              {listing.raw_message_truncated && (
-                <p className="mt-3 text-xs leading-5" style={{ color: MUTED }}>
-                  Long source text is shortened in this customer view.
-                </p>
-              )}
-            </>
+          {listing.raw_message || (listing as any).raw_line || (listing as any).description ? (
+            <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>
+              {listing.raw_message || (listing as any).raw_line || (listing as any).description}
+            </pre>
           ) : (
             <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
               Original source text evidence is currently loading or unavailable.
@@ -887,17 +893,17 @@ function ContactMetric({ label, value }: { label: string; value: number }) {
 }
 
 function sourcePosterContact(listing: ListingRecord): ListingContact | null {
-  const phone = String(listing.seller_phone || '').trim();
-  const name = cleanValue(listing.seller_name);
+  const phone = String(listing.seller_phone || (listing as any)['Phone Number'] || (listing as any).phone_number || '').trim();
+  const name = cleanValue(listing.seller_name || (listing as any)['Posted By'] || (listing as any).posted_by);
   if (!phone && !name) return null;
   const digits = phone.replace(/[^\d]/g, '');
   return {
-    contact_available: digits.length >= 7,
+    contact_available: Boolean(phone || name),
     dealer_name: name || undefined,
     phone_display: phone || undefined,
     contact_source: 'OWNER_APPROVED_WORKBOOK',
     whatsapp_url: digits.length >= 7 ? `https://wa.me/${digits}` : undefined,
-    reason: digits.length >= 7 ? undefined : 'SOURCE_PHONE_UNAVAILABLE',
+    reason: undefined,
   };
 }
 

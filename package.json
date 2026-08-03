@@ -86,7 +86,8 @@
     "test:security": "node --test tests/service-token.test.cjs tests/security-boundaries.test.cjs tests/dealer-submissions.test.cjs tests/dealer-workspace.test.cjs tests/forecast-release-gate.test.cjs",
     "test:dealer-directory": "node --test tests/dealer-directory-import.test.cjs",
     "test:price-review": "node --test tests/price-remediation-review.test.cjs",
-    "test:data-recovery": "node --test tests/data-recovery-control-plane.test.cjs"
+    "test:data-recovery": "node --test tests/data-recovery-control-plane.test.cjs",
+    "test:e2e": "node tests/e2e/e2e-test-runner.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

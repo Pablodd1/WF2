@@ -24,17 +24,17 @@ function marketPlausibilityFloor(values) {
 function summarizePrices(values) {
   const raw = values.map(Number).filter(value => Number.isFinite(value) && value > 0);
   const sortedRaw = [...raw].sort((a, b) => a - b);
-  const sample_quality = raw.length < 5 ? 'observational' : raw.length < 10 ? 'provisional' : 'robust';
+  const sample_quality = raw.length < 2 ? 'observational' : raw.length < 10 ? 'provisional' : 'robust';
 
-  if (!raw.length) {
-    return { sample_quality, analytics_ready: false, raw_count: 0, included: [], outliers: [], stats: null };
+  if (raw.length < 2) {
+    return { sample_quality, analytics_ready: false, raw_count: raw.length, included: raw, outliers: [], stats: null };
   }
 
   const q1 = percentile(sortedRaw, 0.25);
   const q3 = percentile(sortedRaw, 0.75);
   const iqr = q3 - q1;
-  const lower_fence = raw.length >= 5 ? q1 - 1.5 * iqr : null;
-  const upper_fence = raw.length >= 5 ? q3 + 1.5 * iqr : null;
+  const lower_fence = raw.length >= 2 ? q1 - 3.0 * iqr : null;
+  const upper_fence = raw.length >= 2 ? q3 + 3.0 * iqr : null;
   const included = lower_fence == null
     ? raw
     : raw.filter(value => value >= lower_fence && value <= upper_fence);
@@ -46,7 +46,7 @@ function summarizePrices(values) {
 
   return {
     sample_quality,
-    analytics_ready: raw.length >= 5,
+    analytics_ready: raw.length >= 2,
     raw_count: raw.length,
     included,
     outliers,

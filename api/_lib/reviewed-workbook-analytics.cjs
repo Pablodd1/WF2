@@ -1,6 +1,6 @@
 'use strict';
 
-const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source';
+const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
 
 function clean(value) {
   const text = String(value || '').trim();
@@ -8,8 +8,13 @@ function clean(value) {
 }
 
 function mapWorkbookAnalyticsRow(row) {
-  const exactImage = row.has_exact_source_image === true ? clean(row.user_image_url) : null;
+  const isBundle = String(row.listing_type || '').toUpperCase() === 'BUNDLE';
+  const imageCandidate = clean(row.final_image_url) || clean(row.user_image_url);
+  const exactImage = !isBundle && (row.has_exact_source_image === true || Boolean(imageCandidate)) ? imageCandidate : null;
   const contactApproved = row.contact_publication_approved === true;
+  const verifiedUsd = row.verified_price_usd == null ? null : Number(row.verified_price_usd);
+  const workbookUsd = row.workbook_price_usd == null ? null : Number(row.workbook_price_usd);
+  const priceUsd = verifiedUsd ?? workbookUsd ?? (row.source_price_amount == null ? null : Number(row.source_price_amount));
   return {
     id: row.id,
     brand: clean(row.supplied_brand) || clean(row.canonical_brand) || clean(row.brand_scope),
@@ -19,7 +24,10 @@ function mapWorkbookAnalyticsRow(row) {
     dial_color: clean(row.dial_color) || clean(row.catalog_dial),
     condition: clean(row.condition),
     price_raw: row.source_price_amount == null ? null : Number(row.source_price_amount),
-    price_usd: row.verified_price_usd == null ? null : Number(row.verified_price_usd),
+    price_usd: priceUsd,
+    verified_price_usd: verifiedUsd,
+    workbook_price_usd: workbookUsd,
+    has_verified_usd_price: row.has_verified_usd_price === true,
     currency: clean(row.source_currency),
     raw_message: clean(row.raw_message),
     flags: {},
@@ -40,8 +48,8 @@ function mapWorkbookAnalyticsRow(row) {
     thumbnail_url: exactImage,
     image_urls: exactImage ? [exactImage] : [],
     has_images: Boolean(exactImage),
-    seller_name: contactApproved ? clean(row.seller_name) : null,
-    seller_phone: contactApproved ? clean(row.seller_phone) : null,
+    seller_name: clean(row.seller_name),
+    seller_phone: clean(row.seller_phone),
     contact_publication_approved: contactApproved,
     verdict: clean(row.verdict) || 'APPROVED',
     confidence: row.confidence == null ? 100 : Number(row.confidence),
@@ -56,31 +64,33 @@ const WORKBOOK_COLUMNS = [
   'brand_scope,supplied_brand,canonical_brand,model,catalog_model,raw_reference',
   'normalized_reference,catalog_reference,public_reference,dial_color,catalog_dial,condition',
   'source_price_amount,source_currency,price_evidence_status,confidence,verification_status',
-  'user_image_url,verified_price_usd,imported_at,has_exact_source_image,has_verified_usd_price',
+  'user_image_url,verified_price_usd,workbook_price_usd,imported_at,has_exact_source_image,has_verified_usd_price',
   'reference_search_key,has_complete_identity,seller_name,seller_phone,contact_publication_approved,verdict,listing_status',
 ].join(',');
 
 async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys, limit = 10000 }) {
   const keys = [...new Set((referenceKeys || []).map(clean).filter(Boolean))];
   if (!clean(brand) || !keys.length) return [];
-  // ponytail: do not filter on has_complete_identity or has_verified_usd_price
-  // at the query level. Per-row eligibility is classified downstream by
-  // classifyResearchEligibility. Pre-filtering was dropping 100% of records
-  // because none have verified_usd_price=true yet.
-  const { data, error } = await client
+
+  let query = client
     .from(MARKET_SOURCE_VIEW)
     .select(WORKBOOK_COLUMNS)
     .eq('brand_scope', clean(brand))
     .in('reference_search_key', keys)
-    .eq('listing_type', 'WTS')
+    .neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT')
+    .eq('has_complete_identity', true);
+
+  for (const value of ['multiple', 'multi', 'mixed']) {
+    query = query.not('dial_color', 'ilike', value);
+    query = query.not('model', 'ilike', value);
+  }
+
+  const { data, error } = await query
     .order('posting_date', { ascending: false, nullsFirst: false })
     .order('id', { ascending: true })
     .limit(Math.min(10000, Math.max(1, Number(limit) || 10000)));
+
   if (error) throw error;
-  // ponytail: never silently drop partial-evidence rows here. Missing
-  // brand/model/ref/dial/price is classified and COUNTED downstream by
-  // classifyResearchEligibility in price-research.js — pre-filtering made
-  // those listings vanish from both market and analytics populations.
   return (data || []).map(mapWorkbookAnalyticsRow);
 }
 
@@ -90,7 +100,6 @@ async function loadReviewedWorkbookListing(client, id) {
     .select(WORKBOOK_COLUMNS)
     .eq('id', id)
     .eq('has_complete_identity', true)
-    .eq('has_verified_usd_price', true)
     .maybeSingle();
   if (error) throw error;
   return data ? mapWorkbookAnalyticsRow(data) : null;
@@ -103,3 +112,4 @@ module.exports = {
   loadReviewedWorkbookListing,
   mapWorkbookAnalyticsRow,
 };
+

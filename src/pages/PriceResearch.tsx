@@ -26,6 +26,39 @@ interface RowData {
     'CURRENCY_UNVERIFIED' | 'CURRENCY_AMBIGUOUS' | 'CURRENCY_RATE_UNVERIFIED' | null;
   source_price_amount?: number | null;
   source_currency?: string | null;
+  posted_by?: string | null;
+  phone_number?: string | null;
+  seller_name?: string | null;
+  seller_phone?: string | null;
+  raw_message?: string | null;
+  raw_line?: string | null;
+  image_url?: string | null;
+  thumbnail_url?: string | null;
+  image_urls?: string[] | null;
+  has_images?: boolean;
+  whatsapp_url?: string | null;
+}
+
+interface WtbListingData {
+  id: string;
+  brand: string;
+  model?: string | null;
+  reference: string;
+  dial_color?: string | null;
+  condition?: string | null;
+  listing_type?: string | null;
+  raw_message?: string | null;
+  seller_name?: string | null;
+  seller_phone?: string | null;
+  whatsapp_url?: string | null;
+  image_url?: string | null;
+  image_urls?: string[] | null;
+  has_images?: boolean;
+  created_at?: string | null;
+  listing_date?: string | null;
+  price_usd?: number | null;
+  price_raw?: number | string | null;
+  currency?: string | null;
 }
 
 interface MonthlyPoint {
@@ -222,6 +255,7 @@ interface LiquidityData {
   wtb_fs_ratio?: number | null;
   demand_count?: number;
   demand_cohorts?: { dial_color: string; count: number }[];
+  demand_rows?: WtbListingData[];
   demand_sample_capped?: boolean;
 }
 
@@ -247,6 +281,27 @@ interface PriceData {
   bundle_data_quality?: {
     unsplit_parent_excluded_count: number;
     status: 'excluded_from_analytics' | 'clean';
+  };
+  total_tracked_listings?: number;
+  wts_eligible_analytics_count?: number;
+  wtb_demand_count?: number;
+  demand_rows?: WtbListingData[];
+  excluded_count?: number;
+  excluded_breakdown?: {
+    unpriced: number;
+    outliers: number;
+    unsplit_bundles: number;
+  };
+  reconciliation?: {
+    total_tracked_listings: number;
+    wts_eligible_analytics_count: number;
+    wtb_demand_count: number;
+    excluded_count: number;
+    excluded_breakdown: {
+      unpriced: number;
+      outliers: number;
+      unsplit_bundles: number;
+    };
   };
   totalListings: number;
   eligible_observation_count?: number;
@@ -286,7 +341,7 @@ interface PriceData {
     truncated: boolean;
   };
   methodology: {
-    method: 'IQR_1_5' | 'PLAUSIBILITY_FLOOR_THEN_IQR_1_5'; minimum_sample: number; included_count: number; excluded_count: number;
+    method: 'IQR_3_0' | 'PLAUSIBILITY_FLOOR_THEN_IQR_3_0'; minimum_sample: number; included_count: number; excluded_count: number;
     plausibility_floor_usd?: number; plausibility_excluded_count?: number; required_field_excluded_count?: number;
     statistical_outlier_count?: number;
     repost_excluded_count?: number;
@@ -776,7 +831,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           )}
           <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${pBrand} model` : 'Choose a brand'}</h3>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-            Brands come from the complete available inventory. Five source-qualified comparable observations are required before price analytics are published.
+            Brands come from the complete available inventory. Two source-qualified comparable observations are required before price analytics are published.
           </div>
 
           {/* Brand chips */}
@@ -880,7 +935,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 </div>
               </div>
               <div style={{ fontSize: 10, color: MUTED, marginTop: 10, fontStyle: 'italic' }}>
-                IQR-filtered · only references with 5+ real listings included
+                IQR-filtered · only references with 2+ real listings included
               </div>
             </div>
           )}
@@ -896,7 +951,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</div>
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
-                    {r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} observations · {r.avg_price == null ? 'analytics pending (minimum 5)' : `avg $${r.avg_price.toLocaleString()}`}
+                    {r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} observations · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}
                   </div>
                 </button>
               ))}
@@ -1087,7 +1142,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                         <span style={{ fontSize: 18, fontWeight: 700, color: BLUE }}>{(data.liquidity.demand_count || 0).toLocaleString()}</span>
                       </div>
                       <div style={{ fontSize: 11, color: MUTED, marginTop: 5 }}>
-                        Only catalog-valid dial cohorts with at least five WTB/NTQ observations are counted.
+                        All catalog-valid WTB/NTQ buyer demand cohorts are tracked.
                       </div>
                       {(data.liquidity.demand_cohorts || []).slice(0, 4).map(cohort => (
                         <div key={cohort.dial_color} className="mt-2 flex items-center justify-between" style={{ fontSize: 12 }}>
@@ -1127,18 +1182,21 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   </>
                 ) : (
                   <div style={{ fontSize: 12, color: RED, lineHeight: 1.5 }}>
-                    Analytics are withheld until at least five catalog-consistent observations exist for the same reference and dial across all listing conditions.
+                    Analytics are withheld until at least two catalog-consistent observations exist for the same reference and dial across all listing conditions.
                   </div>
                 )}
               </div>
             </div>
+
+            {/* ── Dedicated Demand Signals Section (WTB Buyer Demand) ── */}
+            <DemandSignalsSection data={data} onOpenListing={openListing} />
 
             {/* Dial cohorts that satisfy catalog and minimum-sample policy. */}
             {data.dial_analysis && data.dial_analysis.length > 0 && (
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Dial Color Analysis</h3>
                 <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
-                  Catalog-valid dial cohorts with at least five comparable observations for {displayRef}.
+                  Catalog-valid dial cohorts with at least two comparable observations for {displayRef}.
                 </div>
                 {(data.dial_analysis || []).length > 1 && <div role="img" aria-label={`Average comparable price by dial color for ${displayRef}`} style={{ height: 210, marginBottom: 18 }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -1243,7 +1301,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   </div>
 
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
-                    Based on {data.count} comparable WTS listings | standard 1.5 x IQR fences applied.
+                    Based on {data.count} comparable WTS listings | standard 3.0 x IQR fences applied.
                     {!datedHistory && ' Original posting dates are unavailable for a reliable time series, so this is a current range only.'}
                   </div>
                   {data.forecast?.ready ? (
@@ -1277,7 +1335,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    The release starts with canonical-identity-reviewed records that are APPROVED at confidence 90 or higher. Confidence is a parser score, not a probability. Explicit source currency, verified FX provenance when conversion is required, catalog model and dial, bundle, and duplicate checks run before a cohort with five or more observations uses the market plausibility floor and standard 1.5 x IQR method.
+                    The release starts with canonical-identity-reviewed records that are APPROVED at confidence 90 or higher. Confidence is a parser score, not a probability. Explicit source currency, verified FX provenance when conversion is required, catalog model and dial, bundle, and duplicate checks run before a cohort with two or more observations uses the market plausibility floor and standard 3.0 x IQR method.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
@@ -1325,7 +1383,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   <div>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Insufficient qualified market evidence</h3>
                     <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginTop: 5 }}>
-                      Price statistics and charts require at least five approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort.
+                      Price statistics and charts require at least two approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
                       {data.sampledListings.toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · {data.count.toLocaleString()} qualified comparable{data.count === 1 ? '' : 's'}
@@ -1448,7 +1506,7 @@ function ReviewedPriceContext({ record, analytics }: { record: ReviewedMarketRec
     && analytics
     && analytics.analytics_ready
     && analytics.stats
-    && analytics.count >= Math.max(5, Number(analytics.methodology.minimum_sample || 5)),
+    && analytics.count >= Math.max(2, Number(analytics.methodology.minimum_sample || 2)),
   );
   const eligibleUsd = record.price_research_eligible === true
     && record.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
@@ -1459,7 +1517,7 @@ function ReviewedPriceContext({ record, analytics }: { record: ReviewedMarketRec
   if (!exactCohort || !analytics?.stats) {
     return (
       <div style={{ marginTop: 12, padding: 10, border: `1px solid ${BORDER}`, borderRadius: 7, color: MUTED, fontSize: 11, lineHeight: 1.5 }}>
-        Price rating and timeline require at least five verified USD comparable offers for this exact reference and dial. Projections remain unavailable unless the separate historical validation also passes.
+        Price rating and timeline require at least two verified USD comparable offers for this exact reference and dial. Projections remain unavailable unless the separate historical validation also passes.
         {sameIdentityAndDial && analytics ? ` ${analytics.count.toLocaleString()} are available now.` : ''}
       </div>
     );
@@ -1825,7 +1883,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                   <div style={{ minWidth: 88, borderRadius: 8, padding: '11px 10px', textAlign: 'center', background: `${rating.color}18`, color: rating.color, border: `1px solid ${rating.color}55`, fontWeight: 800, fontSize: 13 }}>{rating.label}</div>
                   <div style={{ color: MUTED, fontSize: 13, lineHeight: 1.55 }}>{rating.reason}</div>
                 </div>
-                {benchmark && comparableCount >= 5 && <div className="grid grid-cols-3 gap-3" style={{ marginTop: 18 }}>
+                {benchmark && comparableCount >= 2 && <div className="grid grid-cols-3 gap-3" style={{ marginTop: 18 }}>
                   <Metric label="Comparable low" value={`$${benchmark.min.toLocaleString()}`} />
                   <Metric label="Comparable average" value={`$${benchmark.avg.toLocaleString()}`} />
                   <Metric label="Comparable high" value={`$${benchmark.max.toLocaleString()}`} />
@@ -1871,13 +1929,21 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
               )}
 
               <DetailCard title="Posted by">
-                {seller?.dealer_name ? (
+                {seller?.dealer_name || seller?.phone_display || summary.posted_by || summary.phone_number || (summary as any)['Posted By'] || (summary as any)['Phone Number'] ? (
                   <>
-                    <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>{seller.dealer_name}</div>
-                    {seller.dealer_company && <div style={{ color: MUTED, fontSize: 13, marginTop: 3 }}>{seller.dealer_company}</div>}
+                    {(seller?.dealer_name || summary.posted_by || (summary as any)['Posted By']) && (
+                      <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>
+                        {seller?.dealer_name || summary.posted_by || (summary as any)['Posted By']}
+                      </div>
+                    )}
+                    {seller?.dealer_company && <div style={{ color: MUTED, fontSize: 13, marginTop: 3 }}>{seller.dealer_company}</div>}
                     {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
-                    {seller.phone_display && <div style={{ color: NAVY, fontSize: 13, fontWeight: 800, marginTop: 8 }}>{seller.phone_display}</div>}
-                    {seller.dealer_stats ? (
+                    {(seller?.phone_display || summary.phone_number || (summary as any)['Phone Number']) && (
+                      <div style={{ color: NAVY, fontSize: 13, fontWeight: 800, marginTop: 8 }}>
+                        {seller?.phone_display || summary.phone_number || (summary as any)['Phone Number']}
+                      </div>
+                    )}
+                    {seller?.dealer_stats ? (
                       <>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }} aria-label="Source poster activity">
                           <Metric label="Total posts" value={Number(seller.dealer_stats.total_posts).toLocaleString()} />
@@ -1895,47 +1961,57 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                           </div>
                         )}
                       </>
-                    ) : (
-                      <div style={{ marginTop: 16, padding: 12, background: LIGHT_GRAY, color: MUTED, fontSize: 12 }}>
-                        Dealer activity is not available until an applied-lineage aggregate is verified.
-                      </div>
-                    )}
+                    ) : null}
                     <div className="flex flex-wrap gap-3" style={{ marginTop: 18 }}>
-                      {seller.dealer_profile_url && <Link to={seller.dealer_profile_url} style={{ color: NAVY, border: `1px solid ${BORDER}`, padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>View profile</Link>}
-                      {seller.contact_available && seller.whatsapp_url && <a href={seller.whatsapp_url} target="_blank" rel="noreferrer" className="flex items-center gap-2" style={{ color: '#07140b', background: '#25D366', padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 800 }}><MessageCircle size={15} /> Contact on WhatsApp</a>}
+                      {seller?.dealer_profile_url && <Link to={seller.dealer_profile_url} style={{ color: NAVY, border: `1px solid ${BORDER}`, padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>View profile</Link>}
+                      {(() => {
+                        const waUrl = seller?.whatsapp_url || (() => {
+                          const rawPhone = seller?.phone_display || summary.phone_number || (summary as any)['Phone Number'];
+                          const digits = String(rawPhone || '').replace(/\D/g, '');
+                          return digits.length >= 7 ? `https://wa.me/${digits}` : null;
+                        })();
+                        return waUrl ? (
+                          <a href={waUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2" style={{ color: '#07140b', background: '#25D366', padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 800 }}>
+                            <MessageCircle size={15} /> Contact on WhatsApp
+                          </a>
+                        ) : null;
+                      })()}
                     </div>
                   </>
                 ) : (
-                  <div style={{ color: MUTED, fontSize: 13 }}>Poster data is not available for this listing. No identity or contact data is guessed.</div>
+                  <div style={{ color: MUTED, fontSize: 13 }}>Poster data is not available for this listing.</div>
                 )}
               </DetailCard>
 
-              <DetailCard title="Original listing" action={detail.raw_message ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy listing text'}</button> : undefined}>
+              <DetailCard title="Original listing" action={detail?.raw_message || summary.raw_message || (summary as any).raw_line ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy listing text'}</button> : undefined}>
                 <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
-                  <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>ORIGINAL LISTING / CONTACT REDACTED</span>
+                  <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>RAW SOURCE MESSAGE</span>
                   <span style={{ color: MUTED, fontSize: 12 }}>
-                    {detail.raw_message_scope === 'original_post'
-                      ? 'Complete post recovered from immutable ingestion lineage; direct contact tokens are redacted in this public view.'
-                      : detail.raw_message_scope === 'stored_source_message'
-                        ? 'Stored source text for this historical listing; direct contact tokens are redacted and full-post lineage is unavailable.'
-                        : 'Original listing text has not yet been linked to this record.'}
+                    {detail?.raw_message_scope === 'original_post'
+                      ? 'Complete post recovered from source ingestion lineage.'
+                      : 'Stored raw source message text for this listing.'}
                   </span>
                 </div>
-                {detail.raw_message ? <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>{detail.raw_message}</pre> : <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>Original listing text is not available for this record yet.</div>}
-                {detail.raw_message_truncated && <div style={{ marginTop: 8, color: MUTED, fontSize: 11 }}>Long source text is shortened in this customer view; the immutable original remains preserved for review.</div>}
+                {detail?.raw_message || summary.raw_message || (summary as any).raw_line ? (
+                  <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>
+                    {detail?.raw_message || summary.raw_message || (summary as any).raw_line}
+                  </pre>
+                ) : (
+                  <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>Original listing text is not available for this record yet.</div>
+                )}
               </DetailCard>
 
               <DetailCard title="Watch details">
                 <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
                   {observedDate && <DetailField label="Observed" value={observedDate} />}
-                  <DetailField label="Asking price as posted" value={detail.price_raw != null && detail.currency ? `${detail.price_raw} ${detail.currency}` : null} />
-                  <DetailField label="Condition" value={detail.condition} />
-                  <DetailField label="Model" value={detail.model || null} />
-                  <DetailField label="Dial" value={detail.dial_color} />
-                  <DetailField label="Year" value={detail.year} />
-                  {detail.region && !/^unknown$/i.test(detail.region) && <DetailField label="Region" value={detail.region} />}
+                  <DetailField label="Asking price as posted" value={detail?.price_raw != null && detail?.currency ? `${detail.price_raw} ${detail.currency}` : null} />
+                  <DetailField label="Condition" value={detail?.condition} />
+                  <DetailField label="Model" value={detail?.model || null} />
+                  <DetailField label="Dial" value={detail?.dial_color || summary.dial_color} />
+                  <DetailField label="Year" value={detail?.year || summary.year} />
+                  {detail?.region && !/^unknown$/i.test(detail.region) && <DetailField label="Region" value={detail.region} />}
                 </div>
-                {detail.accessories.length > 0 && <div style={{ marginTop: 20 }}><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Accessories stated in source</div><div className="flex flex-wrap gap-2">{detail.accessories.map(item => <span key={item} style={{ background: LIGHT_GRAY, border: `1px solid ${BORDER}`, padding: '5px 9px', borderRadius: 5, fontSize: 12 }}>{item}</span>)}</div></div>}
+                {detail?.accessories && detail.accessories.length > 0 && <div style={{ marginTop: 20 }}><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Accessories stated in source</div><div className="flex flex-wrap gap-2">{detail.accessories.map(item => <span key={item} style={{ background: LIGHT_GRAY, border: `1px solid ${BORDER}`, padding: '5px 9px', borderRadius: 5, fontSize: 12 }}>{item}</span>)}</div></div>}
               </DetailCard>
 
             </section>
@@ -2009,4 +2085,213 @@ function Footer() {
       </div>
     </div>
   );
+}
+
+function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpenListing: (row: RowData) => void }) {
+  const displayRef = data.resolvedRef || data.reference || '';
+  const demandCount = data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? data.liquidity?.demand_count ?? 0;
+  const demandCohorts = data.liquidity?.demand_cohorts || [];
+  const demandRows = data.demand_rows || data.liquidity?.demand_rows || [];
+
+  return (
+    <div style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 24, marginBottom: 24 }}>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span style={{ backgroundColor: BLUE, color: WHITE, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Demand Signals (WTB)
+            </span>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: NAVY, margin: 0 }}>
+              Buyer Demand & WTB Volume
+            </h3>
+          </div>
+          <p style={{ fontSize: 12, color: MUTED, margin: '4px 0 0' }}>
+            Want-To-Buy (WTB) listings representing active buyer interest for {displayRef}. Strictly separated from WTS asking-price averages.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-4" style={{ backgroundColor: WHITE, padding: '10px 16px', borderRadius: 8, border: `1px solid ${BORDER}` }}>
+          <div>
+            <div style={{ fontSize: 11, color: MUTED, fontWeight: 500 }}>Total WTB Volume</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: BLUE }}>
+              {demandCount.toLocaleString()} <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>buyers</span>
+            </div>
+          </div>
+          {data.liquidity?.wtb_fs_ratio != null && (
+            <div style={{ borderLeft: `1px solid ${BORDER}`, paddingLeft: 16 }}>
+              <div style={{ fontSize: 11, color: MUTED, fontWeight: 500 }}>WTB / WTS Ratio</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{Number(data.liquidity.wtb_fs_ratio).toFixed(2)}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Cohorts breakdown by dial color */}
+      {demandCohorts.length > 0 && (
+        <div style={{ backgroundColor: WHITE, padding: 14, borderRadius: 8, border: `1px solid ${BORDER}`, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: NAVY, marginBottom: 8 }}>
+            Demand Cohorts by Dial Color (All Observations Retained):
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {demandCohorts.map(cohort => (
+              <div key={cohort.dial_color} className="inline-flex items-center gap-2" style={{ backgroundColor: LIGHT_GRAY, padding: '5px 10px', borderRadius: 6, fontSize: 12, border: `1px solid ${BORDER}` }}>
+                <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: dialSwatch(cohort.dial_color), border: '1px solid rgba(0,0,0,0.18)' }} />
+                <span>{cohort.dial_color}:</span>
+                <span style={{ color: BLUE, fontWeight: 700 }}>{cohort.count.toLocaleString()} {cohort.count === 1 ? 'buyer' : 'buyers'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* WTB Listings Grid / Cards */}
+      {demandRows.length > 0 ? (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h4 style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: 0 }}>
+              WTB Demand Listings ({demandRows.length})
+            </h4>
+            <span style={{ fontSize: 11, color: MUTED }}>
+              Seller/Buyer contacts, WhatsApp links, unredacted raw source messages, and image flow-through
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {demandRows.map(row => (
+              <WtbDemandCard key={row.id} row={row} onOpen={() => onOpenListing(mapWtbToRowData(row))} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div style={{ backgroundColor: WHITE, borderRadius: 8, border: `1px dashed #bfdbfe`, padding: 20, textAlign: 'center', fontSize: 12, color: MUTED }}>
+          No individual WTB listing cards available for this reference. Total WTB demand count: {demandCount}.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => void }) {
+  const brandRef = [row.brand, row.reference].filter(Boolean).join(' ');
+  const title = row.model ? `${brandRef} (${row.model})` : brandRef;
+  const phone = row.seller_phone;
+  const whatsappUrl = row.whatsapp_url || (phone ? `https://wa.me/${phone.replace(/[^0-9]/g, '')}` : null);
+  const sellerName = row.seller_name || 'Buyer / Dealer';
+  const imgUrl = row.image_url || (row.image_urls && row.image_urls[0]) || null;
+  const priceDisplay = row.price_usd && row.price_usd > 0
+    ? `$${row.price_usd.toLocaleString()} USD`
+    : row.price_raw
+      ? `${row.currency || ''} ${row.price_raw}`
+      : 'WTB / Budget Unstated';
+
+  return (
+    <div style={{ backgroundColor: WHITE, borderRadius: 8, border: `1px solid ${BORDER}`, padding: 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+      <div>
+        {/* Card Header */}
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span style={{ backgroundColor: '#e0e7ff', color: '#3730a3', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, textTransform: 'uppercase' }}>
+            {row.listing_type || 'WTB'}
+          </span>
+          <span style={{ fontSize: 11, color: MUTED, fontFamily: 'monospace' }}>
+            {row.created_at ? String(row.created_at).split('T')[0] : ''}
+          </span>
+        </div>
+
+        {/* Content & Image */}
+        <div className="flex gap-3 mb-3">
+          {imgUrl && (
+            <div style={{ width: 72, height: 72, flexShrink: 0, borderRadius: 6, background: LIGHT_GRAY, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
+              <img src={imgUrl} alt={title} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
+            </div>
+          )}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h5 style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</h5>
+            <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+              <span>Dial: <strong style={{ color: TEXT }}>{row.dial_color || 'Unspecified'}</strong></span>
+              {row.condition && <span style={{ marginLeft: 8 }}>· {row.condition}</span>}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: BLUE, marginTop: 4 }}>
+              Target Price: {priceDisplay}
+            </div>
+          </div>
+        </div>
+
+        {/* Seller / Buyer Contact Box */}
+        <div style={{ backgroundColor: LIGHT_GRAY, padding: 10, borderRadius: 6, marginBottom: 10, fontSize: 12, border: `1px solid ${BORDER}` }}>
+          <div className="flex items-center justify-between flex-wrap gap-1">
+            <span style={{ color: MUTED }}>Posted by / Contact:</span>
+            <span style={{ fontWeight: 700, color: TEXT }}>{sellerName}</span>
+          </div>
+          {phone && (
+            <div className="flex items-center justify-between flex-wrap gap-1 mt-1">
+              <span style={{ color: MUTED }}>Phone:</span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 600, color: NAVY }}>{phone}</span>
+            </div>
+          )}
+          {whatsappUrl && (
+            <div style={{ marginTop: 8 }}>
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5"
+                style={{ backgroundColor: '#25D366', color: '#07140b', padding: '5px 10px', borderRadius: 5, fontSize: 11, fontWeight: 800, textDecoration: 'none' }}
+              >
+                <MessageCircle size={13} /> Contact on WhatsApp
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Unredacted Raw Source Message */}
+        {row.raw_message && (
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: MUTED, marginBottom: 4 }}>
+              Unredacted Raw Source Message
+            </div>
+            <pre style={{ margin: 0, padding: 10, background: '#111827', color: '#e5e7eb', borderRadius: 6, fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 130, overflowY: 'auto' }}>
+              {row.raw_message}
+            </pre>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex items-center gap-1"
+          style={{ border: 0, background: 'transparent', color: BLUE, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+        >
+          <Eye size={13} /> View full listing detail
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function mapWtbToRowData(row: WtbListingData): RowData {
+  return {
+    id: row.id,
+    price_usd: row.price_usd || null,
+    created_at: row.created_at || new Date().toISOString(),
+    listing_date: row.listing_date || row.created_at || null,
+    dial_color: row.dial_color || null,
+    condition: row.condition || null,
+    source: 'WTB_DEMAND',
+    year: null,
+    is_outlier: true,
+    outlier_reason: null,
+    source_price_amount: row.price_raw ? Number(row.price_raw) : null,
+    source_currency: row.currency || null,
+    posted_by: row.seller_name || null,
+    phone_number: row.seller_phone || null,
+    seller_name: row.seller_name || null,
+    seller_phone: row.seller_phone || null,
+    raw_message: row.raw_message || null,
+    image_url: row.image_url || null,
+    thumbnail_url: row.image_url || null,
+    image_urls: row.image_urls || (row.image_url ? [row.image_url] : []),
+    has_images: Boolean(row.has_images || row.image_url),
+    whatsapp_url: row.whatsapp_url || null,
+  };
 }
