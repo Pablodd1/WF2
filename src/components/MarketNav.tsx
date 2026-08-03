@@ -2,14 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { MarketHeader } from './MarketHeader';
 
-<<<<<<< HEAD
 const PUBLIC_LINKS = [
   { to: '/telegram-test', label: 'Telegram Test Staging' },
   { to: '/dealer-login', label: 'Dealer Login' },
 ];
-
-=======
->>>>>>> 85e67db21e91bdde5ffca652d707550c4b952141
 export function MarketNav() {
   const location = useLocation();
   const [role, setRole] = useState('');

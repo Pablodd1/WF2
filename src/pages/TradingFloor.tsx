@@ -853,11 +853,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{listing.raw_message_scope === 'normalized_summary' ? 'Source evidence' : 'Original listing'}</h2>
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
-<<<<<<< HEAD
             Raw Source Message (Untouched & Complete)
-=======
-            {listing.raw_message_scope === 'normalized_summary' ? 'Original source pending verification' : 'Raw source message'}
->>>>>>> 85e67db21e91bdde5ffca652d707550c4b952141
           </div>
           {listing.raw_message_scope === 'normalized_summary' ? (
             <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
@@ -874,11 +870,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </>
           ) : (
             <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-<<<<<<< HEAD
-              {evidenceError || 'Original source text evidence is currently loading or unavailable.'}
-=======
-              Source evidence is unavailable for this record.
->>>>>>> 85e67db21e91bdde5ffca652d707550c4b952141
+              Original source text evidence is currently loading or unavailable.
             </p>
           )}
         </div>
