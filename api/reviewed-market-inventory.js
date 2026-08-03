@@ -172,17 +172,20 @@ function summarizeCoverage(records) {
 }
 
 function mapReviewedRecord(row) {
+  // Prefer user_image_url (direct source upload) then fall back to display_image_url
+  // (platform-curated or reference CDN image already stored in the workbook).
+  const candidateImageUrl = row.user_image_url || row.display_image_url || null;
   const hasExactSourceImage = Boolean(
-    row.user_image_url
-    && String(row.user_image_url).trim().length > 0
-    && /^https?:\/\/[^\s]+$/i.test(String(row.user_image_url).trim())
+    candidateImageUrl
+    && String(candidateImageUrl).trim().length > 0
+    && /^https?:\/\/[^\s]+$/i.test(String(candidateImageUrl).trim())
   );
   const hasVerifiedUsdPrice = row.price_evidence_status === EXPLICIT_USD_STATUS
     && row.workbook_price_usd > 0;
   const verifiedPriceUsd = hasVerifiedUsdPrice ? row.workbook_price_usd : null;
 
   const exactImageUrl = hasExactSourceImage
-    ? exactHttpUrl(row.user_image_url)
+    ? exactHttpUrl(candidateImageUrl)
     : null;
   const contactApproved = row.contact_publication_approved === true;
   const sourceAmount = positiveNumber(row.source_price_amount);
@@ -250,7 +253,7 @@ function mapReviewedRecord(row) {
     listing_type: row.listing_type || 'OTHER',
     listing_date: row.posting_date || null,
     created_at: row.posting_date || row.imported_at || null,
-    raw_message: row.raw_message || null,
+    raw_message: row.raw_message || row.raw_line || null,
     raw_message_scope: normalizedSummary ? 'normalized_summary' : 'stored_source_message',
     raw_message_evidence_type: normalizedSummary ? 'WORKBOOK_NORMALIZED_SUMMARY' : 'SOURCE_RAW_MESSAGE',
     seller_name: sellerName,
@@ -406,13 +409,14 @@ module.exports = async function handler(req, res) {
 
     const columns = [
       'id,source_file,source_row_number,source_record_id,posting_date,posted_by',
-      'phone_number,contact_publication_approved,raw_message,listing_type,brand_scope',
+      'phone_number,contact_publication_approved,raw_message,raw_line,listing_type,brand_scope',
       'supplied_brand,canonical_brand,model,catalog_model,raw_reference',
       'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
       'workbook_price_usd,source_price_amount,source_price_text,source_currency',
       'price_evidence_status,confidence,verification_status,user_image_url,imported_at',
       'has_image,display_image_url,image_evidence_type',
     ].join(',');
+
     let query = client
       .from('reviewed_workbook_inventory')
       .select(columns, {
