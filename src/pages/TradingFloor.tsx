@@ -136,12 +136,10 @@ type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
 function hasListingImage(listing: ListingRecord) {
-  return Boolean(
-    ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(String(listing.image_evidence_type || ''))
-    &&
-    listing.has_images
-    && (listing.thumbnail_url || listing.image_urls?.some(Boolean)),
-  );
+  if (listing.thumbnail_url && listing.thumbnail_url.trim().length > 0) return true;
+  if (Array.isArray(listing.image_urls) && listing.image_urls.some(url => Boolean(url && String(url).trim().length > 0))) return true;
+  if (listing.has_images) return true;
+  return false;
 }
 
 export default function TradingFloor() {
