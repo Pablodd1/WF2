@@ -1009,7 +1009,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Original listing</h2>
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
-            Raw source message · contact redacted
+            Raw Source Message (Untouched & Complete)
           </div>
           {evidence?.raw_message ? (
             <>
@@ -1022,7 +1022,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </>
           ) : (
             <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-              {evidenceError || 'Contact-redacted source evidence is unavailable for this record.'}
+              {evidenceError || 'Original source text evidence is currently loading or unavailable.'}
             </p>
           )}
         </div>

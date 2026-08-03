@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { MarketHeader } from './MarketHeader';
 
 const PUBLIC_LINKS = [
+  { to: '/telegram-test', label: 'Telegram Test Staging' },
   { to: '/dealer-login', label: 'Dealer Login' },
 ];
 

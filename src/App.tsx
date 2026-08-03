@@ -21,6 +21,7 @@ const DealerSubmitListing = lazy(() => import('@/pages/DealerSubmitListing'));
 const DealerAccount = lazy(() => import('@/pages/DealerAccount'));
 const DealerDirectory = lazy(() => import('@/pages/DealerDirectory'));
 const DealerProfile = lazy(() => import('@/pages/DealerProfile'));
+const TelegramTest = lazy(() => import('@/pages/TelegramTest'));
 const MultiListings = lazy(() => import('@/pages/MultiListings'));
 const PublicInfo = lazy(() => import('@/pages/PublicInfo'));
 
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/dashboard" element={<DealerGate allowedRoles={['admin']}><OperationsDashboard /></DealerGate>} />
         <Route path="/dashboard/legacy" element={<Navigate to="/dashboard" replace />} />
         <Route path="/trading" element={<TradingFloor />} />
+        <Route path="/telegram-test" element={<TelegramTest />} />
         <Route path="/analytics" element={<DealerGate><SourceAnalytics /></DealerGate>} />
         <Route path="/analytics/legacy" element={<Navigate to="/analytics" replace />} />
         <Route path="/analytics-dashboard" element={<Navigate to="/analytics" replace />} />
