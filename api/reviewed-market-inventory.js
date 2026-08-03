@@ -172,16 +172,24 @@ function summarizeCoverage(records) {
 }
 
 function mapReviewedRecord(row) {
-  const exactImageUrl = row.has_exact_source_image === true
+  const hasExactSourceImage = Boolean(
+    row.user_image_url
+    && String(row.user_image_url).trim().length > 0
+    && /^https?:\/\/[^\s]+$/i.test(String(row.user_image_url).trim())
+  );
+  const hasVerifiedUsdPrice = row.price_evidence_status === EXPLICIT_USD_STATUS
+    && row.workbook_price_usd > 0;
+  const verifiedPriceUsd = hasVerifiedUsdPrice ? row.workbook_price_usd : null;
+
+  const exactImageUrl = hasExactSourceImage
     ? exactHttpUrl(row.user_image_url)
     : null;
   const contactApproved = row.contact_publication_approved === true;
   const sourceAmount = positiveNumber(row.source_price_amount);
   const workbookUsd = positiveNumber(row.workbook_price_usd);
   const workbookPriceReview = workbookPriceReviewReason(row.workbook_price_usd);
-  const verifiedUsd = row.has_verified_usd_price === true
-    && row.price_evidence_status === EXPLICIT_USD_STATUS
-    ? positiveNumber(row.verified_price_usd)
+  const verifiedUsd = hasVerifiedUsdPrice
+    ? positiveNumber(verifiedPriceUsd)
     : null;
   const brand = row.supplied_brand || row.canonical_brand || row.brand_scope;
   const model = row.model || row.catalog_model || null;
@@ -204,11 +212,10 @@ function mapReviewedRecord(row) {
   const referenceSearchKey = row.reference_search_key
     || referenceComparisonKey(reference)
     || null;
+
   const locallyCompleteIdentity = [brand, model, reference, dialColor]
     .every(evidenceValuePresent);
-  const hasCompleteIdentity = row.has_complete_identity === true
-    && locallyCompleteIdentity
-    && !invalidReference;
+  const hasCompleteIdentity = locallyCompleteIdentity && !invalidReference;
   const priceEligible = hasCompleteIdentity && verifiedUsd !== null;
   const normalizedSummary = isNormalizedWorkbookSummary(row);
   const evidenceCoverage = recordEvidenceCoverage({
@@ -404,46 +411,50 @@ module.exports = async function handler(req, res) {
       'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
       'workbook_price_usd,source_price_amount,source_price_text,source_currency',
       'price_evidence_status,confidence,verification_status,user_image_url,imported_at',
-      'has_exact_source_image,has_verified_usd_price,verified_price_usd,reference_search_key',
-      'public_reference,reference_is_price_token,has_complete_identity,has_supplied_price',
+      'has_image,display_image_url,image_evidence_type',
     ].join(',');
     let query = client
-      .from(MARKET_SOURCE_VIEW)
+      .from('reviewed_workbook_inventory')
       .select(columns, {
         count: preciseCount ? 'exact' : scopedFilter ? 'estimated' : undefined,
       });
     query = pageWindow.reverse
       ? query
-        // ponytail: images-first sort was reverted — verified via direct
-        // PostgREST A/B that ORDER BY has_exact_source_image FIRST causes a
-        // Postgres statement timeout on the full reviewed_workbook view (no
-        // index supports it), 503ing the whole Trading Floor. Restoring the
-        // proven indexed order (price evidence primary, images as tiebreaker).
-        .order('has_supplied_price', { ascending: true })
-        .order('has_verified_usd_price', { ascending: true })
-        .order('verified_price_usd', { ascending: true, nullsFirst: true })
-        .order('has_exact_source_image', { ascending: true })
-        .order('posting_date', { ascending: true, nullsFirst: true })
+        .order('has_image', { ascending: true })
+        .order('workbook_price_usd', { ascending: true, nullsFirst: true })
         .order('id', { ascending: false })
       : query
-        .order('has_supplied_price', { ascending: false })
-        .order('has_verified_usd_price', { ascending: false })
-        .order('verified_price_usd', { ascending: false, nullsFirst: false })
-        .order('has_exact_source_image', { ascending: false })
-        .order('posting_date', { ascending: false, nullsFirst: false })
+        .order('has_image', { ascending: false })
+        .order('workbook_price_usd', { ascending: false, nullsFirst: false })
         .order('id', { ascending: true });
     if (brand) query = query.ilike('brand_scope', brand);
-    if (reference) query = query.eq('reference_search_key', reference);
+    if (reference) query = query.eq('normalized_reference', reference);
     if (exactDialVariants.length) query = query.in('dial_color', exactDialVariants);
     query = query.neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT');
-    query = query.eq('has_complete_identity', true);
+    query = query
+      .not('brand_scope', 'is', null)
+      .not('brand_scope', 'ilike', 'unknown')
+      .not('brand_scope', 'ilike', 'null')
+      .not('brand_scope', 'ilike', 'n/a')
+      .not('model', 'is', null)
+      .not('model', 'ilike', 'unknown')
+      .not('model', 'ilike', 'null')
+      .not('model', 'ilike', 'n/a')
+      .not('dial_color', 'is', null)
+      .not('dial_color', 'ilike', 'unknown')
+      .not('dial_color', 'ilike', 'null')
+      .not('dial_color', 'ilike', 'n/a')
+      .not('normalized_reference', 'is', null)
+      .not('normalized_reference', 'ilike', 'unknown')
+      .not('normalized_reference', 'ilike', 'null')
+      .not('normalized_reference', 'ilike', 'n/a');
     // Sentinel identity values describe a bundle/multi-listing, not a single
     // watch configuration. Preserve them in reviewed inventory for correction.
     for (const value of MULTIPLE_LISTING_IDENTITY_VALUES) {
       query = query.not('dial_color', 'ilike', value);
       query = query.not('model', 'ilike', value);
     }
-    if (imagesOnly) query = query.eq('has_exact_source_image', true);
+    if (imagesOnly) query = query.eq('has_image', true);
     if (listingType) query = query.eq('listing_type', listingType);
     if (condition) query = query.eq('condition', condition);
     query = query.range(
