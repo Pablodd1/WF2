@@ -1,4 +1,4 @@
-# BRIEFING — 2026-08-03T16:31:39Z
+# BRIEFING — 2026-08-03T16:35:18Z
 
 ## Mission
 Adversarially re-verify Milestone M4 remediation fixes in `src/pages/InsightDetails.tsx` and `src/lib/marketPriceRating.ts`.
@@ -15,9 +15,21 @@ Adversarially re-verify Milestone M4 remediation fixes in `src/pages/InsightDeta
 - Review-only — do NOT modify implementation code (report findings/bugs, test harness scripts are allowed in workspace)
 - Run empirical verification and stress testing
 
+## Attack Surface
+- **Hypotheses tested**:
+  - `rateMarketPrice` handles N=2,3,4,5+ items correctly and returns non-NOT_RATED objects for in-range prices (Passed).
+  - `InsightDetails.tsx` computes non-zero quantiles and retains valid filtered prices for N=2,3 items (Passed).
+  - Production build succeeds with 0 TypeScript errors (Passed).
+  - Standard unit tests and E2E tests pass (Passed).
+- **Vulnerabilities found**: None in Round 2. Round 1 defects were fully resolved.
+- **Untested angles**: None.
+
+## Loaded Skills
+- None loaded explicitly.
+
 ## Current Parent
 - Conversation ID: a6b04094-c6d6-4146-baad-52f14c409183
-- Updated: 2026-08-03T16:31:39Z
+- Updated: 2026-08-03T16:35:18Z
 
 ## Review Scope
 - **Files to review**: `src/pages/InsightDetails.tsx`, `src/lib/marketPriceRating.ts`
@@ -29,8 +41,15 @@ Adversarially re-verify Milestone M4 remediation fixes in `src/pages/InsightDeta
 - **Review criteria**: Outlier relaxation correctness (N < 4 vs N >= 4), handling of 2, 3, 4, 5+ items, valid price filtering, non-null returns.
 
 ## Key Decisions Made
-- Starting adversarial verification round 2 by reading reference documents, source code, and running stress test suites.
+- Executed existing stress test suite (`.agents/challenger_m4_2/stress_test_suite.js`) -> 27/27 PASSED.
+- Created and executed custom stress harness (`.agents/challenger_m4_r2_2/stress_harness.ts`) -> 61/61 PASSED.
+- Ran `npm run build` -> Clean build (0 TS errors).
+- Ran unit & E2E tests -> All passed.
+- Verdict: **APPROVE**.
 
 ## Artifact Index
 - DISPATCH.md — Initial task dispatch
 - BRIEFING.md — Context and identity tracking
+- progress.md — Heartbeat progress log
+- stress_harness.ts — Custom stress test script
+- handoff.md — Final handoff report (Verdict: APPROVE)

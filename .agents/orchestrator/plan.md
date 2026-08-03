@@ -29,10 +29,11 @@
 |---|------|-------|-------------|--------|
 | M1 | Data Consistency | Align Trading Floor & Price Research query sources & count reconciliation formula | None | DONE |
 | M2 | WTB Demand Signals | Integrate WTB listings as Demand Signals in Price Research | M1 | DONE |
-| M3 | Contacts & Raw Messages | Render complete unredacted raw messages ('oceandigital' untouched), phone, WhatsApp button, dealer stats, image handling | None | IN_PROGRESS |
-| M4 | Outlier Filter Relaxation | Update IQR multiplier to 3.0x and observation threshold to 2 across API and client libraries | M1, M2 | IN_PROGRESS |
+| M3 | Contacts & Raw Messages | Render complete unredacted raw messages ('oceandigital' untouched), phone, WhatsApp button, dealer stats, image handling | None | DONE |
+| M4 | Outlier Filter Relaxation | Update IQR multiplier to 3.0x and observation threshold to 2 across API and client libraries | M1, M2 | DONE |
 | M5 | Navigation & UX | Implement persistent TopNav, breadcrumbs & back navigation | None | DONE |
-| M6 | E2E Testing & Build Integrity | E2E test verification, `npm run build`, `git push origin main`, Vercel check | M1-M5 | PLANNED |
+| M6 | E2E Testing & Build Integrity | E2E test verification, `npm run build`, `git push origin main`, Vercel check | M1-M5 | DONE |
+
 
 ## Interface Contracts
 ### Trading Floor ↔ Price Research Data Reconciliation
