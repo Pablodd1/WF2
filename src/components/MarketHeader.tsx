@@ -2,41 +2,51 @@ import { ExternalLink } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const LUXFI_URL = 'https://luxfi.ai/#add-fi';
-const LUXURY_APP_POST_ITEM_URL = 'https://luxuryapp-wf-w5o1.vercel.app/';
 
 const HEADER_LINKS = [
   { label: 'HOME', to: '/' },
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'WANT TO BUY', to: '/trading?type=WTB' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
-  { label: 'POST ITEM', href: LUXURY_APP_POST_ITEM_URL, external: true },
+  { label: 'POST ITEM', to: '/dealer/post' },
   { label: 'ACCOUNT', to: '/dealer/account/profile' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
+];
+
+const LANDING_LINKS = [
+  { label: 'TRADING FLOOR', to: '/trading' },
+  { label: 'HIRE FI', href: LUXFI_URL, external: true },
+  { label: 'LOGIN', to: '/dealer-login' },
 ];
 
 type MarketHeaderProps = {
   compact?: boolean;
   className?: string;
+  landing?: boolean;
   showLogo?: boolean;
 };
 
-export function MarketHeader({ compact = false, className = '', showLogo = true }: MarketHeaderProps) {
+export function MarketHeader({ compact = false, className = '', landing = false, showLogo = true }: MarketHeaderProps) {
   const location = useLocation();
+  const links = landing ? LANDING_LINKS : HEADER_LINKS;
 
   return (
     <header className={`relative z-40 border-b border-white/10 bg-[#070708]/95 text-white backdrop-blur-md ${className}`}>
       <div className={`mx-auto flex max-w-7xl flex-col items-stretch gap-2 px-4 ${compact ? 'py-2.5' : 'py-3.5'} sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6 lg:px-8`}>
         {showLogo ? (
-          <Link to="/" aria-label="Curated Luxury home" className="flex min-w-0 items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center border border-[#c9a96e]/65 font-serif text-sm text-[#d4b87a] shadow-[0_0_24px_rgba(201,169,110,.18)] sm:h-11 sm:w-11">CL</span>
-            <span className="hidden truncate font-serif text-lg text-white sm:block">Curated Luxury</span>
+          <Link to="/" aria-label="Curated Luxury home" className="flex min-w-0 shrink-0 items-center">
+            <img
+              src="/images/curated-luxury-logo-dark.png"
+              alt="Curated Luxury"
+              className="h-10 w-auto max-w-[178px] object-contain object-left sm:h-11 sm:max-w-[200px]"
+            />
           </Link>
         ) : (
           <span className="sr-only">Curated Luxury</span>
         )}
 
         <nav className="flex min-w-0 items-center gap-1 overflow-x-auto pb-1 sm:flex-1 sm:justify-end sm:pb-0" aria-label="Primary navigation">
-          {HEADER_LINKS.map(link => {
+          {links.map(link => {
             const wantsToBuy = location.pathname === '/trading' && new URLSearchParams(location.search).get('type') === 'WTB';
             const active = link.to === '/'
               ? location.pathname === '/'
@@ -75,4 +85,4 @@ export function MarketHeader({ compact = false, className = '', showLogo = true 
   );
 }
 
-export { LUXFI_URL, LUXURY_APP_POST_ITEM_URL };
+export { LUXFI_URL };

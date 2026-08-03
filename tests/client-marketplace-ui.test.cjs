@@ -13,15 +13,33 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   const floor = read('src/pages/TradingFloor.tsx');
   const research = read('src/pages/PriceResearch.tsx');
   const home = read('src/pages/LandingPage.tsx');
+  const postItem = read('src/pages/DealerSubmitListing.tsx');
+  const styles = read('src/index.css');
 
   assert.match(header, /label: 'HOME', to: '\/'/);
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
   assert.match(header, /label: 'WANT TO BUY', to: '\/trading\?type=WTB'/);
   assert.match(header, /label: 'PRICE RESEARCH', to: '\/price-research'/);
-  assert.match(header, /const LUXURY_APP_POST_ITEM_URL = 'https:\/\/luxuryapp-wf-w5o1\.vercel\.app\/'/);
-  assert.match(header, /label: 'POST ITEM', href: LUXURY_APP_POST_ITEM_URL, external: true/);
+  assert.match(header, /label: 'POST ITEM', to: '\/dealer\/post'/);
+  assert.doesNotMatch(header, /luxuryapp-wf-w5o1/);
   assert.match(header, /label: 'ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'HIRE FI'/);
+  assert.match(header, /const LANDING_LINKS = \[[\s\S]*label: 'TRADING FLOOR'[\s\S]*label: 'HIRE FI'[\s\S]*label: 'LOGIN'/);
+  assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
+  assert.match(home, /to="\/dealer\/post"[\s\S]*Post an offer/);
+  assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
+  assert.match(postItem, /const LUXURY_APP_URL = 'https:\/\/luxuryapp-wf\.vercel\.app\/'/);
+  assert.match(postItem, /WatchFacts form/);
+  assert.match(postItem, /Luxury App/);
+  assert.match(postItem, /<iframe[\s\S]*src=\{LUXURY_APP_URL\}[\s\S]*title="Luxury App posting experience"/);
+  assert.match(postItem, /Open full page/);
+  assert.match(home, /const LUXURY_MARKETPLACE_URL = 'https:\/\/luxuryapp-wf-w5o1\.vercel\.app\/marketplace\/'/);
+  assert.match(home, /Luxury item marketplace/);
+  assert.match(home, /href=\{LUXURY_MARKETPLACE_URL\}[\s\S]*target="_blank"[\s\S]*rel="noreferrer"/);
+  assert.match(home, /to="\/admin-login"[\s\S]*Admin login/);
+  assert.match(header, /src="\/images\/curated-luxury-logo-dark\.png"/);
+  assert.match(header, /alt="Curated Luxury"/);
+  assert.doesNotMatch(header, />CL<\/span>/);
   assert.match(header, /overflow-x-auto/);
   assert.match(header, /h-11 shrink-0/);
   assert.match(header, /location\.pathname === '\/trading' && !wantsToBuy/);
@@ -29,6 +47,10 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(banner, /href="https:\/\/luxfi\.ai\/#add-fi"/);
   assert.match(floor, /<MarketNav \/>[\s\S]*<LuxFiBanner \/>/);
   assert.match(research, /<MarketNav \/>[\s\S]*<LuxFiBanner \/>/);
+  assert.match(home, /className="luxury-wordmark/);
+  assert.match(styles, /@keyframes luxury-gold-flow-down/);
+  assert.match(styles, /animation: luxury-gold-flow-down 6s ease-in-out infinite/);
+  assert.match(styles, /prefers-reduced-motion: reduce/);
   assert.match(home, /Curated Luxury marketplace · WatchFacts market intelligence/);
 });
 
@@ -43,15 +65,34 @@ test('Trading Floor watch view does not render internal listing labels or identi
   assert.match(floor, /aria-label="Close selected watch"/);
 });
 
-test('Trading Floor shows bounded price evidence before unresolved release rows', () => {
+test('Trading Floor uses the server-ranked reviewed release and fails closed on images', () => {
   const floor = read('src/pages/TradingFloor.tsx');
 
-  assert.match(floor, /media\.matches \? 48 : 100/);
-  assert.match(floor, /function priceEvidenceRank/);
-  assert.match(floor, /function verifiedUsdPrice/);
-  assert.match(floor, /verifiedUsdPrice\(right\) - verifiedUsdPrice\(left\)/);
-  assert.match(floor, /Highest verified USD price first; unpriced listings follow\./);
-  assert.match(floor, /setListings\(current => sortListingsForDisplay/);
+  assert.match(floor, /media\.matches \? 24 : 100/);
+  assert.match(floor, /function hasListingImage/);
+  assert.match(floor, /'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'/);
+  assert.match(floor, /fetch\(`\/api\/reviewed-market-inventory\?/);
+  assert.doesNotMatch(floor, /fetch\(`\/api\/ingest\?/);
+  assert.match(floor, /params\.set\('images', 'true'\)/);
+  assert.match(floor, /Source-confirmed USD first; other supplied prices next; no-price requests last\./);
+  assert.match(floor, /Price requires review/);
+  assert.match(floor, /Workbook price anomaly - held for review/);
+  assert.doesNotMatch(floor, /Data under review/);
+  assert.doesNotMatch(floor, /Price under review/);
+  assert.doesNotMatch(floor, /Exact source currency is being verified/);
+  assert.match(floor, /setListings\(\[\.\.\.withImages, \.\.\.withoutImages\]\)/);
+  assert.match(floor, /aria-label="Trading Floor pages"/);
+  assert.match(floor, /Page \{cursorHistory\.length \+ 1\}/);
+  assert.match(floor, /onUnavailable=\{\(\) => setImageAvailable\(false\)\}/);
+  assert.match(floor, /onError=\{onUnavailable\}/);
+  assert.doesNotMatch(floor, /Reference image · not seller photo/);
+  assert.doesNotMatch(floor, /\/api\/featured-listings/);
+  assert.match(floor, /fetch\(`\/api\/reviewed-seller-summary\?id=/);
+  assert.match(floor, /Raw source message/);
+  assert.match(floor, /Source poster activity/);
+  assert.doesNotMatch(floor, /EvidenceIndicators|aria-label="Listing evidence"/);
+  assert.doesNotMatch(floor, /per request keeps mobile memory bounded/);
+  assert.doesNotMatch(floor, /top_watches_trading_floor\.json/);
 });
 
 test('dealer login keeps authentication but omits the removed marketing panel', () => {
@@ -59,6 +100,10 @@ test('dealer login keeps authentication but omits the removed marketing panel', 
 
   assert.match(login, /<form onSubmit=\{login\}/);
   assert.match(login, /fetch\('\/api\/dealer-auth'/);
+  assert.match(login, /location\.pathname === '\/admin-login'/);
+  assert.match(login, /Sign in is required to access Price Research/);
+  assert.match(login, /const betaDestinations = new Set\(\['\/dealer', '\/trading'\]\)/);
+  assert.doesNotMatch(login, /Continue without login to Price Research/);
   assert.doesNotMatch(login, /Controlled dealer access/i);
   assert.doesNotMatch(login, /Your market operations workspace/i);
   assert.doesNotMatch(login, /Accounts are provisioned by WatchFacts/i);

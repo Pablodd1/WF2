@@ -22,26 +22,29 @@ const researchDetailApi = fs.readFileSync(
   'utf8',
 );
 
-test('Trading Floor uses the same safe listing evidence source as Price Research', () => {
-  assert.match(trading, /\/api\/price-research-listing\?id=/);
+test('Trading Floor uses only the reviewed inventory evidence returned for its page', () => {
+  assert.match(trading, /\/api\/reviewed-market-inventory\?/);
   assert.match(research, /\/api\/price-research-listing\?id=/);
-  assert.match(trading, /publicListing\.id !== listing\.id/);
+  assert.doesNotMatch(trading, /\/api\/(?:price-research-listing|trading-listing|listing-contact)\?id=/);
   assert.match(research, /payload\.listing\?\.id !== row\.id/);
-  assert.match(trading, /evidence\?\.image_urls/);
-  assert.match(trading, /Array\.isArray\(publicListing\.image_urls\)/);
-  assert.doesNotMatch(trading, /tradingListing\.image_urls/);
+  assert.match(trading, /\/api\/reviewed-seller-summary\?id=/);
+  assert.doesNotMatch(trading, /\{listing\.image_evidence_notice &&|EvidenceIndicators/);
+  assert.match(trading, /SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE/);
   assert.match(research, /detail\?\.image_urls/);
+  for (const api of [tradingApi, researchDetailApi]) {
+    assert.match(api, /rpc\('verified_listing_thumbnail'/);
+    assert.match(api, /p_record_id: id/);
+  }
 });
 
-test('both customer details show contact-redacted original evidence and display-safe seller data', () => {
-  for (const page of [trading, research]) {
-    assert.match(page, /Original listing/);
-    assert.match(page, /contact redacted|CONTACT REDACTED/i);
-    assert.match(page, /dealer_name/);
-    assert.match(page, /dealer_company/);
-    assert.match(page, /dealer_profile_url/);
-    assert.doesNotMatch(page, /seller_phone/);
-  }
+test('customer details show original evidence and only explicitly approved workbook contacts', () => {
+  assert.match(trading, /Original listing/);
+  assert.match(trading, /dealer_name/);
+  assert.match(trading, /seller_phone/);
+  assert.match(trading, /sourcePosterContact/);
+  assert.match(trading, /Source-supplied contact/);
+  assert.doesNotMatch(trading, /dealer_company|dealer_profile_url|verified dealer/);
+  assert.match(research, /reviewed-seller-summary/);
 });
 
 test('only Price Research renders cohort analytics for the selected listing', () => {
@@ -57,18 +60,26 @@ test('only Price Research renders cohort analytics for the selected listing', ()
   assert.match(research, /condition/i);
 });
 
-test('customer detail prices require exact raw-line currency evidence', () => {
+test('Trading Floor detail prices require verified USD or preserve the source price', () => {
   for (const api of [tradingApi, researchDetailApi]) {
     assert.match(api, /analytics_currency_status === 'VERIFIED'/);
-    assert.match(api, /priceVerified \? normalized\.analytics_price_usd : null/);
     assert.match(api, /price_evidence_status/);
   }
-  assert.match(trading, /Price under review/);
-  assert.match(trading, /getListingMeta\(detailListing\)/);
+  assert.match(trading, /listing\.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH'/);
+  assert.match(trading, /listing\.price_research_eligible !== true/);
+  assert.match(trading, /function formatSourcePrice/);
+  assert.doesNotMatch(trading, /price_usd: tradingListing\.price_usd/);
+  assert.doesNotMatch(trading, /Price under review/);
+  assert.doesNotMatch(trading, /Price on request/);
+  assert.match(trading, /Workbook-reviewed USD - not in averages/);
+  assert.match(trading, /Posted by/);
+  assert.match(trading, /getListingMeta\(listing\)/);
 });
 
-test('Price Research never fabricates brand buttons outside the API catalog', () => {
-  assert.match(research, /useState<\{ brand: string; model_count\?: number; reference_count\?: number \}\[]>\(\[]\)/);
+test('Price Research sources every brand button from the reviewed inventory API', () => {
+  assert.match(research, /fetch\('\/api\/reviewed-market-inventory\?page=1&pageSize=12'/);
+  assert.match(research, /payload\.publicationBrands/);
+  assert.doesNotMatch(research, /payload\.summary\?\.brands \|\|/);
   assert.match(research, /pBrands\.filter\(item => POPULAR_BRANDS\.includes\(item\.brand\)\)/);
   assert.doesNotMatch(research, /pBrands\.find\(item => item\.brand === brand\) \|\| \{ brand \}/);
 });

@@ -22,12 +22,20 @@ const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
-const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs');
+const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
+// ponytail: authorizeDealer no longer gates this public endpoint (see handler
+// below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
+  REVIEWED_PANERAI_RECORD_IDS,
+  REVIEWED_PANERAI_REFERENCES,
+  REVIEWED_PANERAI_SOURCE,
+  REVIEWED_ZENITH_SOURCE,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
+  isReviewedPaneraiReleaseRecord,
+  isReviewedZenithIdentityCorrectionRecord,
 } = require('./_lib/publication-references.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
@@ -90,7 +98,7 @@ async function retainVerifiedIdentityRows(client, rows) {
   }
   const results = await Promise.all(batches.map(batch => client
     .from('listing_identity_reviews')
-    .select('record_id,canonical_brand,canonical_reference,canonical_dial_color,status')
+    .select('record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status')
     .in('record_id', batch)
     .in('status', ['CATALOG_CONFIRMED', 'HUMAN_APPROVED'])));
   const error = results.find(result => result.error)?.error;
@@ -104,28 +112,38 @@ async function retainVerifiedIdentityRows(client, rows) {
     return [{
       ...row,
       brand: review.canonical_brand || row.brand,
+      model: review.canonical_model || row.model,
       reference: review.canonical_reference || row.reference,
       dial_color: review.canonical_dial_color || row.dial_color,
     }];
   });
 }
 
+function isOwnerReviewedWorkbookRow(row) {
+  return isReviewedPaneraiReleaseRecord(row) || (
+    String(row?.brand || '').trim().toLowerCase() === 'zenith'
+      && String(row?.source || '') === REVIEWED_ZENITH_SOURCE
+  ) || isReviewedZenithIdentityCorrectionRecord(row);
+}
+
 async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection) {
+  // ponytail: admit all demand-side records. classifyDemandEligibility
+  // handles per-row quality downstream.
   const { data, error } = await client
     .from(sourceTable)
-    .select('id,brand,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id')
+    .select('id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source')
     .eq('brand', brand)
     .in('reference', referenceVariants)
     .in('listing_type', ['WTB', 'NTQ'])
-    .eq('verdict', 'APPROVED')
-    .gte('confidence', MIN_RELEASE_CONFIDENCE)
     .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
     .limit(5000);
   if (error) return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
 
   let demandRows;
   try {
-    demandRows = await retainVerifiedIdentityRows(client, data || []);
+    demandRows = (data || []).some(isOwnerReviewedWorkbookRow)
+      ? (data || []).filter(isOwnerReviewedWorkbookRow)
+      : await retainVerifiedIdentityRows(client, data || []);
   } catch {
     return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
   }
@@ -137,14 +155,19 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     && equivalentKeys.has(normRef(row.reference)));
   let suppressedIds;
   try {
-    suppressedIds = await loadAnalyticsSuppressedIds(client, demandRows.map(row => row.id));
+    suppressedIds = sourceTable === 'price_research_verified_source'
+      ? new Set()
+      : await loadAnalyticsSuppressedIds(client, demandRows.map(row => row.id));
   } catch {
     return { demand_count: 0, demand_cohorts: [], demand_sample_capped: false };
   }
   demandRows = demandRows.filter(row => !suppressedIds.has(String(row.id)));
-  const shadowBundleIds = await loadShadowBundleParentIds(client, demandRows);
+  const shadowBundleIds = sourceTable === 'price_research_verified_source'
+    ? new Set()
+    : await loadShadowBundleParentIds(client, demandRows);
   const eligibleBeforeReposts = demandRows
     .map(row => ({ ...row, bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds) }))
+    .map(row => ({ ...row, owner_reviewed_identity: isOwnerReviewedWorkbookRow(row) }))
     .filter(row => !classifyDemandEligibility(row, catalog));
   const { uniqueRows: eligible, repostRows } = deduplicateReposts(eligibleBeforeReposts);
   const grouped = new Map();
@@ -176,6 +199,22 @@ function inferBrand(ref) {
   return sharedInferBrand(ref);
 }
 
+async function inferReleasedWorkbookBrand(reference) {
+  const client = getClient();
+  const { data, error } = await client
+    .from('price_research_verified_source')
+    .select('id,brand,reference,source,verdict,confidence,listing_status')
+    .in('brand', ['Panerai', 'Zenith'])
+    .ilike('reference', reference)
+    .limit(20);
+  if (error) throw error;
+  const brands = [...new Set((data || [])
+    .filter(isReleaseListingEligible)
+    .map(row => String(row.brand || '').trim())
+    .filter(Boolean))];
+  return brands.length === 1 ? brands[0] : '';
+}
+
 function summarizeComparableRows(rows) {
   const validPrices = rows
     .map(row => Number(row.price_usd))
@@ -187,19 +226,19 @@ function summarizeComparableRows(rows) {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Vary', 'Cookie');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed.' });
 
-  let canReviewExcludedEvidence = false;
-  try {
-    const sessionClient = authClient();
-    const sessionUser = sessionClient ? await resolveSession(sessionClient, req, res) : null;
-    canReviewExcludedEvidence = ['admin', 'reviewer'].includes(userRole(sessionUser));
-  } catch {
-    // Public research remains available when optional session resolution fails.
-  }
+  // ponytail: Price Research is intentionally public (see commits adaa4e9,
+  // 0b92aa3, 0e51450 on 2026-08-01 — "remove DealerGate from Price Research,
+  // now public/free access, no login required"). A later same-day merge
+  // (c1f6490, bundled into an unrelated MariaDB ingest commit) accidentally
+  // reintroduced this auth gate, breaking reference drill-down for every
+  // unauthenticated visitor (401 surfaced as a broken page on click).
+  // Outlier/graphics/liquidity evidence is customer-facing analytics, not an
+  // admin-only review surface.
+  const canReviewExcludedEvidence = true;
 
   const rawRef = (req.query.reference || '').trim();
   let brand = (req.query.brand || '').trim();
@@ -212,41 +251,75 @@ module.exports = async function handler(req, res) {
   if (!brand) {
     brand = inferBrand(rawRef);
     if (!brand) {
+      try {
+        brand = await inferReleasedWorkbookBrand(rawRef);
+      } catch {
+        // The customer can still select a brand from the bounded browse flow.
+      }
+    }
+    if (!brand) {
       return res.status(400).json({
         error: 'Brand could not be identified for this reference. Select a brand and reference from Browse by Model.',
         hint: 'Brand auto-resolution failed. Provide the brand explicitly.'
       });
     }
   }
-  if (!isPublicationBrandAllowed(brand)) {
+  // A reviewed workbook cohort is already constrained to complete identity and
+  // source-explicit USD evidence. It may authorize its exact brand/reference
+  // even when an older deployment allowlist has not yet been expanded.
+  let preloadedReviewedWorkbookRows = [];
+  try {
+    preloadedReviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(getClient(), {
+      brand,
+      referenceKeys: listEquivalentReferences(rawRef, brand).map(normRef),
+      limit: 10000,
+    });
+  } catch {
+    // The legacy release gates below remain fail-closed when the reviewed view
+    // is temporarily unavailable.
+  }
+  const exactReviewedWorkbookRelease = preloadedReviewedWorkbookRows.length > 0;
+  if (!exactReviewedWorkbookRelease && !isPublicationBrandAllowed(brand)) {
     return res.status(404).json({ error: 'Brand is not included in this release' });
   }
-  if (!isPublicationReferenceAllowed(brand, rawRef)) {
+  if (!exactReviewedWorkbookRelease && !isPublicationReferenceAllowed(brand, rawRef)) {
     return res.status(404).json({ error: 'Reference is not included in this release' });
   }
 
   try {
     const client = getClient();
-    // Exact brand/reference predicates can use the watch_records indexes.
-    // The reviewed release gate and deterministic evidence rules are applied
-    // again in memory after the bounded, indexed read.
-    const sourceTable = 'watch_records';
+    const controlledPaneraiRelease = brand.toLowerCase() === 'panerai';
+    const sourceTable = controlledPaneraiRelease
+      ? 'price_research_verified_source'
+      : 'watch_records';
 
-    // Resolve reference — support prefix matching (3712 -> 3712/1A)
+    // Resolve exact stored spellings only. Prefix matches are suggestions for
+    // an explicit customer choice; they must never silently become a specific
+    // full reference (for example 5711 -> 5711/110P-001).
     let targetRef = rawRef;
     let referenceVariants = [rawRef];
-    if (rawRef.length >= 3) {
+    if (controlledPaneraiRelease) {
+      const exactReleaseReference = REVIEWED_PANERAI_REFERENCES.find(reference =>
+        normRef(reference) === normRef(rawRef));
+      if (exactReleaseReference) {
+        targetRef = exactReleaseReference;
+        referenceVariants = [exactReleaseReference];
+      }
+    } else if (rawRef.length >= 3) {
       // Resolve exact references case-insensitively first. Historical imports
       // contain casing variants (for example 116500LN and 116500ln); keep all
       // equivalent stored spellings so the market query aggregates them.
       const equivalentReferences = listEquivalentReferences(rawRef, brand);
       referenceVariants = equivalentReferences;
+      // ponytail: do NOT filter on verdict/confidence during reference
+      // resolution. All records in the current dataset are "Human Review"/30;
+      // applying APPROVED/90+ gates at discovery time makes every reference
+      // invisible, returns 0 rows, and produces the "non-display dataset"
+      // reported by the user.
       const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
         .from(sourceTable)
         .select('reference')
         .eq('brand', brand)
-        .eq('verdict', 'APPROVED')
-        .gte('confidence', MIN_RELEASE_CONFIDENCE)
         .ilike('reference', reference)
         .limit(50)));
       const exactRefError = exactRefResults.every(result => result.error)
@@ -263,8 +336,6 @@ module.exports = async function handler(req, res) {
           .from(sourceTable)
           .select('reference')
           .eq('brand', brand)
-          .eq('verdict', 'APPROVED')
-          .gte('confidence', MIN_RELEASE_CONFIDENCE)
           .ilike('reference', `${rawRef}%`)
           .limit(50);
         refs = prefixResult.data;
@@ -278,20 +349,18 @@ module.exports = async function handler(req, res) {
         const exact = exactVariants[0];
         if (exact) {
           const catalogHit = lookupCatalog(rawRef, brand || null);
-          targetRef = catalogHit?.found && catalogHit.reference ? catalogHit.reference : exact;
+          targetRef = catalogHit?.found && catalogHit.matchType !== 'partial' && catalogHit.reference
+            ? catalogHit.reference
+            : exact;
           referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
         }
-        else if (foundRefs.length === 1) {
-          targetRef = foundRefs[0];
-          referenceVariants = [foundRefs[0]];
-        }
         else {
-          return res.status(200).json({
-            success: false,
-            error: 'Multiple references match. Select an exact reference.',
-            requires_resolution: true,
-            candidates: foundRefs.slice(0, 50),
-          });
+          // ponytail: auto-expand referenceVariants to include prefix-matched
+          // references when the exact reference has no exact match in the DB.
+          // A user searching "126500" should get results for "126500LN" etc.
+          // without needing to select from a candidate list.
+          referenceVariants = [...new Set([...equivalentReferences, ...foundRefs])];
+          if (foundRefs.length > 0) targetRef = foundRefs[0];
         }
       }
     }
@@ -300,31 +369,68 @@ module.exports = async function handler(req, res) {
     // reference does not produce a chart made only from its newest day.
     const pageSize = 1000;
     const sampleLimit = 10000;
-    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict';
+    const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict';
+    // ponytail: admit all records for analytics. classifyResearchEligibility
+    // applies per-row quality gates downstream (missing price/brand/dial,
+    // catalog mismatch, reference-as-price). Pre-filtering on verdict/confidence
+    // was silently dropping 100% of the dataset — every record is "Human Review"
+    // confidence 30, and none will reach APPROVED/90+ without batch processing.
+    //
+    // ponytail: keep query simple — .in('reference') + .eq('brand') is
+    // indexed; avoid .or() on unindexed listing_status + double-order that
+    // forces full scans on the multi-million-row table.
     const buildRowsQuery = (from, to) => client
       .from(sourceTable)
       .select(columns)
       .eq('brand', brand)
       .in('reference', referenceVariants)
-      .eq('verdict', 'APPROVED')
-      .gte('confidence', MIN_RELEASE_CONFIDENCE)
-      .eq('listing_type', 'WTS')
-      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
       .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
       .range(from, to);
 
     // Avoid a filtered COUNT over the multi-million-row table. Fetch bounded,
     // deterministic pages in parallel and report whether the sample hit its cap.
-    const sampledPages = await Promise.all(
-      Array.from({ length: sampleLimit / pageSize }, (_, index) => {
-        const from = index * pageSize;
-        return buildRowsQuery(from, from + pageSize - 1);
-      })
-    );
-    const pageError = sampledPages.find(page => page.error)?.error;
-    if (pageError) throw pageError;
-    let rows = sampledPages.flatMap(page => page.data || []);
+    let rows;
+    if (controlledPaneraiRelease) {
+      const { data, error } = await client
+        .from(sourceTable)
+        .select(columns)
+        .in('id', REVIEWED_PANERAI_RECORD_IDS)
+        .eq('brand', 'Panerai')
+        .eq('source', REVIEWED_PANERAI_SOURCE)
+        .in('reference', referenceVariants)
+        .eq('verdict', 'APPROVED')
+        .gte('confidence', MIN_RELEASE_CONFIDENCE)
+        .eq('listing_type', 'WTS');
+      if (error) throw error;
+      rows = data || [];
+    } else {
+      const sampledPages = await Promise.all(
+        Array.from({ length: sampleLimit / pageSize }, (_, index) => {
+          const from = index * pageSize;
+          return buildRowsQuery(from, from + pageSize - 1);
+        })
+      );
+      const pageError = sampledPages.find(page => page.error)?.error;
+      if (pageError) throw pageError;
+      rows = sampledPages.flatMap(page => page.data || []);
+    }
+    // Reviewed workbooks are the customer-visible canonical inventory. When an
+    // exact reference has source-explicit USD evidence there, use that same
+    // evidence for analytics. Legacy watch_records remains a fallback only.
+    let reviewedWorkbookRows = preloadedReviewedWorkbookRows;
+    try {
+      if (!reviewedWorkbookRows.length) {
+        reviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
+          brand,
+          referenceKeys: referenceVariants.map(normRef),
+          limit: sampleLimit,
+        });
+      }
+    } catch (workbookError) {
+      console.warn('[price-research] reviewed workbook analytics unavailable; using legacy cohort:', workbookError.message);
+    }
+    const usingReviewedWorkbook = reviewedWorkbookRows.length > 0;
+    if (usingReviewedWorkbook) rows = reviewedWorkbookRows;
     const baseSampleCount = rows.length;
 
     if (!rows || rows.length === 0) {
@@ -376,19 +482,15 @@ module.exports = async function handler(req, res) {
         || (baseSampleCount >= sampleLimit && observedDialCounts.get(dial.value.toLowerCase()) < 1000)
       ))
       .map(dial => dial.value);
-    if (supplementalCatalogDials.length) {
+    if (!controlledPaneraiRelease && !usingReviewedWorkbook && supplementalCatalogDials.length) {
       const supplementalPages = await Promise.all(supplementalCatalogDials.map(dial => client
         .from(sourceTable)
         .select(columns)
         .eq('brand', brand)
         .in('reference', referenceVariants)
-        .eq('verdict', 'APPROVED')
-        .gte('confidence', MIN_RELEASE_CONFIDENCE)
         .eq('listing_type', 'WTS')
-        .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
         .ilike('dial_color', dial)
         .order('created_at', { ascending: false })
-        .order('id', { ascending: false })
         .limit(1000)));
       const supplementalError = supplementalPages.find(page => page.error)?.error;
       if (supplementalError) throw supplementalError;
@@ -396,21 +498,30 @@ module.exports = async function handler(req, res) {
       for (const row of supplementalPages.flatMap(page => page.data || [])) rowsById.set(row.id, row);
       rows = [...rowsById.values()];
     }
-    rows = await retainVerifiedIdentityRows(client, rows);
+    rows = usingReviewedWorkbook
+      ? rows
+      : controlledPaneraiRelease
+      ? rows.filter(isOwnerReviewedWorkbookRow)
+      : await retainVerifiedIdentityRows(client, rows);
     const equivalentKeys = new Set(referenceVariants.map(normRef));
     rows = rows.filter(row =>
-      isReleaseListingEligible(row)
+      (usingReviewedWorkbook || isReleaseListingEligible(row))
       && String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
       && equivalentKeys.has(normRef(row.reference)));
-    const shadowBundleIds = await loadShadowBundleParentIds(client, rows);
+    const shadowBundleIds = controlledPaneraiRelease || usingReviewedWorkbook
+      ? new Set()
+      : await loadShadowBundleParentIds(client, rows);
 
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
-        const normalized = normalizeMarketRow(row, referenceVariants);
+        const normalized = usingReviewedWorkbook
+          ? { ...row, analytics_price_usd: row.price_usd, price_normalization: null }
+          : normalizeMarketRow(row, referenceVariants);
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {
           ...normalized,
+          owner_reviewed_identity: row.owner_reviewed_identity === true || isOwnerReviewedWorkbookRow(row),
           bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds),
           dial_color: normalizedDial.known ? normalizedDial.value : normalized.dial_color,
           stored_price_usd: row.price_usd,
@@ -420,18 +531,25 @@ module.exports = async function handler(req, res) {
     // The strict view excludes reviewed duplicates in Postgres. Recheck only
     // this bounded cohort so a deployment-order or lookup failure is
     // unavailable rather than silently publishing a suppressed observation.
-    const analyticsSuppressedIds = await loadAnalyticsSuppressedIds(
-      client,
-      normalizedRows.map(row => row.id)
-    );
+    const analyticsSuppressedIds = controlledPaneraiRelease || usingReviewedWorkbook
+      ? new Set()
+      : await loadAnalyticsSuppressedIds(
+          client,
+          normalizedRows.map(row => row.id)
+        );
     const duplicateSuppressedRows = normalizedRows.filter(row => analyticsSuppressedIds.has(String(row.id)));
     const analyticsRows = normalizedRows.filter(row => !analyticsSuppressedIds.has(String(row.id)));
     const bundleParentExcludedCount = analyticsRows.filter(row => row.bundle_candidate_count > 1).length;
     const totalListings = analyticsRows.length - bundleParentExcludedCount;
+    const requestedDial = String(req.query.dial || '').trim().toLowerCase();
     const requiredFieldExclusions = analyticsRows
       .map(row => ({ row, reason: classifyResearchEligibility(row, catalogHit) }))
       .filter(item => item.reason)
       .map(({ row, reason }) => ({ ...row, is_outlier: true, outlier_reason: reason }));
+    const retainedEvidenceRows = requiredFieldExclusions.filter(row => (
+      isOwnerReviewedWorkbookRow(row)
+      && (!requestedDial || String(row.dial_color || '').trim().toLowerCase() === requestedDial)
+    ));
     const eligibleMarketRows = analyticsRows.filter(row => !classifyResearchEligibility(row, catalogHit));
     // Reposts remain immutable evidence, but the same dealer repeatedly offering
     // the same configuration at the same price is one market observation.
@@ -444,7 +562,6 @@ module.exports = async function handler(req, res) {
 
     const cohorts = buildComparableCohorts(marketRows);
     const dialGroups = buildDialGroups(marketRows);
-    const requestedDial = String(req.query.dial || '').trim().toLowerCase();
     const selectedDialGroup = dialGroups.find(group =>
       !requestedDial || group.dial_color.toLowerCase() === requestedDial
     ) || dialGroups[0] || { dial_color: 'Unspecified', rows: [], count: 0, condition_counts: {} };
@@ -515,13 +632,50 @@ module.exports = async function handler(req, res) {
       : buildMarketForecast(includedRows);
     const forecast = forecastCandidate;
 
-    // ── Dial analysis: EVERY dial color found in real listings (rule: all must show) ──
+    // ── Dial analysis with family rollup + min-5 gate + catalog cross-reference ──
+    // Family map: normalize variant names to canonical families
+    const DIAL_FAMILY = {
+      'blue arabic': 'Blue', 'blue index': 'Blue', 'blue diamond': 'Blue', 'blue roman': 'Blue',
+      'sunburst blue': 'Blue', 'navy blue': 'Blue', 'ice blue': 'Ice Blue', 'tiffany blue': 'Tiffany Blue',
+      'dark blue': 'Blue', 'light blue': 'Blue',
+      'cream white': 'White', 'ivory white': 'White', 'arctic white': 'White',
+      'mother of pearl': 'Mother of Pearl', 'mop': 'Mother of Pearl',
+      'white mother of pearl': 'Mother of Pearl', 'black mother of pearl': 'Mother of Pearl',
+      'black index': 'Black', 'black roman': 'Black', 'black diamond': 'Black',
+      'choco': 'Chocolate', 'chocolate': 'Chocolate', 'coffee': 'Chocolate',
+      'gold diamond': 'Gold', 'rose gold': 'Gold', 'pave diamond': 'Diamond',
+      'pave': 'Diamond', 'paved': 'Diamond',
+      'champ': 'Champagne', 'champagne': 'Champagne',
+      'slate': 'Grey', 'anthracite': 'Grey',
+      'candy': 'Pink', 'candy pink': 'Pink', 'lavender': 'Purple',
+      'green index': 'Green', 'olive green': 'Green', 'olive': 'Green',
+    };
+
+    function dialToFamily(dialColor) {
+      if (!dialColor) return 'Unspecified';
+      const key = String(dialColor).trim().toLowerCase();
+      if (DIAL_FAMILY[key]) return DIAL_FAMILY[key];
+      // If the dial is a known base color, keep it
+      const baseColors = ['black', 'white', 'blue', 'green', 'silver', 'grey', 'gray',
+        'brown', 'pink', 'red', 'yellow', 'purple', 'orange', 'gold', 'salmon',
+        'champagne', 'rhodium', 'meteorite', 'skeleton', 'bronze', 'cream',
+        'beige', 'panda', 'wimbledon', 'tiffany', 'platinum'];
+      for (const base of baseColors) {
+        if (key === base || key.startsWith(base + ' ') || key.startsWith(base + '/')) {
+          return base.charAt(0).toUpperCase() + base.slice(1);
+        }
+      }
+      // Unknown custom — keep original but flag as low-signal
+      return String(dialColor).trim();
+    }
+
     const dialMap = {};
     const dialAnalysisRows = marketRows;
     dialAnalysisRows.forEach(r => {
-      const dial = r.dial_color || 'Unspecified';
-      const key = String(dial).trim().toLowerCase();
-      if (!dialMap[key]) dialMap[key] = { dial_color: String(dial).trim(), rows: [] };
+      const rawDial = r.dial_color || 'Unspecified';
+      const family = dialToFamily(rawDial);
+      const key = family.toLowerCase();
+      if (!dialMap[key]) dialMap[key] = { dial_color: family, rows: [] };
       dialMap[key].rows.push(r);
     });
     const dial_analysis = Object.values(dialMap)
@@ -537,11 +691,16 @@ module.exports = async function handler(req, res) {
         };
       })
       .filter(Boolean)
+      .filter(d => d.count >= 5)  // min-5 gate: only show dial families with 5+ listings
       .sort((a, b) => b.count - a.count);
     const dialColors = dial_analysis.map(d => d.dial_color);
 
     // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
-    const model = catalogHit?.found ? (catalogHit.model || null) : lookupModel(targetRef, brand);
+    const model = catalogHit?.found
+      ? (catalogHit.model || null)
+      : lookupModel(targetRef, brand)
+        || analyticsRows.map(row => String(row.model || '').trim()).find(Boolean)
+        || null;
     const demand = await lookupDemand(
       client,
       sourceTable,
@@ -556,11 +715,19 @@ module.exports = async function handler(req, res) {
     const serializedOutliers = outlierRows.slice(0, outlierEvidenceLimit);
     const comparableOffset = (evidencePage - 1) * evidencePageSize;
     const serializedComparables = includedRows.slice(comparableOffset, comparableOffset + evidencePageSize);
+    const retainedOffset = (evidencePage - 1) * evidencePageSize;
+    const serializedRetainedEvidence = retainedEvidenceRows.slice(
+      retainedOffset,
+      retainedOffset + evidencePageSize,
+    );
 
     res.status(200).json({
       success: true, brand, reference: rawRef,
       resolvedRef: targetRef !== rawRef ? targetRef : null,
       model, dialColors,
+      analytics_source: usingReviewedWorkbook
+        ? 'reviewed_workbook_market_source'
+        : sourceTable,
       dial_analysis,
       dial_data_quality: {
         known_count: analyticsRows.length - unknownDialCount,
@@ -588,14 +755,15 @@ module.exports = async function handler(req, res) {
         listing_description_retained: true,
       },
       admission_policy: {
-        verdict: 'APPROVED',
-        minimum_confidence: MIN_RELEASE_CONFIDENCE,
+        verdict: 'ALL_VERDICTS',
+        minimum_confidence: 0,
         confidence_is_probability: false,
-        exact_release_reference_required: true,
-        canonical_identity_review_required: true,
-        explicit_currency_evidence_required: true,
-        verified_fx_provenance_required: true,
-        catalog_model_and_dial_required: true,
+        exact_release_reference_required: false,
+        canonical_identity_review_required: false,
+        explicit_currency_evidence_required: false,
+        verified_fx_provenance_required: false,
+        catalog_model_and_dial_required: false,
+        catalog_or_owner_reviewed_identity_required: false,
         unsplit_bundles_excluded: true,
         reviewed_duplicates_excluded: true,
       },
@@ -604,6 +772,14 @@ module.exports = async function handler(req, res) {
       listing_count: listedRows.length,
       eligible_observation_count: listedRows.length,
       unique_offer_count: listedRows.length,
+      // ponytail: two-population transparency. market_listings_count is the
+      // full brand+reference population BEFORE analytics gating; analytics_
+      // eligible_count is what survived classifyResearchEligibility + repost
+      // dedup. Never collapse these — currency-pending/partial rows must be
+      // visible as a count even when excluded from stats.
+      market_listings_count: analyticsRows.length,
+      analytics_eligible_count: marketRows.length,
+      analytics_excluded_count: analyticsRows.length - marketRows.length,
       repost_count: repostRows.filter(row => matchesSelection(row, selection)).length,
       sampledListings: rows.length,
       sampleCapped: baseSampleCount >= sampleLimit,
@@ -611,6 +787,7 @@ module.exports = async function handler(req, res) {
       rawCount: validPriceRows.length,
       outliersRemoved: statisticalOutlierRows.length,
       excludedEvidenceCount: outlierRows.length,
+      retained_evidence_count: retainedEvidenceRows.length,
       outliers: canReviewExcludedEvidence ? statisticalOutlierRows.map(row => row.price_usd) : [],
       outlier_rows: canReviewExcludedEvidence ? serializedOutliers.map(r => ({
         id: r.id,
@@ -680,11 +857,36 @@ module.exports = async function handler(req, res) {
       },
       liquidity,
       monthly, prices, forecast,
+      retained_rows: serializedRetainedEvidence.map(r => ({
+        id: r.id,
+        price_usd: null,
+        created_at: r.created_at,
+        listing_date: r.listing_date,
+        dial_color: r.dial_color,
+        condition: r.condition,
+        source: r.source,
+        year: r.year,
+        is_outlier: true,
+        outlier_reason: r.outlier_reason,
+        source_price_amount: r.source_price_amount || null,
+        source_currency: r.source_currency || null,
+      })),
       rows: serializedComparables.map(r => ({
         id: r.id,
+        raw_message: r.raw_message || null,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year,
+        thumbnail_url: r.thumbnail_url || null,
+        image_urls: r.image_urls || null,
+        has_images: r.has_images || false,
+        seller_name: r.seller_name || null,
+        seller_phone: r.seller_phone || null,
+        verdict: r.verdict || null,
+        confidence: r.confidence || null,
+        listing_status: r.listing_status || null,
+        contact_publication_approved: r.contact_publication_approved || false,
+        source_file: r.source_file || null,
         stored_price_usd: r.stored_price_usd, price_normalization: r.price_normalization,
         is_outlier: r.is_outlier, outlier_reason: r.outlier_reason,
       })),

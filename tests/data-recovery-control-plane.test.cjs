@@ -283,12 +283,13 @@ test('strict publication covers floor, archive, price research, featured, and de
   const featured = fs.readFileSync(path.join(__dirname, '..', 'api', 'featured-listings.js'), 'utf8');
   const detail = fs.readFileSync(path.join(__dirname, '..', 'api', 'trading-listing.js'), 'utf8');
   assert.match(ingest, /strictVerifiedPublication[\s\S]*\? 'trading_floor_verified_listings'[\s\S]*quality === 'archive'/);
-  assert.match(price, /const sourceTable = 'watch_records'/);
+  assert.match(price, /controlledPaneraiRelease[\s\S]*\? 'price_research_verified_source'[\s\S]*: 'watch_records'/);
+  assert.match(price, /REVIEWED_PANERAI_RECORD_IDS[\s\S]*\.in\('id', REVIEWED_PANERAI_RECORD_IDS\)/);
   assert.match(price, /isReleaseListingEligible\(row\)/);
   assert.match(price, /\.gte\('confidence', MIN_RELEASE_CONFIDENCE\)/);
   assert.match(priceDetail, /from\('price_research_verified_source'\)/);
   assert.match(price, /lookupDemand\(client, sourceTable,/);
-  assert.doesNotMatch(price, /\.from\('price_research_verified_source'\)/);
+  assert.match(price, /inferReleasedWorkbookBrand[\s\S]*\.from\('price_research_verified_source'\)/);
   assert.match(featured, /from\('listing_image_reviews'\)[\s\S]*VISUALLY_VERIFIED[\s\S]*loadVerifiedListingRows[\s\S]*from\('price_research_verified_source'\)/);
   assert.match(detail, /const publicTable = 'trading_floor_verified_listings'/);
   assert.match(detail, /isReleaseListingEligible\(resolvedData\)/);

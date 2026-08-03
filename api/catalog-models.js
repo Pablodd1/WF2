@@ -6,12 +6,103 @@
  * showing a reference. Uncatalogued references remain directly searchable and
  * are never presented as model names.
  */
-const { listCatalogReferences } = require('./_lib/catalog');
+const { listCatalogReferences, lookupCatalog } = require('./_lib/catalog');
+const { getClient } = require('./_lib/supabase');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
-const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
+const {
+  loadReviewedWorkbookBrandRows,
+  summarizeReviewedWorkbookModels,
+} = require('./_lib/reviewed-workbook-browse.cjs');
+const {
+  REVIEWED_PANERAI_RECORD_IDS,
+  REVIEWED_PANERAI_SOURCE,
+  REVIEWED_ZENITH_RECORD_END,
+  REVIEWED_ZENITH_RECORD_START,
+  REVIEWED_ZENITH_SOURCE,
+  isPublicationReferenceAllowed,
+  isReleaseListingEligible,
+} = require('./_lib/publication-references.cjs');
 
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
+const REFERENCE_ONLY_MODEL = 'Reference-only listings';
+const FOREIGN_BRAND_NAMES = [
+  'Audemars Piguet',
+  'Cartier',
+  'IWC',
+  'Omega',
+  'Patek Philippe',
+  'Piaget',
+  'Rolex',
+  'Tudor',
+  'Vacheron Constantin',
+];
+
+function reviewedWorkbookModel(row, brand) {
+  const catalog = lookupCatalog(row.reference, brand);
+  if (catalog?.found && catalog.model) return String(catalog.model).trim();
+  const claimed = String(row.model || '').trim();
+  const foreignBrand = FOREIGN_BRAND_NAMES.some(name =>
+    name.toLowerCase() !== brand.toLowerCase()
+    && claimed.toLowerCase().includes(name.toLowerCase()));
+  return claimed && !foreignBrand ? claimed : REFERENCE_ONLY_MODEL;
+}
+
+function summarizeReviewedModels(rows, brand) {
+  const models = new Map();
+  for (const row of rows) {
+    if (!row.reference) continue;
+    const model = reviewedWorkbookModel(row, brand);
+    const current = models.get(model) || { references: new Set(), listing_count: 0 };
+    current.references.add(row.reference);
+    current.listing_count += 1;
+    models.set(model, current);
+  }
+  return [...models.entries()]
+    .map(([model, value]) => ({
+      model,
+      reference_count: value.references.size,
+      listing_count: value.listing_count,
+    }))
+    .sort((a, b) => b.listing_count - a.listing_count || a.model.localeCompare(b.model));
+}
+
+async function loadReviewedPaneraiModels() {
+  const client = getClient();
+  const { data, error } = await client
+    .from('price_research_verified_source')
+    .select('id,brand,model,reference,source,verdict,confidence,listing_type,listing_status')
+    .in('id', REVIEWED_PANERAI_RECORD_IDS)
+    .eq('brand', 'Panerai')
+    .eq('source', REVIEWED_PANERAI_SOURCE)
+    .eq('verdict', 'APPROVED')
+    .gte('confidence', 90)
+    .eq('listing_type', 'WTS');
+  if (error) throw error;
+  return summarizeReviewedModels((data || []).filter(isReleaseListingEligible), 'Panerai');
+}
+
+async function loadReviewedZenithModels() {
+  const client = getClient();
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await client
+      .from('price_research_verified_source')
+      .select('id,model,reference')
+      .gte('id', REVIEWED_ZENITH_RECORD_START)
+      .lt('id', REVIEWED_ZENITH_RECORD_END)
+      .eq('brand', 'Zenith')
+      .eq('source', REVIEWED_ZENITH_SOURCE)
+      .eq('verdict', 'APPROVED')
+      .gte('confidence', 90)
+      .order('id', { ascending: true })
+      .range(from, from + 999);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < 1000) break;
+  }
+  return summarizeReviewedModels(rows, 'Zenith');
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,9 +111,6 @@ module.exports = async function handler(req, res) {
 
   const brand = (req.query.brand || '').trim();
   if (!brand) return res.status(400).json({ error: 'brand required' });
-  if (!isPublicationBrandAllowed(brand)) {
-    return res.status(404).json({ error: 'Brand is not included in this release' });
-  }
 
   const cached = _cache.get(brand);
   if (cached && Date.now() - cached.at < CACHE_TTL) {
@@ -30,6 +118,82 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    if (!isPublicationBrandAllowed(brand)) {
+      // ponytail: prefer the preaggregated in-memory catalog index. The
+      // per-request reviewed-workbook row scan times out on large brands
+      // (Richard Mille hit the 10k-row cap -> 503; Cartier hit the Postgres
+      // statement timeout -> 500). Scan only as last resort for brands with
+      // no catalog coverage.
+      // ponytail: browse index shows ALL catalogued brand references — model
+      // names + reference numbers are catalog metadata, not market evidence.
+      // The reviewed-reference allowlist gates analytics display downstream,
+      // not the browse tree (gating here emptied RM/Cartier back into the
+      // timeout-prone DB scan).
+      const catalogReferences = listCatalogReferences(brand);
+      if (catalogReferences.length) {
+        const models = new Map();
+        for (const entry of catalogReferences) {
+          if (!entry.model) continue;
+          if (!models.has(entry.model)) models.set(entry.model, new Set());
+          models.get(entry.model).add(entry.reference);
+        }
+        const out = [...models.entries()]
+          .map(([model, refs]) => ({ model, reference_count: refs.size }))
+          .sort((a, b) => b.reference_count - a.reference_count || a.model.localeCompare(b.model));
+        const payload = {
+          success: true,
+          brand,
+          model_count: out.length,
+          catalog_reference_count: catalogReferences.length,
+          models: out,
+          identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+          sample_capped: false,
+        };
+        _cache.set(brand, { at: Date.now(), payload });
+        return res.status(200).json(payload);
+      }
+      const { rows, truncated } = await loadReviewedWorkbookBrandRows(getClient(), brand);
+      if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe model browsing' });
+      const out = summarizeReviewedWorkbookModels(rows);
+      const payload = {
+        success: true,
+        brand,
+        model_count: out.length,
+        catalog_reference_count: out.reduce((sum, item) => sum + item.reference_count, 0),
+        models: out,
+        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        sample_capped: false,
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
+    if (brand.toLowerCase() === 'panerai') {
+      const out = await loadReviewedPaneraiModels();
+      const payload = {
+        success: true,
+        brand: 'Panerai',
+        model_count: out.length,
+        catalog_reference_count: out.reduce((sum, item) => sum + item.reference_count, 0),
+        models: out,
+        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
+    if (brand.toLowerCase() === 'zenith') {
+      const out = await loadReviewedZenithModels();
+      const payload = {
+        success: true,
+        brand: 'Zenith',
+        model_count: out.length,
+        catalog_reference_count: out.reduce((sum, item) => sum + item.reference_count, 0),
+        models: out,
+        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     const catalogReferences = listCatalogReferences(brand)
       .filter(entry => isPublicationReferenceAllowed(brand, entry.reference));
     const models = new Map();
@@ -55,3 +219,4 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Failed to load models', detail: err.message });
   }
 };
+// force recompile Sat Aug  1 19:01:51 EDT 2026

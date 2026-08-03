@@ -105,9 +105,9 @@ test('uses bounded cohort-only direct queries before the RPC migration exists', 
 test('has no global 20,000-ID cap or unbounded fallback query', () => {
   assert.match(
     priceResearchSource,
-    /const analyticsSuppressedIds = await loadAnalyticsSuppressedIds\(\s*client,\s*normalizedRows\.map\(row => row\.id\)/
+    /const analyticsSuppressedIds = controlledPaneraiRelease[\s\S]*loadAnalyticsSuppressedIds\(\s*client,\s*normalizedRows\.map\(row => row\.id\)/
   );
-  assert.doesNotMatch(priceResearchSource, /sourceTable === 'price_research_verified_source'[\s\S]*\? new Set\(\)/);
+  assert.match(priceResearchSource, /controlledPaneraiRelease[\s\S]*\? new Set\(\)/);
   assert.doesNotMatch(priceResearchSource, /limit\(20_000\)|limit\(20000\)/);
   assert.match(migration, /reviewed_suppressed_duplicate_ids\(p_duplicate_ids TEXT\[\]\)/);
   assert.match(migration, /cardinality\(COALESCE\(p_duplicate_ids[\s\S]*BETWEEN 1 AND 1000/);

@@ -1,12 +1,15 @@
 # WatchFacts CTO Control Center
 
-**Control date:** July 28, 2026
-**Assignment mode:** released customer UI; evidence-first data operations remain
-gated
-**Current release decision:** keep the currently verified Rolex/Patek customer
-inventory live through bounded database pagination; route every unresolved row
-to its exact human-review disposition. Do not bulk-promote normalization,
-bundles, images, sellers, or duplicates.
+**Control date:** August 2, 2026
+**Assignment mode:** controlled customer publication plus continuous,
+read-only MariaDB shadow capture and deterministic normalization
+**Current release decision:** keep the exact owner-reviewed Panerai and Zenith
+cohorts plus the reviewed Rolex, Patek Philippe, and Audemars Piguet scope live
+only through the existing approval, confidence, catalog, currency, bundle,
+duplicate, outlier, image, and seller gates. PR #242 reopened the reviewed
+Rolex/Patek cohorts; it did not approve every raw archive row. Do not
+bulk-publish any workbook or incoming-source row without source-backed,
+reconciled evidence.
 
 **Infrastructure update:** the upgraded Supabase and Railway queue path has now
 exactly reconciled every raw-evidence-eligible record. Four Railway workers with
@@ -19,7 +22,198 @@ It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
 
-## July 28 release record and active bottlenecks
+## August 2 permanent error register and source accountability
+
+The permanent mistake, evidence, remediation, and regression record is
+[`DATA_QUALITY_INCIDENT_REGISTER_2026-08-02.md`](DATA_QUALITY_INCIDENT_REGISTER_2026-08-02.md).
+It records the NTQ/WTB error, wrong-image risk, missing seller lineage, release
+configuration failure, sub-five comparable-count defect, outlier presentation,
+currency/FX risk, bundle ordering, unverified workbook image claims, and the
+incoming MariaDB visibility gap.
+
+PRs #241, #242, and #243 are merged. Price Research now shows analysis before
+a compact included-listing sample, reopens reviewed Rolex/Patek cohorts without
+bypassing evidence gates, and reports the real qualified count for cohorts with
+fewer than five observations. The five recurring John references were checked
+in the live browser. Patek 3712/1A has three qualified observations and remains
+correctly below the analytics threshold.
+
+The exact Natan David message `NTQ - 5821/1a green` was verified live as a
+Patek Cubitus buyer request with price on request, exact source image, supplied
+contact, source-poster activity, and the preserved raw message. The remaining
+5821/1A search rows are countable records but are not collectively claimed as
+visually verified.
+
+This release also introduces a service-only source-pipeline accountability
+ledger and owner-dashboard readback. It stores counts, cursors, freshness,
+reconciliation, and errors only. It is not a listing table and cannot publish
+or modify `watch_records`. Telegram shadow outcomes can be counted directly;
+the MariaDB Railway worker reports only after the migration is applied and
+`PIPELINE_ACCOUNTABILITY_ENABLED=true` is configured with server-side Supabase
+credentials.
+
+## August 1 continuous source stabilization
+
+PRs [#233](https://github.com/Pablodd1/wf/pull/233),
+[#234](https://github.com/Pablodd1/wf/pull/234), and
+[#235](https://github.com/Pablodd1/wf/pull/235) are merged. They restore the
+reviewed publication boundary after an unsafe open-access change, protect Price
+Research with dealer authentication, require explicit verified USD for market
+analytics, require exact source-image lineage, keep seller contact private
+without publication consent, and keep excluded observations reviewer-only.
+The full repository safety suite passed `617/617`; the production build passed.
+
+The live upstream `thecollective_inventory.auctions` monitor reported:
+
+| Source measure | Verified result |
+| --- | ---: |
+| Total rows | 1,353,529 |
+| Rows in the latest 24 hours | 6,722 |
+| Freshness lag at check | 265 seconds |
+| Source account mode | SELECT-only |
+| Production writes from monitor/canaries | 0 |
+
+The dedicated Railway service `wf-mariadb-shadow` is active with one replica
+and a persistent 5 GB volume mounted at `/data`. Its source cursor begins at
+the historical start, copies immutable raw evidence, runs deterministic
+`v4.2-line-condition` normalization, checkpoints both stages, and then polls
+for new rows every 30 seconds. It does not call AI/vision, Supabase, or any
+customer publication path.
+
+The first self-healing production readback after deployment reconciled exactly:
+
+| Worker measure | Verified result |
+| --- | ---: |
+| Source input rows | 22,000 |
+| Immutable raw outputs | 22,000 |
+| Collection errors | 0 |
+| Normalization proposals | 22,000 |
+| Normalization errors | 0 |
+| `watch_records` writes | 0 |
+
+Observed throughput is approximately 52 rows/second. The initial full catch-up
+is estimated at about 7.2 hours from worker start, after which the same worker
+continues as the live tail. Current row-size extrapolation is approximately 4.0
+GB against the 5 GB volume; volume use must be watched during catch-up.
+
+Declared and corrected stabilization errors:
+
+- The first bounded canary found that legacy `auctions.year` does not exist;
+  the collector stopped before output and now uses the verified source schema.
+- The first isolated Railway deployment inherited the old Supabase worker
+  command, crashed without writes, and was removed. Railway now keeps the old
+  service default while allowing an explicit per-service command.
+- Eight legacy scripts contained embedded database credentials and unsafe
+  direct-import/FX behavior. Those paths are disabled and known literals were
+  removed. The exposed credentials still require rotation.
+- Repository lint still reports 169 pre-existing issues. This is declared
+  technical debt; build and the 617 safety/contract tests pass.
+
+Continuous capture and normalization proposals do **not** mean automatic
+publication. Bundle parents, incomplete catalog identity, ambiguous currency,
+unverified images, unapproved contacts, duplicates, and outliers remain held or
+routed to review. Promotion to Trading Floor or Price Research requires a
+separate signed, reconciled publication decision.
+
+## July 30 three-brand reviewed workbook intake
+
+The current authoritative handoff is
+[`THREE_BRAND_REVIEWED_WORKBOOK_RELEASE_2026-07-30.md`](THREE_BRAND_REVIEWED_WORKBOOK_RELEASE_2026-07-30.md).
+It supersedes older estimates for the owner-supplied Patek Philippe, Rolex, and
+Audemars Piguet workbook folder.
+
+| Control measure | Verified result |
+| --- | ---: |
+| In-scope workbooks | 296 |
+| Input rows | 7,630,906 |
+| Distinct rows after exact brand-aware dedupe | 6,108,416 |
+| Exact duplicate copies held | 1,522,490 |
+| Complete identity before dedupe | 7,510,497 |
+| Source-proven Price Research candidates before remaining gates | 105,624 |
+| Database writes from the full audit | 0 |
+
+The 100,000-row mixed-brand local canary reconciles exactly:
+
+| Canary disposition | Rows |
+| --- | ---: |
+| Trading Floor ready | 96,332 |
+| Also Price Research ready | 821 |
+| Focused identity review | 3,388 |
+| Exact duplicate copies held | 280 |
+| Errors / database writes | 0 / 0 |
+
+The canary ran deterministic normalization `v4.2-line-condition` at 634.16
+rows/second. The supplied reviewed workbook remains the identity authority;
+parser disagreements are retained as audit flags rather than silently
+overwriting owner-reviewed fields. True multi-listings and missing required
+identity remain held.
+
+Draft PR [#205](https://github.com/Pablodd1/wf/pull/205) contains the
+reproducible local audit/canary and an additive, empty-on-create three-brand
+verified cache. The cache cutover is disabled by default. Apply the migration,
+persist and read back the signed canary, refresh the cache, and only then set
+`THREE_BRAND_RELEASE_CACHE=true`.
+
+## July 30 Panerai client-readiness release
+
+The Panerai release input is the already materialized, owner-reviewed
+`PANERAI_REVIEWED_XLSX_20260729` cohort. Its immutable scope is:
+
+| Release measure | Exact controlled count | Customer treatment |
+| --- | ---: | --- |
+| Reviewed source records | 99 | Retained unchanged |
+| Unique raw listing messages | 92 | One public card per deterministic repost signature |
+| Exact duplicate raw-message groups | 7 | Reposts remain in evidence; duplicate public cards are suppressed |
+| WTB records | 2 | Trading Floor only |
+| WTS records | 97 | Trading Floor; Price Research retains every row as evidence |
+| Approved Panerai references | 71 | Browse and direct reference search |
+| Records with reviewed display imagery | 99 | Displayed as reference imagery, not seller photography |
+| Original DigitalOcean listing-photo matches in this cohort | 0 | No original-photo claim is made |
+
+The customer image rule is explicit: the Panerai workbook uses online
+model-reference imagery where exact source listing photography is unavailable.
+Every such image is labeled **Reference image** with the notice that it is not
+the seller's original listing photo. This owner-authorized presentation does
+not create image lineage and does not change the immutable raw message.
+
+Price Research uses one bounded read of the 99 reviewed record IDs for Panerai
+model/reference discovery and one bounded exact-reference read for analytics.
+It does not fan out one database query per catalog reference. Owner-reviewed
+brand, model, reference, and dial values may support identity display, but
+prices enter averages only when raw-message currency and FX evidence pass the
+existing deterministic rules. Missing or ambiguous price evidence remains
+visible as listing evidence and is not averaged.
+
+Trading Floor orders images first and then the highest customer-safe price,
+uses 24-row mobile pages, suppresses deterministic repost cards without
+deleting evidence, and fails closed if verified inventory is unavailable.
+POST ITEM routes to the moderated internal dealer submission workflow at
+`/dealer/post`.
+
+**Production verification completed July 30, 2026:** PRs
+[#199](https://github.com/Pablodd1/wf/pull/199),
+[#200](https://github.com/Pablodd1/wf/pull/200), and
+[#201](https://github.com/Pablodd1/wf/pull/201) are merged. Vercel and the
+WatchFacts Railway service reported successful production deployments. The
+deduplicated customer API reports `92` Panerai listings and `943` Zenith
+listings (`1,035` total). Panerai browse reports four model families and 69 WTS
+references; the 71-reference release total above also includes references that
+do not belong in WTS Price Research browse.
+
+Production desktop and 390-pixel mobile browser QA confirmed: Panerai detail
+shows its contact-redacted raw message and visible reference-image disclosure;
+POST ITEM opens `/dealer/post`; an unsupported Rolex URL fails closed instead
+of substituting Panerai; and mobile has no horizontal overflow. Direct search
+for `PAM00671` resolves to Panerai and preserves both HKD offers as reviewed
+evidence. It publishes zero analytics observations because dated FX provenance
+is not verified. No database row, schema, or immutable source evidence was
+changed by this release.
+
+## July 28 historical release record and active bottlenecks
+
+The Rolex/Patek counts in this section are retained as historical evidence and
+are superseded for the current customer release by the July 30 Panerai/Zenith
+decision above.
 
 **Released customer-facing work:** PRs #176 through #181 are merged. They add
 advisory direct-image delivery for review only, the Price Research live release
@@ -29,7 +223,7 @@ detail view no longer requests or displays Price Research analytics; those
 analytics remain in Price Research. The home footer now distinguishes Curated
 Luxury marketplace from WatchFacts market intelligence.
 
-**Production customer inventory readback:** 110,178 verified Rolex/Patek
+**Historical July 28 production inventory readback:** 110,178 verified Rolex/Patek
 Trading Floor listings are customer-visible: 105,974 Rolex and 4,204 Patek
 Philippe. This is the complete currently publishable two-brand set, not a claim
 that every raw archive row is normalized, image-verified, seller-verified, or

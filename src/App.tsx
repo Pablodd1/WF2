@@ -24,6 +24,7 @@ const DealerProfile = lazy(() => import('@/pages/DealerProfile'));
 const TelegramTest = lazy(() => import('@/pages/TelegramTest'));
 const MultiListings = lazy(() => import('@/pages/MultiListings'));
 const PublicInfo = lazy(() => import('@/pages/PublicInfo'));
+const FlashSaleDetail = lazy(() => import('@/pages/FlashSaleDetail'));
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/dealer-login" element={<DealerLogin />} />
+        <Route path="/admin-login" element={<DealerLogin />} />
         <Route path="/dealer" element={<DealerGate allowBetaSkip><DealerPortal /></DealerGate>} />
         <Route path="/dealer/post" element={<DealerGate><DealerSubmitListing /></DealerGate>} />
         <Route path="/dealer/account/:section" element={<DealerGate><DealerAccount /></DealerGate>} />
@@ -52,10 +54,15 @@ export default function App() {
         <Route path="/multi-listings" element={<DealerGate allowedRoles={['admin']}><MultiListings /></DealerGate>} />
         <Route path="/dealers" element={<DealerGate><DealerDirectory /></DealerGate>} />
         <Route path="/dealers/:dealerId" element={<DealerProfile />} />
-        <Route path="/price-research" element={<DealerGate allowBetaSkip><PriceResearch /></DealerGate>} />
+        {/* ponytail: Price Research is public (adaa4e9, 0b92aa3, 0e51450 —
+            2026-08-01 "remove DealerGate ... now public/free access, no
+            login required"). c1f6490 re-wrapped it in DealerGate the same
+            day by accident, showing the login page to every visitor. */}
+        <Route path="/price-research" element={<PriceResearch />} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
         <Route path="/info/:page" element={<PublicInfo />} />
+        <Route path="/flash-sales/:id" element={<FlashSaleDetail />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

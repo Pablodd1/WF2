@@ -41,6 +41,21 @@ test('requires a catalog model, dial and price', () => {
   assert.equal(classifyResearchEligibility({ ...valid, price_usd: null }, catalog), 'MISSING_PRICE');
 });
 
+test('accepts owner-reviewed workbook identity without inventing catalog coverage', () => {
+  const ownerReviewed = {
+    brand: 'Zenith',
+    reference: '0331003600',
+    dial_color: 'Black',
+    price_usd: 8000,
+    owner_reviewed_identity: true,
+  };
+  assert.equal(classifyResearchEligibility(ownerReviewed, { found: false }), null);
+  assert.equal(
+    classifyResearchEligibility({ ...ownerReviewed, dial_color: null }, { found: false }),
+    'MISSING_DIAL',
+  );
+});
+
 test('excludes a price whose reference-line currency proof is incomplete', () => {
   assert.equal(
     classifyResearchEligibility({ ...valid, analytics_currency_status: 'CURRENCY_AMBIGUOUS' }, catalog),
@@ -51,6 +66,25 @@ test('excludes a price whose reference-line currency proof is incomplete', () =>
 test('rejects unsplit bundle source rows from price analytics', () => {
   assert.equal(
     classifyResearchEligibility({ ...valid, bundle_candidate_count: 3 }, catalog),
+    'BUNDLE_SOURCE_UNSPLIT',
+  );
+});
+
+test('rejects multi-listing identity sentinels even for owner-reviewed rows', () => {
+  const ownerReviewed = {
+    ...valid,
+    owner_reviewed_identity: true,
+  };
+  assert.equal(
+    classifyResearchEligibility({ ...ownerReviewed, dial_color: 'multiple' }, { found: false }),
+    'BUNDLE_SOURCE_UNSPLIT',
+  );
+  assert.equal(
+    classifyResearchEligibility({ ...ownerReviewed, model: 'mixed' }, { found: false }),
+    'BUNDLE_SOURCE_UNSPLIT',
+  );
+  assert.equal(
+    classifyDemandEligibility({ ...ownerReviewed, dial_color: 'multi', price_usd: null }, { found: false }),
     'BUNDLE_SOURCE_UNSPLIT',
   );
 });

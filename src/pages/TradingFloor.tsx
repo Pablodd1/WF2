@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { isCustomerSafeFeaturedListing } from '../lib/featuredListings';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -42,15 +41,21 @@ const INTENT_OPTIONS = [
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
-const RELEASE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet'] as const;
-
 interface ListingRecord {
   id: string;
   brand: string;
+  model?: string | null;
   reference: string | null;
   price_usd: number | null;
+  workbook_price_usd?: number | null;
+  workbook_price_review_reason?: string | null;
   price_raw: number | null;
   currency: string | null;
+  source_price_amount?: number | null;
+  source_price_text?: string | null;
+  source_currency?: string | null;
+  price_evidence_status?: string | null;
+  price_research_eligible?: boolean;
   dial_color: string | null;
   condition: string | null;
   year: number | null;
@@ -65,9 +70,21 @@ interface ListingRecord {
   confidence: number;
   has_images: boolean;
   thumbnail_url: string | null;
+  image_urls?: string[];
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_label?: string | null;
+  image_evidence_notice?: string | null;
   region: string | null;
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
+  raw_message?: string | null;
+  raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
+  raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
+  raw_message_truncated?: boolean;
+  seller_name?: string | null;
+  seller_phone?: string | null;
+  source_file?: string | null;
+  source_row_number?: number | null;
 }
 
 interface TradingFloorResponse {
@@ -78,58 +95,46 @@ interface TradingFloorResponse {
   totalIsEstimate?: boolean;
   nextCursor?: string | null;
   hasMore?: boolean;
+  publicationBrands?: string[];
 }
 
 interface ListingContact {
   contact_available: boolean;
-  dealer_id?: string;
   dealer_name?: string;
-  dealer_company?: string | null;
-  dealer_country?: string | null;
-  dealer_city?: string | null;
-  dealer_avatar_url?: string | null;
-  dealer_profile_summary?: string | null;
-  dealer_profile_url?: string;
-  dealer_rating?: number | null;
-  dealer_review_count?: number;
-  dealer_group_count?: number;
-  dealer_stats?: { total_posts: number; active_listings: number; wts_posts: number; wtb_posts: number; first_post_at: string | null; last_post_at: string | null; posting_years: number } | null;
+  phone_display?: string;
+  contact_source?: string;
   whatsapp_url?: string;
   reason?: string;
 }
 
-interface ListingEvidence extends Partial<ListingRecord> {
-  id: string;
-  brand: string;
-  reference: string;
-  raw_message: string | null;
-  raw_message_scope?: 'original_post' | 'stored_source_message' | 'unavailable';
-  raw_message_truncated?: boolean;
-  image_urls?: string[];
+interface ReviewedSellerAnalytics {
+  total_posts: number;
+  wts_posts: number;
+  wtb_posts: number;
+  other_posts: number;
+  first_post_at: string | null;
+  last_post_at: string | null;
+}
+
+interface ReviewedSellerSummaryResponse {
+  status?: string;
+  contact_available?: boolean;
+  seller?: { name?: string | null; phone?: string | null } | null;
+  analytics?: ReviewedSellerAnalytics | null;
 }
 
 type ViewMode = 'grid' | 'list';
-type InventoryScope = 'market' | 'archive';
 type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
-type BrandFilter = '' | typeof RELEASE_BRANDS[number];
+type BrandFilter = string;
 
-function priceEvidenceRank(listing: ListingRecord) {
-  if (Number(listing.price_usd) > 0 && listing.currency === 'USD') return 2;
-  if (Number(listing.price_raw) > 0 && listing.currency) return 1;
-  return 0;
-}
-
-function verifiedUsdPrice(listing: ListingRecord) {
-  return priceEvidenceRank(listing) === 2 ? Number(listing.price_usd) : 0;
-}
-
-function sortListingsForDisplay(listings: ListingRecord[]) {
-  return [...listings].sort((left, right) =>
-    verifiedUsdPrice(right) - verifiedUsdPrice(left)
-    || priceEvidenceRank(right) - priceEvidenceRank(left)
-    || Date.parse(right.created_at || '') - Date.parse(left.created_at || '')
-    || String(right.id).localeCompare(String(left.id)));
+function hasListingImage(listing: ListingRecord) {
+  return Boolean(
+    ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(String(listing.image_evidence_type || ''))
+    &&
+    listing.has_images
+    && (listing.thumbnail_url || listing.image_urls?.some(Boolean)),
+  );
 }
 
 export default function TradingFloor() {
@@ -144,42 +149,38 @@ export default function TradingFloor() {
     : '';
   const search = searchParams.get('q') || '';
   const requestedBrand = searchParams.get('brand') || '';
-  const brandFilter: BrandFilter = RELEASE_BRANDS.includes(requestedBrand as typeof RELEASE_BRANDS[number])
-    ? requestedBrand as BrandFilter
-    : '';
-  const conditionFilter = searchParams.get('condition') || '';
-  const regionFilter = searchParams.get('region') || '';
-  const inventoryScope: InventoryScope = searchParams.get('scope') === 'archive' ? 'archive' : 'market';
+  const imagesOnly = searchParams.get('images') === 'true';
+  const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
+  const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
+  const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
   const [listings, setListings] = useState<ListingRecord[]>([]);
-  const [featuredListings, setFeaturedListings] = useState<ListingRecord[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [totalIsEstimate, setTotalIsEstimate] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const [regionInput, setRegionInput] = useState(regionFilter);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 48 : 100);
+  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 100);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search, conditionFilter, regionFilter, inventoryScope].join('\u001f');
+  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
     categoryFilter !== 'all',
     Boolean(intentFilter),
-    Boolean(conditionFilter),
-    Boolean(regionFilter),
-    inventoryScope === 'archive',
+    imagesOnly,
   ].filter(Boolean).length;
 
   const resetResults = useCallback(() => {
     setCursor(null);
+    setCursorHistory([]);
     setNextCursor(null);
     setHasMore(false);
     setListings([]);
@@ -221,7 +222,7 @@ export default function TradingFloor() {
   useEffect(() => {
     const media = window.matchMedia('(max-width: 640px)');
     const updatePageSize = () => {
-      setPageSize(media.matches ? 48 : 100);
+      setPageSize(media.matches ? 24 : 100);
       resetResults();
     };
     updatePageSize();
@@ -232,20 +233,18 @@ export default function TradingFloor() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const nextSearch = searchInput.trim();
-      const nextRegion = regionInput.trim();
-      if (nextSearch !== search || nextRegion !== regionFilter) {
+      if (nextSearch !== search) {
         resetResults();
-        updateViewParams({ q: nextSearch || null, region: nextRegion || null });
+        updateViewParams({ q: nextSearch || null });
       }
     }, 300);
 
     return () => window.clearTimeout(timer);
-  }, [regionFilter, regionInput, resetResults, search, searchInput, updateViewParams]);
+  }, [resetResults, search, searchInput, updateViewParams]);
 
   useEffect(() => {
     setSearchInput(search);
-    setRegionInput(regionFilter);
-  }, [regionFilter, search]);
+  }, [search]);
 
   useEffect(() => {
     if (previousViewKeyRef.current === viewKey) return;
@@ -275,17 +274,23 @@ export default function TradingFloor() {
       setError('');
 
       try {
+        if (!['all', 'watches'].includes(categoryFilter)) {
+          setListings([]);
+          setTotal(0);
+          setTotalIsEstimate(false);
+          setHasMore(false);
+          setNextCursor(null);
+          setError('The current inventory contains watches only.');
+          return;
+        }
         const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
-        params.set('quality', inventoryScope);
         if (cursor) params.set('cursor', cursor);
-        params.set('item', categoryFilter);
         if (brandFilter) params.set('brand', brandFilter);
         if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
-        if (conditionFilter) params.set('condition', conditionFilter);
-        if (regionFilter.trim()) params.set('region', regionFilter.trim());
+        if (imagesOnly) params.set('images', 'true');
 
-        let response = await fetch(`/api/ingest?${params.toString()}`, { signal: controller.signal });
+        const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal: controller.signal });
         let data: TradingFloorResponse;
         try {
           data = await response.json() as TradingFloorResponse;
@@ -293,63 +298,28 @@ export default function TradingFloor() {
           data = { status: 'error' };
         }
 
-        if (data.status === 'supabase_not_configured' || data.status === 'error' || !data.records || data.records.length === 0) {
-          const fallbackRes = await fetch('/top_watches_trading_floor.json', { signal: controller.signal });
-          const fallbackData = await fallbackRes.json();
-          const mapped = fallbackData.map((item: any) => ({
-            id: item.id,
-            brand: item.formData.brand,
-            reference: item.formData.model.replace(item.formData.brand + ' Ref ', '') || '',
-            price_usd: Number(item.formData.estimatedValue),
-            price_raw: Number(item.formData.estimatedValue),
-            currency: 'USD',
-            dial_color: item.formData.dial || 'Classic',
-            condition: '4',
-            year: 2025,
-            listing_type: 'WTS',
-            verdict: 'APPROVED',
-            source: 'WatchFacts Import',
-            source_type: 'Live Ingest',
-            item_category: 'WATCH',
-            listing_date: item.timestamp,
-            listing_status: 'ACTIVE',
-            created_at: item.timestamp,
-            confidence: 99,
-            has_images: true,
-            thumbnail_url: item.imageSrc
-          }));
-
-          let filtered = mapped;
-          if (search) {
-            const query = search.toLowerCase();
-            filtered = filtered.filter((r: any) =>
-              r.brand.toLowerCase().includes(query) ||
-              r.reference.toLowerCase().includes(query) ||
-              (r.dial_color && r.dial_color.toLowerCase().includes(query))
-            );
-          }
-          if (brandFilter) {
-            filtered = filtered.filter((r: any) => r.brand.toLowerCase() === brandFilter.toLowerCase());
-          }
-
-          data = {
-            status: 'ok',
-            records: filtered,
-            total: filtered.length
-          };
+        if (data.status === 'supabase_not_configured') {
+          throw new Error('Inventory is temporarily unavailable.');
+        } else if (!response.ok || data.status === 'error' || !Array.isArray(data.records)) {
+          throw new Error(data.error || 'Failed to load listings');
         }
 
+        if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
+          setReleaseBrands(data.publicationBrands);
+        }
         const nextListings = data.records || [];
-        setListings(current => sortListingsForDisplay(
-          cursor
-            ? [...current, ...nextListings.filter(row => !current.some(existing => existing.id === row.id))]
-            : nextListings,
-        ));
-        if (!cursor) {
-          const parsedTotal = data.total == null ? null : Number(data.total);
-          setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
-          setTotalIsEstimate(parsedTotal !== null && Boolean(data.totalIsEstimate));
-        }
+        // ponytail: server-side images-first ORDER BY was reverted (df046c8)
+        // because ORDER BY has_exact_source_image FIRST hits a Postgres
+        // statement timeout on the unindexed view. Deliver the user's
+        // images-first requirement client-side instead — stable partition of
+        // each fetched page preserves the server's price-evidence ordering
+        // within each group.
+        const withImages = nextListings.filter(hasListingImage);
+        const withoutImages = nextListings.filter(listing => !hasListingImage(listing));
+        setListings([...withImages, ...withoutImages]);
+        const parsedTotal = data.total == null ? null : Number(data.total);
+        setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
+        setTotalIsEstimate(parsedTotal !== null && Boolean(data.totalIsEstimate));
         setNextCursor(data.nextCursor || null);
         setHasMore(Boolean(data.hasMore && data.nextCursor));
         if (!cursor) setSelectedListing(null);
@@ -364,26 +334,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [brandFilter, categoryFilter, conditionFilter, cursor, intentFilter, inventoryScope, pageSize, regionFilter, search]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    async function loadFeatured() {
-      try {
-        const params = new URLSearchParams({ limit: '18' });
-        if (brandFilter) params.set('brand', brandFilter);
-        const response = await fetch(`/api/featured-listings?${params.toString()}`, { signal: controller.signal });
-        const data = await response.json() as TradingFloorResponse;
-        if (response.ok && data.status === 'ok') {
-          setFeaturedListings((data.records || []).filter(isCustomerSafeFeaturedListing));
-        }
-      } catch (caught) {
-        if ((caught as Error).name !== 'AbortError') console.warn('Image showcase unavailable:', caught);
-      }
-    }
-    void loadFeatured();
-    return () => controller.abort();
-  }, [brandFilter]);
+  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, pageSize, search]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -395,7 +346,7 @@ export default function TradingFloor() {
             <div>
               <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {total === null ? 'Verified customer-visible inventory' : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} customer-visible listings`}
+                {total === null ? 'Watch inventory' : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings`}
               </p>
             </div>
 
@@ -412,7 +363,7 @@ export default function TradingFloor() {
                 type="search"
                 value={searchInput}
                 onChange={event => setSearchInput(event.target.value)}
-                placeholder="Search brand, reference, or dial"
+                placeholder="Search exact reference"
                 className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
               />
@@ -431,12 +382,14 @@ export default function TradingFloor() {
           </div>
 
           <div className="hidden gap-4 md:grid" aria-label="Marketplace filters">
-            <FilterGroup label="Release brands">
-              <FilterChoice active={!brandFilter} label="Both brands" onClick={() => {
-                resetResults();
-                updateViewParams({ brand: null });
-              }} />
-              {RELEASE_BRANDS.map(brand => (
+            <FilterGroup label="Brands">
+              {releaseBrands.length > 0 && (
+                <FilterChoice active={!brandFilter} label="All brands" onClick={() => {
+                  resetResults();
+                  updateViewParams({ brand: null });
+                }} />
+              )}
+              {releaseBrands.map(brand => (
                 <FilterChoice key={brand} active={brandFilter === brand} label={brand} onClick={() => {
                   resetResults();
                   updateViewParams({ brand });
@@ -462,11 +415,6 @@ export default function TradingFloor() {
                 }} />
               ))}
             </FilterGroup>
-            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-              <ConditionSelect value={conditionFilter} onChange={value => { resetResults(); updateViewParams({ condition: value || null }); }} />
-              <LocationInput value={regionInput} onChange={setRegionInput} />
-            </div>
-            <InventoryScopeControl value={inventoryScope} onChange={value => { resetResults(); updateViewParams({ scope: value === 'archive' ? 'archive' : null }); }} />
           </div>
 
           <CurrencyConverter compact />
@@ -476,22 +424,18 @@ export default function TradingFloor() {
       {filtersOpen && (
         <MobileFilterSheet
           brand={brandFilter}
+          releaseBrands={releaseBrands}
           category={categoryFilter}
           intent={intentFilter}
-          condition={conditionFilter}
-          region={regionInput}
-          inventoryScope={inventoryScope}
+          imagesOnly={imagesOnly}
           onApply={next => {
-            setRegionInput(next.region);
             setFiltersOpen(false);
             resetResults();
             updateViewParams({
               brand: next.brand || null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
-              condition: next.condition || null,
-              region: next.region.trim() || null,
-              scope: next.inventoryScope === 'archive' ? 'archive' : null,
+              images: next.imagesOnly ? 'true' : null,
             });
           }}
           onClose={() => setFiltersOpen(false)}
@@ -499,19 +443,14 @@ export default function TradingFloor() {
       )}
 
       <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-5">
-        {featuredListings.length > 0 && !selectedListing && !cursor && !search && ['all', 'watches'].includes(categoryFilter) && ['', 'WTS'].includes(intentFilter) && (
-          <FeaturedImageRail listings={featuredListings} onSelect={openListing} />
-        )}
-
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
             Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong>
             {total === null
-              ? ' customer-visible records from verified inventory'
-              : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</>}
+              ? ' listings'
+              : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> listings</>}
           </span>
-          <span>Highest verified USD price first; unpriced listings follow.</span>
-          <span title="Records are fetched in bounded batches from Postgres; search and filters run on the database.">{pageSize} per request keeps mobile memory bounded.</span>
+          <span>Source-confirmed USD first; other supplied prices next; no-price requests last.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
@@ -544,18 +483,36 @@ export default function TradingFloor() {
           </div>
         )}
 
-        {hasMore && nextCursor && !selectedListing && (
-          <div className="flex items-center justify-center pt-8">
+        {(cursorHistory.length > 0 || (hasMore && nextCursor)) && !selectedListing && (
+          <nav className="flex items-center justify-center gap-3 pt-8" aria-label="Trading Floor pages">
             <button
               type="button"
-              onClick={() => setCursor(nextCursor)}
-              disabled={loading}
-              className="h-11 min-w-[160px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
+              onClick={() => {
+                const previousCursor = cursorHistory[cursorHistory.length - 1] ?? null;
+                setCursorHistory(history => history.slice(0, -1));
+                setCursor(previousCursor);
+              }}
+              disabled={loading || cursorHistory.length === 0}
+              className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
+              style={{ borderColor: GOLD, background: SURFACE, color: GOLD_BRIGHT }}
+            >
+              Previous
+            </button>
+            <span className="text-sm" style={{ color: MUTED }}>Page {cursorHistory.length + 1}</span>
+            <button
+              type="button"
+              onClick={() => {
+                if (!nextCursor) return;
+                setCursorHistory(history => [...history, cursor]);
+                setCursor(nextCursor);
+              }}
+              disabled={loading || !hasMore || !nextCursor}
+              className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
               style={{ borderColor: GOLD, background: GOLD, color: '#09090D' }}
             >
-              {loading ? 'Loading...' : 'Load more'}
+              {loading ? 'Loading...' : 'Next'}
             </button>
-          </div>
+          </nav>
         )}
 
         <div className="pt-10">
@@ -590,82 +547,27 @@ function FilterChoice({ active, disabled = false, label, onClick }: { active: bo
   );
 }
 
-function ConditionSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return (
-    <label className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>
-      Condition
-      <select
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        className="mt-2 h-11 w-full rounded-md border px-3 text-sm font-normal normal-case tracking-normal outline-none"
-        style={{ borderColor: BORDER, background: PANEL, color: INK }}
-      >
-        <option value="">All conditions</option>
-        <option value="New">New</option>
-        <option value="Used">Used</option>
-        <option value="Unknown">Condition not stated</option>
-      </select>
-    </label>
-  );
-}
-
-function LocationInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return (
-    <label className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>
-      Location
-      <input
-        type="search"
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        placeholder="City, country, or region"
-        className="mt-2 h-11 w-full rounded-md border px-3 text-sm font-normal normal-case tracking-normal outline-none"
-        style={{ borderColor: BORDER, background: PANEL, color: INK }}
-      />
-    </label>
-  );
-}
-
-function InventoryScopeControl({ value, onChange }: { value: InventoryScope; onChange: (value: InventoryScope) => void }) {
-  return (
-    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-      <FilterGroup label="Coverage">
-        <FilterChoice active={value === 'market'} label="Main inventory" onClick={() => onChange('market')} />
-        <FilterChoice active={value === 'archive'} label="Full archive" onClick={() => onChange('archive')} />
-      </FilterGroup>
-      <p className="max-w-xl text-xs leading-5" style={{ color: MUTED }}>
-        {value === 'market'
-          ? 'Main indexed inventory first. Searches still include the complete historical archive.'
-          : 'Includes historical records whose original posting date or fields may be incomplete.'}
-      </p>
-    </div>
-  );
-}
-
 function MobileFilterSheet({
   brand,
+  releaseBrands,
   category,
   intent,
-  condition,
-  region,
-  inventoryScope,
+  imagesOnly,
   onApply,
   onClose,
 }: {
   brand: BrandFilter;
+  releaseBrands: string[];
   category: CategoryFilter;
   intent: IntentFilter;
-  condition: string;
-  region: string;
-  inventoryScope: InventoryScope;
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; condition: string; region: string; inventoryScope: InventoryScope }) => void;
+  imagesOnly: boolean;
+  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
-  const [draftCondition, setDraftCondition] = useState(condition);
-  const [draftRegion, setDraftRegion] = useState(region);
-  const [draftInventoryScope, setDraftInventoryScope] = useState(inventoryScope);
+  const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
 
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="presentation">
@@ -685,9 +587,11 @@ function MobileFilterSheet({
         </header>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
-          <FilterGroup label="Release brands">
-            <FilterChoice active={!draftBrand} label="Both brands" onClick={() => setDraftBrand('')} />
-            {RELEASE_BRANDS.map(value => (
+          <FilterGroup label="Brands">
+            {releaseBrands.length > 0 && (
+              <FilterChoice active={!draftBrand} label="All brands" onClick={() => setDraftBrand('')} />
+            )}
+            {releaseBrands.map(value => (
               <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
             ))}
           </FilterGroup>
@@ -707,9 +611,6 @@ function MobileFilterSheet({
           {!['all', 'watches'].includes(draftCategory) && (
             <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
           )}
-          <ConditionSelect value={draftCondition} onChange={setDraftCondition} />
-          <LocationInput value={draftRegion} onChange={setDraftRegion} />
-          <InventoryScopeControl value={draftInventoryScope} onChange={setDraftInventoryScope} />
         </div>
 
         <footer className="grid shrink-0 grid-cols-2 gap-3 border-t p-4" style={{ borderColor: BORDER, background: SURFACE }}>
@@ -717,50 +618,12 @@ function MobileFilterSheet({
             setDraftBrand('');
             setDraftCategory('all');
             setDraftIntent('');
-            setDraftCondition('');
-            setDraftRegion('');
-            setDraftInventoryScope('market');
+            setDraftImagesOnly(false);
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, condition: draftCondition, region: draftRegion.trim(), inventoryScope: draftInventoryScope })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
         </footer>
       </section>
     </div>
-  );
-}
-
-function FeaturedImageRail({ listings, onSelect }: { listings: ListingRecord[]; onSelect: (listing: ListingRecord) => void }) {
-  return (
-    <section className="mb-8" aria-labelledby="featured-listings-heading">
-      <div className="mb-4 flex items-end justify-between gap-4">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Visual inventory</div>
-          <h2 id="featured-listings-heading" className="mt-1 text-xl font-semibold" style={{ color: INK }}>Featured watches with source-linked images</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-5" style={{ color: MUTED }}>Prequalified WTS records with complete identity, plausible pricing, and bounded confidence.</p>
-        </div>
-        <span className="text-xs" style={{ color: MUTED }}>{listings.length} linked listings</span>
-      </div>
-      <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 hide-scrollbar">
-        {listings.map(listing => {
-          const meta = getListingMeta(listing);
-          return (
-            <button
-              key={`featured-${listing.id}`}
-              type="button"
-              onClick={() => onSelect(listing)}
-              className="group w-[220px] shrink-0 snap-start overflow-hidden rounded-md border text-left transition hover:-translate-y-0.5 sm:w-[250px]"
-              style={{ borderColor: BORDER, background: SURFACE }}
-            >
-              <img src={listing.thumbnail_url || ''} alt={meta.title} className="h-[250px] w-full object-cover sm:h-[286px]" loading="lazy" />
-              <span className="block min-h-[92px] px-4 py-3">
-                <span className="block truncate text-sm font-medium" style={{ color: INK }}>{meta.title}</span>
-                <span className="mt-1 block text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</span>
-                <span className="mt-2 block text-[11px] uppercase tracking-[0.12em]" style={{ color: MUTED }}>View listing</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 
@@ -785,20 +648,23 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
 
 function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
+  const [imageAvailable, setImageAvailable] = useState(() => hasListingImage(listing));
+  const cardHasImage = imageAvailable && hasListingImage(listing);
 
   return (
     <article
-      className="flex min-h-[660px] flex-col rounded-md border p-6 transition hover:-translate-y-0.5"
+      className={`flex flex-col rounded-md border p-6 transition hover:-translate-y-0.5 ${cardHasImage ? 'min-h-[660px]' : 'min-h-[320px]'}`}
       style={{ borderColor: selected ? GOLD : BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.28)' }}
     >
-      <button type="button" onClick={onSelect} className="block text-left">
-        <ListingImage listing={listing} className="h-[338px] w-full" />
-      </button>
+      {cardHasImage && (
+        <button type="button" onClick={onSelect} className="block text-left">
+          <ListingImage listing={listing} className="h-[338px] w-full" onUnavailable={() => setImageAvailable(false)} />
+        </button>
+      )}
 
-      <div className="mt-5 min-h-[56px]">
+      <div className={`${cardHasImage ? 'mt-5' : ''} min-h-[56px]`}>
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
           <span>{listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}</span>
-          {listing.data_quality_review_required && <span className="rounded-full border px-2 py-0.5" style={{ borderColor: '#B7791F', color: '#F6C453' }}>Data under review</span>}
         </div>
         <button
           type="button"
@@ -808,11 +674,15 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         >
           {meta.title}
         </button>
-        <div className="mt-1 text-[15px] leading-6" style={{ color: INK }}>{meta.rawPriceLabel}</div>
+        {cleanValue(listing.seller_name) && (
+          <div className="mt-3 text-sm" style={{ color: MUTED }}>
+            Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name)}</span>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3">
-        <div className="text-[16px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</div>
+        <div className="text-[16px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
         {meta.region && <RegionLabel region={meta.region} />}
       </div>
 
@@ -829,68 +699,45 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 }
 
 function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
-  const canLoadPublicEvidence = Boolean(listing.reference && listing.brand);
-  const [contact, setContact] = useState<ListingContact | null>(null);
-  const [evidence, setEvidence] = useState<ListingEvidence | null>(null);
-  const [evidenceError, setEvidenceError] = useState('');
+  const detailListing = listing;
+  const [contact, setContact] = useState<ListingContact | null>(() => sourcePosterContact(listing));
+  const [sellerAnalytics, setSellerAnalytics] = useState<ReviewedSellerAnalytics | null>(null);
   const [activeImage, setActiveImage] = useState(0);
-  const detailListing = useMemo<ListingRecord>(() => evidence
-    ? {
-        ...listing,
-        ...evidence,
-        id: listing.id,
-        brand: evidence.brand || listing.brand,
-        reference: evidence.reference || listing.reference,
-      }
-    : listing, [evidence, listing]);
-  const meta = useMemo(() => getListingMeta(detailListing), [detailListing]);
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
+  const meta = useMemo(() => getListingMeta(listing), [listing]);
   const images = useMemo(() => {
-    return (evidence?.image_urls || []).map(value => String(value || '').trim()).filter(Boolean);
-  }, [evidence]);
+    if (!hasListingImage(listing)) return [];
+    const candidates = listing.image_urls?.length
+      ? listing.image_urls
+      : [listing.thumbnail_url];
+    return [...new Set(candidates
+      .map(value => String(value || '').trim())
+      .filter(value => value && !failedImages.has(value)))];
+  }, [failedImages, listing]);
+
+  const visibleImageIndex = activeImage < images.length ? activeImage : 0;
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/listing-contact?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
-      .then(response => response.json())
-      .then(payload => setContact(payload))
-      .catch(error => { if (error?.name !== 'AbortError') setContact({ contact_available: false, reason: 'CONTACT_UNAVAILABLE' }); });
-
-    const tradingDetail = fetch(`/api/trading-listing?id=${encodeURIComponent(listing.id)}`, {
-      credentials: 'include',
-      signal: controller.signal,
-    }).then(async response => response.ok ? response.json() : null);
-    const publicEvidence = canLoadPublicEvidence
-      ? fetch(`/api/price-research-listing?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
-        .then(async response => response.ok ? response.json() : null)
-      : Promise.resolve(null);
-    Promise.all([tradingDetail, publicEvidence])
-      .then(([tradingPayload, evidencePayload]) => {
-        const tradingListing = tradingPayload?.listing || {};
-        const publicListing = evidencePayload?.listing || {};
-        if (publicListing.id && publicListing.id !== listing.id) {
-          setEvidenceError('Listing evidence did not match the selected record.');
-          return;
-        }
-        const imageUrls = Array.isArray(publicListing.image_urls) ? publicListing.image_urls : [];
-        setEvidence({
-          ...tradingListing,
-          ...publicListing,
-          id: listing.id,
-          brand: publicListing.brand || tradingListing.brand || listing.brand,
-          reference: publicListing.reference || tradingListing.reference || listing.reference || '',
-          raw_message: publicListing.raw_message || null,
-          image_urls: imageUrls,
+    fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
+      .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
+      .then(payload => {
+        if (!payload || payload.status !== 'ok' || !payload.contact_available) return;
+        const sourceContact = sourcePosterContact({
+          ...listing,
+          seller_name: payload.seller?.name ?? listing.seller_name,
+          seller_phone: payload.seller?.phone ?? listing.seller_phone,
         });
+        setContact(sourceContact);
+        setSellerAnalytics(payload.analytics || null);
       })
-      .catch(error => {
-        if (error?.name !== 'AbortError') setEvidenceError('Listing evidence is unavailable.');
-      });
+      .catch(error => { if (error?.name !== 'AbortError') setSellerAnalytics(null); });
 
     return () => controller.abort();
-  }, [canLoadPublicEvidence, listing]);
+  }, [listing]);
 
   return (
-    <section className="mb-8 grid gap-8 lg:grid-cols-[minmax(320px,504px)_1fr]" aria-label="Selected listing">
+    <section className={`mb-8 grid gap-8 ${images.length > 0 ? 'lg:grid-cols-[minmax(320px,504px)_1fr]' : ''}`} aria-label="Selected listing">
       <button
         type="button"
         onClick={onClose}
@@ -900,33 +747,32 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         <ArrowLeft size={17} /> Back to results
       </button>
 
-      <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
-        {images[activeImage] ? (
+      {images.length > 0 && (
+        <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
           <img
-            src={images[activeImage]}
-            alt={`${meta.title} listing`}
-            className="h-[648px] w-full rounded-sm object-contain"
+            src={images[visibleImageIndex]}
+            alt={`${meta.title} source listing image`}
+            className="h-[420px] w-full rounded-sm object-contain sm:h-[540px] lg:h-[648px]"
+            onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
           />
-        ) : (
-          <ListingImage listing={{ ...detailListing, thumbnail_url: null }} className="h-[648px] w-full" large />
-        )}
-        {images.length > 1 && (
-          <div className="mt-2 flex gap-2 overflow-x-auto">
-            {images.map((url, index) => (
-              <button
-                type="button"
-                key={url}
-                onClick={() => setActiveImage(index)}
-                aria-label={`Show listing image ${index + 1}`}
-                className="h-16 w-16 shrink-0 overflow-hidden rounded-sm border p-0.5"
-                style={{ borderColor: index === activeImage ? GOLD : BORDER, background: PANEL }}
-              >
-                <img src={url} alt="" className="h-full w-full object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+          {images.length > 1 && (
+            <div className="mt-2 flex gap-2 overflow-x-auto">
+              {images.map((url, index) => (
+                <button
+                  type="button"
+                  key={url}
+                  onClick={() => setActiveImage(index)}
+                  aria-label={`Show listing image ${index + 1}`}
+                  className="h-16 w-16 shrink-0 overflow-hidden rounded-sm border p-0.5"
+                  style={{ borderColor: index === visibleImageIndex ? GOLD : BORDER, background: PANEL }}
+                >
+                  <img src={url} alt="" className="h-full w-full object-cover" onError={() => setFailedImages(current => new Set(current).add(url))} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-8">
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
@@ -945,8 +791,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>
 
           <div className="mt-6">
-            <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</div>
-            <div className="mt-1 text-sm" style={{ color: MUTED }}>{meta.rawPriceLabel}</div>
+            <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
@@ -955,74 +800,85 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             ))}
           </div>
 
-          {detailListing.data_quality_review_required && (
-            <p className="mt-5 border-l-2 pl-3 text-sm leading-6" style={{ borderColor: '#B7791F', color: '#F6C453' }}>
-              One or more normalized fields were withheld because they conflict with the source data. The original listing remains preserved for review.
-            </p>
-          )}
-
           {meta.postedDate && <div className="mt-6 text-[15px]" style={{ color: INK }}>
             <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
           </div>}
         </div>
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(detailListing.listing_type) ? 'Buyer request contact' : 'Check availability'}</h2>
-          {contact?.dealer_name && (
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(listing.listing_type) ? 'Buyer source contact' : 'Source contact'}</h2>
+          {(contact?.dealer_name || contact?.phone_display) && (
             <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
-              <div className="text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>
-              {contact.dealer_company && <div className="mt-1 text-sm" style={{ color: MUTED }}>{contact.dealer_company}</div>}
-              {displayLocation(contact.dealer_city, contact.dealer_country) && <div className="mt-2 text-sm" style={{ color: MUTED }}>
-                {displayLocation(contact.dealer_city, contact.dealer_country)}
-              </div>}
-              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs" style={{ color: MUTED }}>
-                <span>{contact.dealer_rating == null ? 'Unrated' : `${Number(contact.dealer_rating).toFixed(2)} rating`}</span>
-                <span>{Number(contact.dealer_review_count || 0).toLocaleString()} reviews</span>
-                <span>{Number(contact.dealer_group_count || 0).toLocaleString()} common groups</span>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
+                Source-supplied contact
               </div>
-              {contact.dealer_stats && (
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                  <ContactMetric label="For sale" value={contact.dealer_stats.wts_posts} />
-                  <ContactMetric label="Looking for" value={contact.dealer_stats.wtb_posts} />
-                  <ContactMetric label="Active" value={contact.dealer_stats.active_listings} />
+              {contact.dealer_name && <div className="mt-1 text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>}
+              {contact.phone_display && <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
+                {contact.phone_display}
+              </div>}
+              {sellerAnalytics && (
+                <div className="mt-4" aria-label="Source poster activity">
+                  <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+                    <ContactMetric label="Total posts" value={sellerAnalytics.total_posts} />
+                    <ContactMetric label="For sale" value={sellerAnalytics.wts_posts} />
+                    <ContactMetric label="Want to buy" value={sellerAnalytics.wtb_posts} />
+                    <ContactMetric label="Other" value={sellerAnalytics.other_posts} />
+                  </div>
+                  {(sellerAnalytics.first_post_at || sellerAnalytics.last_post_at) && (
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: MUTED }}>
+                      {sellerAnalytics.first_post_at && <span>First post: {formatListingDate(sellerAnalytics.first_post_at)}</span>}
+                      {sellerAnalytics.last_post_at && <span>Latest post: {formatListingDate(sellerAnalytics.last_post_at)}</span>}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
-          {contact?.dealer_profile_url && (
-            <Link to={contact.dealer_profile_url} className="mt-4 block text-sm" style={{ color: GOLD_BRIGHT }}>
-              View full dealer profile
-            </Link>
-          )}
           {contact?.contact_available && contact.whatsapp_url ? (
             <>
-              <p className="mt-3 text-sm" style={{ color: MUTED }}>{isBuyerIntent(detailListing.listing_type) ? `Contact ${contact.dealer_name || 'the verified buyer'} about this request.` : `Contact ${contact.dealer_name || 'the verified dealer'} directly about this item.`}</p>
+              <p className="mt-3 text-sm" style={{ color: MUTED }}>
+                Contact {contact.dealer_name || 'the source poster'} using the phone supplied with this listing.
+              </p>
               <a href={contact.whatsapp_url} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
-                <MessageCircle size={18} /> {isBuyerIntent(detailListing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
+                <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
               </a>
             </>
           ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>{contact?.dealer_profile_url ? 'This dealer profile is verified; direct WhatsApp contact is awaiting consent or a verified phone.' : 'Dealer identity has not yet been verified for this historical listing.'}</p>
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+              A publishable source contact was not supplied for this listing.
+            </p>
           )}
         </div>
 
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Original listing</h2>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{listing.raw_message_scope === 'normalized_summary' ? 'Source evidence' : 'Original listing'}</h2>
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
+<<<<<<< HEAD
             Raw Source Message (Untouched & Complete)
+=======
+            {listing.raw_message_scope === 'normalized_summary' ? 'Original source pending verification' : 'Raw source message'}
+>>>>>>> 85e67db21e91bdde5ffca652d707550c4b952141
           </div>
-          {evidence?.raw_message ? (
+          {listing.raw_message_scope === 'normalized_summary' ? (
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+              The original source listing is pending verification. Unverified workbook summary text is withheld from the customer view.
+            </p>
+          ) : listing.raw_message ? (
             <>
-              <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{evidence.raw_message}</pre>
-              {evidence.raw_message_truncated && (
+              <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{listing.raw_message}</pre>
+              {listing.raw_message_truncated && (
                 <p className="mt-3 text-xs leading-5" style={{ color: MUTED }}>
-                  Long source text is shortened in this customer view; the immutable original remains preserved for review.
+                  Long source text is shortened in this customer view.
                 </p>
               )}
             </>
           ) : (
             <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+<<<<<<< HEAD
               {evidenceError || 'Original source text evidence is currently loading or unavailable.'}
+=======
+              Source evidence is unavailable for this record.
+>>>>>>> 85e67db21e91bdde5ffca652d707550c4b952141
             </p>
           )}
         </div>
@@ -1036,33 +892,34 @@ function ContactMetric({ label, value }: { label: string; value: number }) {
   return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{Number(value || 0).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
 }
 
-function ListingImage({ listing, className, large = false }: { listing: ListingRecord; className: string; large?: boolean }) {
+function sourcePosterContact(listing: ListingRecord): ListingContact | null {
+  const phone = String(listing.seller_phone || '').trim();
+  const name = cleanValue(listing.seller_name);
+  if (!phone && !name) return null;
+  const digits = phone.replace(/[^\d]/g, '');
+  return {
+    contact_available: digits.length >= 7,
+    dealer_name: name || undefined,
+    phone_display: phone || undefined,
+    contact_source: 'OWNER_APPROVED_WORKBOOK',
+    whatsapp_url: digits.length >= 7 ? `https://wa.me/${digits}` : undefined,
+    reason: digits.length >= 7 ? undefined : 'SOURCE_PHONE_UNAVAILABLE',
+  };
+}
+
+function ListingImage({ listing, className, onUnavailable }: { listing: ListingRecord; className: string; onUnavailable: () => void }) {
   const meta = getListingMeta(listing);
+  const imageUrl = listing.thumbnail_url || listing.image_urls?.find(Boolean);
 
-  if (listing.thumbnail_url) {
-    return (
-      <img
-        src={listing.thumbnail_url}
-        alt={meta.title}
-        className={`${className} rounded-sm object-cover`}
-        loading="lazy"
-      />
-    );
-  }
-
-  return (
-    <div
-      className={`${className} flex flex-col items-center justify-center rounded-sm border text-center`}
-      style={{ borderColor: BORDER, background: 'linear-gradient(145deg, #181820, #0E0E14)' }}
-    >
-      <div className={large ? 'text-[34px] font-semibold' : 'text-[22px] font-semibold'} style={{ color: GOLD_BRIGHT }}>
-        {cleanValue(listing.brand) || 'Watch'}
-      </div>
-      <div className="mt-3 text-[15px]" style={{ color: MUTED }}>
-        {cleanValue(listing.reference) || (listing.listing_type === 'MULTI' ? 'Multiple items · split pending' : listingKindLabel(listing))}
-      </div>
-    </div>
-  );
+  return imageUrl ? (
+    <img
+      src={imageUrl}
+      alt={meta.title}
+      className={`${className} rounded-sm object-cover`}
+      loading="lazy"
+      onError={onUnavailable}
+    />
+  ) : null;
 }
 
 function ActionButton({ label, muted = false, onClick }: { label: string; muted?: boolean; onClick?: () => void }) {
@@ -1097,18 +954,32 @@ function RegionLabel({ region }: { region: string }) {
 function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
-  const rawPriceLabel = formatRawPrice(listing);
-  const usdPriceLabel = hasPriceReviewIssue(listing)
-    ? listing.currency && listing.currency !== 'USD'
-      ? 'USD conversion unavailable'
-      : 'Price under review'
-    : formatUsdPrice(listing.price_usd, listing.listing_type);
+  const verifiedUsd = verifiedUsdPrice(listing);
+  const reviewedWorkbookUsd = reviewedWorkbookUsdPrice(listing);
+  const workbookPriceNeedsReview = Boolean(cleanValue(listing.workbook_price_review_reason));
+  const sourcePrice = formatSourcePrice(listing);
+  const priceLabel = verifiedUsd !== null
+    ? formatUsdPrice(verifiedUsd)
+    : sourcePrice || (workbookPriceNeedsReview
+      ? 'Price requires review'
+      : reviewedWorkbookUsd !== null
+        ? formatUsdPrice(reviewedWorkbookUsd)
+        : 'Price not provided');
+  const priceEvidenceLabel = verifiedUsd !== null
+    ? 'Source-confirmed USD'
+    : sourcePrice
+      ? 'Original source price · no USD conversion'
+      : workbookPriceNeedsReview
+        ? 'Workbook price anomaly - held for review'
+      : reviewedWorkbookUsd !== null
+        ? 'Workbook-reviewed USD - not in averages'
+        : 'Price not provided';
   const title = buildListingTitle(listing);
 
   return {
     title,
-    rawPriceLabel,
-    usdPriceLabel,
+    priceLabel,
+    priceEvidenceLabel,
     region,
     postedDate,
   };
@@ -1118,6 +989,7 @@ function buildListingTitle(listing: ListingRecord) {
   if (listing.listing_type === 'MULTI' && !cleanValue(listing.reference)) return 'Multi-item dealer listing';
   const parts = [
     cleanValue(listing.brand) === 'Unknown' ? '' : cleanValue(listing.brand),
+    cleanValue(listing.model),
     cleanValue(listing.reference),
     cleanValue(listing.condition),
     listing.year ? `${listing.year}year` : '',
@@ -1135,36 +1007,45 @@ function listingKindLabel(listing: ListingRecord) {
   return 'Watch';
 }
 
-function formatRawPrice(listing: ListingRecord) {
-  if (listing.price_raw && listing.currency) {
-    return `Source price: ${listing.currency} ${Math.round(listing.price_raw).toLocaleString('en-US')}`;
+function verifiedUsdPrice(listing: ListingRecord) {
+  if (listing.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH' || listing.price_research_eligible !== true) return null;
+  const value = Number(listing.price_usd);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function reviewedWorkbookUsdPrice(listing: ListingRecord) {
+  const value = Number(listing.workbook_price_usd);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function sourceTextIncludesCurrency(sourceText: string, currency: string) {
+  const text = sourceText.toUpperCase();
+  const normalizedCurrency = currency.toUpperCase();
+  if (text.includes(normalizedCurrency)) return true;
+  if (normalizedCurrency === 'USD') return /(?:US\$|USD|USDT|\$)/.test(text);
+  if (normalizedCurrency === 'HKD') return /(?:HKD|HK\$|HDK)/.test(text);
+  return false;
+}
+
+function formatSourcePrice(listing: ListingRecord) {
+  const currency = cleanValue(listing.source_currency) || cleanValue(listing.currency);
+  const sourceText = cleanValue(listing.source_price_text);
+  if (sourceText && currency) {
+    return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (hasPriceReviewIssue(listing)) return 'Exact source currency is being verified';
-  if (listing.price_usd) return `${compactNumber(listing.price_usd)}USD`;
-  return isBuyerIntent(listing.listing_type) ? 'Buyer budget not stated' : 'Price on request';
+  if (sourceText) return sourceText;
+
+  const amount = Number(listing.source_price_amount ?? listing.price_raw);
+  if (!currency || !Number.isFinite(amount) || amount <= 0) return '';
+  return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 
-function hasPriceReviewIssue(listing: ListingRecord) {
-  return (listing.data_quality_issues || []).some(issue =>
-    issue === 'REFERENCE_TOKEN_AS_PRICE'
-    || issue === 'PRICE_EVIDENCE_LOAD_REQUIRED'
-    || issue === 'MISSING_PRICE'
-    || issue.startsWith('CURRENCY_')
-  );
-}
-
-function formatUsdPrice(value: number | null, listingType: string) {
-  if (value == null || value <= 0) return isBuyerIntent(listingType) ? 'Buyer budget not stated' : 'Price on request';
+function formatUsdPrice(value: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value);
-}
-
-function compactNumber(value: number) {
-  if (!Number.isFinite(value)) return '';
-  return Math.round(value).toLocaleString('en-US').replace(/,/g, '');
 }
 
 function formatListingDate(dateStr: string | null) {
@@ -1188,13 +1069,6 @@ function cleanValue(value: string | number | null | undefined) {
   const text = String(value).trim();
   if (!text || /^unknown$/i.test(text) || /^null$/i.test(text)) return '';
   return text;
-}
-
-function displayLocation(...values: Array<string | null | undefined>) {
-  return values
-    .map(cleanValue)
-    .filter(Boolean)
-    .join(', ');
 }
 
 function displayDial(value: string | null | undefined) {

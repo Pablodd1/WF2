@@ -22,15 +22,20 @@ test('Trading Floor canonical Patek references retain the claimed reference for 
   assert.equal(normalized.analytics_currency_status, 'CURRENCY_RATE_UNVERIFIED');
 });
 
-test('Trading Floor publishes exact source HKD separately from an unverified USD conversion', () => {
+test('Trading Floor publishes exact source HKD without converting it to USD', () => {
   const ingest = fs.readFileSync(path.join(root, 'api', 'ingest.js'), 'utf8');
   const trading = fs.readFileSync(path.join(root, 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
 
   assert.match(ingest, /listEquivalentReferences\(resolved\.reference,\s*resolved\.brand\)/);
   assert.match(ingest, /price_raw:\s*normalized\.source_price_amount/);
   assert.match(ingest, /currency:\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
-  assert.match(trading, /Source price: \$\{listing\.currency\}/);
-  assert.match(trading, /USD conversion unavailable/);
+  assert.match(trading, /function formatSourcePrice/);
+  assert.match(trading, /listing\.source_currency[\s\S]*listing\.currency/);
+  assert.match(trading, /listing\.source_price_text/);
+  assert.match(trading, /Original source price · no USD conversion/);
+  assert.match(trading, /listing\.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH'/);
+  assert.doesNotMatch(trading, /USD conversion unavailable/);
+  assert.doesNotMatch(trading, /Exact source currency is being verified/);
 });
 
 test('Price Research labels excluded HKD evidence in its source currency', () => {
@@ -50,8 +55,9 @@ test('Listing detail uses reference aliases and preserves exact source currency'
   assert.match(detail, /price_raw:\s*normalized\.source_price_amount/);
   assert.match(detail, /currency:\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
   assert.match(tradingDetail, /listEquivalentReferences\(resolvedData\.reference,\s*resolvedData\.brand\)/);
-  assert.match(tradingDetail, /listing\.price_raw\s*=\s*normalized\.source_price_amount/);
-  assert.match(tradingDetail, /listing\.currency\s*=\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
+  assert.match(tradingDetail, /listing\.price_raw\s*=\s*reviewedWorkbookPrice/);
+  assert.match(tradingDetail, /listing\.currency\s*=\s*reviewedWorkbookPrice/);
+  assert.match(tradingDetail, /priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
 });
 
 test('all customer price surfaces use equivalent reference evidence', () => {

@@ -3,6 +3,7 @@ const test = require('node:test');
 
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-server-key';
+process.env.PUBLICATION_BRANDS = 'Rolex|Patek Philippe|Panerai|Zenith';
 
 const handler = require('../api/ingest.js');
 
@@ -119,6 +120,86 @@ test('customer inventory admits an exact APPROVED 90 row only after canonical id
     assert.equal(res.body.records[0].price_evidence_status, 'VERIFIED');
     assert.equal(Object.hasOwn(res.body.records[0], 'dealer_id'), false);
     assert.equal(Object.hasOwn(res.body.records[0], 'raw_message'), false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('Panerai inventory reads only the controlled reviewed workbook release', async () => {
+  const originalFetch = global.fetch;
+  const id = 'reviewed_panerai_0010e7f0-3af7-420e-a759-487c4ce9cea2_000';
+  let initialRequest = null;
+  global.fetch = async url => {
+    const requestUrl = String(url);
+    const parsed = new URL(requestUrl);
+    const select = parsed.searchParams.get('select') || '';
+    let body = [];
+    if (requestUrl.includes('/price_research_verified_source?') && select.includes('verdict')) {
+      initialRequest = parsed;
+      body = (parsed.searchParams.get('id') || '').includes(id) ? [{
+        id,
+        brand: 'Panerai',
+        model: 'Luminor Marina',
+        reference: 'PAM00590',
+        dial_color: 'Black',
+        condition: 'Used',
+        listing_type: 'WTS',
+        verdict: 'APPROVED',
+        confidence: 100,
+        source: 'PANERAI_REVIEWED_XLSX_20260729',
+        price_usd: 6500,
+        currency: 'USD',
+        created_at: '2026-07-01T00:00:00Z',
+        has_images: true,
+      }] : [];
+    } else if (requestUrl.includes('/price_research_verified_source?')) {
+      body = [{
+        id,
+        has_images: true,
+        thumbnail_url: 'https://images.example/pam00590.jpg',
+        image_urls: ['https://images.example/pam00590.jpg'],
+      }];
+    } else if (requestUrl.includes('/listing_identity_reviews?')) {
+      body = [{
+        record_id: id,
+        canonical_brand: 'Panerai',
+        canonical_model: 'Luminor Marina',
+        canonical_reference: 'PAM00590',
+        canonical_dial_color: 'Black',
+        status: 'HUMAN_APPROVED',
+      }];
+    } else if (requestUrl.includes('/trading_floor_verified_listings?')) {
+      body = [{
+        id,
+        has_images: true,
+        thumbnail_url: 'https://images.example/pam00590.jpg',
+        image_urls: ['https://images.example/pam00590.jpg'],
+      }];
+    } else if (requestUrl.includes('/watch_records?')) {
+      body = (parsed.searchParams.get('id') || '').includes(id)
+        ? [{ id, raw_message: 'Panerai PAM00590 Black HKD 50,700' }]
+        : [];
+    }
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-range': '0-0/1', 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const res = responseRecorder();
+    await handler({ method: 'GET', query: { quality: 'market', brand: 'Panerai' } }, res);
+    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+    assert.equal(initialRequest.pathname, '/rest/v1/price_research_verified_source');
+    assert.match(initialRequest.searchParams.get('id'), /^in\.\("reviewed_panerai_/);
+    assert.equal(initialRequest.searchParams.get('select').includes('identity_review_status'), false);
+    assert.deepEqual(res.body.records.map(row => row.id), [id]);
+    assert.equal(res.body.records[0].price_usd, 6500);
+    assert.equal(res.body.records[0].price_evidence_status, 'HUMAN_APPROVED_WORKBOOK');
+    assert.equal(res.body.records[0].thumbnail_url, 'https://images.example/pam00590.jpg');
+    assert.equal(res.body.records[0].image_evidence_type, 'REFERENCE_IMAGE');
+    assert.equal(res.body.records[0].image_evidence_label, 'Reference image');
+    assert.match(res.body.records[0].image_evidence_notice, /not the seller/);
+    assert.equal(res.body.publicationScope, 'REVIEWED_FILE');
   } finally {
     global.fetch = originalFetch;
   }
@@ -295,7 +376,7 @@ test('strict release fails closed when PostgREST returns its 1,000-row ceiling',
 test('recent inventory excludes recycle rows and undated imports', async () => {
   const url = await runQuery({ quality: 'market' });
   assert.equal(url.searchParams.get('status'), 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)');
-  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","5712/1A","5712/1A-001","126710BLNR")');
+  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","116500LN","52506","5712/1A","5712/1A-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")');
   assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
@@ -307,7 +388,7 @@ test('all inventory still excludes recycle rows but includes undated imports', a
 
 test('reference search reaches dated and undated eligible market inventory', async () => {
   const url = await runQuery({ quality: 'market', q: '116610LN' });
-  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","5712/1A","5712/1A-001","126710BLNR")');
+  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","116500LN","52506","5712/1A","5712/1A-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")');
   assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
@@ -405,11 +486,9 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.match(app, /path="\/trading" element=\{<TradingFloor \/>\}/);
   assert.doesNotMatch(floor, /label: 'Bulk listings'/);
   assert.doesNotMatch(floor, /label: 'Trade'/);
-  assert.match(floor, /VIEW BUYER REQUEST/);
-  assert.match(floor, /const inventoryScope: InventoryScope = searchParams\.get\('scope'\) === 'archive' \? 'archive' : 'market'/);
-  assert.match(floor, /Main inventory/);
-  assert.match(floor, /Full archive/);
-  assert.match(floor, /Main indexed inventory first/);
+  assert.match(floor, /Want to buy/);
+  assert.match(floor, /fetch\(`\/api\/reviewed-market-inventory\?/);
+  assert.doesNotMatch(floor, /InventoryScope|Full archive/);
   assert.match(floor, /const categoryFilter = CATEGORY_OPTIONS\.some/);
   assert.match(floor, /const intentFilter = \['all', 'watches'\]\.includes\(categoryFilter\)/);
   assert.match(floor, /MobileFilterSheet/);
@@ -417,13 +496,14 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.match(floor, /View results/);
   assert.match(floor, /matchMedia\('\(max-width: 640px\)'\)/);
   assert.match(floor, /media\.addEventListener\('change', updatePageSize\)/);
-  assert.match(floor, /if \(nextSearch !== search \|\| nextRegion !== regionFilter\)/);
+  assert.match(floor, /if \(nextSearch !== search\)/);
   assert.match(floor, /setSearchParams\(next, \{ replace: true \}\)/);
   assert.match(floor, /listScrollPositionRef\.current = window\.scrollY/);
   assert.match(floor, /window\.scrollTo\(\{ top: restoreTo, behavior: 'auto' \}\)/);
   assert.match(floor, /onClose=\{closeListing\}/);
   assert.match(floor, /previousViewKeyRef\.current === viewKey/);
   assert.match(floor, /Back to results/);
+  assert.match(floor, /aria-label="Trading Floor pages"/);
   assert.match(header, /overflow-x-auto/);
   assert.match(header, /h-11 shrink-0/);
   assert.match(header, /sm:flex-row/);

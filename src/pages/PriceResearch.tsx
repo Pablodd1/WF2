@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, ImageOff, Loader2, MessageCircle, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, Loader2, MessageCircle, Search, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
@@ -11,7 +11,7 @@ import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating'
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
   id: string;
-  price_usd: number;
+  price_usd: number | null;
   created_at: string;
   listing_date?: string | null;
   dial_color: string | null;
@@ -52,6 +52,7 @@ interface DialPoint {
 interface ListingDetailData {
   id: string;
   brand: string;
+  model?: string | null;
   reference: string;
   price_raw: number | string | null;
   price_usd: number | null;
@@ -71,6 +72,9 @@ interface ListingDetailData {
   accessories: string[];
   image_urls: string[];
   has_images: boolean;
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_label?: string | null;
+  image_evidence_notice?: string | null;
   region: string | null;
   source_type: string | null;
   listing_status: string | null;
@@ -84,18 +88,18 @@ interface ListingSellerData {
   dealer_country?: string | null;
   dealer_city?: string | null;
   dealer_profile_url?: string;
-  dealer_rating?: number | null;
-  dealer_review_count?: number;
-  dealer_group_count?: number;
   dealer_stats?: {
     total_posts: number;
-    active_listings: number;
+    active_listings?: number | null;
     wts_posts: number;
     wtb_posts: number;
+    other_posts?: number | null;
     first_post_at: string | null;
     last_post_at: string | null;
-    posting_years: number;
+    posting_years?: number;
   } | null;
+  phone_display?: string;
+  contact_source?: string;
   whatsapp_url?: string;
   reason?: string;
 }
@@ -118,11 +122,88 @@ interface DialGroupPoint {
   max_price: number | null;
 }
 
-interface LiveReleaseSummary {
-  success: boolean;
-  surface: 'Trading Floor';
-  total_listing_count: number;
-  brands: Array<{ brand: string; listing_count: number }>;
+interface ReviewedMarketRecord {
+  id: string;
+  source_file?: string | null;
+  source_row_number?: number | null;
+  source_record_id?: string | null;
+  posting_date?: string | null;
+  listing_date?: string | null;
+  posted_by?: string | null;
+  seller_name?: string | null;
+  phone_number?: string | null;
+  seller_phone?: string | null;
+  raw_message?: string | null;
+  raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
+  raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
+  listing_type?: string | null;
+  brand?: string | null;
+  brand_scope?: string | null;
+  canonical_brand?: string | null;
+  supplied_brand?: string | null;
+  model?: string | null;
+  reference?: string | null;
+  reference_search_key?: string | null;
+  raw_reference?: string | null;
+  normalized_reference?: string | null;
+  catalog_reference?: string | null;
+  dial_color?: string | null;
+  condition?: string | null;
+  source_price_amount?: number | null;
+  source_price_text?: string | null;
+  source_currency?: string | null;
+  price_raw?: number | string | null;
+  price_usd?: number | null;
+  currency?: string | null;
+  workbook_price_usd?: number | null;
+  price_evidence_status?: string | null;
+  price_research_eligible?: boolean;
+  display_image_url?: string | null;
+  thumbnail_url?: string | null;
+  image_url?: string | null;
+  image_urls?: string[] | null;
+  review_reasons?: string[] | null;
+  seller_analytics?: {
+    total_posts?: number | null;
+    active_listings?: number | null;
+    wts_posts?: number | null;
+    wtb_posts?: number | null;
+  } | null;
+}
+
+interface ReviewedMarketResponse {
+  success?: boolean;
+  status?: string;
+  page: number;
+  pageSize: number;
+  total: number;
+  totalIsEstimate?: boolean;
+  hasMore: boolean;
+  records?: ReviewedMarketRecord[];
+  listings?: ReviewedMarketRecord[];
+  publicationBrands?: Array<string | { brand: string; listing_count?: number; canonical_listings?: number; model_count?: number; reference_count?: number }>;
+  summary?: {
+    publicationBrands?: Array<string | { brand: string; listing_count?: number; canonical_listings?: number; model_count?: number; reference_count?: number }>;
+    brands?: Array<{ brand: string; listing_count?: number; canonical_listings?: number; model_count?: number; reference_count?: number }>;
+  };
+  error?: string;
+}
+
+interface ReviewedSellerAnalytics {
+  first_post_at?: string | null;
+  last_post_at?: string | null;
+  total_posts?: number | null;
+  wts_posts?: number | null;
+  wtb_posts?: number | null;
+  other_posts?: number | null;
+}
+
+interface ReviewedSellerResponse {
+  status: string;
+  contact_available?: boolean;
+  seller?: { name?: string | null; phone?: string | null } | null;
+  analytics?: ReviewedSellerAnalytics | null;
+  error?: string;
 }
 
 // Real liquidity — either precomputed indicators or a live-derived fallback.
@@ -177,6 +258,7 @@ interface PriceData {
   rawCount: number;
   outliersRemoved: number;
   excludedEvidenceCount?: number;
+  retained_evidence_count?: number;
   analytics_ready: boolean;
   sample_quality: 'observational' | 'provisional' | 'robust';
   selected_cohort: { condition: string; dial_color: string; count: number };
@@ -191,6 +273,7 @@ interface PriceData {
   forecast?: ForecastData;
   prices: number[];
   rows: RowData[];
+  retained_rows?: RowData[];
   outlier_rows: RowData[];
   evidence?: {
     comparable_returned: number;
@@ -234,7 +317,9 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
-const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Cartier', 'Omega'];
+const COMPARABLE_LISTING_PREVIEW_LIMIT = 12;
+const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
+const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
@@ -327,39 +412,61 @@ export default function PriceResearch() {
     controller: null,
   });
   const [showAllBrands, setShowAllBrands] = useState(false);
-  const [viewerRole, setViewerRole] = useState('public');
-  const [liveReleaseSummary, setLiveReleaseSummary] = useState<LiveReleaseSummary | null>(null);
+  const [analyticsNotice, setAnalyticsNotice] = useState('');
 
   // ── Drill-down picker state (brand → model → reference) ──
-  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number }[]>([]);
-  const [pBrand, setPBrand] = useState('');
+  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
+  const [pBrand, setPBrand] = useState(initialBrand);
   const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
   const [pModel, setPModel] = useState('');
   const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; analytics_ready?: boolean; sample_capped?: boolean; avg_price: number | null }[]>([]);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
+  const [pickerError, setPickerError] = useState('');
+
+  // ── Per-model market stats (min-5 exposure, avg + date range) ──
+  interface ModelStats {
+    total: number; wts: number; wtb: number;
+    stats: { avg: number; median: number; min: number; max: number } | null;
+    first_seen: string | null; last_seen: string | null;
+  }
+  const [mStats, setMStats] = useState<ModelStats | null>(null);
 
   const loadModels = useCallback(async (brand: string) => {
-    setPBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery('');
+setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setPickerError(''); setMStats(null);
     if (!brand) return;
     setPLoading('models');
     try {
       const r = await fetch(`/api/catalog-models?brand=${encodeURIComponent(brand)}`);
       const d = await r.json();
-      if (d.success) setPModels(d.models || []);
+      if (!r.ok || !d.success) {
+        setPickerError(d.error || 'Models are temporarily unavailable');
+        return;
+      }
+      setPModels(d.models || []);
     } catch { /* ignore — direct search still works */ }
     finally { setPLoading(''); }
   }, []);
 
   const loadRefs = useCallback(async (brand: string, model: string) => {
-    setPModel(model); setPRefs([]);
+setPModel(model); setPRefs([]); setPickerError(''); setMStats(null);
     if (!brand || !model) return;
     setPLoading('refs');
     try {
-      const r = await fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`);
+      const [r, ms] = await Promise.all([
+        fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`),
+        fetch(`/api/model-stats?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`).catch(() => null),
+      ]);
       const d = await r.json();
-      if (d.success) setPRefs(d.references || []);
-    } catch { /* ignore */ }
+if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily unavailable');
+      setPRefs(d.references || []);
+      if (ms) {
+        const md = await ms.json().catch(() => null);
+        if (md?.success) setMStats({ total: md.total, wts: md.wts, wtb: md.wtb, stats: md.stats, first_seen: md.first_seen, last_seen: md.last_seen });
+      }
+    } catch (requestError) {
+      setPickerError(requestError instanceof Error ? requestError.message : 'References are temporarily unavailable');
+    }
     finally { setPLoading(''); }
   }, []);
 
@@ -371,6 +478,7 @@ export default function PriceResearch() {
     }
     setLoading(true);
     setError('');
+    setAnalyticsNotice('');
     setData(null);
     setSelectedRow(null);
     setListingDetail(null);
@@ -380,48 +488,60 @@ export default function PriceResearch() {
       if (brand) params.set('brand', brand);
       if (dial) params.set('dial', dial);
       params.set('evidencePage', String(evidencePage));
-      const r = await fetch(`/api/price-research?${params.toString()}`);
+      const r = await fetch(`/api/price-research?${params.toString()}`, { credentials: 'include' });
       const d = await r.json();
       if (d.success) {
         setData(d);
-        setQuery(d.resolvedRef || d.reference || normalizedReference);
+        const resolvedReference = d.resolvedRef || d.reference || normalizedReference;
+        setQuery(resolvedReference);
         if (d.brand) setQueryBrand(d.brand);
       }
-      else setError(d.error || 'No data for this reference');
-    } catch { setError('Failed to fetch'); }
+      else if (d.requires_resolution) {
+        const candidates = Array.isArray(d.candidates)
+          ? d.candidates.filter((candidate: unknown): candidate is string => typeof candidate === 'string').slice(0, 12)
+          : [];
+        setError(candidates.length
+          ? `Enter an exact reference. Matching references: ${candidates.join(', ')}.`
+          : 'Enter an exact reference. Partial references are not expanded automatically.');
+      }
+      else setAnalyticsNotice(brand
+        ? 'Qualified price analytics are pending for this reference.'
+        : 'Qualified price analytics could not resolve a brand. Select a brand to run the exact comparable analysis.');
+    } catch { setAnalyticsNotice(brand
+      ? 'Qualified price analytics are temporarily unavailable.'
+      : 'Qualified price analytics could not resolve a brand. Select a brand to run the exact comparable analysis.'); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/catalog-brands', { signal: controller.signal })
+    fetch('/api/reviewed-market-inventory?page=1&pageSize=12', { signal: controller.signal })
       .then(response => response.json())
       .then(payload => {
-        if (payload.success && Array.isArray(payload.brands) && payload.brands.length) setPBrands(payload.brands);
+        // The checkpoint summary includes pre-publication rows, so its per-brand
+        // totals are not customer-safe after the strict identity gate. Use only
+        // the API's publication brand names here; exact counts are shown after
+        // the customer selects a reference and the service performs an exact
+        // count against the gated market view.
+        const brands = payload.publicationBrands || payload.summary?.publicationBrands || [];
+        if (Array.isArray(brands) && brands.length) {
+          setPBrands(brands.map((item: string | { brand: string; listing_count?: number; canonical_listings?: number; model_count?: number; reference_count?: number }) => typeof item === 'string'
+            ? { brand: item }
+            : {
+                brand: item.brand,
+                listing_count: Number(item.listing_count ?? item.canonical_listings ?? 0),
+                model_count: item.model_count,
+                reference_count: item.reference_count,
+              }));
+        }
       })
-      .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load catalog brands:', error); });
+      .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load reviewed inventory brands:', error); });
     return () => controller.abort();
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/live-release-summary', { signal: controller.signal })
-      .then(response => response.ok ? response.json() : null)
-      .then(payload => {
-        if (payload?.success && Array.isArray(payload.brands)) setLiveReleaseSummary(payload);
-      })
-      .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load live release summary:', error); });
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/dealer-auth', { credentials: 'include', signal: controller.signal })
-      .then(response => response.ok ? response.json() : null)
-      .then(payload => setViewerRole(payload?.authenticated ? String(payload?.user?.role || 'dealer') : 'public'))
-      .catch(error => { if (error?.name !== 'AbortError') setViewerRole('public'); });
-    return () => controller.abort();
-  }, []);
+    if (initialBrand && !initialReference) void loadModels(initialBrand);
+  }, [initialBrand, initialReference, loadModels]);
 
   const openListing = useCallback(async (row: RowData) => {
     listingRequestRef.current.controller?.abort();
@@ -434,15 +554,37 @@ export default function PriceResearch() {
     setDetailError('');
     setDetailLoading(true);
     try {
+      const workbookListing = REVIEWED_WORKBOOK_ID.test(row.id);
+      const contactEndpoint = workbookListing
+        ? `/api/reviewed-seller-summary?id=${encodeURIComponent(row.id)}`
+        : `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research`;
       const [response, contactResponse] = await Promise.all([
         fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`, { signal: controller.signal }),
-        fetch(`/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research`, { signal: controller.signal }),
+        fetch(contactEndpoint, { signal: controller.signal }),
       ]);
       const [payload, contactPayload] = await Promise.all([response.json(), contactResponse.json()]);
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Listing detail is unavailable');
       if (listingRequestRef.current.sequence !== sequence || payload.listing?.id !== row.id) return;
       setListingDetail(payload.listing);
-      if (contactResponse.ok && contactPayload.success) setListingSeller(contactPayload);
+      if (contactResponse.ok && workbookListing && contactPayload.status === 'ok') {
+        const analytics = contactPayload.analytics as ReviewedSellerAnalytics | null | undefined;
+        setListingSeller({
+          contact_available: Boolean(contactPayload.contact_available),
+          dealer_name: contactPayload.seller?.name || undefined,
+          phone_display: contactPayload.seller?.phone || undefined,
+          contact_source: 'OWNER_APPROVED_WORKBOOK',
+          dealer_stats: analytics ? {
+            total_posts: Number(analytics.total_posts || 0),
+            wts_posts: Number(analytics.wts_posts || 0),
+            wtb_posts: Number(analytics.wtb_posts || 0),
+            other_posts: Number(analytics.other_posts || 0),
+            first_post_at: analytics.first_post_at || null,
+            last_post_at: analytics.last_post_at || null,
+          } : null,
+        });
+      } else if (contactResponse.ok && contactPayload.success) {
+        setListingSeller(contactPayload);
+      }
     } catch (requestError) {
       if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
       if (listingRequestRef.current.sequence !== sequence) return;
@@ -537,14 +679,19 @@ export default function PriceResearch() {
 
   const displayRef = data?.resolvedRef || data?.reference || query;
 
-  const listings = (data?.rows || []).filter(r => !r.is_outlier);
+  const listings = [...(data?.rows || [])]
+    .filter(row => !row.is_outlier)
+    .sort((left, right) => {
+      const priceDifference = Number(left.price_usd) - Number(right.price_usd);
+      if (Number.isFinite(priceDifference) && priceDifference !== 0) return priceDifference;
+      return String(left.listing_date || left.created_at || '').localeCompare(String(right.listing_date || right.created_at || ''))
+        || left.id.localeCompare(right.id);
+    })
+    .slice(0, COMPARABLE_LISTING_PREVIEW_LIMIT);
   const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
   const visibleBrands = showAllBrands
     ? pBrands
     : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
-  const liveListingCount = (brand: string) => liveReleaseSummary?.brands
-    .find(item => item.brand === brand)?.listing_count ?? null;
-  const canReviewExcludedEvidence = viewerRole === 'admin' || viewerRole === 'reviewer';
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
     if (reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR') return 'Below market plausibility floor';
@@ -580,7 +727,19 @@ export default function PriceResearch() {
               <h1 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
               <p className="mt-1 max-w-xl text-sm text-white/60">Search catalog-backed market evidence by watch reference.</p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="grid gap-2 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
+              <label className="block">
+                <span className="sr-only">Watch brand</span>
+                <select
+                  aria-label="Watch brand"
+                  value={queryBrand}
+                  onChange={event => void loadModels(event.target.value)}
+                  className="h-11 w-full rounded-md border border-white/20 bg-[#1a1a20] px-3 text-sm text-white outline-none focus:border-[#c9a03a]"
+                >
+                  <option value="">Select brand</option>
+                  {pBrands.map(item => <option key={item.brand} value={item.brand}>{item.brand}</option>)}
+                </select>
+              </label>
               <label className="relative block">
                 <span className="sr-only">Watch reference</span>
                 <Search aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45" />
@@ -589,7 +748,7 @@ export default function PriceResearch() {
                   aria-label="Watch reference"
                   type="text"
                   value={query}
-                  onChange={event => { setQuery(event.target.value); setQueryBrand(''); }}
+                  onChange={event => setQuery(event.target.value)}
                   onKeyDown={event => { if (event.key === 'Enter' && !loading) void fetchData(query, '', queryBrand); }}
                   placeholder="Enter a watch reference"
                   className="h-11 w-full rounded-md border border-white/20 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#c9a03a]"
@@ -604,28 +763,6 @@ export default function PriceResearch() {
       </header>
 
       <div className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:py-8">
-        {!data && liveReleaseSummary && (
-          <section aria-label="Live verified inventory" className="mb-6 rounded-xl border p-4" style={{ borderColor: BORDER, background: '#fbfaf7' }}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <div className="text-sm font-bold" style={{ color: NAVY }}>Live verified inventory</div>
-                <p className="mt-1 text-xs" style={{ color: MUTED }}>
-                  {liveReleaseSummary.total_listing_count.toLocaleString()} customer-visible Rolex and Patek listings on the Trading Floor.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {liveReleaseSummary.brands.map(item => (
-                  <Link key={item.brand} to={`/trading?brand=${encodeURIComponent(item.brand)}`} className="rounded-md border px-3 py-2 text-xs font-semibold" style={{ borderColor: BORDER, color: NAVY }}>
-                    {item.brand}: {item.listing_count.toLocaleString()} live
-                  </Link>
-                ))}
-              </div>
-            </div>
-            <p className="mt-3 text-xs" style={{ color: MUTED }}>
-              Price charts use a narrower source-proven WTS subset. Listings with unverified currency, FX, bundle, duplicate, or identity evidence are never averaged.
-            </p>
-          </section>
-        )}
         {/* ── Drill-down: Browse by Model (real listings only) ─────── */}
         <div className="mb-6 border-y py-5" style={{ borderColor: BORDER, display: data ? 'none' : undefined }}>
           {(pBrand || pModel) && (
@@ -639,7 +776,7 @@ export default function PriceResearch() {
           )}
           <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${pBrand} model` : 'Choose a brand'}</h3>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-            Every reference shown here has real approved listing evidence. Five comparable observations are required before price analytics are published.
+            Brands come from the complete available inventory. Five source-qualified comparable observations are required before price analytics are published.
           </div>
 
           {/* Brand chips */}
@@ -651,8 +788,8 @@ export default function PriceResearch() {
                   backgroundColor: WHITE, color: TEXT, fontWeight: 600, textAlign: 'left',
                 }}>
                 {item.brand}
-                {liveListingCount(item.brand) !== null && (
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 3 }}>{liveListingCount(item.brand)?.toLocaleString()} live Trading Floor listings</div>
+                {item.listing_count != null && (
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 3 }}>{item.listing_count.toLocaleString()} listings</div>
                 )}
               </button>
             ))}
@@ -664,7 +801,8 @@ export default function PriceResearch() {
           )}
 
           {pLoading === 'models' && <div style={{ fontSize: 13, color: MUTED }}>Loading models…</div>}
-          {pBrand && !pModel && pLoading !== 'models' && pModels.length === 0 && (
+          {pickerError && <div role="alert" style={{ fontSize: 13, color: RED, marginBottom: 12 }}>{pickerError}</div>}
+          {pBrand && !pModel && pLoading !== 'models' && !pickerError && pModels.length === 0 && (
             <div style={{ fontSize: 13, color: MUTED }}>No cataloged models were returned. Search a known reference above.</div>
           )}
 
@@ -694,8 +832,57 @@ export default function PriceResearch() {
           )}
 
           {pLoading === 'refs' && <div style={{ fontSize: 13, color: MUTED }}>Loading references…</div>}
-          {pBrand && pModel && pLoading !== 'refs' && pRefs.length === 0 && (
+          {pBrand && pModel && pLoading !== 'refs' && !pickerError && pRefs.length === 0 && (
             <div style={{ fontSize: 13, color: MUTED }}>No approved listing evidence was returned for this model.</div>
+          )}
+
+          {/* ── Model market stats panel (min-5 exposure) ── */}
+          {mStats && mStats.stats && (
+            <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 16, marginBottom: 14 }}>
+              <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
+                <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>
+                  {pBrand} {pModel} — Market Overview
+                </div>
+                <div style={{ fontSize: 11, color: MUTED }}>
+                  {mStats.first_seen && mStats.last_seen && (
+                    <>Data: {mStats.first_seen.split('T')[0]} → {mStats.last_seen.split('T')[0]}</>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3" style={{ fontSize: 12 }}>
+                <div>
+                  <div style={{ color: MUTED }}>Avg Price</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: GREEN }}>${mStats.stats.avg.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: MUTED }}>Median</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: NAVY }}>${mStats.stats.median.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: MUTED }}>Range</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: TEXT, marginTop: 4 }}>
+                    ${mStats.stats.min.toLocaleString()} – ${mStats.stats.max.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: MUTED }}>WTS (For Sale)</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{mStats.wts.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: MUTED }}>WTB (Demand)</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: BLUE }}>{mStats.wtb.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: MUTED }}>WTB/WTS Ratio</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: mStats.wts > 0 && (mStats.wtb / mStats.wts) > 1 ? RED : GREEN }}>
+                    {mStats.wts > 0 ? (mStats.wtb / mStats.wts).toFixed(2) : '—'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: 10, color: MUTED, marginTop: 10, fontStyle: 'italic' }}>
+                IQR-filtered · only references with 5+ real listings included
+              </div>
+            </div>
           )}
 
           {/* Reference cards */}
@@ -720,6 +907,12 @@ export default function PriceResearch() {
         {error && (
           <div style={{ padding: 16, borderRadius: 8, marginBottom: 24, backgroundColor: '#fff5f5', border: '1px solid #fecaca', color: RED, fontSize: 14 }}>
             {error}
+          </div>
+        )}
+
+        {analyticsNotice && (
+          <div style={{ padding: 16, borderRadius: 8, marginBottom: 24, backgroundColor: '#fffaf0', border: '1px solid #ead9a2', color: '#7a5900', fontSize: 13 }}>
+            {analyticsNotice}
           </div>
         )}
 
@@ -802,7 +995,7 @@ export default function PriceResearch() {
                 </div>
                 {data.eligible_observation_count != null && (
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 6, lineHeight: 1.4 }}>
-                    Evidence path: {data.sampledListings.toLocaleString()} rows sampled → {data.eligible_observation_count.toLocaleString()} passed WTS and catalog checks → {data.count.toLocaleString()} in this chart cohort.
+                    Evidence path: {data.sampledListings.toLocaleString()} rows sampled → {data.eligible_observation_count.toLocaleString()} passed all analytics evidence checks → {data.count.toLocaleString()} in this chart cohort.
                   </div>
                 )}
                 {(data.repost_count || 0) > 0 && (
@@ -1073,9 +1266,9 @@ export default function PriceResearch() {
 
             {/* ── Listings Table ──────────────────────────────── */}
             {data.analytics_ready ? (
-            <details style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '18px 0', marginBottom: 24 }}>
+            <details open style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '18px 0', marginBottom: 24 }}>
               <summary style={{ cursor: 'pointer', color: NAVY, fontWeight: 700, fontSize: 14, marginBottom: 16 }}>
-                How this price was calculated
+                Analysis outcome and methodology
               </summary>
               <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
                 <div style={{ flex: 1 }}>
@@ -1084,7 +1277,7 @@ export default function PriceResearch() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    The release starts with canonical-identity-reviewed Rolex and Patek Philippe records that are APPROVED at confidence 90 or higher. Confidence is a parser score, not a probability. Explicit source currency, verified FX provenance when conversion is required, catalog model and dial, bundle, and duplicate checks run before a cohort with five or more observations uses the market plausibility floor and standard 1.5 x IQR method.
+                    The release starts with canonical-identity-reviewed records that are APPROVED at confidence 90 or higher. Confidence is a parser score, not a probability. Explicit source currency, verified FX provenance when conversion is required, catalog model and dial, bundle, and duplicate checks run before a cohort with five or more observations uses the market plausibility floor and standard 1.5 x IQR method.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
@@ -1135,87 +1328,23 @@ export default function PriceResearch() {
                       Price statistics and charts require at least five approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
-                      {data.sampledListings.toLocaleString()} observations checked · {(data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · 0 qualified comparables
+                      {data.sampledListings.toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · {data.count.toLocaleString()} qualified comparable{data.count === 1 ? '' : 's'}
                     </div>
                   </div>
                 </div>
               </section>
             )}
 
-            {canReviewExcludedEvidence && data.outlier_rows.length > 0 && (
-              <section style={{ marginBottom: 28 }}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ marginBottom: 10 }}>
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Excluded evidence for human review</h3>
-                    <p style={{ fontSize: 12, color: MUTED, marginTop: 3 }}>
-                      These rows are preserved, not discarded. Most require a currency, dial, bundle, or duplicate decision; only rows labeled with an IQR or plausibility reason are statistical price outliers.
-                    </p>
-                  </div>
-                  <Link
-                    to="/review-queue"
-                    className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md px-4 text-xs font-bold"
-                    style={{ background: NAVY, color: WHITE }}
-                  >
-                    Open Human Review Queue
-                  </Link>
-                </div>
-                <div style={{ overflowX: 'auto', borderTop: `1px solid ${BORDER}` }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760, fontSize: 13 }}>
-                    <thead><tr style={{ textAlign: 'left', color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
-                      <th style={{ padding: '10px 8px' }}>Price</th><th style={{ padding: '10px 8px' }}>Date</th>
-                      <th style={{ padding: '10px 8px' }}>Reason</th><th style={{ padding: '10px 8px' }}>Condition</th>
-                      <th style={{ padding: '10px 8px' }}>Dial</th><th style={{ padding: '10px 8px' }}>Source</th>
-                    </tr></thead>
-                    <tbody>
-                      {data.outlier_rows.slice(0, 100).map((row, index) => (
-                        <tr
-                          key={row.id || `${row.created_at}-${row.price_usd}-${index}`}
-                          tabIndex={0}
-                          role="button"
-                          aria-label={`View source detail for excluded observation${row.source_price_amount && row.source_currency ? ` at ${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}` : Number.isFinite(Number(row.price_usd)) ? ` at $${Number(row.price_usd).toLocaleString()}` : ''}`}
-                          onClick={() => void openListing(row)}
-                          onKeyDown={event => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              void openListing(row);
-                            }
-                          }}
-                          style={{ borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
-                          onMouseEnter={event => (event.currentTarget.style.backgroundColor = '#fff9e8')}
-                          onMouseLeave={event => (event.currentTarget.style.backgroundColor = WHITE)}
-                        >
-                          <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>
-                            {row.source_price_amount && row.source_currency
-                              ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
-                              : Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0
-                                ? `$${Number(row.price_usd).toLocaleString()}`
-                                : 'No price'}
-                          </td>
-                          <td style={{ padding: '11px 8px' }}>{row.listing_date ? row.listing_date.split('T')[0] : 'Unknown'}</td>
-                          <td style={{ padding: '11px 8px', color: '#8a6500' }}>{outlierReason(row.outlier_reason)}</td>
-                          <td style={{ padding: '11px 8px' }}>{row.condition || 'Unspecified'}</td>
-                          <td style={{ padding: '11px 8px' }}>{row.dial_color || 'Unspecified'}</td>
-                          <td style={{ padding: '11px 8px', color: MUTED }}>
-                            <span className="flex items-center gap-2">{row.source || 'Unknown'} <Eye size={14} aria-hidden="true" /></span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
-
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
               <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
-                Qualified Comparable Sample ({listings.length} shown of {data.count.toLocaleString()} included)
+                Qualified comparable listings ({listings.length} shown of {data.count.toLocaleString()} included)
               </div>
               {listings.length === 0 && (
                 <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: 14 }}>
                   No qualified comparable listings are available for this cohort.
                 </div>
               )}
-              {listings.slice(0, 100).map(row => (
+              {listings.map(row => (
                 <ListingRow
                   key={row.id}
                   row={row}
@@ -1223,23 +1352,9 @@ export default function PriceResearch() {
                   onOpen={() => void openListing(row)}
                 />
               ))}
-              {(data.evidence?.comparable_pages || 1) > 1 && (
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" style={{ padding: '14px clamp(12px, 3vw, 24px)', borderTop: `1px solid ${BORDER}` }}>
-                  <button
-                    type="button"
-                    disabled={(data.evidence?.comparable_page || 1) <= 1 || loading}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) - 1)}
-                    style={{ minHeight: 44, justifySelf: 'start', border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) <= 1 ? 0.45 : 1 }}
-                  >Previous</button>
-                  <span style={{ color: MUTED, fontSize: 12 }}>
-                    Page {data.evidence?.comparable_page || 1} of {data.evidence?.comparable_pages || 1}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={(data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) || loading}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) + 1)}
-                    style={{ minHeight: 44, justifySelf: 'end', border: `1px solid ${BORDER}`, background: NAVY, color: WHITE, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) ? 0.45 : 1 }}
-                  >Next</button>
+              {data.count > COMPARABLE_LISTING_PREVIEW_LIMIT && (
+                <div style={{ padding: '12px 24px', borderTop: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
+                  Showing a compact source-evidence sample for speed. Outliers and other exclusions are summarized above and are not displayed as watch listings.
                 </div>
               )}
             </div>
@@ -1271,10 +1386,280 @@ export default function PriceResearch() {
 
 // ── Sub-Components ─────────────────────────────────────────────
 
+function ReviewedEvidenceImage({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return null;
+  return (
+    <div style={{ height: 270, background: '#f1f3f5', overflow: 'hidden', borderRadius: 8, marginBottom: 16 }}>
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }}
+      />
+    </div>
+  );
+}
+
+function reviewedPriceLabel(record: ReviewedMarketRecord) {
+  const sourceText = String(record.source_price_text || '').trim();
+  if (sourceText) return sourceText;
+  if (record.currency && record.price_raw != null && String(record.price_raw).trim()) {
+    return `${record.currency} ${record.price_raw}`;
+  }
+  if (record.source_currency && Number.isFinite(Number(record.source_price_amount)) && Number(record.source_price_amount) > 0) {
+    return `${record.source_currency} ${Number(record.source_price_amount).toLocaleString()}`;
+  }
+  return '';
+}
+
+function reviewedPriceEvidenceLabel(status?: string | null) {
+  if (status === 'SOURCE_EXPLICIT_USD_MATCH') return 'Currency basis: USD stated in the original listing.';
+  if (status === 'DATED_FX_PROVENANCE_REQUIRED') return 'Market comparison unavailable: this price does not have a verified dated USD conversion.';
+  if (status === 'EXPLICIT_USD_PRICE_CONFLICT') return 'Market comparison unavailable: the posted and supplied USD values conflict.';
+  return 'Market comparison unavailable: currency is not explicit in the original listing.';
+}
+
+function sameEvidenceValue(left?: string | null, right?: string | null) {
+  return Boolean(left && right && left.trim().toLowerCase() === right.trim().toLowerCase());
+}
+
+function referenceComparisonKey(value?: string | null) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function ReviewedPriceContext({ record, analytics }: { record: ReviewedMarketRecord; analytics: PriceData | null }) {
+  const [chartOpen, setChartOpen] = useState(false);
+  const recordBrand = record.brand || record.canonical_brand || record.brand_scope || record.supplied_brand || '';
+  const recordReference = record.reference || record.normalized_reference || record.catalog_reference || record.raw_reference || '';
+  const analyticsReference = analytics?.resolvedRef || analytics?.reference || '';
+  const sameReference = record.reference_search_key
+    ? record.reference_search_key === referenceComparisonKey(analyticsReference)
+    : sameEvidenceValue(recordReference, analyticsReference);
+  const sameIdentityAndDial = Boolean(
+    analytics
+    && sameEvidenceValue(recordBrand, analytics.brand)
+    && sameReference
+    && sameEvidenceValue(record.dial_color, analytics.selected_cohort.dial_color),
+  );
+  const exactCohort = Boolean(
+    sameIdentityAndDial
+    && analytics
+    && analytics.analytics_ready
+    && analytics.stats
+    && analytics.count >= Math.max(5, Number(analytics.methodology.minimum_sample || 5)),
+  );
+  const eligibleUsd = record.price_research_eligible === true
+    && record.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
+    && record.listing_type === 'WTS'
+    && Number.isFinite(Number(record.price_usd))
+    && Number(record.price_usd) > 0;
+  if (!eligibleUsd) return null;
+  if (!exactCohort || !analytics?.stats) {
+    return (
+      <div style={{ marginTop: 12, padding: 10, border: `1px solid ${BORDER}`, borderRadius: 7, color: MUTED, fontSize: 11, lineHeight: 1.5 }}>
+        Price rating and timeline require at least five verified USD comparable offers for this exact reference and dial. Projections remain unavailable unless the separate historical validation also passes.
+        {sameIdentityAndDial && analytics ? ` ${analytics.count.toLocaleString()} are available now.` : ''}
+      </div>
+    );
+  }
+
+  const price = Number(record.price_usd);
+  const rating = rateMarketPrice(price, analytics.stats, analytics.count);
+  const postedAt = record.listing_date || record.posting_date || null;
+  const postedDate = postedAt ? postedAt.split('T')[0] : null;
+  const postedMonth = postedDate?.slice(0, 7) || '';
+  const chartRows: Array<{
+    month: string;
+    avg_price: number | null;
+    count: number;
+    selected_price: number | null;
+    observed_date: string | null;
+  }> = analytics.monthly.map(point => ({
+    month: point.month,
+    avg_price: point.avg_price,
+    count: point.count,
+    selected_price: point.month === postedMonth ? price : null,
+    observed_date: point.month === postedMonth ? postedDate : null,
+  }));
+  if (postedMonth && !chartRows.some(point => point.month === postedMonth)) {
+    chartRows.push({
+      month: postedMonth,
+      avg_price: null,
+      count: 0,
+      selected_price: price,
+      observed_date: postedDate,
+    });
+    chartRows.sort((left, right) => left.month.localeCompare(right.month));
+  }
+  const chartReady = Boolean(postedMonth && chartRows.length > 0);
+  const chartValues = [
+    ...analytics.monthly.map(point => Number(point.avg_price)),
+    price,
+  ].filter(value => Number.isFinite(value) && value > 0);
+  const chartMin = chartValues.length ? Math.min(...chartValues) : 0;
+  const chartMax = chartValues.length ? Math.max(...chartValues) : 1;
+  const chartPadding = Math.max(1000, (chartMax - chartMin) * 0.15);
+  const chartDomain: [number, number] = [
+    Math.max(0, Math.floor((chartMin - chartPadding) / 1000) * 1000),
+    Math.ceil((chartMax + chartPadding) / 1000) * 1000,
+  ];
+
+  return (
+    <div style={{ marginTop: 14, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 12, background: '#fbfaf7' }}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div style={{ color: rating.color, fontWeight: 800, fontSize: 13 }}>{rating.label}</div>
+          <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>{rating.reason}</div>
+        </div>
+        <div style={{ color: NAVY, fontSize: 11, fontWeight: 700 }}>{analytics.count.toLocaleString()} verified USD comparables</div>
+      </div>
+      <div style={{ color: MUTED, fontSize: 10, marginTop: 8 }}>
+        Exact {analytics.brand} {analyticsReference} · {analytics.selected_cohort.dial_color} dial · all listing conditions
+      </div>
+      {chartReady ? (
+        <>
+          <button type="button" onClick={() => setChartOpen(value => !value)} style={{ marginTop: 10, minHeight: 38, border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, borderRadius: 6, padding: '7px 10px', fontSize: 11, fontWeight: 800 }}>
+            {chartOpen ? 'Hide price timeline' : 'Compare price when posted'}
+          </button>
+          {chartOpen && (
+            <div style={{ width: '100%', height: 230, marginTop: 12 }} role="img" aria-label={`Posted USD price compared with verified monthly averages for the exact ${analytics.selected_cohort.dial_color} dial cohort`}>
+              <ResponsiveContainer>
+                <ComposedChart data={chartRows} margin={{ top: 8, right: 12, left: 0, bottom: 2 }}>
+                  <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" stroke={MUTED} fontSize={9} tickFormatter={month => String(month).replace(/^(\d{4})-(\d{2})$/, '$2/$1')} />
+                  <YAxis domain={chartDomain} stroke={MUTED} fontSize={9} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} width={48} />
+                  <Tooltip content={<ListingComparisonTooltip />} />
+                  <Line type="monotone" dataKey="avg_price" name="Verified monthly average" stroke={NAVY} strokeWidth={2.5} dot={{ r: 3, fill: NAVY }} connectNulls />
+                  <Scatter dataKey="selected_price" name="Posted listing" fill={GOLD} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ color: MUTED, fontSize: 11, marginTop: 9 }}>A price timeline is unavailable because the original posting date is not present.</div>
+      )}
+    </div>
+  );
+}
+
+function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRecord; analytics: PriceData | null }) {
+  const [sellerOpen, setSellerOpen] = useState(false);
+  const [sellerSummary, setSellerSummary] = useState<ReviewedSellerResponse | null>(null);
+  const [sellerLoading, setSellerLoading] = useState(false);
+  const [sellerError, setSellerError] = useState('');
+  const sellerRequestRef = useRef<AbortController | null>(null);
+  const brand = record.brand || record.canonical_brand || record.brand_scope || record.supplied_brand || 'Watch';
+  const reference = record.reference || record.normalized_reference || record.catalog_reference || record.raw_reference || '';
+  const title = [brand, record.model, reference].filter((value, index, values) => value && values.indexOf(value) === index).join(' ');
+  const imageUrl = record.display_image_url || record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
+  const poster = sellerSummary?.seller?.name || record.posted_by || record.seller_name || '';
+  const phone = sellerSummary?.seller?.phone || record.phone_number || record.seller_phone || '';
+  const price = reviewedPriceLabel(record);
+  const sellerAnalytics = sellerSummary?.analytics;
+  const sellerMetrics: Array<[string, number]> = [
+    ['For sale', sellerAnalytics?.wts_posts ?? record.seller_analytics?.wts_posts],
+    ['Looking for', sellerAnalytics?.wtb_posts ?? record.seller_analytics?.wtb_posts],
+    ['Other posts', sellerAnalytics?.other_posts],
+    ['Active', record.seller_analytics?.active_listings],
+    ['Total posts', sellerAnalytics?.total_posts ?? record.seller_analytics?.total_posts],
+  ].flatMap(([label, value]) => value != null && Number.isFinite(Number(value))
+    ? [[String(label), Number(value)] as [string, number]]
+    : []);
+
+  useEffect(() => () => sellerRequestRef.current?.abort(), []);
+
+  const toggleSeller = async () => {
+    if (sellerOpen) {
+      setSellerOpen(false);
+      return;
+    }
+    setSellerOpen(true);
+    if (sellerSummary || sellerLoading) return;
+    sellerRequestRef.current?.abort();
+    const controller = new AbortController();
+    sellerRequestRef.current = controller;
+    setSellerLoading(true);
+    setSellerError('');
+    try {
+      const response = await fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(record.id)}`, { signal: controller.signal });
+      const payload = await response.json() as ReviewedSellerResponse;
+      if (!response.ok || payload.status !== 'ok') throw new Error(payload.error || 'Seller activity is unavailable');
+      setSellerSummary(payload);
+    } catch (requestError) {
+      if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
+      setSellerError(requestError instanceof Error ? requestError.message : 'Seller activity is unavailable');
+    } finally {
+      if (sellerRequestRef.current === controller) setSellerLoading(false);
+    }
+  };
+
+  return (
+    <article style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 18, background: WHITE, minWidth: 0 }}>
+      <ReviewedEvidenceImage src={imageUrl} alt={`${title} original listing image`} />
+      <div style={{ color: GOLD, fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+        {record.listing_type || 'Listing'}{record.condition ? ` · ${record.condition}` : ''}
+      </div>
+      <h3 style={{ color: NAVY, fontSize: 17, fontWeight: 800, marginTop: 7 }}>{title}</h3>
+      {record.dial_color && <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>Dial: {record.dial_color}</div>}
+      {price && <div style={{ color: GOLD, fontSize: 18, fontWeight: 800, marginTop: 10 }}>{price}</div>}
+      <div style={{ color: record.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH' ? GREEN : '#7a5900', fontSize: 11, lineHeight: 1.5, marginTop: 5 }}>
+        {reviewedPriceEvidenceLabel(record.price_evidence_status)}
+      </div>
+      <ReviewedPriceContext record={record} analytics={analytics} />
+
+      {(poster || phone || record.listing_date || record.posting_date) && (
+        <div style={{ marginTop: 14, padding: 12, background: LIGHT_GRAY, borderRadius: 7, fontSize: 12, color: TEXT }}>
+          {poster && <div><strong>Posted by:</strong> {poster}</div>}
+          {phone && <div style={{ marginTop: 3 }}><strong>Contact:</strong> {phone}</div>}
+          {(record.listing_date || record.posting_date) && <div style={{ marginTop: 3, color: MUTED }}>{String(record.listing_date || record.posting_date).split('T')[0]}</div>}
+          <button type="button" onClick={() => void toggleSeller()} style={{ marginTop: 10, border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, borderRadius: 6, minHeight: 38, padding: '7px 10px', fontSize: 11, fontWeight: 800 }}>
+            {sellerOpen ? 'Hide seller activity' : 'View seller activity'}
+          </button>
+          {sellerOpen && sellerLoading && <div style={{ marginTop: 10, color: MUTED }}>Loading seller activity…</div>}
+          {sellerOpen && sellerError && <div style={{ marginTop: 10, color: RED }}>{sellerError}</div>}
+          {sellerOpen && sellerSummary && !sellerSummary.contact_available && (
+            <div style={{ marginTop: 10, color: MUTED }}>No seller identity or activity can be linked without guessing.</div>
+          )}
+          {sellerOpen && sellerMetrics.length > 0 && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {sellerMetrics.map(([label, value]) => <Metric key={label} label={label} value={Number(value).toLocaleString()} />)}
+            </div>
+          )}
+          {sellerOpen && sellerAnalytics?.first_post_at && <div style={{ marginTop: 10, color: MUTED }}>First observed: {sellerAnalytics.first_post_at.split('T')[0]}</div>}
+          {sellerOpen && sellerAnalytics?.last_post_at && <div style={{ marginTop: 3, color: MUTED }}>Last observed: {sellerAnalytics.last_post_at.split('T')[0]}</div>}
+        </div>
+      )}
+
+      {record.raw_message && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ color: MUTED, fontSize: 10, fontWeight: 800, letterSpacing: '.07em', marginBottom: 6 }}>{record.raw_message_scope === 'normalized_summary' ? 'LISTING SUMMARY · ORIGINAL SOURCE PENDING' : 'ORIGINAL LISTING'}</div>
+          <pre style={{ margin: 0, padding: 12, background: '#111827', color: '#e5e7eb', borderRadius: 7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 260, overflowY: 'auto', fontSize: 11, lineHeight: 1.5 }}>{record.raw_message}</pre>
+        </div>
+      )}
+
+    </article>
+  );
+}
+
 function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
   const date = row.listing_date;
+  const hasUsdPrice = Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0;
+  const hasSourcePrice = Boolean(
+    row.source_price_amount
+    && row.source_currency
+    && Number.isFinite(Number(row.source_price_amount))
+    && Number(row.source_price_amount) > 0,
+  );
+  const priceLabel = hasUsdPrice
+    ? `$${Number(row.price_usd).toLocaleString()}`
+    : hasSourcePrice
+      ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
+      : 'Price not available';
   return (
-    <button type="button" onClick={onOpen} aria-label={`View source detail for ${title} at $${row.price_usd.toLocaleString()}`}
+    <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}`}
       className="min-h-16"
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
@@ -1288,7 +1673,8 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
         </div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${row.price_usd.toLocaleString()}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: hasUsdPrice ? GOLD : '#8a6500' }}>{priceLabel}</div>
+        {!hasUsdPrice && <div style={{ color: MUTED, fontSize: 10, marginTop: 2 }}>Excluded from averages</div>}
       </div>
       <Eye className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
     </button>
@@ -1309,8 +1695,14 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   cohortDial: string;
 }) {
   const [activeImage, setActiveImage] = useState(0);
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const [copied, setCopied] = useState(false);
-  const images = detail?.image_urls || [];
+  const sourceImageEvidence = ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
+    .includes(String(detail?.image_evidence_type || ''));
+  const images = sourceImageEvidence
+    ? [...new Set((detail?.image_urls || []).map(url => String(url || '').trim()).filter(url => url && !failedImages.has(url)))]
+    : [];
+  const visibleImageIndex = activeImage < images.length ? activeImage : 0;
   const observedAt = detail?.listing_date || summary.listing_date;
   const sellerLocation = [seller?.dealer_city, seller?.dealer_country]
     .map(value => String(value || '').trim())
@@ -1319,10 +1711,12 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   // The summary price is the exact value used by the comparable-set and
   // outlier calculations. A legacy detail row may still contain an older
   // currency conversion, so it must never replace the analytics value here.
-  const displayPrice = Number.isFinite(Number(summary.price_usd)) && Number(summary.price_usd) > 0
+  const resolvedDisplayPrice = Number.isFinite(Number(summary.price_usd)) && Number(summary.price_usd) > 0
     ? Number(summary.price_usd)
     : Number(detail?.price_usd || 0);
-  const rating = rateMarketPrice(displayPrice, benchmark || null, comparableCount);
+  const hasDisplayPrice = Number.isFinite(resolvedDisplayPrice) && resolvedDisplayPrice > 0;
+  const displayPrice = hasDisplayPrice ? resolvedDisplayPrice : null;
+  const rating = rateMarketPrice(displayPrice || 0, benchmark || null, comparableCount);
   const observedDate = observedAt ? observedAt.split('T')[0] : null;
   const observedMonth = observedDate?.slice(0, 7) || '';
   const comparisonData: Array<{
@@ -1335,10 +1729,10 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
     month: point.month,
     avg_price: point.avg_price,
     count: point.count,
-    selected_price: point.month === observedMonth ? displayPrice : null,
+    selected_price: point.month === observedMonth && hasDisplayPrice ? displayPrice : null,
     observed_date: point.month === observedMonth ? observedDate : null,
   }));
-  if (observedMonth && !comparisonData.some(point => point.month === observedMonth)) {
+  if (hasDisplayPrice && observedMonth && !comparisonData.some(point => point.month === observedMonth)) {
     comparisonData.push({
       month: observedMonth,
       avg_price: null,
@@ -1354,9 +1748,9 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
     ...monthly.map(point => Number(point.avg_price)),
     displayPrice,
     cohortAverage,
-  ].filter(value => Number.isFinite(value) && value > 0);
-  const comparisonMin = Math.min(...comparisonPrices);
-  const comparisonMax = Math.max(...comparisonPrices);
+  ].map(Number).filter(value => Number.isFinite(value) && value > 0);
+  const comparisonMin = comparisonPrices.length ? Math.min(...comparisonPrices) : 0;
+  const comparisonMax = comparisonPrices.length ? Math.max(...comparisonPrices) : 1;
   const comparisonPadding = Math.max(1000, (comparisonMax - comparisonMin) * 0.15);
   const comparisonDomain: [number, number] = [
     Math.max(0, Math.floor((comparisonMin - comparisonPadding) / 1000) * 1000),
@@ -1382,23 +1776,27 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
         {!loading && error && <div style={{ margin: 28, padding: 20, border: '1px solid #f1c2c7', background: '#fff5f6', color: RED }}><strong>Detail unavailable.</strong> {error}</div>}
 
         {!loading && detail && (
-          <div className="grid lg:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]">
-            <section style={{ background: '#f1f3f5', minHeight: images.length ? 600 : 'auto', padding: 20 }}>
-              <div style={{ position: 'sticky', top: 84 }}>
-                <div style={{ minHeight: images.length ? 500 : 260, height: images.length ? 'min(68vh, 680px)' : 260, background: '#e5e7eb', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 10 }}>
-                  {images[activeImage] ? (
-                    <img src={images[activeImage]} alt={`${detail.brand} ${detail.reference} listing`} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
-                  ) : (
-                    <div style={{ maxWidth: 280, textAlign: 'center', color: MUTED, padding: 24 }}>
-                      <ImageOff size={42} style={{ margin: '0 auto 12px' }} />
-                      <div style={{ color: NAVY, fontWeight: 700, marginBottom: 6 }}>No linked image for this record</div>
-                      <div style={{ fontSize: 13 }}>The listing remains useful as price evidence. An image will appear here only when media is actually linked to this source record.</div>
+          <div className={images.length > 0 ? 'grid lg:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]' : ''}>
+            {images.length > 0 && (
+              <section style={{ background: '#f1f3f5', minHeight: 600, padding: 20 }}>
+                <div style={{ position: 'sticky', top: 84 }}>
+                  <div style={{ minHeight: 500, height: 'min(68vh, 680px)', background: '#e5e7eb', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 10 }}>
+                    <img
+                      src={images[visibleImageIndex]}
+                      alt={`${detail.brand} ${detail.reference} source listing image`}
+                      onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }}
+                    />
+                  </div>
+                  {detail.image_evidence_notice && (
+                    <div style={{ marginTop: 10, color: MUTED, fontSize: 12, lineHeight: 1.5 }}>
+                      <strong style={{ color: NAVY }}>{detail.image_evidence_label || 'Image evidence'}:</strong> {detail.image_evidence_notice}
                     </div>
                   )}
+                  {images.length > 1 && <div className="flex gap-2" style={{ marginTop: 10, overflowX: 'auto' }}>{images.map((url, index) => <button type="button" key={url} onClick={() => setActiveImage(index)} aria-label={`Show image ${index + 1}`} style={{ width: 64, height: 64, border: `2px solid ${index === visibleImageIndex ? GOLD : 'transparent'}`, background: WHITE, padding: 2, flexShrink: 0, cursor: 'pointer' }}><img src={url} alt="" onError={() => setFailedImages(current => new Set(current).add(url))} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></button>)}</div>}
                 </div>
-                {images.length > 1 && <div className="flex gap-2" style={{ marginTop: 10, overflowX: 'auto' }}>{images.map((url, index) => <button type="button" key={url} onClick={() => setActiveImage(index)} aria-label={`Show image ${index + 1}`} style={{ width: 64, height: 64, border: `2px solid ${index === activeImage ? GOLD : 'transparent'}`, background: WHITE, padding: 2, flexShrink: 0, cursor: 'pointer' }}><img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></button>)}</div>}
-              </div>
-            </section>
+              </section>
+            )}
 
             <section style={{ padding: 'clamp(22px, 4vw, 42px)' }}>
               <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 18 }}>
@@ -1408,9 +1806,20 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                 {summary.is_outlier && <span style={{ color: '#7a5900', fontSize: 12 }}>{outlierLabel}</span>}
               </div>
 
-              <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{detail.brand} {detail.reference}</h1>
-              <div style={{ color: GOLD, fontSize: 26, fontWeight: 800, marginBottom: 28 }}>${displayPrice.toLocaleString()} <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>USD asking price</span></div>
+              <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{[detail.brand, detail.model, detail.reference].filter((value, index, values) => value && values.indexOf(value) === index).join(' ')}</h1>
+              <div style={{ color: hasDisplayPrice ? GOLD : '#8a6500', fontSize: 26, fontWeight: 800, marginBottom: 28 }}>
+                {hasDisplayPrice
+                  ? `$${Number(displayPrice).toLocaleString()}`
+                  : detail.price_raw != null && detail.currency
+                    ? `${detail.currency} ${Number(detail.price_raw).toLocaleString()}`
+                    : 'Price not available for analytics'}
+                <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>
+                  {hasDisplayPrice ? ' USD asking price' : ' · excluded from averages'}
+                </span>
+              </div>
 
+              {hasDisplayPrice ? (
+                <>
               <DetailCard title="Price rating">
                 <div className="flex items-start gap-4">
                   <div style={{ minWidth: 88, borderRadius: 8, padding: '11px 10px', textAlign: 'center', background: `${rating.color}18`, color: rating.color, border: `1px solid ${rating.color}55`, fontWeight: 800, fontSize: 13 }}>{rating.label}</div>
@@ -1452,6 +1861,14 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                   <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>A posting date is not available, so this listing cannot be placed on the price timeline yet.</div>
                 )}
               </DetailCard>
+                </>
+              ) : (
+                <DetailCard title="Price evidence">
+                  <div style={{ color: MUTED, fontSize: 13, lineHeight: 1.6 }}>
+                    This reviewed listing is displayed for its source post, image, seller, and watch identity. Its price is not used in averages because the raw message does not provide enough explicit currency evidence for a verified USD observation.
+                  </div>
+                </DetailCard>
+              )}
 
               <DetailCard title="Posted by">
                 {seller?.dealer_name ? (
@@ -1459,13 +1876,25 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                     <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>{seller.dealer_name}</div>
                     {seller.dealer_company && <div style={{ color: MUTED, fontSize: 13, marginTop: 3 }}>{seller.dealer_company}</div>}
                     {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
+                    {seller.phone_display && <div style={{ color: NAVY, fontSize: 13, fontWeight: 800, marginTop: 8 }}>{seller.phone_display}</div>}
                     {seller.dealer_stats ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }}>
-                        <Metric label="For sale" value={Number(seller.dealer_stats.wts_posts).toLocaleString()} />
-                        <Metric label="Looking for" value={Number(seller.dealer_stats.wtb_posts).toLocaleString()} />
-                        <Metric label="Reviews" value={Number(seller.dealer_review_count || 0).toLocaleString()} />
-                        <Metric label="Common groups" value={Number(seller.dealer_group_count || 0).toLocaleString()} />
-                      </div>
+                      <>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }} aria-label="Source poster activity">
+                          <Metric label="Total posts" value={Number(seller.dealer_stats.total_posts).toLocaleString()} />
+                          <Metric label="For sale" value={Number(seller.dealer_stats.wts_posts).toLocaleString()} />
+                          <Metric label="Looking for" value={Number(seller.dealer_stats.wtb_posts).toLocaleString()} />
+                          <Metric
+                            label={seller.dealer_stats.active_listings != null ? 'Active' : 'Other posts'}
+                            value={Number(seller.dealer_stats.active_listings ?? seller.dealer_stats.other_posts ?? 0).toLocaleString()}
+                          />
+                        </div>
+                        {(seller.dealer_stats.first_post_at || seller.dealer_stats.last_post_at) && (
+                          <div className="flex flex-wrap gap-x-4 gap-y-1" style={{ color: MUTED, fontSize: 11, marginTop: 10 }}>
+                            {seller.dealer_stats.first_post_at && <span>First observed: {seller.dealer_stats.first_post_at.split('T')[0]}</span>}
+                            {seller.dealer_stats.last_post_at && <span>Last observed: {seller.dealer_stats.last_post_at.split('T')[0]}</span>}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div style={{ marginTop: 16, padding: 12, background: LIGHT_GRAY, color: MUTED, fontSize: 12 }}>
                         Dealer activity is not available until an applied-lineage aggregate is verified.
@@ -1477,7 +1906,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                     </div>
                   </>
                 ) : (
-                  <div style={{ color: MUTED, fontSize: 13 }}>Poster verification is pending. The person or dealer will appear only after this exact listing is linked to a verified WatchFacts profile. No identity or contact data is guessed.</div>
+                  <div style={{ color: MUTED, fontSize: 13 }}>Poster data is not available for this listing. No identity or contact data is guessed.</div>
                 )}
               </DetailCard>
 
@@ -1499,8 +1928,9 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
               <DetailCard title="Watch details">
                 <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
                   {observedDate && <DetailField label="Observed" value={observedDate} />}
-                  <DetailField label="Asking price as posted" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
+                  <DetailField label="Asking price as posted" value={detail.price_raw != null && detail.currency ? `${detail.price_raw} ${detail.currency}` : null} />
                   <DetailField label="Condition" value={detail.condition} />
+                  <DetailField label="Model" value={detail.model || null} />
                   <DetailField label="Dial" value={detail.dial_color} />
                   <DetailField label="Year" value={detail.year} />
                   {detail.region && !/^unknown$/i.test(detail.region) && <DetailField label="Region" value={detail.region} />}

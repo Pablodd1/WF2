@@ -100,6 +100,20 @@ test('browser routes mirror backend authorization for review and demo tools', ()
   assert.match(app, /path="\/reprocess"[\s\S]*allowedRoles=\{\['reviewer', 'admin'\]\}/);
   assert.match(app, /path="\/demo"[\s\S]*allowedRoles=\{\['admin'\]\}/);
   assert.match(app, /path="\/demo-mode"[\s\S]*allowedRoles=\{\['admin'\]\}/);
+  // Price Research is intentionally public (2026-08-01 product decision:
+  // adaa4e9, 0b92aa3, 0e51450 "remove DealerGate ... no login required").
+  assert.match(app, /path="\/price-research" element=\{<PriceResearch \/>\}/);
+  assert.match(app, /path="\/admin-login" element=\{<DealerLogin \/>\}/);
   assert.match(login, /route === '\/review-queue' \|\| route === '\/reprocess'/);
   assert.match(login, /route === '\/demo' \|\| route === '\/demo-mode'/);
+});
+
+test('Price Research analytics API is public — no session required', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
+  // 2026-08-01 product decision (adaa4e9, 0b92aa3, 0e51450): Price Research
+  // is public/free access. Guard against the auth gate being silently
+  // reintroduced again (it was, once already, by c1f6490 the same day).
+  assert.doesNotMatch(source, /authorizeDealer\(req, res\)/);
+  assert.doesNotMatch(source, /Sign in is required to access Price Research/);
+  assert.match(source, /Cache-Control', 'no-store'/);
 });

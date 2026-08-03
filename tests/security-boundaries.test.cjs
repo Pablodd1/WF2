@@ -143,32 +143,42 @@ test('Price Research shows contact-redacted source evidence and only verified se
   assert.match(page, /Posted by/);
   assert.match(page, /No identity or contact data is guessed/);
   assert.match(page, /api\/listing-contact/);
+  assert.match(page, /api\/reviewed-seller-summary/);
+  assert.match(page, /Source poster activity/);
+  assert.match(page, /Total posts/);
+  assert.match(page, /For sale/);
+  assert.match(page, /Looking for/);
+  assert.doesNotMatch(page, /dealer_review_count|dealer_group_count|Common groups/);
   assert.doesNotMatch(page, /title\.startsWith\('Raw source'\)/);
   assert.match(page, /seller\.dealer_stats \?/);
   assert.doesNotMatch(page, /seller\.dealer_stats\?\.wts_posts \|\| 0/);
   assert.match(page, /Dealer activity is not available until an applied-lineage aggregate is verified/);
 });
 
-test('Price Research only returns excluded observation rows to reviewers and admins', () => {
+test('Price Research returns outlier analytics publicly (no auth gate)', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const route = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
-  assert.match(route, /\['admin', 'reviewer'\]\.includes\(userRole\(sessionUser\)\)/);
+  // 2026-08-01 product decision (adaa4e9, 0b92aa3, 0e51450): Price Research
+  // is public — outliers/liquidity/graphics are customer-facing analytics.
+  // Guard against the auth gate regression recurring (it did once, in c1f6490).
+  assert.doesNotMatch(route, /authorizeDealer\(req, res\)/);
+  assert.match(route, /const canReviewExcludedEvidence = true/);
   assert.match(route, /outlier_rows: canReviewExcludedEvidence \?/);
   assert.match(route, /Cache-Control', 'no-store/);
-  assert.match(route, /Vary', 'Cookie/);
 });
 
 test('Trading Floor click-through shows source evidence and only verified seller analytics', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
-  assert.match(page, /api\/price-research-listing/);
-  assert.match(page, /api\/listing-contact/);
+  assert.match(page, /api\/reviewed-market-inventory/);
+  assert.match(page, /api\/reviewed-seller-summary/);
+  assert.doesNotMatch(page, /api\/(?:price-research-listing|listing-contact|trading-listing)\?id=/);
   assert.match(page, /Original listing/);
-  assert.match(page, /dealer_stats/);
+  assert.match(page, /sellerAnalytics/);
   assert.match(page, /For sale/);
-  assert.match(page, /Looking for/);
-  assert.match(page, /common groups/);
-  assert.match(page, /reviews/);
+  assert.match(page, /Want to buy/);
+  assert.match(page, /Source-supplied contact/);
+  assert.doesNotMatch(page, /verified dealer|common groups|dealer_review_count/);
 });
