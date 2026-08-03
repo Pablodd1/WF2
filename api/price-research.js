@@ -558,7 +558,7 @@ module.exports = async function handler(req, res) {
       ? rows
       : controlledPaneraiRelease
       ? rows.filter(isOwnerReviewedWorkbookRow)
-      : await retainVerifiedIdentityRows(client, rows);
+      : rows;
     const equivalentKeys = new Set(referenceVariants.map(normRef));
     rows = rows.filter(row =>
       (usingReviewedWorkbook || isReleaseListingEligible(row))
