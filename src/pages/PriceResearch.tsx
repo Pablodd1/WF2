@@ -1003,23 +1003,23 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 </div>
                 <Link
                   to={`/trading?brand=${encodeURIComponent(data.brand)}&q=${encodeURIComponent(data.reference)}`}
-                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 shadow-sm"
-                  style={{ background: '#D4B87A' }}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:opacity-90 shadow-sm"
+                  style={{ color: '#C9A96E', border: '1px solid #C9A96E', background: 'transparent' }}
                 >
                   <Store size={16} />
-                  <span>View Inventory on Trading Floor</span>
+                  <span>View on Trading Floor →</span>
                 </Link>
               </div>
             </div>
 
-            {(data.dial_groups || []).length > 0 && (
+            {(data.dial_analysis || []).length > 0 && (
               <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
                   Each dial appears once. New, Used, and Unspecified listings are combined for analytics; condition remains visible in each listing description.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {(data.dial_groups || []).map(group => {
+                  {(data.dial_analysis || []).map(group => {
                     const selected = data.selected_cohort.dial_color === group.dial_color;
                     return (
                       <button
@@ -1271,7 +1271,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             )}
 
             {/* ── Price Chart ───────────────────────────────── */}
-            {chartData.length >= 1 ? (
+            {chartData.length >= 1 && (data.monthly || []).length >= 2 ? (
               <>
                 <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                   <div className="flex items-center justify-between mb-4">
@@ -1334,7 +1334,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </>
             ) : (
               <section aria-label="Insufficient price history evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Not enough comparable listings to display a reliable price history for this selection.</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Monthly trend data unavailable — fewer than 2 time-series points for this reference.</h3>
                 <p style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>Choose another dial color to inspect its independent evidence. Listing condition is descriptive and does not split the analytics cohort.</p>
               </section>
             )}
@@ -1740,7 +1740,12 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+        <div className="flex items-center gap-2">
+          <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          {row.source === 'MYSQL_RAW' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#f1f5f9', color: '#475569', whiteSpace: 'nowrap' }}>🗄️ Auction DB</span>}
+          {row.source === 'REVIEWED_WORKBOOK' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', whiteSpace: 'nowrap' }}>📋 Workbook</span>}
+          {row.source === 'REVIEWED_WORKBOOK_INVENTORY' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#e0e7ff', color: '#3730a3', whiteSpace: 'nowrap' }}>💬 Direct Listing</span>}
+        </div>
         <div className="flex flex-wrap gap-x-2" style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
           <span className="mr-2">Dial: {row.dial_color || 'Unspecified'}</span>
           <span className="mr-2">· {row.condition || 'Unspecified'}</span>
