@@ -26,6 +26,8 @@ function clean(value) {
   return text && !/^(?:unknown|null|n\/a)$/i.test(text) ? text : '';
 }
 
+const { normalizeCanonicalModel } = require('./catalog-taxonomy');
+
 function rowModel(row) {
   const claimed = clean(row.catalog_model) || clean(row.model);
   if (!claimed || /^\d+$/.test(claimed) || /^\d{4}[/-]\d{1,2}$/.test(claimed)) {
@@ -36,7 +38,8 @@ function rowModel(row) {
     brand.toLowerCase() !== ownerBrand
     && claimed.toLowerCase().includes(brand.toLowerCase())
   ));
-  return foreignBrand ? REFERENCE_ONLY_MODEL : claimed;
+  const rawResult = foreignBrand ? REFERENCE_ONLY_MODEL : claimed;
+  return normalizeCanonicalModel(rawResult, row.brand_scope || row.brand);
 }
 
 function rowReference(row) {

@@ -1,5 +1,6 @@
+import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MarketHeader } from './MarketHeader';
 
 const PUBLIC_LINKS = [
@@ -8,6 +9,7 @@ const PUBLIC_LINKS = [
 ];
 export function MarketNav() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [role, setRole] = useState('');
 
   useEffect(() => {
@@ -28,9 +30,21 @@ export function MarketNav() {
   return (
     <div className="bg-[#09090d] text-white">
       <MarketHeader compact />
-      {links.length > 0 && (
-        <nav className="border-b border-white/10" aria-label="Dealer navigation">
-          <div className="mx-auto flex max-w-7xl items-center justify-end gap-4 overflow-x-auto px-4 py-2 text-xs sm:gap-6 sm:px-6 lg:px-8">
+      <nav className="border-b border-white/10" aria-label="Dealer navigation">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 overflow-x-auto px-4 py-2 text-xs sm:gap-6 sm:px-6 lg:px-8">
+          <div>
+            {location.pathname !== '/' && (
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="flex items-center gap-1.5 rounded bg-white/10 px-3 py-1 text-xs font-medium text-[#d4b87a] hover:bg-white/20 hover:text-white transition-colors"
+                aria-label="Go Back"
+              >
+                <ArrowLeft size={14} /> Go Back
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
             {links.map(link => {
               const active = location.pathname.startsWith(link.to);
               return (
@@ -46,8 +60,8 @@ export function MarketNav() {
               );
             })}
           </div>
-        </nav>
-      )}
+        </div>
+      </nav>
     </div>
   );
 }

@@ -578,16 +578,23 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         // the API's publication brand names here; exact counts are shown after
         // the customer selects a reference and the service performs an exact
         // count against the gated market view.
+        const cleanBrandStr = (raw: any): string => {
+          if (!raw) return '';
+          if (typeof raw === 'string') return raw.replace(/^[({"'`\s]+|[)}"'`\s]+$/g, '').trim();
+          if (Array.isArray(raw)) return cleanBrandStr(raw[0]);
+          if (typeof raw === 'object' && raw.brand) return cleanBrandStr(raw.brand);
+          return String(raw).replace(/^[({"'`\s]+|[)}"'`\s]+$/g, '').trim();
+        };
         const brands = payload.publicationBrands || payload.summary?.publicationBrands || [];
         if (Array.isArray(brands) && brands.length) {
-          setPBrands(brands.map((item: string | { brand: string; listing_count?: number; canonical_listings?: number; model_count?: number; reference_count?: number }) => typeof item === 'string'
-            ? { brand: item }
+          setPBrands(brands.map((item: any) => typeof item === 'string'
+            ? { brand: cleanBrandStr(item) }
             : {
-                brand: item.brand,
+                brand: cleanBrandStr(item.brand || item.name || item),
                 listing_count: Number(item.listing_count ?? item.canonical_listings ?? 0),
                 model_count: item.model_count,
                 reference_count: item.reference_count,
-              }));
+              }).filter(b => Boolean(b.brand)));
         }
       })
       .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load reviewed inventory brands:', error); });

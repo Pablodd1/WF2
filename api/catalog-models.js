@@ -38,14 +38,21 @@ const FOREIGN_BRAND_NAMES = [
   'Vacheron Constantin',
 ];
 
+const { normalizeCanonicalModel } = require('./_lib/catalog-taxonomy');
+
 function reviewedWorkbookModel(row, brand) {
   const catalog = lookupCatalog(row.reference, brand);
-  if (catalog?.found && catalog.model) return String(catalog.model).trim();
-  const claimed = String(row.model || '').trim();
-  const foreignBrand = FOREIGN_BRAND_NAMES.some(name =>
-    name.toLowerCase() !== brand.toLowerCase()
-    && claimed.toLowerCase().includes(name.toLowerCase()));
-  return claimed && !foreignBrand ? claimed : REFERENCE_ONLY_MODEL;
+  let modelName = '';
+  if (catalog?.found && catalog.model) {
+    modelName = String(catalog.model).trim();
+  } else {
+    const claimed = String(row.model || '').trim();
+    const foreignBrand = FOREIGN_BRAND_NAMES.some(name =>
+      name.toLowerCase() !== brand.toLowerCase()
+      && claimed.toLowerCase().includes(name.toLowerCase()));
+    modelName = claimed && !foreignBrand ? claimed : REFERENCE_ONLY_MODEL;
+  }
+  return normalizeCanonicalModel(modelName, brand);
 }
 
 function summarizeReviewedModels(rows, brand) {

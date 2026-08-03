@@ -6,7 +6,6 @@ const LUXFI_URL = 'https://luxfi.ai/#add-fi';
 const HEADER_LINKS = [
   { label: 'HOME', to: '/' },
   { label: 'TRADING FLOOR', to: '/trading' },
-  { label: 'WANT TO BUY', to: '/trading?type=WTB' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
   { label: 'TELEGRAM TEST', to: '/telegram-test' },
   { label: 'DEALER LOGIN', to: '/dealer-login' },
