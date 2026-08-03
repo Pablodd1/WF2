@@ -141,8 +141,9 @@ module.exports = async function handler(req, res) {
         const models = new Map();
         for (const entry of catalogReferences) {
           if (!entry.model) continue;
-          if (!models.has(entry.model)) models.set(entry.model, new Set());
-          models.get(entry.model).add(entry.reference);
+          const canonicalModel = normalizeCanonicalModel(entry.model, brand);
+          if (!models.has(canonicalModel)) models.set(canonicalModel, new Set());
+          models.get(canonicalModel).add(entry.reference);
         }
         const out = [...models.entries()]
           .map(([model, refs]) => ({ model, reference_count: refs.size }))
@@ -205,8 +206,10 @@ module.exports = async function handler(req, res) {
       .filter(entry => isPublicationReferenceAllowed(brand, entry.reference));
     const models = new Map();
     for (const entry of catalogReferences) {
-      if (!models.has(entry.model)) models.set(entry.model, new Set());
-      models.get(entry.model).add(entry.reference);
+      if (!entry.model) continue;
+      const canonicalModel = normalizeCanonicalModel(entry.model, brand);
+      if (!models.has(canonicalModel)) models.set(canonicalModel, new Set());
+      models.get(canonicalModel).add(entry.reference);
     }
 
     const out = [...models.entries()]

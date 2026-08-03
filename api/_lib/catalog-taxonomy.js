@@ -19,7 +19,7 @@ const PATEK_COLLECTION_ROLLUPS = [
   { pattern: /^gondolo\b/i, canonical: 'Gondolo' },
 
   // Twenty~4 Rollups
-  { pattern: /^twenty[~\-]?4\b/i, canonical: 'Twenty~4' },
+  { pattern: /^twenty[~\-\s]?4\b/i, canonical: 'Twenty~4' },
 
   // Calatrava Rollups
   { pattern: /^calatrava\b/i, canonical: 'Calatrava' },
