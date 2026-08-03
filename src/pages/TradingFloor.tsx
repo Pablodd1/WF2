@@ -79,6 +79,8 @@ interface ListingRecord {
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
   raw_message?: string | null;
+  raw_line?: string | null;
+  description?: string | null;
   raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
   raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
   raw_message_truncated?: boolean;
@@ -701,6 +703,18 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       </div>
 
       {meta.postedDate && <div className="mt-3 text-[15px]" style={{ color: INK }}>Posted: {meta.postedDate}</div>}
+
+      {(listing.raw_message || listing.raw_line || listing.description) && (
+        <div className="mt-3.5 rounded border border-white/10 bg-[#0A0B0E] p-2.5 text-xs text-white/70">
+          <div className="mb-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-[#D4B87A]">
+            <span>RAW Message</span>
+            <span className="text-[9px] text-white/40">Untouched</span>
+          </div>
+          <div className="line-clamp-3 font-mono text-[11px] leading-relaxed text-white/80 whitespace-pre-wrap">
+            {listing.raw_message || listing.raw_line || listing.description}
+          </div>
+        </div>
+      )}
 
       <div className="mt-auto pt-4">
         <ActionButton
