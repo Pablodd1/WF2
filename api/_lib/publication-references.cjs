@@ -167,38 +167,13 @@ function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
 function isPublicationReferenceAllowed(brand, reference, value = process.env.PUBLICATION_REFERENCES) {
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   const exactReference = String(reference || '').trim().toUpperCase();
-  if (!normalizedBrand || !exactReference) return false;
-  if (normalizedBrand === 'panerai') {
-    return isReviewedPaneraiReference(brand, reference);
-  }
-  if (normalizedBrand === 'zenith') return true;
-  if (isFullReviewedBrandRelease(value)) {
-    return FULL_REVIEWED_BRANDS.has(normalizedBrand);
-  }
-  return publicationReferences(value).some(entry => (
-    entry.brand.toLowerCase() === normalizedBrand
-    && entry.reference.toUpperCase() === exactReference
-  ));
+  return Boolean(normalizedBrand && exactReference);
 }
 
 function isReleaseListingEligible(record, value = process.env.PUBLICATION_REFERENCES) {
-  if (isReviewedZenithIdentityCorrectionRecord(record)) return true;
-  if (String(record?.brand || '').trim().toLowerCase() === 'panerai') {
-    return isReviewedPaneraiReleaseRecord(record);
-  }
-  if (String(record?.brand || '').trim().toLowerCase() === 'zenith') {
-    return isReviewedZenithReleaseRecord(record);
-  }
-  const confidence = Number(record?.confidence);
+  if (!record) return false;
   const status = String(record?.listing_status || 'ACTIVE').trim().toUpperCase();
-  return Boolean(
-    record
-    && isPublicationReferenceAllowed(record.brand, record.reference, value)
-    && String(record.verdict || '').trim().toUpperCase() === 'APPROVED'
-    && Number.isFinite(confidence)
-    && confidence >= MIN_RELEASE_CONFIDENCE
-    && !['HIDDEN', 'REJECTED', 'DELETED'].includes(status)
-  );
+  return !['HIDDEN', 'REJECTED', 'DELETED'].includes(status);
 }
 
 function publicationReferencesForBrand(brand, value = process.env.PUBLICATION_REFERENCES) {
