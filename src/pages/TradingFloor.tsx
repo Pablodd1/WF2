@@ -859,7 +859,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
               The original source listing is pending verification. Unverified workbook summary text is withheld from the customer view.
             </p>
-          {listing.raw_message || (listing as any).raw_line || (listing as any).description ? (
+          ) : listing.raw_message || (listing as any).raw_line || (listing as any).description ? (
             <>
               <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>
                 {listing.raw_message || (listing as any).raw_line || (listing as any).description}
