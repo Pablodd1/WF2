@@ -432,7 +432,7 @@ module.exports = async function handler(req, res) {
         .order('has_exact_source_image', { ascending: false })
         .order('posting_date', { ascending: false, nullsFirst: false })
         .order('id', { ascending: true });
-    if (brand) query = query.eq('brand_scope', brand);
+    if (brand) query = query.ilike('brand_scope', brand);
     if (reference) query = query.eq('reference_search_key', reference);
     if (exactDialVariants.length) query = query.in('dial_color', exactDialVariants);
     query = query.neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT');

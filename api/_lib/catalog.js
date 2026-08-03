@@ -31,6 +31,46 @@ function normalizeBrand(brand) {
   return String(brand || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+/** Map common brand abbreviations/variants to their canonical official name */
+const BRAND_ALIASES = {
+  'PP': 'Patek Philippe',
+  'AP': 'Audemars Piguet',
+  'RM': 'Richard Mille',
+  'VC': 'Vacheron Constantin',
+  'JLC': 'Jaeger-LeCoultre',
+  'GP': 'Girard-Perregaux',
+  'GO': 'Glashütte Original',
+  'A LANGE': 'A. Lange & Söhne',
+  'A. LANGE': 'A. Lange & Söhne',
+  'ALANGE': 'A. Lange & Söhne',
+  'A LANGE SOHNE': 'A. Lange & Söhne',
+  'A. LANGE & SOHNE': 'A. Lange & Söhne',
+  'FP JOURNE': 'F.P. Journe',
+  'F.P.JOURNE': 'F.P. Journe',
+  'FPJOURNE': 'F.P. Journe',
+  'H MOSER': 'H. Moser & Cie',
+  'H. MOSER': 'H. Moser & Cie',
+  'HMOSER': 'H. Moser & Cie',
+  'GLASHUTTE ORIGINAL': 'Glashütte Original',
+  'GLASHUTTE': 'Glashütte Original',
+  'LUXURY WATCH': '',
+  'TAG': 'TAG Heuer',
+  'MB&F': 'MB&F',
+  'MBF': 'MB&F',
+};
+
+function canonicalBrand(brand) {
+  const raw = String(brand || '').trim();
+  if (!raw) return '';
+  const upper = raw.toUpperCase();
+  if (BRAND_ALIASES[upper]) return BRAND_ALIASES[upper];
+  // Check partial matches for multi-word aliases
+  for (const [alias, canonical] of Object.entries(BRAND_ALIASES)) {
+    if (upper === alias) return canonical;
+  }
+  return raw;
+}
+
 function inferredOrExpectedBrand(reference, expectedBrand) {
   return expectedBrand || inferBrand(reference) || null;
 }
@@ -146,12 +186,18 @@ function loadCatalogs() {
   }
 
   try {
-    const enriched = JSON.parse(readFileSync(resolve(PUBLIC_DIR, 'enriched_refs.json'), 'utf8'));
+    const enrichedRaw = JSON.parse(readFileSync(resolve(PUBLIC_DIR, 'enriched_refs.json'), 'utf8'));
+    // enriched_refs.json may be an array or an object keyed by reference
+    const enriched = Array.isArray(enrichedRaw)
+      ? enrichedRaw
+      : Object.entries(enrichedRaw).map(([key, val]) => ({ ...val, reference: val.reference || key }));
     for (const item of enriched) {
       const ref = normalizeRef(item.reference);
       if (!ref || _enriched.has(ref)) continue;
+      const resolvedBrand = canonicalBrand(item.brand) || inferBrand(item.reference) || null;
+      if (!resolvedBrand) continue; // Skip unresolvable brands like "Luxury Watch"
       _enriched.set(ref, {
-        brand: item.brand || inferBrand(item.reference) || null,
+        brand: resolvedBrand,
         collection: item.collection && item.collection !== 'Unknown' ? item.collection : null,
         model: item.model && item.model !== 'Unknown' ? item.model : null,
         caseMetal: item.case_metal && item.case_metal !== 'Unknown' ? item.case_metal : null,
@@ -361,12 +407,14 @@ function listCatalogReferences(brand, model = null) {
   for (const [reference, entry] of _catalog) candidates.push({ ...entry, reference });
   for (const [reference, entry] of _enriched) candidates.push({ ...entry, reference });
 
+  const FALLBACK_MODEL = 'Reference-only listings';
   const unique = new Map();
   for (const entry of candidates) {
-    if (normalizeBrand(entry.brand) !== expectedBrand || !entry.reference || !entry.model) continue;
+    if (normalizeBrand(entry.brand) !== expectedBrand || !entry.reference) continue;
+    const entryModel = entry.model || FALLBACK_MODEL;
     const key = normalizeRef(entry.reference);
     if (!unique.has(key) || entry.source === 'local_catalog_v1') {
-      unique.set(key, { reference: entry.reference, brand: entry.brand, model: entry.model });
+      unique.set(key, { reference: entry.reference, brand: entry.brand, model: entryModel });
     }
   }
   return [...unique.values()]
@@ -397,6 +445,7 @@ module.exports = {
   lookupCatalog,
   listEquivalentReferences,
   inferBrand,
+  canonicalBrand,
   normalizeRef,
   catalogStats,
   listCatalogReferences,

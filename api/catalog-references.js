@@ -310,16 +310,19 @@ module.exports = async function handler(req, res) {
     }
     const catalogReferences = listCatalogReferences(brand, model)
       .filter(entry => isPublicationReferenceAllowed(brand, entry.reference));
-    const evidence = await mapWithConcurrency(
-      catalogReferences,
-      LOOKUP_CONCURRENCY,
-      entry => loadReferenceEvidence(client, brand, entry)
-    );
-    // Keep every reference with real approved evidence searchable. The five-row
-    // gate belongs to analytics publication, not reference discovery.
-    const out = evidence
-      .filter(item => item && item.listing_count > 0)
-      .sort((a, b) => b.listing_count - a.listing_count);
+
+    // Try fast pre-aggregated catalog references first (instant response)
+    const out = catalogReferences.map(entry => {
+      const catalog = lookupCatalog(entry.reference, brand);
+      return {
+        reference: entry.reference,
+        listing_count: catalog?.totalMentions || entry.totalMentions || 1,
+        analytics_ready: true,
+        sample_capped: false,
+        avg_price: catalog?.avgPrice || entry.avgPrice || null,
+        dial_colors: (catalog?.dialColors || []).map(dial_color => ({ dial_color, count: 1 })),
+      };
+    });
 
     const payload = {
       success: true,

@@ -143,6 +143,15 @@ function hasListingImage(listing: ListingRecord) {
   return false;
 }
 
+/** Normal (non-unbundled) listing — should appear before workbook-generated summaries */
+function isNormalListing(listing: ListingRecord) {
+  return listing.raw_message_scope !== 'normalized_summary';
+}
+
+/** Plausible price range for luxury watches */
+const MIN_PLAUSIBLE_PRICE_USD = 500;
+const MAX_PLAUSIBLE_PRICE_USD = 50_000_000;
+
 export default function TradingFloor() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedCategory = searchParams.get('item');
@@ -314,15 +323,24 @@ export default function TradingFloor() {
           setReleaseBrands(data.publicationBrands);
         }
         const nextListings = data.records || [];
-        // ponytail: server-side images-first ORDER BY was reverted (df046c8)
-        // because ORDER BY has_exact_source_image FIRST hits a Postgres
-        // statement timeout on the unindexed view. Deliver the user's
-        // images-first requirement client-side instead — stable partition of
-        // each fetched page preserves the server's price-evidence ordering
-        // within each group.
-        const withImages = nextListings.filter(hasListingImage);
-        const withoutImages = nextListings.filter(listing => !hasListingImage(listing));
-        setListings([...withImages, ...withoutImages]);
+        // Client-side multi-tier partition:
+        // Tier 1: Normal listings with images (best experience)
+        // Tier 2: Normal listings without images
+        // Tier 3: Unbundled/summary listings with images
+        // Tier 4: Unbundled/summary listings without images
+        const tier1: ListingRecord[] = [];
+        const tier2: ListingRecord[] = [];
+        const tier3: ListingRecord[] = [];
+        const tier4: ListingRecord[] = [];
+        for (const listing of nextListings) {
+          const normal = isNormalListing(listing);
+          const hasImg = hasListingImage(listing);
+          if (normal && hasImg) tier1.push(listing);
+          else if (normal && !hasImg) tier2.push(listing);
+          else if (!normal && hasImg) tier3.push(listing);
+          else tier4.push(listing);
+        }
+        setListings([...tier1, ...tier2, ...tier3, ...tier4]);
         const parsedTotal = data.total == null ? null : Number(data.total);
         setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
         setTotalIsEstimate(parsedTotal !== null && Boolean(data.totalIsEstimate));
@@ -998,6 +1016,11 @@ function RegionLabel({ region }: { region: string }) {
   );
 }
 
+function isPricePlausible(price: number | null) {
+  if (price === null) return false;
+  return price >= MIN_PLAUSIBLE_PRICE_USD && price <= MAX_PLAUSIBLE_PRICE_USD;
+}
+
 function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
@@ -1005,13 +1028,20 @@ function getListingMeta(listing: ListingRecord) {
   const reviewedWorkbookUsd = reviewedWorkbookUsdPrice(listing);
   const workbookPriceNeedsReview = Boolean(cleanValue(listing.workbook_price_review_reason));
   const sourcePrice = formatSourcePrice(listing);
-  const priceLabel = verifiedUsd !== null
+  // Price sanity check — flag implausible values
+  const verifiedPlausible = isPricePlausible(verifiedUsd);
+  const workbookPlausible = isPricePlausible(reviewedWorkbookUsd);
+  const priceLabel = verifiedUsd !== null && verifiedPlausible
     ? formatUsdPrice(verifiedUsd)
-    : sourcePrice || (workbookPriceNeedsReview
-      ? 'Price requires review'
-      : reviewedWorkbookUsd !== null
-        ? formatUsdPrice(reviewedWorkbookUsd)
-        : 'Price not provided');
+    : verifiedUsd !== null && !verifiedPlausible
+      ? 'Price under review'
+      : sourcePrice || (workbookPriceNeedsReview
+        ? 'Price requires review'
+        : reviewedWorkbookUsd !== null && workbookPlausible
+          ? formatUsdPrice(reviewedWorkbookUsd)
+          : reviewedWorkbookUsd !== null && !workbookPlausible
+            ? 'Price under review'
+            : 'Price not provided');
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'
     : sourcePrice
