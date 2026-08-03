@@ -3,10 +3,6 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MarketHeader } from './MarketHeader';
 
-const PUBLIC_LINKS = [
-  { to: '/telegram-test', label: 'Telegram Test Staging' },
-  { to: '/dealer-login', label: 'Dealer Login' },
-];
 export function MarketNav() {
   const location = useLocation();
   const navigate = useNavigate();

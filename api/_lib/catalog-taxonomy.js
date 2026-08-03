@@ -27,14 +27,14 @@ const PATEK_COLLECTION_ROLLUPS = [
   // Ellipse Rollups
   { pattern: /^(golden\s+)?ellipse\b/i, canonical: 'Golden Ellipse' },
 
-  // Complications & Grand Complications Rollups
-  {
-    pattern: /^(annual\s+calendar|chronograph|minute\s+repeater|split[ \-]?seconds|world\s+time|travel\s+time|flyback|regulator|celestial|astronomy|alarm)/i,
-    canonical: 'Complications'
-  },
+  // Complications & Grand Complications Rollups (Grand Complications first)
   {
     pattern: /^(grand\s+complication|perpetual\s+calendar|tourbillon|minute\s+repeater\s+perpetual)/i,
     canonical: 'Grand Complications'
+  },
+  {
+    pattern: /^(annual\s+calendar|chronograph|minute\s+repeater|split[ \-]?seconds|world\s+time|travel\s+time|flyback|regulator|celestial|astronomy|alarm)/i,
+    canonical: 'Complications'
   }
 ];
 

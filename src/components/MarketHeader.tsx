@@ -30,6 +30,7 @@ type MarketHeaderProps = {
 export function MarketHeader({ compact = false, className = '', landing = false, showLogo = true }: MarketHeaderProps) {
   const location = useLocation();
   const links = landing ? LANDING_LINKS : HEADER_LINKS;
+  const wantsToBuy = location.pathname === '/trading' && new URLSearchParams(location.search).get('type') === 'WTB';
 
   return (
     <header className={`relative z-40 border-b border-white/10 bg-[#070708]/95 text-white backdrop-blur-md ${className}`}>
@@ -48,7 +49,6 @@ export function MarketHeader({ compact = false, className = '', landing = false,
 
         <nav className="flex min-w-0 items-center gap-1 overflow-x-auto pb-1 sm:flex-1 sm:justify-end sm:pb-0" aria-label="Primary navigation">
           {links.map(link => {
-            const wantsToBuy = location.pathname === '/trading' && new URLSearchParams(location.search).get('type') === 'WTB';
             const active = link.to === '/'
               ? location.pathname === '/'
               : link.to === '/trading'
@@ -58,7 +58,7 @@ export function MarketHeader({ compact = false, className = '', landing = false,
                   : link.to
                     ? location.pathname.startsWith(link.to.split('?')[0])
                     : false;
-            const className = [
+            const linkBtnClass = [
               'flex h-11 shrink-0 items-center justify-center gap-1 border px-3 text-center text-[10px] font-semibold transition-colors whitespace-nowrap sm:gap-1.5 sm:px-4 sm:text-[11px]',
               active
                 ? 'border-[#d4b87a] bg-[#d4b87a] text-black'
@@ -67,7 +67,7 @@ export function MarketHeader({ compact = false, className = '', landing = false,
 
             if (link.external) {
               return (
-                <a key={link.label} href={link.href} target="_blank" rel="noreferrer" className={className}>
+                <a key={link.label} href={link.href} target="_blank" rel="noreferrer" className={linkBtnClass}>
                   {link.label}
                   <ExternalLink size={12} aria-hidden="true" />
                 </a>
@@ -75,7 +75,7 @@ export function MarketHeader({ compact = false, className = '', landing = false,
             }
 
             return (
-              <Link key={link.label} to={link.to || '/'} aria-current={active ? 'page' : undefined} className={className}>
+              <Link key={link.label} to={link.to || '/'} aria-current={active ? 'page' : undefined} className={linkBtnClass}>
                 {link.label}
               </Link>
             );

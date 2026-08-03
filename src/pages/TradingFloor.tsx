@@ -994,7 +994,7 @@ function buildListingTitle(listing: ListingRecord) {
     cleanValue(listing.model),
     cleanValue(listing.reference),
     cleanValue(listing.condition),
-    listing.year ? `${listing.year}year` : '',
+    listing.year ? String(listing.year) : '',
     displayDial(listing.dial_color),
   ].filter(Boolean);
   return parts.length ? parts.join(' ') : `${listingKindLabel(listing)} listing`;
