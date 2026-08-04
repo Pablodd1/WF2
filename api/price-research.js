@@ -332,6 +332,9 @@ module.exports = async function handler(req, res) {
       let refs = exactRefs;
       let refError = exactRefError;
       if (!exactRefError && (!exactRefs || exactRefs.length === 0)) {
+        // ponytail: prefix ilike with .limit(50) is fast and indexed when the
+        // leading characters are specific. Fall back to catalog-based expansion
+        // if the DB query returns nothing.
         const prefixResult = await client
           .from(sourceTable)
           .select('reference')
@@ -340,6 +343,18 @@ module.exports = async function handler(req, res) {
           .limit(50);
         refs = prefixResult.data;
         refError = prefixResult.error;
+        // ponytail: also try the catalog for prefix-matched references.
+        // listCatalogReferences contains every known reference per brand
+        // and is already loaded in memory. For "126500" this returns
+        // ["126500LN", "126500LNA", ...] without a DB query.
+        if ((!refs || refs.length === 0) && !refError) {
+          try {
+            const catalogRefs = listCatalogReferences(brand)
+              .filter(e => e.reference && e.reference.toUpperCase().startsWith(rawRef.toUpperCase()))
+              .map(e => e.reference);
+            refs = [...new Set(catalogRefs)].map(r => ({ reference: r }));
+          } catch { /* catalog unavailable, keep refs as-is */ }
+        }
       }
 
       if (!refError && refs && refs.length > 0) {
@@ -430,7 +445,22 @@ module.exports = async function handler(req, res) {
       console.warn('[price-research] reviewed workbook analytics unavailable; using legacy cohort:', workbookError.message);
     }
     const usingReviewedWorkbook = reviewedWorkbookRows.length > 0;
-    if (usingReviewedWorkbook) rows = reviewedWorkbookRows;
+    // ponytail: reviewed workbooks may have identity metadata (brand/model/ref/dial)
+    // but no verified USD price yet. When ALL view rows are price-ineligible,
+    // fall back to the direct watch_records query which may have parser-extracted
+    // prices from raw_line text (e.g., "WTS Omega 310.30.42.50.04.001 white 7300.00").
+    // This prevents Price Research from showing 0 rows when the workbook staging
+    // pipeline hasn't completed its price verification pass yet.
+    const catalogForEligibilityCheck = lookupCatalog(targetRef, brand || null);
+    const workbookHasAnyEligible = usingReviewedWorkbook
+      && reviewedWorkbookRows.some(r => !classifyResearchEligibility(r, catalogForEligibilityCheck));
+    if (usingReviewedWorkbook && !workbookHasAnyEligible && rows && rows.length > 0) {
+      // Fall back to direct query rows — they have price_usd from parser extraction
+      console.log(`[price-research] reviewed workbook rows exist but none are price-eligible; using direct query rows (${rows.length})`);
+      // Keep usingReviewedWorkbook false so downstream doesn't expect workbook-only fields
+    } else if (usingReviewedWorkbook) {
+      rows = reviewedWorkbookRows;
+    }
     const baseSampleCount = rows.length;
 
     if (!rows || rows.length === 0) {
