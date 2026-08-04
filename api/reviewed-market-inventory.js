@@ -418,9 +418,7 @@ module.exports = async function handler(req, res) {
 
     let query = client
       .from('reviewed_workbook_market_source_v2')
-      .select(columns, {
-        count: preciseCount ? 'exact' : scopedFilter ? 'estimated' : undefined,
-      });
+      .select(columns);
     query = pageWindow.reverse
       ? query
         .order('has_exact_source_image', { ascending: true })
@@ -465,9 +463,10 @@ module.exports = async function handler(req, res) {
       pageWindow.end + Number(scopedFilter),
     );
 
-    const { data, count, error } = await query;
+    const { data, error } = await query;
     if (error) throw error;
-    const total = scopedFilter ? Number(count || 0) : summaryTotal;
+    // ponytail: count removed to avoid timeout. Use summary total instead.
+    const total = summaryTotal;
     const rows = pageWindow.reverse ? [...(data || [])].reverse() : (data || []);
     const pageResult = boundedPage(rows, pageSize, scopedFilter);
     const records = pageResult.records.map(mapReviewedRecord);
