@@ -1046,10 +1046,9 @@ function RegionLabel({ region }: { region: string }) {
   );
 }
 
-function isPricePlausible(price: number | null, isWorkbookPrice: boolean = false, reviewReason?: string | null) {
+function isPricePlausible(price: number | null) {
   if (price === null) return false;
   if (price < MIN_PLAUSIBLE_PRICE_USD || price > MAX_PLAUSIBLE_PRICE_USD) return false;
-  if (isWorkbookPrice && price > 10_000_000 && !reviewReason) return false;
   return true;
 }
 
@@ -1061,8 +1060,8 @@ function getListingMeta(listing: ListingRecord) {
   const workbookPriceNeedsReview = Boolean(cleanValue(listing.workbook_price_review_reason));
   const sourcePrice = formatSourcePrice(listing);
   // Price sanity check — flag implausible values
-  const verifiedPlausible = isPricePlausible(verifiedUsd, false);
-  const workbookPlausible = isPricePlausible(reviewedWorkbookUsd, true, listing.workbook_price_review_reason);
+  const verifiedPlausible = isPricePlausible(verifiedUsd);
+  const workbookPlausible = isPricePlausible(reviewedWorkbookUsd);
   
   const priceLabel = verifiedUsd !== null
     ? (verifiedPlausible ? formatUsdPrice(verifiedUsd) : 'Price under review')
@@ -1121,6 +1120,10 @@ function verifiedUsdPrice(listing: ListingRecord) {
 }
 
 function reviewedWorkbookUsdPrice(listing: ListingRecord) {
+  // Only display the workbook price if the API has NOT flagged it for review.
+  // workbook_price_review_reason is set by the API when the price is out of
+  // plausibility range (e.g. reference number stored as price like 79377000).
+  if (listing.workbook_price_review_reason) return null;
   const value = Number(listing.workbook_price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
