@@ -918,6 +918,38 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
       )}
 
+      {/* Raw source message — moved to top of detail */}
+      <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
+        <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Original listing</h2>
+        <div className="mt-3 flex items-center gap-2">
+          {listing.raw_message_scope === 'normalized_summary' ? (
+            <span className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-500">
+              📋 Workbook Summary
+            </span>
+          ) : listing.raw_message_scope === 'stored_source_message' ? (
+            <span className="inline-flex items-center gap-1.5 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
+              💬 Source Message
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white/60">
+              📄 Message
+            </span>
+          )}
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
+            (Untouched & Complete)
+          </span>
+        </div>
+        {listing.raw_message || (listing as any).raw_line || (listing as any).description ? (
+          <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>
+            {listing.raw_message || (listing as any).raw_line || (listing as any).description}
+          </pre>
+        ) : (
+          <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+            Original source text evidence is currently loading or unavailable.
+          </p>
+        )}
+      </div>
+
       <div className="space-y-8">
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <div className="flex items-start justify-between gap-4">
@@ -974,11 +1006,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               )}
               {sellerAnalytics && (
                 <div className="mt-4" aria-label="Source poster activity">
-                  <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
-                    <ContactMetric label="Total posts" value={sellerAnalytics.total_posts} />
+                  <div className="grid grid-cols-2 gap-2 text-center">
                     <ContactMetric label="For sale" value={sellerAnalytics.wts_posts} />
                     <ContactMetric label="Want to buy" value={sellerAnalytics.wtb_posts} />
-                    <ContactMetric label="Other" value={sellerAnalytics.other_posts} />
                   </div>
                   {(sellerAnalytics.first_post_at || sellerAnalytics.last_post_at) && (
                     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: MUTED }}>
@@ -1015,37 +1045,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               </p>
             );
           })()}
-        </div>
-
-        <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Original listing</h2>
-          <div className="mt-3 flex items-center gap-2">
-            {listing.raw_message_scope === 'normalized_summary' ? (
-              <span className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-500">
-                📋 Workbook Summary
-              </span>
-            ) : listing.raw_message_scope === 'stored_source_message' ? (
-              <span className="inline-flex items-center gap-1.5 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
-                💬 Source Message
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white/60">
-                📄 Message
-              </span>
-            )}
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
-              (Untouched & Complete)
-            </span>
-          </div>
-          {listing.raw_message || (listing as any).raw_line || (listing as any).description ? (
-            <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>
-              {listing.raw_message || (listing as any).raw_line || (listing as any).description}
-            </pre>
-          ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-              Original source text evidence is currently loading or unavailable.
-            </p>
-          )}
         </div>
 
         {canLoadBenchmark && (
