@@ -174,7 +174,7 @@ function summarizeCoverage(records) {
 function mapReviewedRecord(row) {
   // Prefer user_image_url (direct source upload) then fall back to display_image_url
   // (platform-curated or reference CDN image already stored in the workbook).
-  const candidateImageUrl = row.user_image_url || row.display_image_url || null;
+  const candidateImageUrl = row.user_image_url || null;
   const hasExactSourceImage = row.has_exact_source_image === true
     && candidateImageUrl
     && String(candidateImageUrl).trim().length > 0
@@ -413,7 +413,7 @@ module.exports = async function handler(req, res) {
       'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
       'workbook_price_usd,source_price_amount,source_price_text,source_currency',
       'price_evidence_status,confidence,verification_status,user_image_url,imported_at',
-      'has_exact_source_image,display_image_url,image_evidence_type',
+      'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity',
     ].join(',');
 
     let query = client
