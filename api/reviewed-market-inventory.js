@@ -179,9 +179,9 @@ function mapReviewedRecord(row) {
     && candidateImageUrl
     && String(candidateImageUrl).trim().length > 0
     && /^https?:\/\/[^\s]+$/i.test(String(candidateImageUrl).trim());
-  const hasVerifiedUsdPrice = row.price_evidence_status === EXPLICIT_USD_STATUS
-    && row.workbook_price_usd > 0;
-  const verifiedPriceUsd = hasVerifiedUsdPrice ? row.workbook_price_usd : null;
+  const hasVerifiedUsdPrice = row.has_verified_usd_price === true
+    && row.verified_price_usd > 0;
+  const verifiedPriceUsd = hasVerifiedUsdPrice ? row.verified_price_usd : null;
 
   const exactImageUrl = hasExactSourceImage
     ? exactHttpUrl(candidateImageUrl)
@@ -416,54 +416,29 @@ module.exports = async function handler(req, res) {
       'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity',
     ].join(',');
 
-    let query = client
-      .from('reviewed_workbook_market_source_v2')
-      .select(columns);
-    query = pageWindow.reverse
-      ? query
-        .order('has_exact_source_image', { ascending: true })
-        .order('workbook_price_usd', { ascending: true, nullsFirst: true })
-        .order('id', { ascending: false })
-      : query
-        .order('has_exact_source_image', { ascending: false })
-        .order('workbook_price_usd', { ascending: false, nullsFirst: false })
-        .order('id', { ascending: true });
-    if (brand) query = query.eq('brand_scope', brand);
-    if (reference) query = query.eq('normalized_reference', reference);
-    if (exactDialVariants.length) query = query.in('dial_color', exactDialVariants);
-    // ponytail: temporarily remove complex filters to debug timeout
-    // query = query.neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT');
-    // query = query
-    //   .not('brand_scope', 'is', null)
-    //   .not('brand_scope', 'eq', 'unknown')
-    //   .not('brand_scope', 'eq', 'null')
-    //   .not('brand_scope', 'eq', 'n/a')
-    //   .not('model', 'is', null)
-    //   .not('model', 'eq', 'unknown')
-    //   .not('model', 'eq', 'null')
-    //   .not('model', 'eq', 'n/a')
-    //   .not('dial_color', 'is', null)
-    //   .not('dial_color', 'eq', 'unknown')
-    //   .not('dial_color', 'eq', 'null')
-    //   .not('dial_color', 'eq', 'n/a')
-    //   .not('normalized_reference', 'is', null)
-    //   .not('normalized_reference', 'eq', 'unknown')
-    //   .not('normalized_reference', 'eq', 'null')
-    //   .not('normalized_reference', 'eq', 'n/a');
-    // Sentinel identity values describe a bundle/multi-listing, not a single
-    // watch configuration. Preserve them in reviewed inventory for correction.
-    for (const value of MULTIPLE_LISTING_IDENTITY_VALUES) {
-      query = query.not('dial_color', 'eq', value);
-      query = query.not('model', 'eq', value);
+    // ponytail: use raw REST instead of Supabase client to avoid client-side issues
+    const queryParams = new URLSearchParams();
+    queryParams.set('select', columns);
+    if (brand) queryParams.set('brand_scope', `eq.${brand}`);
+    if (reference) queryParams.set('normalized_reference', `eq.${reference}`);
+    if (exactDialVariants.length) queryParams.set('dial_color', `in.(${exactDialVariants.join(',')})`);
+    queryParams.set('verification_status', 'neq.QUARANTINED_SOURCE_CONFLICT');
+    queryParams.set('order', 'has_exact_source_image.desc,workbook_price_usd.desc,id.asc');
+    queryParams.set('limit', String(pageSize));
+    queryParams.set('offset', String(pageWindow.start));
+    
+    const restUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${queryParams.toString()}`;
+    const restRes = await fetch(restUrl, {
+      headers: {
+        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
+        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY}`,
+      },
+    });
+    if (!restRes.ok) {
+      const errText = await restRes.text();
+      throw new Error(`REST query failed: ${restRes.status} ${errText.slice(0, 200)}`);
     }
-    if (imagesOnly) query = query.eq('has_exact_source_image', true);
-    if (listingType) query = query.eq('listing_type', listingType);
-    if (condition) query = query.eq('condition', condition);
-    // ponytail: simplify query to avoid timeout — remove complex filters
-    query = query.limit(pageSize).offset(pageWindow.start);
-
-    const { data, error } = await query;
-    if (error) throw error;
+    const data = await restRes.json();
     // ponytail: count removed to avoid timeout. Use summary total instead.
     const total = summaryTotal;
     const rows = pageWindow.reverse ? [...(data || [])].reverse() : (data || []);
