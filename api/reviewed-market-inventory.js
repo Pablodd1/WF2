@@ -428,32 +428,32 @@ module.exports = async function handler(req, res) {
         .order('has_exact_source_image', { ascending: false })
         .order('workbook_price_usd', { ascending: false, nullsFirst: false })
         .order('id', { ascending: true });
-    if (brand) query = query.ilike('brand_scope', brand);
+    if (brand) query = query.eq('brand_scope', brand);
     if (reference) query = query.eq('normalized_reference', reference);
     if (exactDialVariants.length) query = query.in('dial_color', exactDialVariants);
     query = query.neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT');
     query = query
       .not('brand_scope', 'is', null)
-      .not('brand_scope', 'ilike', 'unknown')
-      .not('brand_scope', 'ilike', 'null')
-      .not('brand_scope', 'ilike', 'n/a')
+      .not('brand_scope', 'eq', 'unknown')
+      .not('brand_scope', 'eq', 'null')
+      .not('brand_scope', 'eq', 'n/a')
       .not('model', 'is', null)
-      .not('model', 'ilike', 'unknown')
-      .not('model', 'ilike', 'null')
-      .not('model', 'ilike', 'n/a')
+      .not('model', 'eq', 'unknown')
+      .not('model', 'eq', 'null')
+      .not('model', 'eq', 'n/a')
       .not('dial_color', 'is', null)
-      .not('dial_color', 'ilike', 'unknown')
-      .not('dial_color', 'ilike', 'null')
-      .not('dial_color', 'ilike', 'n/a')
+      .not('dial_color', 'eq', 'unknown')
+      .not('dial_color', 'eq', 'null')
+      .not('dial_color', 'eq', 'n/a')
       .not('normalized_reference', 'is', null)
-      .not('normalized_reference', 'ilike', 'unknown')
-      .not('normalized_reference', 'ilike', 'null')
-      .not('normalized_reference', 'ilike', 'n/a');
+      .not('normalized_reference', 'eq', 'unknown')
+      .not('normalized_reference', 'eq', 'null')
+      .not('normalized_reference', 'eq', 'n/a');
     // Sentinel identity values describe a bundle/multi-listing, not a single
     // watch configuration. Preserve them in reviewed inventory for correction.
     for (const value of MULTIPLE_LISTING_IDENTITY_VALUES) {
-      query = query.not('dial_color', 'ilike', value);
-      query = query.not('model', 'ilike', value);
+      query = query.not('dial_color', 'eq', value);
+      query = query.not('model', 'eq', value);
     }
     if (imagesOnly) query = query.eq('has_exact_source_image', true);
     if (listingType) query = query.eq('listing_type', listingType);
