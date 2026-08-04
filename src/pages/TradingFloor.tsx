@@ -9,9 +9,11 @@ import {
   List,
   MessageCircle,
   Search,
+  Star,
   TrendingUp,
   X,
 } from 'lucide-react';
+import { rateMarketPrice } from '../lib/marketPriceRating';
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
@@ -704,8 +706,28 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         </button>
         {(cleanValue(listing.seller_name) || (listing as any)['Posted By'] || listing.location || listing.seller_country) && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm" style={{ color: MUTED }}>
-            <div>
-              Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || (listing as any)['Posted By'] || 'Dealer'}</span>
+            <div className="flex items-center gap-2">
+              <span>
+                Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || (listing as any)['Posted By'] || 'Dealer'}</span>
+              </span>
+              {listing.confidence > 0 && (
+                <span className="flex items-center gap-0.5 ml-1" title={`Confidence score: ${listing.confidence}%`}>
+                  {Array.from({ length: 5 }, (_, i) => {
+                    const starsCount = Math.round((listing.confidence ?? 0) / 20);
+                    return (
+                      <Star
+                        key={i}
+                        size={10}
+                        className={
+                          i < starsCount
+                            ? 'text-[#D4B87A] fill-[#D4B87A]'
+                            : 'text-white/10 fill-white/10'
+                        }
+                      />
+                    );
+                  })}
+                </span>
+              )}
             </div>
             {(listing.location || listing.seller_country || (listing as any)['Location']) && (
               <div className="flex items-center gap-1.5 rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-[#D4B87A]">
@@ -777,8 +799,23 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
   const visibleImageIndex = activeImage < images.length ? activeImage : 0;
 
+  const canLoadBenchmark = Boolean(listing.reference && listing.brand && listing.listing_type === 'WTS');
+  const [benchmark, setBenchmark] = useState<{
+    loading: boolean;
+    count: number;
+    stats: any | null;
+    rating: any;
+  }>({
+    loading: canLoadBenchmark,
+    count: 0,
+    stats: null,
+    rating: rateMarketPrice(listing.price_usd, null, 0),
+  });
+
   useEffect(() => {
     const controller = new AbortController();
+    
+    // Fetch seller analytics
     fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
       .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
       .then(payload => {
@@ -793,8 +830,54 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       })
       .catch(error => { if (error?.name !== 'AbortError') setSellerAnalytics(null); });
 
+    // Fetch price rating benchmark
+    if (canLoadBenchmark) {
+      setBenchmark({
+        loading: true,
+        count: 0,
+        stats: null,
+        rating: rateMarketPrice(listing.price_usd, null, 0),
+      });
+
+      const reference = listing.reference as string;
+      const params = new URLSearchParams({ reference, brand: listing.brand });
+      if (listing.condition) params.set('condition', listing.condition);
+      if (listing.dial_color) params.set('dial', listing.dial_color);
+
+      fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })
+        .then(async response => response.ok ? response.json() : null)
+        .then(payload => {
+          if (!payload) return;
+          const count = Number(payload.count || 0);
+          const stats = payload.analytics_ready && payload.stats ? payload.stats : null;
+          setBenchmark({
+            loading: false,
+            count,
+            stats,
+            rating: rateMarketPrice(listing.price_usd, stats, count),
+          });
+        })
+        .catch(error => {
+          if (error?.name !== 'AbortError') {
+            setBenchmark({
+              loading: false,
+              count: 0,
+              stats: null,
+              rating: rateMarketPrice(listing.price_usd, null, 0),
+            });
+          }
+        });
+    } else {
+      setBenchmark({
+        loading: false,
+        count: 0,
+        stats: null,
+        rating: rateMarketPrice(null, null, 0),
+      });
+    }
+
     return () => controller.abort();
-  }, [listing]);
+  }, [canLoadBenchmark, listing]);
 
   return (
     <section className={`mb-8 grid gap-8 ${images.length > 0 ? 'lg:grid-cols-[minmax(320px,504px)_1fr]' : ''}`} aria-label="Selected listing">
@@ -964,6 +1047,35 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           )}
         </div>
 
+        {canLoadBenchmark && (
+          <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: benchmark.rating.color }}>Price Rating</div>
+                <div className="mt-2 text-xl font-semibold" style={{ color: INK }}>
+                  {benchmark.loading ? 'Calculating…' : benchmark.rating.label}
+                </div>
+                {!benchmark.loading && (
+                  <p className="mt-2 text-sm leading-6" style={{ color: MUTED }}>
+                    {benchmark.rating.reason}
+                  </p>
+                )}
+              </div>
+              <div className="h-3 w-3 shrink-0 rounded-full" style={{ background: benchmark.rating.color }} />
+            </div>
+            {benchmark.stats && benchmark.count >= 2 && (
+              <div className="mt-6 grid grid-cols-3 gap-3 border-t pt-5 text-center" style={{ borderColor: BORDER }}>
+                <MarketStat label="Min" value={benchmark.stats.min} />
+                <MarketStat label="Average" value={benchmark.stats.avg} />
+                <MarketStat label="Max" value={benchmark.stats.max} />
+              </div>
+            )}
+            <div className="mt-4 text-xs" style={{ color: MUTED }}>
+              {benchmark.loading ? 'Calculating...' : `${benchmark.count.toLocaleString()} outlier-clean comparable offers`}
+            </div>
+          </div>
+        )}
+
         <div className="rounded-md border p-6" style={{ borderColor: BORDER, background: SURFACE }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Market Intelligence</h2>
           <p className="mt-1 text-sm" style={{ color: MUTED }}>
@@ -985,6 +1097,17 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
 function ContactMetric({ label, value }: { label: string; value: number }) {
   return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{Number(value || 0).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
+}
+
+function MarketStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase" style={{ color: MUTED }}>{label}</div>
+      <div className="mt-1 text-sm font-semibold" style={{ color: INK }}>
+        ${Math.round(value).toLocaleString()}
+      </div>
+    </div>
+  );
 }
 
 function sourcePosterContact(listing: ListingRecord): ListingContact | null {
