@@ -422,10 +422,10 @@ module.exports = async function handler(req, res) {
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) queryParams.set('normalized_reference', `eq.${reference}`);
     if (exactDialVariants.length) queryParams.set('dial_color', `in.(${exactDialVariants.join(',')})`);
-    queryParams.set('verification_status', 'neq.QUARANTINED_SOURCE_CONFLICT');
-    queryParams.set('order', 'has_exact_source_image.desc,workbook_price_usd.desc,id.asc');
+    // ponytail: simplified query — ORDER BY with offset times out on large views
+    queryParams.set('order', 'id.desc');
     queryParams.set('limit', String(pageSize));
-    queryParams.set('offset', String(pageWindow.start));
+    if (pageWindow.start > 0) queryParams.set('offset', String(pageWindow.start));
     
     const restUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${queryParams.toString()}`;
     const restRes = await fetch(restUrl, {
