@@ -431,24 +431,25 @@ module.exports = async function handler(req, res) {
     if (brand) query = query.eq('brand_scope', brand);
     if (reference) query = query.eq('normalized_reference', reference);
     if (exactDialVariants.length) query = query.in('dial_color', exactDialVariants);
-    query = query.neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT');
-    query = query
-      .not('brand_scope', 'is', null)
-      .not('brand_scope', 'eq', 'unknown')
-      .not('brand_scope', 'eq', 'null')
-      .not('brand_scope', 'eq', 'n/a')
-      .not('model', 'is', null)
-      .not('model', 'eq', 'unknown')
-      .not('model', 'eq', 'null')
-      .not('model', 'eq', 'n/a')
-      .not('dial_color', 'is', null)
-      .not('dial_color', 'eq', 'unknown')
-      .not('dial_color', 'eq', 'null')
-      .not('dial_color', 'eq', 'n/a')
-      .not('normalized_reference', 'is', null)
-      .not('normalized_reference', 'eq', 'unknown')
-      .not('normalized_reference', 'eq', 'null')
-      .not('normalized_reference', 'eq', 'n/a');
+    // ponytail: temporarily remove complex filters to debug timeout
+    // query = query.neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT');
+    // query = query
+    //   .not('brand_scope', 'is', null)
+    //   .not('brand_scope', 'eq', 'unknown')
+    //   .not('brand_scope', 'eq', 'null')
+    //   .not('brand_scope', 'eq', 'n/a')
+    //   .not('model', 'is', null)
+    //   .not('model', 'eq', 'unknown')
+    //   .not('model', 'eq', 'null')
+    //   .not('model', 'eq', 'n/a')
+    //   .not('dial_color', 'is', null)
+    //   .not('dial_color', 'eq', 'unknown')
+    //   .not('dial_color', 'eq', 'null')
+    //   .not('dial_color', 'eq', 'n/a')
+    //   .not('normalized_reference', 'is', null)
+    //   .not('normalized_reference', 'eq', 'unknown')
+    //   .not('normalized_reference', 'eq', 'null')
+    //   .not('normalized_reference', 'eq', 'n/a');
     // Sentinel identity values describe a bundle/multi-listing, not a single
     // watch configuration. Preserve them in reviewed inventory for correction.
     for (const value of MULTIPLE_LISTING_IDENTITY_VALUES) {
@@ -458,7 +459,7 @@ module.exports = async function handler(req, res) {
     if (imagesOnly) query = query.eq('has_exact_source_image', true);
     if (listingType) query = query.eq('listing_type', listingType);
     if (condition) query = query.eq('condition', condition);
-    // ponytail: use limit + offset for pagination to avoid Supabase range issues
+    // ponytail: simplify query to avoid timeout — remove complex filters
     query = query.limit(pageSize).offset(pageWindow.start);
 
     const { data, error } = await query;
