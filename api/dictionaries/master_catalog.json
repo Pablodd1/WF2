@@ -59632,5 +59632,35 @@
     "dial_colors": [],
     "case_metal": "",
     "source": "workbook"
+  },
+  "15202BC": {
+    "brand": "Audemars Piguet",
+    "model": "Royal Oak",
+    "dial_colors": [
+      "Salmon",
+      "Blue",
+      "Grey"
+    ],
+    "case_metal": "White Gold",
+    "source": "workbook"
+  },
+  "RM35-03": {
+    "brand": "Richard Mille",
+    "model": "RM 35-03",
+    "dial_colors": [
+      "White",
+      "Black"
+    ],
+    "case_metal": "Carbon",
+    "source": "workbook"
+  },
+  "RM35-03WHITE": {
+    "brand": "Richard Mille",
+    "model": "RM 35-03",
+    "dial_colors": [
+      "White"
+    ],
+    "case_metal": "Carbon",
+    "source": "workbook"
   }
 }
