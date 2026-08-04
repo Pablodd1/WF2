@@ -458,10 +458,8 @@ module.exports = async function handler(req, res) {
     if (imagesOnly) query = query.eq('has_exact_source_image', true);
     if (listingType) query = query.eq('listing_type', listingType);
     if (condition) query = query.eq('condition', condition);
-    query = query.range(
-      pageWindow.start,
-      pageWindow.end + Number(scopedFilter),
-    );
+    // ponytail: use limit + offset for pagination to avoid Supabase range issues
+    query = query.limit(pageSize).offset(pageWindow.start);
 
     const { data, error } = await query;
     if (error) throw error;
