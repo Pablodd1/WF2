@@ -175,11 +175,10 @@ function mapReviewedRecord(row) {
   // Prefer user_image_url (direct source upload) then fall back to display_image_url
   // (platform-curated or reference CDN image already stored in the workbook).
   const candidateImageUrl = row.user_image_url || row.display_image_url || null;
-  const hasExactSourceImage = Boolean(
-    candidateImageUrl
+  const hasExactSourceImage = row.has_exact_source_image === true
+    && candidateImageUrl
     && String(candidateImageUrl).trim().length > 0
-    && /^https?:\/\/[^\s]+$/i.test(String(candidateImageUrl).trim())
-  );
+    && /^https?:\/\/[^\s]+$/i.test(String(candidateImageUrl).trim());
   const hasVerifiedUsdPrice = row.price_evidence_status === EXPLICIT_USD_STATUS
     && row.workbook_price_usd > 0;
   const verifiedPriceUsd = hasVerifiedUsdPrice ? row.workbook_price_usd : null;
@@ -414,21 +413,21 @@ module.exports = async function handler(req, res) {
       'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
       'workbook_price_usd,source_price_amount,source_price_text,source_currency',
       'price_evidence_status,confidence,verification_status,user_image_url,imported_at',
-      'has_image,display_image_url,image_evidence_type',
+      'has_exact_source_image,display_image_url,image_evidence_type',
     ].join(',');
 
     let query = client
-      .from('reviewed_workbook_inventory')
+      .from('reviewed_workbook_market_source_v2')
       .select(columns, {
         count: preciseCount ? 'exact' : scopedFilter ? 'estimated' : undefined,
       });
     query = pageWindow.reverse
       ? query
-        .order('has_image', { ascending: true })
+        .order('has_exact_source_image', { ascending: true })
         .order('workbook_price_usd', { ascending: true, nullsFirst: true })
         .order('id', { ascending: false })
       : query
-        .order('has_image', { ascending: false })
+        .order('has_exact_source_image', { ascending: false })
         .order('workbook_price_usd', { ascending: false, nullsFirst: false })
         .order('id', { ascending: true });
     if (brand) query = query.ilike('brand_scope', brand);
@@ -458,7 +457,7 @@ module.exports = async function handler(req, res) {
       query = query.not('dial_color', 'ilike', value);
       query = query.not('model', 'ilike', value);
     }
-    if (imagesOnly) query = query.eq('has_image', true);
+    if (imagesOnly) query = query.eq('has_exact_source_image', true);
     if (listingType) query = query.eq('listing_type', listingType);
     if (condition) query = query.eq('condition', condition);
     query = query.range(
