@@ -55188,5 +55188,25 @@
     "dial_colors": [],
     "case_metal": "",
     "source": "enriched"
+  },
+  "310.30.42.50.04.001": {
+    "brand": "Omega",
+    "model": "Speedmaster Professional Moonwatch",
+    "dial_colors": [
+      "White",
+      "Black"
+    ],
+    "case_metal": "Steel",
+    "source": "curation"
+  },
+  "31030425004001": {
+    "brand": "Omega",
+    "model": "Speedmaster Professional Moonwatch",
+    "dial_colors": [
+      "White",
+      "Black"
+    ],
+    "case_metal": "Steel",
+    "source": "curation"
   }
 }
