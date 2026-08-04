@@ -253,7 +253,7 @@ function mapReviewedRecord(row) {
     listing_type: row.listing_type || 'OTHER',
     listing_date: row.posting_date || null,
     created_at: row.posting_date || row.imported_at || null,
-    raw_message: row.raw_message || row.raw_line || null,
+    raw_message: row.raw_message || null,
     raw_message_scope: normalizedSummary ? 'normalized_summary' : 'stored_source_message',
     raw_message_evidence_type: normalizedSummary ? 'WORKBOOK_NORMALIZED_SUMMARY' : 'SOURCE_RAW_MESSAGE',
     seller_name: sellerName,
@@ -409,7 +409,7 @@ module.exports = async function handler(req, res) {
 
     const columns = [
       'id,source_file,source_row_number,source_record_id,posting_date,posted_by',
-      'phone_number,contact_publication_approved,raw_message,raw_line,listing_type,brand_scope',
+      'phone_number,contact_publication_approved,raw_message,listing_type,brand_scope',
       'supplied_brand,canonical_brand,model,catalog_model,raw_reference',
       'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
       'workbook_price_usd,source_price_amount,source_price_text,source_currency',
