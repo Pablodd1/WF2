@@ -425,7 +425,7 @@ class WatchFactsPipelineProcessor:
                 child_listings.append({
                     "raw_text_segment":      item["raw_text"],
                     "bundle_position":       idx,
-                    "listing_type":          "SINGLE",
+                    "listing_type":          intent,
                     "brand_original":        c_brand,
                     "brand_normalized":      c_brand,
                     "reference_original":    c_ref,

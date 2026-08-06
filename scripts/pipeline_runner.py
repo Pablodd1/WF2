@@ -187,8 +187,16 @@ def generate_deterministic_uuid(namespace_str, key_str):
     ns = uuid.uuid5(uuid.NAMESPACE_DNS, namespace_str)
     return str(uuid.uuid5(ns, str(key_str)))
 
-def load_existing_checksums(cur):
-    """Loads all previously seen payload checksums from DB for persistent duplicate suppression"""
+def compute_transport_checksum(source_platform, source_group_id, source_message_id):
+    """Computes transport duplicate checksum based strictly on source platform, group, and message ID."""
+    raw_str = f"{source_platform}:{source_group_id}:{source_message_id}"
+    return hashlib.sha256(raw_str.encode('utf-8')).hexdigest()
+
+def compute_repost_signature(sender_id, brand_normalized, reference_normalized, price_usd):
+    """Computes repost/history signature based on seller, normalized item identity, and price."""
+    raw_str = f"{sender_id}:{brand_normalized}:{reference_normalized}:{price_usd}"
+    return hashlib.sha256(raw_str.encode('utf-8')).hexdigest()
+
 def check_duplicate_payload(cur, checksum, current_payload_id, batch_seen_checksums):
     if checksum in batch_seen_checksums:
         return True
