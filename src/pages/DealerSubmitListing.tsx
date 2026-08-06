@@ -25,6 +25,20 @@ interface Submission {
   created_at: string;
 }
 
+interface CredentialedPoster {
+  dealer_id: string;
+  email: string | null;
+  name: string | null;
+  company: string | null;
+  phone: string | null;
+  location: string | null;
+  avatar_url: string | null;
+  credential_status: string;
+  rating: number | null;
+  review_count: number;
+  group_count: number;
+}
+
 interface DraftItem {
   key: string;
   intent: Intent;
@@ -65,9 +79,8 @@ export default function DealerSubmitListing() {
   const [postingMode, setPostingMode] = useState<'watchfacts' | 'luxury-app'>('watchfacts');
   const [mode, setMode] = useState<Mode>('single');
   const [items, setItems] = useState<DraftItem[]>([createDraft()]);
-  const [posterName, setPosterName] = useState('');
-  const [posterPhone, setPosterPhone] = useState('');
-  const [location, setLocation] = useState('');
+  const [poster, setPoster] = useState<CredentialedPoster | null>(null);
+  const [credentialError, setCredentialError] = useState('');
   const [posterPhoto, setPosterPhoto] = useState<File | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [message, setMessage] = useState('');
@@ -78,7 +91,11 @@ export default function DealerSubmitListing() {
   useEffect(() => {
     fetch('/api/dealer-submissions', { credentials: 'include' })
       .then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load submissions')))
-      .then(payload => setSubmissions(payload.submissions || []))
+      .then(payload => {
+        setSubmissions(payload.submissions || []);
+        setPoster(payload.poster || null);
+        setCredentialError(payload.credential_error || '');
+      })
       .catch(() => undefined);
   }, []);
 
@@ -115,10 +132,7 @@ export default function DealerSubmitListing() {
       }
       const response = await fetch('/api/dealer-submissions', {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          poster_name: posterName, poster_phone: posterPhone, location,
-          poster_image_url: posterImageUrl, items: normalizedItems,
-        }),
+        body: JSON.stringify({ poster_image_url: posterImageUrl, items: normalizedItems }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to publish listing.');
@@ -159,15 +173,22 @@ export default function DealerSubmitListing() {
 
               <form onSubmit={submit} className="mt-7 space-y-6">
                 <section className="border border-white/12 bg-white/[0.025] p-4 sm:p-5">
-                  <div className="flex items-center gap-2 text-sm font-semibold"><UserRound size={17} className="text-[#c9a96e]" /> Posting user</div>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                    <Field value={posterName} onChange={setPosterName} label="Name" required />
-                    <Field value={posterPhone} onChange={setPosterPhone} label="Phone number" type="tel" required />
-                    <Field value={location} onChange={setLocation} label="Location" required />
-                  </div>
+                  <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-semibold"><UserRound size={17} className="text-[#c9a96e]" /> Credentialed posting user</div>{poster && <span className="border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-200"><ShieldCheck size={12} className="mr-1 inline" /> {poster.credential_status}</span>}</div>
+                  {poster ? (
+                    <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+                      {posterPhoto ? <FilePreview file={posterPhoto} alt="Updated credentialed profile" className="h-20 w-20 rounded-full border border-[#c9a96e]/50 object-cover" /> : poster.avatar_url ? <img src={poster.avatar_url} alt="Credentialed profile" className="h-20 w-20 rounded-full border border-[#c9a96e]/50 object-cover" /> : <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/15 bg-white/5"><UserRound size={28} className="text-white/35" /></div>}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-lg font-semibold">{poster.name}</p>
+                        {poster.company && poster.company !== poster.name && <p className="mt-1 text-xs text-white/45">{poster.company}</p>}
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/60"><span>{poster.phone}</span><span>{poster.location}</span><span>Rating {poster.rating == null ? '—' : poster.rating.toFixed(1)}</span><span>{poster.review_count} reviews</span><span>{poster.group_count} groups</span></div>
+                        <p className="mt-2 text-[11px] text-white/35">Stamped from the signed-in credential · identity fields cannot be edited here.</p>
+                      </div>
+                    </div>
+                  ) : <p className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">{credentialError || 'Loading credentialed dealer profile...'}</p>}
+                  {poster && credentialError && <p className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">{credentialError}</p>}
                   <PhotoPicker
-                    label="Posting user photo"
-                    hint="Take a portrait or choose a profile picture."
+                    label={poster?.avatar_url ? 'Update credentialed profile photo' : 'Add credentialed profile photo'}
+                    hint="Optional. This becomes the posting-user photo attached to the credential."
                     capture="user"
                     files={posterPhoto ? [posterPhoto] : []}
                     onChange={files => setPosterPhoto(files[0] || null)}
@@ -195,7 +216,7 @@ export default function DealerSubmitListing() {
 
                 {error && <p role="alert" className="border-l-2 border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
                 {message && <p role="status" className="flex items-center gap-2 border-l-2 border-emerald-400 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100"><CheckCircle2 size={15} /> {message}</p>}
-                <button disabled={saving} className="flex h-12 w-full items-center justify-center gap-2 bg-[#c9a96e] text-sm font-semibold text-[#09090d] disabled:opacity-60"><Send size={16} /> {saving ? `Uploading ${totalPhotos + Number(Boolean(posterPhoto))} photos and publishing...` : `Normalize and publish ${items.length === 1 ? 'item' : `${items.length} items`}`}</button>
+                <button disabled={saving || !poster || Boolean(credentialError)} className="flex h-12 w-full items-center justify-center gap-2 bg-[#c9a96e] text-sm font-semibold text-[#09090d] disabled:opacity-60"><Send size={16} /> {saving ? `Uploading ${totalPhotos + Number(Boolean(posterPhoto))} photos and publishing...` : `Normalize and publish ${items.length === 1 ? 'item' : `${items.length} items`}`}</button>
               </form>
             </div>
 
