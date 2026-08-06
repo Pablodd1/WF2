@@ -7,7 +7,6 @@ import { useParams, Link } from 'react-router-dom';
 import { MarketNav } from '@/components/MarketNav';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { Footer } from '@/components/Footer';
-import { JoinGroupsCta } from '@/components/JoinGroupsCta';
 import { Package, FileText, User, Globe, Shield, ArrowLeft } from 'lucide-react';
 
 function detectAccessories(raw: string | null): { box: boolean; papers: boolean } {

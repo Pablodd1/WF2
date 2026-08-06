@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -9,34 +9,30 @@ import {
   List,
   MessageCircle,
   Search,
-  Star,
-  TrendingUp,
   X,
 } from 'lucide-react';
 import { rateMarketPrice } from '../lib/marketPriceRating';
-import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
-import { JoinGroupsCta } from '../components/JoinGroupsCta';
 import { Footer } from '../components/Footer';
 
-const GOLD = '#C9A96E';
-const GOLD_BRIGHT = '#D4B87A';
-const INK = '#F6F1E8';
-const MUTED = '#9CA3AF';
-const BORDER = 'rgba(201, 169, 110, 0.24)';
-const SURFACE = '#111118';
-const PANEL = '#16161F';
-const PAGE = '#08080C';
-const RED = '#EF4444';
+const GOLD = '#9A7127';
+const GOLD_BRIGHT = '#7B5719';
+const INK = '#171717';
+const MUTED = '#6B7280';
+const BORDER = '#DED8CD';
+const SURFACE = '#FFFFFF';
+const PANEL = '#F7F5F0';
+const PAGE = '#F4F1EB';
+const RED = '#B42318';
 
 const CATEGORY_OPTIONS = [
   { label: 'All inventory', value: 'all' },
   { label: 'Watches', value: 'watches' },
-  { label: 'Handbags', value: 'handbags' },
-  { label: 'Jewelry', value: 'jewelry' },
-  { label: 'Accessories', value: 'accessories' },
-  { label: 'Other luxury', value: 'other' },
+  { label: 'Handbags — coming soon', value: 'handbags' },
+  { label: 'Jewelry — coming soon', value: 'jewelry' },
+  { label: 'Accessories — coming soon', value: 'accessories' },
+  { label: 'Other luxury — coming soon', value: 'other' },
 ] as const;
 
 const INTENT_OPTIONS = [
@@ -171,6 +167,8 @@ export default function TradingFloor() {
   const search = searchParams.get('q') || '';
   const requestedBrand = searchParams.get('brand') || '';
   const imagesOnly = searchParams.get('images') === 'true';
+  const pricedOnly = searchParams.get('priced') === 'true';
+  const locationFilter = searchParams.get('location') || '';
   const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
@@ -190,14 +188,28 @@ export default function TradingFloor() {
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 50);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly].join('\u001f');
+  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
     categoryFilter !== 'all',
     Boolean(intentFilter),
     imagesOnly,
+    pricedOnly,
+    Boolean(locationFilter),
   ].filter(Boolean).length;
+  const locationOptions = useMemo(() => [...new Set(listings
+    .map(listing => cleanValue(listing.location || listing.seller_country || listing.region))
+    .filter(Boolean))].sort((a, b) => a.localeCompare(b)), [listings]);
+  const visibleListings = useMemo(() => listings.filter(listing => {
+    if (imagesOnly && !hasListingImage(listing)) return false;
+    if (pricedOnly && getListingMeta(listing).priceLabel.includes('not provided')) return false;
+    if (locationFilter) {
+      const location = cleanValue(listing.location || listing.seller_country || listing.region);
+      if (location.toLocaleLowerCase() !== locationFilter.toLocaleLowerCase()) return false;
+    }
+    return true;
+  }), [imagesOnly, listings, locationFilter, pricedOnly]);
 
   const resetResults = useCallback(() => {
     setCursor(null);
@@ -369,8 +381,7 @@ export default function TradingFloor() {
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketNav />
-      <LuxFiBanner />
-      <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 14px 32px rgba(0,0,0,0.28)' }}>
+      <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 10px 28px rgba(41,37,36,0.08)' }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
@@ -393,7 +404,7 @@ export default function TradingFloor() {
                 type="search"
                 value={searchInput}
                 onChange={event => setSearchInput(event.target.value)}
-                placeholder="Search exact reference"
+                placeholder="Search watch model or reference"
                 className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
               />
@@ -411,42 +422,6 @@ export default function TradingFloor() {
             </button>
           </div>
 
-          <div className="hidden gap-4 md:grid" aria-label="Marketplace filters">
-            <FilterGroup label="Brands">
-              {releaseBrands.length > 0 && (
-                <FilterChoice active={!brandFilter} label="All brands" onClick={() => {
-                  resetResults();
-                  updateViewParams({ brand: null });
-                }} />
-              )}
-              {releaseBrands.map(brand => (
-                <FilterChoice key={brand} active={brandFilter === brand} label={brand} onClick={() => {
-                  resetResults();
-                  updateViewParams({ brand });
-                }} />
-              ))}
-            </FilterGroup>
-            <FilterGroup label="Category">
-              {CATEGORY_OPTIONS.map(option => (
-                <FilterChoice key={option.value} active={categoryFilter === option.value} label={option.label} onClick={() => {
-                  resetResults();
-                  updateViewParams({
-                    item: option.value === 'all' ? null : option.value,
-                    type: !['all', 'watches'].includes(option.value) ? null : intentFilter || null,
-                  });
-                }} />
-              ))}
-            </FilterGroup>
-            <FilterGroup label="Intent">
-              {INTENT_OPTIONS.map(option => (
-                <FilterChoice key={option.value || 'all'} active={intentFilter === option.value} label={option.label} disabled={!['all', 'watches'].includes(categoryFilter) && Boolean(option.value)} onClick={() => {
-                  resetResults();
-                  updateViewParams({ type: option.value || null });
-                }} />
-              ))}
-            </FilterGroup>
-          </div>
-
           <CurrencyConverter compact />
         </div>
       </div>
@@ -458,6 +433,7 @@ export default function TradingFloor() {
           category={categoryFilter}
           intent={intentFilter}
           imagesOnly={imagesOnly}
+          pricedOnly={pricedOnly}
           onApply={next => {
             setFiltersOpen(false);
             resetResults();
@@ -466,50 +442,67 @@ export default function TradingFloor() {
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
               images: next.imagesOnly ? 'true' : null,
+              priced: next.pricedOnly ? 'true' : null,
             });
           }}
           onClose={() => setFiltersOpen(false)}
         />
       )}
 
-      <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-5">
-        <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
+      <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-6">
+        <div className="mb-5 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
-            Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong>
+            Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong>
             {total === null
               ? ' listings'
               : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> listings</>}
           </span>
-          <span>Source-confirmed USD first; other supplied prices next; no-price requests last.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
         {selectedListing ? (
           <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={closeListing} />
-        ) : loading && listings.length === 0 ? (
-          <div className="flex justify-center py-16">
-            <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
-          </div>
-        ) : listings.length === 0 ? (
-          <div className="py-16 text-center" style={{ color: MUTED }}>
-            <div className="text-base font-semibold">No listings found</div>
-            <div className="mt-1 text-sm">
-              {total === 0 ? 'No data loaded yet. Incoming messages will appear here.' : 'Try a different filter or search.'}
-            </div>
-          </div>
         ) : (
-          <div className={viewMode === 'grid'
-            ? 'grid grid-cols-1 gap-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-            : 'grid grid-cols-1 gap-4 md:grid-cols-2'}
-          >
-            {listings.map(listing => (
-              <ListingCard
-                key={listing.id}
-                listing={listing}
-                selected={false}
-                onSelect={() => openListing(listing)}
+          <div className="grid gap-6 md:grid-cols-[230px_minmax(0,1fr)]">
+            <aside className="hidden self-start rounded-md border bg-white p-5 md:sticky md:top-4 md:block" style={{ borderColor: BORDER }} aria-label="Marketplace filters">
+              <DesktopFilters
+                brand={brandFilter}
+                releaseBrands={releaseBrands}
+                category={categoryFilter}
+                intent={intentFilter}
+                imagesOnly={imagesOnly}
+                pricedOnly={pricedOnly}
+                location={locationFilter}
+                locations={locationOptions}
+                onChange={updates => { resetResults(); updateViewParams(updates); }}
               />
-            ))}
+            </aside>
+            {loading && listings.length === 0 ? (
+              <div className="flex justify-center py-16">
+                <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
+              </div>
+            ) : visibleListings.length === 0 ? (
+              <div className="rounded-md border bg-white py-16 text-center" style={{ borderColor: BORDER, color: MUTED }}>
+                <div className="text-base font-semibold" style={{ color: INK }}>No listings found</div>
+                <div className="mt-1 text-sm">
+                  {total === 0 ? 'No data loaded yet. Incoming messages will appear here.' : 'Try a different filter or search.'}
+                </div>
+              </div>
+            ) : (
+              <div className={viewMode === 'grid'
+                ? 'grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3'
+                : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}
+              >
+                {visibleListings.map(listing => (
+                  <ListingCard
+                    key={listing.id}
+                    listing={listing}
+                    selected={false}
+                    onSelect={() => openListing(listing)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -545,9 +538,6 @@ export default function TradingFloor() {
           </nav>
         )}
 
-        <div className="pt-10">
-          <JoinGroupsCta dark />
-        </div>
       </div>
       <Footer />
     </main>
@@ -578,12 +568,108 @@ function FilterChoice({ active, disabled = false, label, onClick }: { active: bo
   );
 }
 
+function FilterCheck({ checked, disabled = false, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onChange}
+      className="flex w-full items-center gap-3 rounded px-1 py-2 text-left text-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+      style={{ color: INK }}
+    >
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border" style={{ borderColor: checked ? GOLD : BORDER, background: checked ? GOLD : '#FFFFFF', color: '#FFFFFF' }}>
+        {checked && <Check size={13} />}
+      </span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function DesktopFilters({
+  brand,
+  releaseBrands,
+  category,
+  intent,
+  imagesOnly,
+  pricedOnly,
+  location,
+  locations,
+  onChange,
+}: {
+  brand: BrandFilter;
+  releaseBrands: string[];
+  category: CategoryFilter;
+  intent: IntentFilter;
+  imagesOnly: boolean;
+  pricedOnly: boolean;
+  location: string;
+  locations: string[];
+  onChange: (updates: Record<string, string | null>) => void;
+}) {
+  return (
+    <div className="space-y-7">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
+        {(brand || category !== 'all' || intent || imagesOnly || pricedOnly || location) && (
+          <button type="button" onClick={() => onChange({ brand: null, item: null, type: null, images: null, priced: null, location: null })} className="text-xs font-semibold underline underline-offset-4" style={{ color: GOLD_BRIGHT }}>Clear</button>
+        )}
+      </div>
+
+      <fieldset>
+        <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Brand</label>
+        <select id="brand-filter" value={brand} onChange={event => onChange({ brand: event.target.value || null })} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none" style={{ borderColor: BORDER, color: INK }}>
+          <option value="">All brands</option>
+          {releaseBrands.map(value => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </fieldset>
+
+      <fieldset>
+        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Category</legend>
+        {CATEGORY_OPTIONS.map(option => (
+          <FilterCheck
+            key={option.value}
+            checked={category === option.value}
+            disabled={!['all', 'watches'].includes(option.value)}
+            label={option.label}
+            onChange={() => onChange({ item: option.value === 'all' ? null : option.value, type: !['all', 'watches'].includes(option.value) ? null : intent || null })}
+          />
+        ))}
+      </fieldset>
+
+      <fieldset>
+        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Listing type</legend>
+        {INTENT_OPTIONS.map(option => (
+          <FilterCheck key={option.value || 'all'} checked={intent === option.value} label={option.label} onChange={() => onChange({ type: option.value || null })} />
+        ))}
+      </fieldset>
+
+      <fieldset>
+        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Availability</legend>
+        <FilterCheck checked={imagesOnly} label="Source image only" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
+        <FilterCheck checked={pricedOnly} label="Price supplied" onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
+      </fieldset>
+
+      <fieldset>
+        <label htmlFor="location-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Location</label>
+        <select id="location-filter" value={location} disabled={locations.length === 0} onChange={event => onChange({ location: event.target.value || null })} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-50" style={{ borderColor: BORDER, color: INK }}>
+          <option value="">{locations.length ? 'All supplied locations' : 'No supplied locations'}</option>
+          {locations.map(value => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>Only locations explicitly supplied with a listing are shown.</p>
+      </fieldset>
+    </div>
+  );
+}
+
 function MobileFilterSheet({
   brand,
   releaseBrands,
   category,
   intent,
   imagesOnly,
+  pricedOnly,
   onApply,
   onClose,
 }: {
@@ -592,13 +678,15 @@ function MobileFilterSheet({
   category: CategoryFilter;
   intent: IntentFilter;
   imagesOnly: boolean;
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean }) => void;
+  pricedOnly: boolean;
+  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
   const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
+  const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
 
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="presentation">
@@ -628,11 +716,15 @@ function MobileFilterSheet({
           </FilterGroup>
           <FilterGroup label="Category">
             {CATEGORY_OPTIONS.map(option => (
-              <FilterChoice key={option.value} active={draftCategory === option.value} label={option.label} onClick={() => {
+              <FilterChoice key={option.value} active={draftCategory === option.value} disabled={!['all', 'watches'].includes(option.value)} label={option.label} onClick={() => {
                 setDraftCategory(option.value);
                 if (!['all', 'watches'].includes(option.value)) setDraftIntent('');
               }} />
             ))}
+          </FilterGroup>
+          <FilterGroup label="Availability">
+            <FilterCheck checked={draftImagesOnly} label="Source image only" onChange={() => setDraftImagesOnly(value => !value)} />
+            <FilterCheck checked={draftPricedOnly} label="Price supplied" onChange={() => setDraftPricedOnly(value => !value)} />
           </FilterGroup>
           <FilterGroup label="Intent">
             {INTENT_OPTIONS.map(option => (
@@ -650,8 +742,9 @@ function MobileFilterSheet({
             setDraftCategory('all');
             setDraftIntent('');
             setDraftImagesOnly(false);
+            setDraftPricedOnly(false);
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
         </footer>
       </section>
     </div>
@@ -684,8 +777,8 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
   return (
     <article
-      className={`flex flex-col rounded-md border p-6 transition hover:-translate-y-0.5 ${cardHasImage ? 'min-h-[660px]' : 'min-h-[320px]'}`}
-      style={{ borderColor: selected ? GOLD : BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.28)' }}
+      className={`flex flex-col rounded-md border p-5 transition hover:-translate-y-0.5 ${cardHasImage ? 'min-h-[620px]' : 'min-h-[320px]'}`}
+      style={{ borderColor: selected ? GOLD : BORDER, background: SURFACE, boxShadow: '0 16px 36px rgba(41,37,36,0.09)' }}
     >
       {cardHasImage && (
         <button type="button" onClick={onSelect} className="block text-left">
@@ -711,27 +804,9 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
               <span>
                 Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || (listing as any)['Posted By'] || 'Dealer'}</span>
               </span>
-              {listing.confidence > 0 && (
-                <span className="flex items-center gap-0.5 ml-1" title={`Confidence score: ${listing.confidence}%`}>
-                  {Array.from({ length: 5 }, (_, i) => {
-                    const starsCount = Math.round((listing.confidence ?? 0) / 20);
-                    return (
-                      <Star
-                        key={i}
-                        size={10}
-                        className={
-                          i < starsCount
-                            ? 'text-[#D4B87A] fill-[#D4B87A]'
-                            : 'text-white/10 fill-white/10'
-                        }
-                      />
-                    );
-                  })}
-                </span>
-              )}
             </div>
             {(listing.location || listing.seller_country || (listing as any)['Location']) && (
-              <div className="flex items-center gap-1.5 rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-[#D4B87A]">
+              <div className="flex items-center gap-1.5 rounded bg-stone-100 px-2 py-0.5 text-xs font-medium" style={{ color: GOLD_BRIGHT }}>
                 <Globe2 size={12} />
                 <span>{listing.location || listing.seller_country || (listing as any)['Location']}</span>
               </div>
@@ -748,24 +823,11 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       {meta.postedDate && <div className="mt-3 text-[15px]" style={{ color: INK }}>Posted: {meta.postedDate}</div>}
 
       {(listing.raw_message || listing.raw_line || listing.description) && (
-        <div className="mt-3.5 rounded border border-white/10 bg-[#0A0B0E] p-2.5 text-xs text-white/70">
+        <div className="mt-3.5 rounded border bg-stone-50 p-3 text-xs" style={{ borderColor: BORDER, color: MUTED }}>
           <div className="mb-2 flex items-center justify-between">
-            {listing.raw_message_scope === 'normalized_summary' ? (
-              <span className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-500">
-                📋 Workbook Summary
-              </span>
-            ) : listing.raw_message_scope === 'stored_source_message' ? (
-              <span className="inline-flex items-center gap-1.5 rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-500">
-                💬 Source Message
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/60">
-                📄 Message
-              </span>
-            )}
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-white/40">Untouched</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: GOLD_BRIGHT }}>Original raw message</span>
           </div>
-          <div className="line-clamp-3 font-mono text-[11px] leading-relaxed text-white/80 whitespace-pre-wrap">
+          <div className="line-clamp-3 whitespace-pre-wrap font-mono text-[11px] leading-relaxed" style={{ color: INK }}>
             {listing.raw_message || listing.raw_line || listing.description}
           </div>
         </div>
@@ -816,7 +878,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   useEffect(() => {
     const controller = new AbortController();
     
-    // Fetch seller analytics
+    // Fetch seller analytics from the approved reviewed-workbook contract.
     fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
       .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
       .then(payload => {
@@ -885,7 +947,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       <button
         type="button"
         onClick={onClose}
-        className="col-span-full inline-flex min-h-11 w-fit items-center gap-2 rounded-md border px-4 text-sm font-medium"
+        className="order-[-20] col-span-full inline-flex min-h-11 w-fit items-center gap-2 rounded-md border px-4 text-sm font-medium"
         style={{ borderColor: BORDER, color: INK, background: SURFACE }}
       >
         <ArrowLeft size={17} /> Back to results
@@ -919,26 +981,8 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       )}
 
       {/* Raw source message — moved to top of detail */}
-      <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-        <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Original listing</h2>
-        <div className="mt-3 flex items-center gap-2">
-          {listing.raw_message_scope === 'normalized_summary' ? (
-            <span className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-500">
-              📋 Workbook Summary
-            </span>
-          ) : listing.raw_message_scope === 'stored_source_message' ? (
-            <span className="inline-flex items-center gap-1.5 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
-              💬 Source Message
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white/60">
-              📄 Message
-            </span>
-          )}
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
-            (Untouched & Complete)
-          </span>
-        </div>
+      <div className="order-[-10] col-span-full rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 16px 36px rgba(41,37,36,0.08)' }}>
+        <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Raw message</h2>
         {listing.raw_message || (listing as any).raw_line || (listing as any).description ? (
           <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>
             {listing.raw_message || (listing as any).raw_line || (listing as any).description}
@@ -982,7 +1026,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(listing.listing_type) ? 'Buyer source contact' : 'Source contact'}</h2>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Posted by</h2>
           {(contact?.dealer_name || contact?.phone_display || (listing as any)['Posted By'] || (listing as any)['Phone Number'] || listing.seller_name || listing.seller_phone) && (
             <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
               <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
@@ -999,8 +1043,8 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
                 </div>
               )}
               {(listing.location || listing.seller_country || (listing as any)['Location']) && (
-                <div className="mt-2 flex items-center gap-1.5 text-xs text-white/70">
-                  <Globe2 size={13} className="text-[#D4B87A]" />
+                <div className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: MUTED }}>
+                  <Globe2 size={13} style={{ color: GOLD_BRIGHT }} />
                   <span>{listing.location || listing.seller_country || (listing as any)['Location']}</span>
                 </div>
               )}
@@ -1075,20 +1119,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </div>
           </div>
         )}
-
-        <div className="rounded-md border p-6" style={{ borderColor: BORDER, background: SURFACE }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Market Intelligence</h2>
-          <p className="mt-1 text-sm" style={{ color: MUTED }}>
-            Research historical asking prices, WTB demand signals, and market trends for this model reference.
-          </p>
-          <Link
-            to={`/price-research?q=${encodeURIComponent(listing.reference || listing.model || '')}&brand=${encodeURIComponent(listing.brand || '')}`}
-            className="mt-4 flex h-11 items-center justify-center gap-2 rounded-md font-semibold text-black transition hover:opacity-90"
-            style={{ background: GOLD }}
-          >
-            <TrendingUp size={16} /> Research Market & Prices
-          </Link>
-        </div>
 
       </div>
     </section>

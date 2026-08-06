@@ -2,10 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, Loader2, MessageCircle, Search, Store, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
-import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
-import { JoinGroupsCta } from '../components/JoinGroupsCta';
 import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -780,7 +778,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   return (
     <div style={{ backgroundColor: WHITE, color: TEXT, fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh' }}>
       <MarketNav />
-      <LuxFiBanner />
       <div style={{ paddingTop: 12 }}><CurrencyConverter /></div>
 
       <header style={{ backgroundColor: '#09090d', color: WHITE, padding: '22px 0 24px' }}>
@@ -2085,9 +2082,6 @@ function Footer() {
 
   return (
     <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 32, marginTop: 16 }}>
-      <div style={{ marginBottom: 32 }}>
-        <JoinGroupsCta />
-      </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
         <div>
           <div style={sectionTitle}>Features</div>
