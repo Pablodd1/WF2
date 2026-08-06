@@ -181,8 +181,17 @@ def check_duplicate_payload(cur, checksum, current_payload_id, batch_seen_checks
     if checksum in batch_seen_checksums:
         return True
     payloads_table = "payloads" if IS_SQLITE else "raw.payloads"
+    jobs_table = "processing_jobs" if IS_SQLITE else "jobs.processing_jobs"
     try:
-        db_execute(cur, f"SELECT 1 FROM {payloads_table} WHERE payload_checksum = %s AND id != %s LIMIT 1;", (checksum, current_payload_id))
+        db_execute(cur, f"""
+            SELECT 1 
+            FROM {payloads_table} p 
+            JOIN {jobs_table} j ON p.id = j.raw_payload_id 
+            WHERE p.payload_checksum = %s 
+              AND p.id != %s 
+              AND j.status IN ('normalized', 'completed', 'processing')
+            LIMIT 1;
+        """, (checksum, current_payload_id))
         row = cur.fetchone()
         return bool(row)
     except Exception:
