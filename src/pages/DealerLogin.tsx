@@ -29,7 +29,7 @@ function canOpenRequestedDestination(role?: string, path?: string) {
 export default function DealerLogin() {
   const navigate = useNavigate();
   const location = useLocation();
-  const adminEntry = location.pathname === '/admin-login';
+  const adminEntry = location.pathname === '/cl-login';
   const requestedDestination = (location.state as { from?: string } | null)?.from || (adminEntry ? '/admin' : undefined);
   const destination = requestedDestination || '/dealer/workspace';
   const [email, setEmail] = useState('');
@@ -42,7 +42,7 @@ export default function DealerLogin() {
   const accessMessage = destination === '/price-research'
     ? 'Sign in is required to access Price Research.'
     : destination === '/admin' || destination === '/dashboard' || destination === '/multi-listings'
-      ? 'Administrator sign-in is required for the Admin Panel.'
+      ? 'CL administrator sign-in is required for the control dashboard.'
       : 'Secure sign-in is required to continue.';
 
   useEffect(() => {
@@ -107,7 +107,7 @@ export default function DealerLogin() {
         <Link to="/" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> Curated Luxury</Link>
         <div className="flex flex-1 items-center justify-center py-10">
           <section className="w-full max-w-[420px] border border-white/12 bg-[#111118] p-6 sm:p-8">
-            <div className="mb-6 flex items-center gap-3"><LockKeyhole size={20} className="text-[#c9a96e]" /><h2 className="text-lg font-semibold">{adminEntry ? 'Admin login' : 'Login'}</h2></div>
+            <div className="mb-6 flex items-center gap-3"><LockKeyhole size={20} className="text-[#c9a96e]" /><h2 className="text-lg font-semibold">{adminEntry ? 'CL Login' : 'Login'}</h2></div>
             <div className="mb-5 border-l-2 border-[#c9a96e] bg-[#c9a96e]/10 px-3 py-2 text-xs leading-5 text-[#ead7ae]">
               {accessMessage} Existing secure sessions open automatically.
             </div>

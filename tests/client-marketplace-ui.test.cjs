@@ -13,6 +13,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   const floor = read('src/pages/TradingFloor.tsx');
   const research = read('src/pages/PriceResearch.tsx');
   const home = read('src/pages/LandingPage.tsx');
+  const footer = read('src/components/Footer.tsx');
   const postItem = read('src/pages/DealerSubmitListing.tsx');
   const styles = read('src/index.css');
 
@@ -36,7 +37,8 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(home, /const LUXURY_MARKETPLACE_URL = 'https:\/\/luxuryapp-wf-w5o1\.vercel\.app\/marketplace\/'/);
   assert.match(home, /Luxury item marketplace/);
   assert.match(home, /href=\{LUXURY_MARKETPLACE_URL\}[\s\S]*target="_blank"[\s\S]*rel="noreferrer"/);
-  assert.match(home, /to="\/admin-login"[\s\S]*Admin login/);
+  assert.match(home, /to="\/cl-login"[\s\S]*CL Login/);
+  assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
   assert.match(header, /src="\/images\/curated-luxury-logo-dark\.png"/);
   assert.match(header, /alt="Curated Luxury"/);
   assert.doesNotMatch(header, />CL<\/span>/);
@@ -95,18 +97,30 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.doesNotMatch(floor, /top_watches_trading_floor\.json/);
 });
 
-test('dealer login keeps authentication but omits the removed marketing panel', () => {
+test('dealer and CL login keep authentication but omit preview access and marketing panels', () => {
   const login = read('src/pages/DealerLogin.tsx');
 
   assert.match(login, /<form onSubmit=\{login\}/);
   assert.match(login, /fetch\('\/api\/dealer-auth'/);
-  assert.match(login, /location\.pathname === '\/admin-login'/);
+  assert.match(login, /location\.pathname === '\/cl-login'/);
   assert.match(login, /Sign in is required to access Price Research/);
-  assert.match(login, /const betaDestinations = new Set\(\['\/dealer', '\/trading'\]\)/);
+  assert.match(login, /CL administrator sign-in is required for the control dashboard/);
+  assert.doesNotMatch(login, /betaDestinations|skipForBeta|Continue to dealer preview/);
   assert.doesNotMatch(login, /Continue without login to Price Research/);
   assert.doesNotMatch(login, /Controlled dealer access/i);
   assert.doesNotMatch(login, /Your market operations workspace/i);
   assert.doesNotMatch(login, /Accounts are provisioned by WatchFacts/i);
+});
+
+test('CL control access is kept in the customer footer', () => {
+  const app = read('src/App.tsx');
+  const home = read('src/pages/LandingPage.tsx');
+  const footer = read('src/components/Footer.tsx');
+
+  assert.match(app, /path="\/cl-login" element=\{<DealerLogin \/>\}/);
+  assert.match(app, /path="\/dashboard"[\s\S]*allowedRoles=\{\['admin'\]\}/);
+  assert.match(home, /to="\/cl-login"[\s\S]*CL Login/);
+  assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
 });
 
 test('customer workflows link to the official WatchFacts groups marketplace with public metrics', () => {

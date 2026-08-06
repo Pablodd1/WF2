@@ -35,7 +35,8 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/dealer" element={<DealerLogin />} />
         <Route path="/dealer-login" element={<Navigate to="/dealer" replace />} />
-        <Route path="/admin-login" element={<DealerLogin />} />
+        <Route path="/cl-login" element={<DealerLogin />} />
+        <Route path="/admin-login" element={<Navigate to="/cl-login" replace />} />
         <Route path="/dealer/workspace" element={<DealerGate><DealerPortal /></DealerGate>} />
         <Route path="/dealer/post" element={<DealerGate><DealerSubmitListing /></DealerGate>} />
         <Route path="/dealer/account/:section" element={<DealerGate><DealerAccount /></DealerGate>} />

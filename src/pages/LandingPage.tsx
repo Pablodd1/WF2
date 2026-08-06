@@ -294,7 +294,7 @@ export default function LandingPage() {
           <a href={LUXURY_MARKETPLACE_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-white/70 transition-colors hover:text-white">
             Luxury item marketplace <ExternalLink size={11} aria-hidden="true" />
           </a>
-          <Link to="/admin-login" className="text-white/70 transition-colors hover:text-white">Admin login</Link>
+          <Link to="/cl-login" className="text-white/55 transition-colors hover:text-white">CL Login</Link>
         </div>
       </footer>
       <SocialShareRail />
