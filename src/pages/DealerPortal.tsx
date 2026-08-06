@@ -1,5 +1,21 @@
-import { ArrowLeft, ArrowRight, BadgeCheck, LogOut, PlusCircle, Search, ShieldCheck, Store, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, ArrowRight, BadgeCheck, Download, Globe2, LogOut, MessageCircle, PlusCircle, Search, ShieldCheck, Smartphone, Store, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { GROUPS_URL } from '@/components/JoinGroupsCta';
+
+interface InstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+const communityGroups = [
+  { name: 'B2B Watch Trading Chat', network: 'WhatsApp' },
+  { name: 'Community discussions and announcements', network: 'WhatsApp' },
+  { name: 'System Calls', network: 'WhatsApp' },
+  { name: 'International Group', network: 'WhatsApp' },
+  { name: 'Signed Estate and Branded Jewelry', network: 'WhatsApp' },
+  { name: 'Rolex US Sales', network: 'Telegram' },
+];
 
 const portalLinks = [
   {
@@ -27,7 +43,7 @@ const portalLinks = [
     icon: PlusCircle,
   },
   {
-    title: 'Account workspace',
+    title: 'Profile & settings',
     description: 'Manage your profile, listings, settings, billing status, and support tickets.',
     to: '/dealer/account/profile',
     icon: ShieldCheck,
@@ -37,6 +53,23 @@ const portalLinks = [
 export default function DealerPortal() {
   const navigate = useNavigate();
   const betaAccess = sessionStorage.getItem('wf_beta_skip') === '1';
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+
+  useEffect(() => {
+    const captureInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', captureInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', captureInstallPrompt);
+  }, []);
+
+  async function installApp() {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  }
 
   async function exitAccess() {
     sessionStorage.removeItem('wf_beta_skip');
@@ -61,7 +94,7 @@ export default function DealerPortal() {
             <div className="mb-5 flex h-11 w-11 items-center justify-center border border-[#c9a96e]/45 text-[#c9a96e]">
               <ShieldCheck size={22} />
             </div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Dealer workspace</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Workspace</p>
             <h1 className="mt-3 max-w-2xl font-serif text-4xl leading-tight sm:text-5xl">Market access, with the evidence attached.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-white/58">Search prices, review the live trading floor, and verify counterparties before a transaction.</p>
           </div>
@@ -82,6 +115,67 @@ export default function DealerPortal() {
             </Link>
           ))}
 
+        </section>
+
+        <section className="border-t border-white/10 py-10" aria-labelledby="community-heading">
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="flex h-10 w-10 items-center justify-center border border-white/15 text-[#c9a96e]"><MessageCircle size={19} /></div>
+              <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Community and contact</p>
+              <h2 id="community-heading" className="mt-2 font-serif text-3xl">WatchFacts trading groups</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">Open the official WatchFacts access page to contact the team or request entry to the appropriate WhatsApp and Telegram community.</p>
+            </div>
+            <a href={GROUPS_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 border border-[#c9a96e] px-5 text-sm font-semibold text-[#c9a96e] transition-colors hover:bg-[#c9a96e] hover:text-[#09090d]">
+              <Globe2 size={17} /> Open official access page
+            </a>
+          </div>
+
+          <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {communityGroups.map(group => (
+              <a key={`${group.network}-${group.name}`} href={GROUPS_URL} target="_blank" rel="noreferrer" className="group border border-white/12 bg-[#111118] p-5 transition-colors hover:border-[#c9a96e]/55">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#c9a96e]">{group.network}</div>
+                <div className="mt-3 text-base font-semibold text-white">{group.name}</div>
+                <div className="mt-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-white/45 group-hover:text-[#c9a96e]">Request access <ArrowRight size={14} /></div>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-t border-white/10 py-10" aria-labelledby="install-heading">
+          <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+            <div className="border border-white/12 bg-[#111118] p-7">
+              <div className="flex h-12 w-12 items-center justify-center border border-[#c9a96e]/40 text-[#c9a96e]"><Smartphone size={22} /></div>
+              <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Quick access</p>
+              <h2 id="install-heading" className="mt-2 font-serif text-3xl">Add WatchFacts to your phone</h2>
+              <p className="mt-3 text-sm leading-6 text-white/55">Keep trading, sourcing, Price Research, and your workspace one tap away.</p>
+              {installPrompt ? (
+                <button type="button" onClick={() => void installApp()} className="mt-7 flex min-h-12 w-full items-center justify-center gap-2 bg-[#c9a96e] px-5 text-sm font-extrabold text-[#09090d]">
+                  <Download size={17} /> Install WatchFacts
+                </button>
+              ) : (
+                <div className="mt-7 border border-white/10 px-4 py-3 text-xs leading-5 text-white/45">If your browser supports direct installation, use its Install app or Add to Home screen command.</div>
+              )}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="border border-white/12 p-6">
+                <div className="text-sm font-semibold text-white">Android</div>
+                <ol className="mt-4 space-y-3 text-sm leading-6 text-white/55">
+                  <li>1. Open WatchFacts in Chrome.</li>
+                  <li>2. Open the browser menu.</li>
+                  <li>3. Choose Install app or Add to Home screen.</li>
+                </ol>
+              </div>
+              <div className="border border-white/12 p-6">
+                <div className="text-sm font-semibold text-white">iPhone</div>
+                <ol className="mt-4 space-y-3 text-sm leading-6 text-white/55">
+                  <li>1. Open WatchFacts in Safari.</li>
+                  <li>2. Tap the Share button.</li>
+                  <li>3. Choose Add to Home Screen.</li>
+                </ol>
+              </div>
+            </div>
+          </div>
         </section>
 
         {betaAccess && (

@@ -23,9 +23,9 @@ export function HireFiScrollRail() {
         aria-label="Hire Fi — let Fi search the world"
         title="Let Fi search the world"
         style={reduceMotion ? undefined : { y: railOffset }}
-        className="group pointer-events-auto relative flex min-h-52 w-14 items-center justify-center overflow-hidden rounded-l-2xl border border-r-0 border-[#d4b87a]/45 bg-[#09090a]/95 px-3 py-5 text-white shadow-[-8px_12px_30px_rgba(0,0,0,0.24)] backdrop-blur-md transition-[width,background-color,border-color] duration-300 hover:w-16 hover:border-[#d4b87a] hover:bg-[#111113] focus-visible:w-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4b87a] focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:min-h-80 sm:w-16 sm:hover:w-[4.5rem] sm:focus-visible:w-[4.5rem]"
+        className="group pointer-events-auto relative flex min-h-56 w-16 items-center justify-center overflow-hidden rounded-l-2xl border border-r-0 border-[#d4b87a]/45 bg-[#09090a]/95 px-3 py-5 text-white shadow-[-8px_12px_30px_rgba(0,0,0,0.24)] backdrop-blur-md transition-[width,background-color,border-color] duration-300 hover:w-[4.5rem] hover:border-[#d4b87a] hover:bg-[#111113] focus-visible:w-[4.5rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4b87a] focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:min-h-96 sm:w-[4.5rem] sm:hover:w-20 sm:focus-visible:w-20"
       >
-        <span className="[writing-mode:vertical-rl] rotate-180 text-xs font-semibold uppercase tracking-[0.18em] text-white/85 transition-colors group-hover:text-white sm:text-sm">
+        <span className="[writing-mode:vertical-rl] rotate-180 text-sm font-semibold uppercase tracking-[0.16em] text-white/90 transition-colors group-hover:text-white sm:text-base">
           Let Fi search the world
         </span>
 

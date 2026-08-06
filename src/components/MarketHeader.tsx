@@ -7,16 +7,15 @@ const HEADER_LINKS = [
   { label: 'HOME', to: '/' },
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
-  { label: 'DEALER LOGIN', to: '/dealer' },
+  { label: 'WORKSPACE', to: '/dealer/workspace' },
   { label: 'POST ITEM', to: '/dealer/post' },
-  { label: 'ACCOUNT', to: '/dealer/account/profile' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
 ];
 
 const LANDING_LINKS = [
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
-  { label: 'LOGIN', to: '/dealer' },
+  { label: 'WORKSPACE', to: '/dealer/workspace' },
 ];
 
 type MarketHeaderProps = {

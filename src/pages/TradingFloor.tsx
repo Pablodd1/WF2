@@ -59,6 +59,7 @@ interface ListingRecord {
   dial_color: string | null;
   condition: string | null;
   year: number | null;
+  intent?: string | null;
   listing_type: string;
   verdict: string | null;
   source: string;
@@ -95,6 +96,9 @@ interface ListingRecord {
   seller_country?: string | null;
   posted_by?: string | null;
   phone_number?: string | null;
+  'Posted By'?: string | null;
+  'Phone Number'?: string | null;
+  'Location'?: string | null;
   source_file?: string | null;
   source_row_number?: number | null;
 }
@@ -828,18 +832,18 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         >
           {meta.title}
         </button>
-        {(cleanValue(listing.seller_name) || (listing as any)['Posted By'] || listing.location || listing.seller_country) && (
+        {(cleanValue(listing.seller_name) || listing['Posted By'] || listing.location || listing.seller_country) && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm" style={{ color: MUTED }}>
             <div className="flex items-center gap-2">
               {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="" className="h-8 w-8 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
               <span>
-                Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || (listing as any)['Posted By'] || 'Dealer'}</span>
+                Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer'}</span>
               </span>
             </div>
-            {(listing.location || listing.seller_country || (listing as any)['Location']) && (
+            {(listing.location || listing.seller_country || listing['Location']) && (
               <div className="flex items-center gap-1.5 rounded bg-stone-100 px-2 py-0.5 text-xs font-medium" style={{ color: GOLD_BRIGHT }}>
                 <Globe2 size={12} />
-                <span>{listing.location || listing.seller_country || (listing as any)['Location']}</span>
+                <span>{listing.location || listing.seller_country || listing['Location']}</span>
               </div>
             )}
           </div>
@@ -893,8 +897,10 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   }, [failedImages, listing]);
 
   const visibleImageIndex = activeImage < images.length ? activeImage : 0;
+  const rawSourceMessage = listing.raw_message ?? listing.raw_line ?? listing.description ?? '';
+  const normalizedIntent = String(listing.intent || listing.listing_type || '').toUpperCase();
 
-  const canLoadBenchmark = Boolean(listing.reference && listing.brand && listing.listing_type === 'WTS');
+  const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS');
   const [benchmark, setBenchmark] = useState<{
     loading: boolean;
     count: number;
@@ -1015,22 +1021,8 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
       )}
 
-      {/* Raw source message — moved to top of detail */}
-      <div className="order-[-10] col-span-full rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 16px 36px rgba(41,37,36,0.08)' }}>
-        <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Raw message</h2>
-        {listing.raw_message || (listing as any).raw_line || (listing as any).description ? (
-          <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>
-            {listing.raw_message || (listing as any).raw_line || (listing as any).description}
-          </pre>
-        ) : (
-          <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-            Original source text evidence is currently loading or unavailable.
-          </p>
-        )}
-      </div>
-
-      <div className="space-y-8">
-        <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
+      <div className="flex flex-col gap-8">
+        <div className="order-1 rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <div className="flex items-start justify-between gap-4">
             <h2 className="font-serif text-2xl font-medium tracking-normal" style={{ color: INK }}>{meta.title}</h2>
             <button
@@ -1049,6 +1041,17 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
           </div>
 
+          <div className="mt-6 border-t pt-5" style={{ borderColor: BORDER }}>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD_BRIGHT }}>Original raw message</div>
+            {rawSourceMessage ? (
+              <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: INK }}>
+                {rawSourceMessage}
+              </pre>
+            ) : (
+              <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Original source text is unavailable.</p>
+            )}
+          </div>
+
           <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
             {[displayDial(detailListing.dial_color), cleanValue(detailListing.condition), detailListing.year ? String(detailListing.year) : ''].filter(Boolean).map(value => (
               <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: BORDER }}>{value}</span>
@@ -1060,9 +1063,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>}
         </div>
 
-        <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
+        <div className="order-3 rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Posted by</h2>
-          {(contact?.dealer_name || contact?.phone_display || (listing as any)['Posted By'] || (listing as any)['Phone Number'] || listing.seller_name || listing.seller_phone) && (
+          {(contact?.dealer_name || contact?.phone_display || listing['Posted By'] || listing['Phone Number'] || listing.seller_name || listing.seller_phone) && (
             <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
               <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
                 Source-supplied contact
@@ -1070,20 +1073,20 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               <div className="mt-2 flex items-center gap-3">
                 {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="Posting user" className="h-14 w-14 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
                 <div>
-                  {(contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name) && <div className="text-base font-semibold" style={{ color: INK }}>{contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name}</div>}
+                  {(contact?.dealer_name || listing['Posted By'] || listing.seller_name) && <div className="text-base font-semibold" style={{ color: INK }}>{contact?.dealer_name || listing['Posted By'] || listing.seller_name}</div>}
                   {listing.seller_rating != null && <div className="mt-1 text-xs" style={{ color: GOLD_BRIGHT }}>Rating {Number(listing.seller_rating).toFixed(1)}</div>}
                   {(listing.seller_review_count != null || listing.seller_group_count != null) && <div className="mt-1 text-xs" style={{ color: MUTED }}>{listing.seller_review_count || 0} reviews · {listing.seller_group_count || 0} groups{listing.seller_credential_status ? ` · ${listing.seller_credential_status.toLowerCase()}` : ''}</div>}
                 </div>
               </div>
-              {(contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone) && (
+              {(contact?.phone_display || listing['Phone Number'] || listing.seller_phone) && (
                 <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
-                  {contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone}
+                  {contact?.phone_display || listing['Phone Number'] || listing.seller_phone}
                 </div>
               )}
-              {(listing.location || listing.seller_country || (listing as any)['Location']) && (
+              {(listing.location || listing.seller_country || listing['Location']) && (
                 <div className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: MUTED }}>
                   <Globe2 size={13} style={{ color: GOLD_BRIGHT }} />
-                  <span>{listing.location || listing.seller_country || (listing as any)['Location']}</span>
+                  <span>{listing.location || listing.seller_country || listing['Location']}</span>
                 </div>
               )}
               {sellerAnalytics && (
@@ -1111,20 +1114,20 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           )}
           {(() => {
             const waUrl = contact?.whatsapp_url || (() => {
-              const ph = contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone;
+              const ph = contact?.phone_display || listing['Phone Number'] || listing.seller_phone;
               const digits = String(ph || '').replace(/\D/g, '');
               return digits.length >= 7 ? `https://wa.me/${digits}` : null;
             })();
             return waUrl ? (
               <>
                 <p className="mt-3 text-sm" style={{ color: MUTED }}>
-                  Contact {contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name || 'the source poster'} using WhatsApp.
+                  Contact {contact?.dealer_name || listing['Posted By'] || listing.seller_name || 'the source poster'} using WhatsApp.
                 </p>
                 <a href={waUrl} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
                   <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
                 </a>
               </>
-            ) : (contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name) ? (
+            ) : (contact?.dealer_name || listing['Posted By'] || listing.seller_name) ? (
               <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
                 Contact phone number not available for this poster.
               </p>
@@ -1137,7 +1140,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
 
         {canLoadBenchmark && (
-          <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
+          <div className="order-2 rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: benchmark.rating.color }}>Price Rating</div>
@@ -1197,8 +1200,8 @@ function MarketStat({ label, value }: { label: string; value: number }) {
 }
 
 function sourcePosterContact(listing: ListingRecord): ListingContact | null {
-  const phone = String(listing.seller_phone || (listing as any)['Phone Number'] || (listing as any).phone_number || '').trim();
-  const name = cleanValue(listing.seller_name || (listing as any)['Posted By'] || (listing as any).posted_by);
+  const phone = String(listing.seller_phone || listing['Phone Number'] || listing.phone_number || '').trim();
+  const name = cleanValue(listing.seller_name || listing['Posted By'] || listing.posted_by);
   if (!phone && !name) return null;
   const digits = phone.replace(/[^\d]/g, '');
   return {

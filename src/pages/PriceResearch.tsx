@@ -26,14 +26,19 @@ interface RowData {
   source_currency?: string | null;
   posted_by?: string | null;
   phone_number?: string | null;
+  'Posted By'?: string | null;
+  'Phone Number'?: string | null;
   seller_name?: string | null;
   seller_phone?: string | null;
   raw_message?: string | null;
   raw_line?: string | null;
   image_url?: string | null;
+  display_image_url?: string | null;
   thumbnail_url?: string | null;
   image_urls?: string[] | null;
   has_images?: boolean;
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_label?: string | null;
   whatsapp_url?: string | null;
 }
 
@@ -388,7 +393,7 @@ const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai',
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
-  green: '#327253', 'mint green': '#98c9ad', white: '#f7f4ea', 'white dial': '#f7f4ea',
+  green: '#327253', 'mint green': '#98c9ad', white: '#e8e1d2', 'white dial': '#e8e1d2',
   silver: '#c4c7c9', grey: '#7f858d', gray: '#7f858d', 'dark grey': '#44484f',
   salmon: '#e59a82', pink: '#d99bb5', purple: '#76528e', yellow: '#e3bd3e',
   orange: '#d9792b', brown: '#76513b', cream: '#e8ddbd', 'creamy white': '#eee5ce',
@@ -408,9 +413,14 @@ function dialSwatch(color: string) {
 }
 
 function dialChartColor(color: string) {
-  if (['white', 'white dial', 'silver', 'grey', 'gray', 'mother of pearl', 'mop'].includes(color.trim().toLowerCase())) return NAVY;
   const swatch = dialSwatch(color);
   return swatch.startsWith('#') ? swatch : '#9aa1aa';
+}
+
+function dialChartStroke(color: string) {
+  const normalized = color.trim().toLowerCase();
+  if (['white', 'white dial', 'silver', 'mother of pearl', 'mop'].includes(normalized)) return '#73777d';
+  return dialChartColor(color);
 }
 
 function PriceHistoryTooltip({ active, label, payload }: {
@@ -656,47 +666,44 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       const contactEndpoint = workbookListing
         ? `/api/reviewed-seller-summary?id=${encodeURIComponent(row.id)}`
         : `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research`;
-      const contactRequest = fetch(contactEndpoint, { signal: controller.signal }).catch(() => null);
+      void fetch(contactEndpoint, { signal: controller.signal })
+        .then(async contactResponse => contactResponse.ok ? contactResponse.json().catch(() => null) : null)
+        .then(contactPayload => {
+          if (listingRequestRef.current.sequence !== sequence || !contactPayload) return;
+          if (workbookListing && contactPayload.status === 'ok') {
+            const analytics = contactPayload.analytics as ReviewedSellerAnalytics | null | undefined;
+            const reputation = contactPayload.reputation as ReviewedSellerResponse['reputation'];
+            setListingSeller({
+              contact_available: Boolean(contactPayload.contact_available),
+              dealer_name: contactPayload.seller?.name || undefined,
+              phone_display: contactPayload.seller?.phone || undefined,
+              contact_source: 'OWNER_APPROVED_WORKBOOK',
+              dealer_country: reputation?.country || null,
+              dealer_city: reputation?.city || null,
+              dealer_profile_url: reputation?.profile_url || undefined,
+              dealer_rating: reputation?.rating ?? null,
+              dealer_review_count: reputation?.review_count ?? 0,
+              dealer_group_count: reputation?.group_count ?? 0,
+              dealer_stats: analytics ? {
+                total_posts: Number(analytics.total_posts || 0),
+                wts_posts: Number(analytics.wts_posts || 0),
+                wtb_posts: Number(analytics.wtb_posts || 0),
+                other_posts: Number(analytics.other_posts || 0),
+                first_post_at: analytics.first_post_at || null,
+                last_post_at: analytics.last_post_at || null,
+              } : null,
+            });
+          } else if (contactPayload.success) {
+            setListingSeller(contactPayload);
+          }
+        })
+        .catch(() => undefined);
       const response = await fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`, { signal: controller.signal });
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Listing detail is unavailable');
       if (listingRequestRef.current.sequence !== sequence || payload.listing?.id !== row.id) return;
       setListingDetail(payload.listing);
       setDetailLoading(false);
-
-      // Contact data is optional. A failed seller endpoint must never hide an
-      // otherwise valid comparable listing, image, or raw source message.
-      const contactResponse = await contactRequest;
-      const contactPayload = contactResponse?.ok
-        ? await contactResponse.json().catch(() => null)
-        : null;
-      if (listingRequestRef.current.sequence !== sequence || !contactPayload) return;
-      if (workbookListing && contactPayload.status === 'ok') {
-        const analytics = contactPayload.analytics as ReviewedSellerAnalytics | null | undefined;
-        const reputation = contactPayload.reputation as ReviewedSellerResponse['reputation'];
-        setListingSeller({
-          contact_available: Boolean(contactPayload.contact_available),
-          dealer_name: contactPayload.seller?.name || undefined,
-          phone_display: contactPayload.seller?.phone || undefined,
-          contact_source: 'OWNER_APPROVED_WORKBOOK',
-          dealer_country: reputation?.country || null,
-          dealer_city: reputation?.city || null,
-          dealer_profile_url: reputation?.profile_url || undefined,
-          dealer_rating: reputation?.rating ?? null,
-          dealer_review_count: reputation?.review_count ?? 0,
-          dealer_group_count: reputation?.group_count ?? 0,
-          dealer_stats: analytics ? {
-            total_posts: Number(analytics.total_posts || 0),
-            wts_posts: Number(analytics.wts_posts || 0),
-            wtb_posts: Number(analytics.wtb_posts || 0),
-            other_posts: Number(analytics.other_posts || 0),
-            first_post_at: analytics.first_post_at || null,
-            last_post_at: analytics.last_post_at || null,
-          } : null,
-        });
-      } else if (contactPayload.success) {
-        setListingSeller(contactPayload);
-      }
     } catch (requestError) {
       if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
       if (listingRequestRef.current.sequence !== sequence) return;
@@ -1261,8 +1268,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                           <Cell
                             key={dial.dial_color}
                             fill={dialChartColor(dial.dial_color)}
-                            stroke={data.selected_cohort.dial_color === dial.dial_color ? NAVY : 'transparent'}
-                            strokeWidth={data.selected_cohort.dial_color === dial.dial_color ? 3 : 0}
+                            stroke={data.selected_cohort.dial_color === dial.dial_color ? dialChartStroke(dial.dial_color) : '#a8adb4'}
+                            strokeWidth={data.selected_cohort.dial_color === dial.dial_color ? 3 : 1}
                           />
                         ))}
                       </Bar>
@@ -1372,7 +1379,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
             {/* ── Listings Table ──────────────────────────────── */}
             {data.analytics_ready ? (
-            <details style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '18px 0', marginBottom: 24 }}>
+            <details key={`methodology-${data.brand}-${displayRef}-${data.selected_cohort.dial_color}`} style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '18px 0', marginBottom: 24 }}>
               <summary style={{ cursor: 'pointer', color: NAVY, fontWeight: 700, fontSize: 14 }}>
                 Analysis outcome and methodology
               </summary>
@@ -1425,7 +1432,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             </details>
             ) : (
-              <details aria-label="Insufficient qualified market evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
+              <details key={`methodology-insufficient-${data.brand}-${displayRef}-${data.selected_cohort.dial_color}`} aria-label="Insufficient qualified market evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
                 <summary style={{ cursor: 'pointer', color: NAVY, fontWeight: 700, fontSize: 14 }}>Analysis outcome and methodology</summary>
                 <div className="mt-4 flex items-start gap-3">
                   <AlertTriangle size={20} color="#8a6500" style={{ flexShrink: 0, marginTop: 1 }} />
@@ -1766,8 +1773,8 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
 
 function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
   const date = row.listing_date || row.created_at;
-  const imageUrl = row.thumbnail_url || row.image_url || row.image_urls?.find(Boolean) || '';
-  const rawMessage = String(row.raw_message || row.raw_line || '').trim();
+  const imageUrl = row.thumbnail_url || row.display_image_url || row.image_url || row.image_urls?.find(Boolean) || '';
+  const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
   const hasUsdPrice = Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0;
   const hasSourcePrice = Boolean(
     row.source_price_amount
@@ -1845,11 +1852,12 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
   const sourceImageEvidence = ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
     .includes(String(detail?.image_evidence_type || ''));
   const detailImages = sourceImageEvidence ? (detail?.image_urls || []) : [];
-  const summaryImages = [summary.thumbnail_url, summary.image_url, ...(summary.image_urls || [])];
+  const summaryImages = [summary.thumbnail_url, summary.display_image_url, summary.image_url, ...(summary.image_urls || [])];
   const images = [...new Set([...detailImages, ...summaryImages]
     .map(url => String(url || '').trim())
     .filter(url => url && !failedImages.has(url)))];
   const visibleImageIndex = activeImage < images.length ? activeImage : 0;
+  const rawSourceMessage = detail?.raw_message ?? summary.raw_message ?? summary.raw_line ?? '';
   const observedAt = detail?.listing_date || summary.listing_date;
   const sellerLocation = [seller?.dealer_city, seller?.dealer_country]
     .map(value => String(value || '').trim())
@@ -1906,8 +1914,8 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
   ];
 
   const copyRawMessage = async () => {
-    if (!detail?.raw_message) return;
-    await navigator.clipboard.writeText(detail.raw_message);
+    if (!rawSourceMessage) return;
+    await navigator.clipboard.writeText(rawSourceMessage);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   };
@@ -1924,10 +1932,17 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
         {!loading && error && <div style={{ margin: 28, padding: 20, border: '1px solid #ead9a2', background: '#fffaf0', color: '#7a5900' }}><strong>Some source details are unavailable.</strong> The verified comparable summary is shown below.</div>}
 
         {!loading && !detail && error && (
-          <div className={images.length ? 'grid md:grid-cols-[220px_minmax(0,1fr)]' : ''} style={{ padding: 28, gap: 24 }}>
-            {images.length > 0 && (
-              <img src={images[0]} alt={`${title} listing image`} onError={() => setFailedImages(current => new Set(current).add(images[0]))} style={{ width: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: 10, background: LIGHT_GRAY }} />
-            )}
+          <div className="grid md:grid-cols-[minmax(220px,0.65fr)_minmax(0,1.35fr)]" style={{ padding: 28, gap: 24 }}>
+            <section style={{ minHeight: 300, borderRadius: 10, background: LIGHT_GRAY, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
+              {images.length > 0 ? (
+                <img src={images[0]} alt={`${title} source listing image`} onError={() => setFailedImages(current => new Set(current).add(images[0]))} style={{ width: '100%', height: '100%', maxHeight: 460, objectFit: 'contain', background: WHITE }} />
+              ) : (
+                <div style={{ padding: 24, color: MUTED, fontSize: 13, textAlign: 'center' }}>
+                  <Store size={28} style={{ margin: '0 auto 10px' }} />
+                  Source listing image unavailable
+                </div>
+              )}
+            </section>
             <section>
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 28, lineHeight: 1.15 }}>{title}</h1>
               <div style={{ color: GOLD, fontSize: 22, fontWeight: 800, marginTop: 10 }}>
@@ -1936,11 +1951,28 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
               <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>
                 {[summary.dial_color ? `${summary.dial_color} dial` : null, summary.condition, summary.listing_date?.split('T')[0]].filter(Boolean).join(' · ')}
               </div>
-              {(summary.raw_message || summary.raw_line) && (
-                <pre style={{ marginTop: 18, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 320, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>
-                  {summary.raw_message || summary.raw_line}
-                </pre>
-              )}
+              <div style={{ marginTop: 20 }}>
+                <DetailCard title="Original listing" action={rawSourceMessage ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy listing text'}</button> : undefined}>
+                  {rawSourceMessage ? (
+                    <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 380, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>{rawSourceMessage}</pre>
+                  ) : (
+                    <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>Original listing text is not available for this record yet.</div>
+                  )}
+                </DetailCard>
+
+                <DetailCard title="Posted by">
+                  <div style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{seller?.dealer_name || summary.seller_name || summary.posted_by || 'Poster not supplied'}</div>
+                  {(seller?.phone_display || summary.seller_phone || summary.phone_number) && <div style={{ color: NAVY, fontSize: 13, fontWeight: 700, marginTop: 8 }}>{seller?.phone_display || summary.seller_phone || summary.phone_number}</div>}
+                  {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
+                  {(seller?.dealer_rating != null || seller?.dealer_review_count != null || seller?.dealer_group_count != null) && (
+                    <div className="grid grid-cols-3 gap-3" style={{ marginTop: 16 }}>
+                      <Metric label="Rating" value={seller?.dealer_rating == null ? '—' : seller.dealer_rating.toFixed(1)} />
+                      <Metric label="Reviews" value={Number(seller?.dealer_review_count || 0).toLocaleString()} />
+                      <Metric label="Groups" value={Number(seller?.dealer_group_count || 0).toLocaleString()} />
+                    </div>
+                  )}
+                </DetailCard>
+              </div>
             </section>
           </div>
         )}
@@ -2041,18 +2073,18 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
               )}
 
               <DetailCard title="Posted by">
-                {seller?.dealer_name || seller?.phone_display || summary.posted_by || summary.phone_number || (summary as any)['Posted By'] || (summary as any)['Phone Number'] ? (
+                {seller?.dealer_name || seller?.phone_display || summary.posted_by || summary.phone_number || summary['Posted By'] || summary['Phone Number'] ? (
                   <>
-                    {(seller?.dealer_name || summary.posted_by || (summary as any)['Posted By']) && (
+                    {(seller?.dealer_name || summary.posted_by || summary['Posted By']) && (
                       <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>
-                        {seller?.dealer_name || summary.posted_by || (summary as any)['Posted By']}
+                        {seller?.dealer_name || summary.posted_by || summary['Posted By']}
                       </div>
                     )}
                     {seller?.dealer_company && <div style={{ color: MUTED, fontSize: 13, marginTop: 3 }}>{seller.dealer_company}</div>}
                     {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
-                    {(seller?.phone_display || summary.phone_number || (summary as any)['Phone Number']) && (
+                    {(seller?.phone_display || summary.phone_number || summary['Phone Number']) && (
                       <div style={{ color: NAVY, fontSize: 13, fontWeight: 800, marginTop: 8 }}>
-                        {seller?.phone_display || summary.phone_number || (summary as any)['Phone Number']}
+                        {seller?.phone_display || summary.phone_number || summary['Phone Number']}
                       </div>
                     )}
                     {seller?.dealer_stats ? (
@@ -2080,7 +2112,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                       {seller?.dealer_profile_url && <Link to={seller.dealer_profile_url} style={{ color: NAVY, border: `1px solid ${BORDER}`, padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>View profile</Link>}
                       {(() => {
                         const waUrl = seller?.whatsapp_url || (() => {
-                          const rawPhone = seller?.phone_display || summary.phone_number || (summary as any)['Phone Number'];
+                          const rawPhone = seller?.phone_display || summary.phone_number || summary['Phone Number'];
                           const digits = String(rawPhone || '').replace(/\D/g, '');
                           return digits.length >= 7 ? `https://wa.me/${digits}` : null;
                         })();
@@ -2097,7 +2129,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                 )}
               </DetailCard>
 
-              <DetailCard title="Original listing" action={detail?.raw_message || summary.raw_message || (summary as any).raw_line ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy listing text'}</button> : undefined}>
+              <DetailCard title="Original listing" action={rawSourceMessage ? <button type="button" onClick={() => void copyRawMessage()} className="flex items-center gap-2" style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}><Copy size={14} /> {copied ? 'Copied' : 'Copy listing text'}</button> : undefined}>
                 <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
                   <span style={{ background: '#eaf7ef', color: '#166534', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '.06em' }}>RAW SOURCE MESSAGE</span>
                   <span style={{ color: MUTED, fontSize: 12 }}>
@@ -2106,9 +2138,9 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                       : 'Stored raw source message text for this listing.'}
                   </span>
                 </div>
-                {detail?.raw_message || summary.raw_message || (summary as any).raw_line ? (
+                {rawSourceMessage ? (
                   <pre style={{ margin: 0, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>
-                    {detail?.raw_message || summary.raw_message || (summary as any).raw_line}
+                    {rawSourceMessage}
                   </pre>
                 ) : (
                   <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>Original listing text is not available for this record yet.</div>
@@ -2180,8 +2212,7 @@ function Footer() {
         <div>
           <div style={sectionTitle}>Dealers</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Link to="/dealer/workspace" style={linkStyle}>Dealer Workspace</Link>
-            <Link to="/dealer" style={linkStyle}>Dealer Login</Link>
+            <Link to="/dealer/workspace" style={linkStyle}>Workspace</Link>
           </div>
         </div>
         <div>
