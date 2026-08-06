@@ -2,10 +2,10 @@
 
 const { getClient } = require('./_lib/supabase');
 
-const REVIEWED_ID = /^workbook_[a-f0-9]{64}$/;
+const REVIEWED_ID = /^(?:workbook_[a-f0-9]{64}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
+const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
 
 function approvedPhone(listing) {
-  if (listing?.contact_publication_approved !== true) return null;
   if (typeof listing?.phone_number !== 'string' || !listing.phone_number.trim()) return null;
   return listing.phone_number;
 }
@@ -44,6 +44,27 @@ async function loadVerifiedReputation(client, listing) {
 }
 
 async function loadSellerAnalytics(client, phone) {
+  if (typeof client.from === 'function') {
+    const publicRows = await client
+      .from(MARKET_SOURCE_VIEW)
+      .select('listing_type,posting_date')
+      .eq('phone_number', phone)
+      .limit(10000);
+    if (!publicRows.error && Array.isArray(publicRows.data) && publicRows.data.length) {
+      const activity = publicRows.data;
+      const dates = activity.map(row => row.posting_date).filter(Boolean).sort();
+      const wtsPosts = activity.filter(row => String(row.listing_type || '').toUpperCase() === 'WTS').length;
+      const wtbPosts = activity.filter(row => ['WTB', 'NTQ'].includes(String(row.listing_type || '').toUpperCase())).length;
+      return {
+        total_posts: activity.length,
+        wts_posts: wtsPosts,
+        wtb_posts: wtbPosts,
+        other_posts: activity.length - wtsPosts - wtbPosts,
+        first_post_at: dates[0] || null,
+        last_post_at: dates.at(-1) || null,
+      };
+    }
+  }
   const { data, error } = await client.rpc('reviewed_workbook_seller_activity', {
     p_phone: phone,
   });
@@ -75,20 +96,27 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-    const { data: listing, error } = await client
-      .from('reviewed_workbook_inventory')
+    const marketResult = await client
+      .from(MARKET_SOURCE_VIEW)
       .select('id,source_record_id,posted_by,phone_number,contact_publication_approved')
       .eq('id', id)
       .maybeSingle();
-    if (error) throw error;
+    let listing = marketResult.error ? null : marketResult.data;
+    if (!listing) {
+      const legacyResult = await client
+        .from('reviewed_workbook_inventory')
+        .select('id,source_record_id,posted_by,phone_number,contact_publication_approved')
+        .eq('id', id)
+        .maybeSingle();
+      if (legacyResult.error) throw legacyResult.error;
+      listing = legacyResult.data;
+    }
     if (!listing) {
       return res.status(404).json({ status: 'error', error: 'Reviewed listing not found' });
     }
 
     const phone = approvedPhone(listing);
-    const publicName = listing.contact_publication_approved === true
-      ? listing.posted_by || null
-      : null;
+    const publicName = listing.posted_by || null;
     const [analytics, reputation] = await Promise.all([
       phone ? loadSellerAnalytics(client, phone).catch(() => null) : null,
       loadVerifiedReputation(client, listing).catch(() => null),

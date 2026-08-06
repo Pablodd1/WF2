@@ -23,6 +23,7 @@ const workflow = fs.readFileSync(
 
 test('requires exact reviewed IDs and phone evidence', () => {
   assert.equal(api.REVIEWED_ID.test(`workbook_${'a'.repeat(64)}`), true);
+  assert.equal(api.REVIEWED_ID.test('ff554e25-4cf6-5edf-b288-f9a2561fe73c'), true);
   assert.equal(api.REVIEWED_ID.test('wa_123'), false);
   assert.equal(api.approvedPhone({
     contact_publication_approved: true,
@@ -38,7 +39,8 @@ test('requires exact reviewed IDs and phone evidence', () => {
   }), null);
 });
 
-test('seller analytics query is exact, approved, read-only, and workbook-only', () => {
+test('seller analytics query supports the public market view and legacy workbook fallback', () => {
+  assert.match(source, /reviewed_workbook_market_source_v2/);
   assert.match(source, /\.from\('reviewed_workbook_inventory'\)/);
   assert.match(source, /\.rpc\('reviewed_workbook_seller_activity'/);
   assert.doesNotMatch(source, /watch_records/);

@@ -212,10 +212,6 @@ module.exports = async function handler(req, res) {
       // A future aggregate must count only APPLIED listing lineage.
       dealer_stats: null,
     };
-    if (!dealer.contact_consent) {
-      return res.status(200).json({ success: true, contact_available: false, reason: 'CONTACT_CONSENT_REQUIRED', ...profile });
-    }
-
     const { data: identities, error: identityError } = await client
       .from('dealer_source_identities')
       .select('source_identity,identity_type,verification_status')

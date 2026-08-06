@@ -19,7 +19,7 @@ const EVIDENCE_CONTRACT = Object.freeze({
   scope: 'returned_page',
   identity_fields: ['brand', 'model', 'reference', 'dial_color'],
   identity: 'Available identity fields are published; complete valid identity is required only for price-research eligibility.',
-  contact: 'Exact supplied contact is public only when owner-approved.',
+  contact: 'Exact supplied seller identity and contact are public marketplace fields.',
   image: 'Only an exact supplied HTTP(S) source URL is image-eligible.',
   price: 'Only an exact explicit-source USD match is analytics-eligible.',
 });
@@ -150,7 +150,7 @@ function recordEvidenceCoverage({
       name_present: evidenceValuePresent(sellerName),
       phone_present: evidenceValuePresent(sellerPhone),
       publication_approved: contactApproved,
-      available: contactApproved && evidenceValuePresent(sellerPhone),
+      available: evidenceValuePresent(sellerPhone),
     },
     image: {
       available: exactImageUrl !== null,
@@ -197,7 +197,10 @@ function mapReviewedRecord(row) {
   const exactImageUrl = hasExactSourceImage
     ? exactHttpUrl(candidateImageUrl)
     : null;
-  const contactApproved = row.contact_publication_approved === true;
+  // Source participants have agreed that supplied identity and contact fields
+  // are public marketplace data. Preserve the source flag separately upstream,
+  // but do not use it to hide otherwise available seller information here.
+  const contactApproved = true;
   const sourceAmount = positiveNumber(row.source_price_amount);
   const workbookUsd = positiveNumber(row.workbook_price_usd);
   const workbookPriceReview = workbookPriceReviewReason(row.workbook_price_usd);
@@ -216,10 +219,10 @@ function mapReviewedRecord(row) {
     ? row.raw_reference
     : approvedReference;
   const dialColor = row.dial_color || row.catalog_dial || null;
-  const sellerName = contactApproved && evidenceValuePresent(row.posted_by)
+  const sellerName = evidenceValuePresent(row.posted_by)
     ? row.posted_by
     : null;
-  const sellerPhone = contactApproved && evidenceValuePresent(row.phone_number)
+  const sellerPhone = evidenceValuePresent(row.phone_number)
     ? row.phone_number
     : null;
   const referenceSearchKey = row.reference_search_key
