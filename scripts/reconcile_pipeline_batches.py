@@ -10,11 +10,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pipeline_processor import WatchFactsPipelineProcessor
 from pipeline_runner import get_db_connection, db_execute, setup_sqlite_schema
 
-MYSQL_HOST = "161.35.0.209"
-MYSQL_PORT = 3306
-MYSQL_USER = "john"
-MYSQL_PASS = "U0aeAr1zFt2\\"
-MYSQL_DB = "thecollective_inventory"
+MYSQL_HOST = os.environ.get("MYSQL_HOST", "161.35.0.209")
+MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
+MYSQL_USER = os.environ.get("MYSQL_USER", "john")
+MYSQL_PASS = os.environ.get("MYSQL_PASS")
+MYSQL_DB = os.environ.get("MYSQL_DB", "thecollective_inventory")
 
 def calculate_checksum(text):
     return hashlib.sha256(text.encode('utf-8', errors='ignore')).hexdigest()

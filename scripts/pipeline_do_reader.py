@@ -18,7 +18,7 @@ from datetime import datetime
 MYSQL_HOST = os.environ.get("MYSQL_HOST", "161.35.0.209")
 MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
 MYSQL_USER = os.environ.get("MYSQL_USER", "john")
-MYSQL_PASS = os.environ.get("MYSQL_PASS", "U0aeAr1zFt2\\")
+MYSQL_PASS = os.environ.get("MYSQL_PASS")
 MYSQL_DB   = os.environ.get("MYSQL_DB", "thecollective_inventory")
 
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_URL")

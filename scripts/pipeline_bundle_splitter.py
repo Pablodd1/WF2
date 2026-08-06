@@ -27,8 +27,8 @@ def split_bundle_listing(raw_text):
 
     # Heuristic 1: If there are line-level emoji markers, split inline blocks
     # e.g., "15551or white... 15550sr... "
-    for sep in ["\U0001f195", "\u2705", "\u2b50\ufe0f", "\u2b50", "\U0001f525", "\U0001f31f", "\U0001f48e"]:
-        pattern = re.compile(sep)
+    for sep in ["\U0001f195", "\u2705", "\u2b50\ufe0f", "\u2b50", "\U0001f525", "\U0001f31f", "\U0001f48e", "🤍", "🩵", "☀️", "⭐", "⭐️", "🔹", "▪️", "📌"]:
+        pattern = re.compile(re.escape(sep))
         matches = list(pattern.finditer(raw_text))
         if len(matches) >= 2:
             # Split by emoji marker
@@ -38,25 +38,31 @@ def split_bundle_listing(raw_text):
                 end = matches[i+1].start() if i+1 < len(matches) else len(raw_text)
                 segment = raw_text[start:end].strip()
                 # Clean up leading separator
-                segment = re.sub(r'^' + sep + r'\s*', '', segment)
-                if segment:
+                segment = re.sub(r'^' + re.escape(sep) + r'\s*', '', segment).strip()
+                if segment and not re.search(r'=\s*(new|used|mint|sealed|like new)\b', segment, re.I):
                     segments.append(segment)
             
             # Infer brands for each segment, falling back to parent brand
             results = []
+            seen_texts = set()
             for seg in segments:
+                if seg in seen_texts:
+                    continue
+                seen_texts.add(seg)
                 brand = infer_brand(seg) or parent_brand
                 results.append({"raw_text": seg, "brand": brand})
-            return results
+            if len(results) >= 2:
+                return results
 
     # Heuristic 2: Line-by-line processing with context inheritance
     results = []
+    seen_texts = set()
     current_brand = None
     last_ref = None
     
     for line in lines:
         line_clean = line.strip()
-        if not line_clean:
+        if not line_clean or re.search(r'=\s*(new|used|mint|sealed|like new)\b', line_clean, re.I):
             continue
             
         # Detect brand headers (e.g., "Rolex", "Cartier", "PP")
@@ -77,20 +83,27 @@ def split_bundle_listing(raw_text):
         # If line has price/year but no reference, inherit last reference (Bundle 4 hierarchical format)
         if not ref_match and last_ref and contains_listing_indicators(line_clean):
             full_listing = f"{current_brand or ''} {last_ref} {line_clean}".strip()
-            results.append({"raw_text": full_listing, "brand": current_brand})
+            if full_listing not in seen_texts:
+                seen_texts.add(full_listing)
+                results.append({"raw_text": full_listing, "brand": current_brand})
             continue
 
         if ref_match:
             last_ref = ref_match.group(1)
             brand = infer_brand(line_clean) or current_brand
-            results.append({"raw_text": line_clean, "brand": brand})
+            if line_clean not in seen_texts:
+                seen_texts.add(line_clean)
+                results.append({"raw_text": line_clean, "brand": brand})
             
     # Fallback to simple line split if no structures identified
     if not results:
         for line in lines:
-            if contains_listing_indicators(line):
-                brand = infer_brand(line)
-                results.append({"raw_text": line.strip(), "brand": brand})
+            line_clean = line.strip()
+            if contains_listing_indicators(line_clean) and not re.search(r'=\s*(new|used|mint|sealed|like new)\b', line_clean, re.I):
+                if line_clean not in seen_texts:
+                    seen_texts.add(line_clean)
+                    brand = infer_brand(line_clean)
+                    results.append({"raw_text": line_clean, "brand": brand})
                 
     return results
 

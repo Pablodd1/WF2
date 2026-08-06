@@ -177,24 +177,24 @@ def generate_deterministic_uuid(namespace_str, key_str):
 
 def load_existing_checksums(cur):
     """Loads all previously seen payload checksums from DB for persistent duplicate suppression"""
-    checksums = set()
-    table = "payloads" if IS_SQLITE else "raw.payloads"
+def check_duplicate_payload(cur, checksum, current_payload_id, batch_seen_checksums):
+    if checksum in batch_seen_checksums:
+        return True
+    payloads_table = "payloads" if IS_SQLITE else "raw.payloads"
     try:
-        db_execute(cur, f"SELECT payload_checksum FROM {table} WHERE payload_checksum IS NOT NULL;")
-        rows = cur.fetchall()
-        for r in rows:
-            checksums.add(r[0])
+        db_execute(cur, f"SELECT 1 FROM {payloads_table} WHERE payload_checksum = %s AND id != %s LIMIT 1;", (checksum, current_payload_id))
+        row = cur.fetchone()
+        return bool(row)
     except Exception:
-        pass
-    return checksums
+        return False
 
 def run_pipeline_step(limit=50):
     conn = get_db_connection()
     cur = conn.cursor()
-    
-    seen_checksums = load_existing_checksums(cur)
 
-    # Concurrency locking with FOR UPDATE SKIP LOCKED on PostgreSQL
+    batch_seen_checksums = set()
+
+    # Atomic CTE job claiming with FOR UPDATE SKIP LOCKED on PostgreSQL
     if IS_SQLITE:
         db_execute(cur, """
             SELECT j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
@@ -208,17 +208,29 @@ def run_pipeline_step(limit=50):
         """, (limit,))
         raw_jobs = cur.fetchall()
         jobs = [dict(r) for r in raw_jobs]
+        for j in jobs:
+            db_execute(cur, "UPDATE processing_jobs SET status = 'processing' WHERE id = %s;", (j["job_id"],))
+        conn.commit()
     else:
         db_execute(cur, """
-            SELECT j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
-                   p.source_sender_name as from_name, p.source_sender_id as from_number,
-                   p.source_group_name as region, p.source_platform as type,
-                   p.payload_checksum
-            FROM jobs.processing_jobs j
+            WITH target_jobs AS (
+                SELECT j.id
+                FROM jobs.processing_jobs j
+                WHERE j.status IN ('received'::jobs.processing_status, 'queued'::jobs.processing_status)
+                ORDER BY j.created_at ASC
+                FOR UPDATE OF j SKIP LOCKED
+                LIMIT %s
+            )
+            UPDATE jobs.processing_jobs j
+            SET status = 'processing'::jobs.processing_status,
+                updated_at = NOW()
+            FROM target_jobs t
             JOIN raw.payloads p ON j.raw_payload_id = p.id
-            WHERE j.status = 'received'::jobs.processing_status OR j.status = 'queued'::jobs.processing_status
-            FOR UPDATE OF j SKIP LOCKED
-            LIMIT %s;
+            WHERE j.id = t.id
+            RETURNING j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
+                      p.source_sender_name as from_name, p.source_sender_id as from_number,
+                      p.source_group_name as region, p.source_platform as type,
+                      p.payload_checksum;
         """, (limit,))
         raw_jobs = cur.fetchall()
         jobs = []
@@ -228,6 +240,7 @@ def run_pipeline_step(limit=50):
                 "from_name": r[3], "from_number": r[4], "region": r[5], "type": r[6],
                 "payload_checksum": r[7]
             })
+        conn.commit()
 
     if not jobs:
         conn.close()
@@ -237,12 +250,8 @@ def run_pipeline_step(limit=50):
 
     for job in jobs:
         job_id = job["job_id"]
+        payload_id = job["payload_id"]
         checksum = job.get("payload_checksum") or hashlib.sha256(job["message_text"].encode('utf-8')).hexdigest()
-        
-        status_table = "processing_jobs" if IS_SQLITE else "jobs.processing_jobs"
-        db_execute(cur, f"UPDATE {status_table} SET status = %s WHERE id = %s;", 
-                    ("processing", job_id))
-        conn.commit()
 
         job_data = {
             "id": job_id,
@@ -257,8 +266,8 @@ def run_pipeline_step(limit=50):
         try:
             res = processor.process_job(job_data)
             
-            is_exact_duplicate = checksum in seen_checksums
-            seen_checksums.add(checksum)
+            is_exact_duplicate = check_duplicate_payload(cur, checksum, payload_id, batch_seen_checksums)
+            batch_seen_checksums.add(checksum)
             if is_exact_duplicate:
                 res["trading_floor_status"] = "suppressed_exact_duplicate"
             

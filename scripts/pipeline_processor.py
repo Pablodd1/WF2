@@ -430,7 +430,7 @@ class WatchFactsPipelineProcessor:
                     "verdict":               c_verdict,
                     "validation_errors":     c_errors,
                     "normalization_status":  c_statuses["normalization_status"],
-                    "trading_floor_status":  c_statuses["trading_floor_status"],
+                    "trading_floor_status":  "bundle_child_pending_review",
                     "price_research_status": c_statuses["price_research_status"],
                     "overall_confidence":    self.compute_confidence(
                         {"brand": c_brand, "reference": c_ref, "price": c_price,

@@ -80,11 +80,11 @@ class TestPipelineEndToEnd(unittest.TestCase):
         self.assertEqual(result["trading_floor_status"], "bundle_pending_separation")
         self.assertEqual(result["price_research_status"], "ineligible_bundle")
 
-        # Children should be unbundled and published
+        # Children should be unbundled and quarantined pending review
         children = result.get("child_listings", [])
         self.assertGreater(len(children), 0)
         for child in children:
-            self.assertEqual(child["trading_floor_status"], "published")
+            self.assertEqual(child["trading_floor_status"], "bundle_child_pending_review")
 
     def test_e2e_rm_price_validation(self):
         """Test Richard Mille price validation check."""
