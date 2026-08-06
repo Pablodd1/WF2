@@ -86,6 +86,8 @@ interface ListingRecord {
   raw_message_truncated?: boolean;
   seller_name?: string | null;
   seller_phone?: string | null;
+  seller_avatar_url?: string | null;
+  seller_rating?: number | null;
   location?: string | null;
   seller_country?: string | null;
   posted_by?: string | null;
@@ -826,6 +828,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         {(cleanValue(listing.seller_name) || (listing as any)['Posted By'] || listing.location || listing.seller_country) && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm" style={{ color: MUTED }}>
             <div className="flex items-center gap-2">
+              {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="" className="h-8 w-8 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
               <span>
                 Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || (listing as any)['Posted By'] || 'Dealer'}</span>
               </span>
@@ -1061,11 +1064,13 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
                 Source-supplied contact
               </div>
-              {(contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name) && (
-                <div className="mt-1 text-base font-semibold" style={{ color: INK }}>
-                  {contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name}
+              <div className="mt-2 flex items-center gap-3">
+                {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="Posting user" className="h-14 w-14 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
+                <div>
+                  {(contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name) && <div className="text-base font-semibold" style={{ color: INK }}>{contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name}</div>}
+                  {listing.seller_rating != null && <div className="mt-1 text-xs" style={{ color: GOLD_BRIGHT }}>Rating {Number(listing.seller_rating).toFixed(1)}</div>}
                 </div>
-              )}
+              </div>
               {(contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone) && (
                 <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
                   {contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone}

@@ -4,23 +4,27 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { validateSubmission } = require('../api/dealer-submissions.js');
+const { validateBatch, validateSubmission } = require('../api/dealer-submissions.js');
 
-test('requires approved watch identity fields and WTS price', () => {
+const poster = { poster_name: 'Alex Dealer', poster_phone: '+1 305 555 0101', location: 'Miami, US' };
+const image_urls = ['https://example.supabase.co/storage/v1/object/public/dealer-listing-media/item.jpg'];
+
+test('requires normalized watch identity and a source item photo while allowing no-price WTS posts', () => {
   const invalid = validateSubmission({ intent: 'WTS', category: 'WATCH', raw_message: 'Rolex for sale' });
-  assert.match(invalid.error, /brand, model, reference, dial_color, price_amount/);
+  assert.match(invalid.error, /brand, model, reference, dial_color/);
 
   const valid = validateSubmission({
+    ...poster, image_urls,
     intent: 'WTS', category: 'WATCH', raw_message: 'Rolex Daytona 116500LN white USD 30000',
     brand: 'Rolex', model: 'Daytona', reference: '116500LN', dial_color: 'White',
-    price_amount: '30000', currency: 'USD',
   });
   assert.equal(valid.error, undefined);
-  assert.equal(valid.claimed.price_amount, 30000);
+  assert.equal(valid.claimed.price_amount, null);
 });
 
 test('allows a WTB watch request without an asking price', () => {
   const valid = validateSubmission({
+    ...poster, image_urls,
     intent: 'WTB', category: 'WATCH', raw_message: 'WTB Patek 5712/1A blue',
     brand: 'Patek Philippe', model: 'Nautilus', reference: '5712/1A', dial_color: 'Blue',
   });
@@ -28,9 +32,29 @@ test('allows a WTB watch request without an asking price', () => {
   assert.equal(valid.claimed.price_amount, null);
 });
 
+test('validates a bulk submission and applies shared posting-user fields', () => {
+  const item = {
+    intent: 'WTB', category: 'WATCH', raw_message: 'WTB Patek 5712 blue',
+    brand: 'Patek Philippe', model: 'Nautilus', reference: '5712/1A', dial_color: 'Blue', image_urls,
+  };
+  const batch = validateBatch({ ...poster, items: [item, { ...item, reference: '5711/1A' }] });
+  assert.equal(batch.error, undefined);
+  assert.equal(batch.items.length, 2);
+  assert.equal(batch.items[1].claimed.poster_name, poster.poster_name);
+});
+
 test('submission migration is service-role only and review-gated', () => {
   const migration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260721010000_dealer_listing_submissions.sql'), 'utf8');
   assert.match(migration, /REVOKE ALL ON public\.dealer_listing_submissions FROM anon, authenticated/i);
   assert.match(migration, /DEFAULT 'PENDING_REVIEW'/i);
   assert.doesNotMatch(migration, /GRANT INSERT ON public\.dealer_listing_submissions TO authenticated/i);
+});
+
+test('direct-publication migration isolates media and staging publication from ingestion jobs', () => {
+  const migration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260806160000_dealer_direct_publication.sql'), 'utf8');
+  assert.match(migration, /dealer-listing-media/);
+  assert.match(migration, /source_submission_id/);
+  assert.match(migration, /publication_status/);
+  assert.match(migration, /submission_checksum/);
+  assert.doesNotMatch(migration, /jobs\.processing_jobs/);
 });
