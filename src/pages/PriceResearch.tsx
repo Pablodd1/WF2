@@ -119,6 +119,9 @@ interface ListingSellerData {
   dealer_country?: string | null;
   dealer_city?: string | null;
   dealer_profile_url?: string;
+  dealer_rating?: number | null;
+  dealer_review_count?: number;
+  dealer_group_count?: number;
   dealer_stats?: {
     total_posts: number;
     active_listings?: number | null;
@@ -235,6 +238,14 @@ interface ReviewedSellerResponse {
   contact_available?: boolean;
   seller?: { name?: string | null; phone?: string | null } | null;
   analytics?: ReviewedSellerAnalytics | null;
+  reputation?: {
+    rating?: number | null;
+    review_count?: number;
+    group_count?: number;
+    city?: string | null;
+    country?: string | null;
+    profile_url?: string | null;
+  } | null;
   error?: string;
 }
 
@@ -449,7 +460,7 @@ function ListingComparisonTooltip({ active, label, payload }: {
 // ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
-  const initialReference = searchParams.get('ref') || '';
+  const initialReference = searchParams.get('ref') || searchParams.get('reference') || '';
   const initialBrand = searchParams.get('brand') || '';
   const [query, setQuery] = useState(initialReference);
   const [queryBrand, setQueryBrand] = useState(initialBrand);
@@ -475,6 +486,8 @@ export default function PriceResearch() {
   const [modelQuery, setModelQuery] = useState('');
   const [pModel, setPModel] = useState('');
   const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; analytics_ready?: boolean; sample_capped?: boolean; avg_price: number | null }[]>([]);
+  const [modelImages, setModelImages] = useState<Record<string, string>>({});
+  const [referenceImages, setReferenceImages] = useState<Record<string, string>>({});
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
   const [pickerError, setPickerError] = useState('');
 
@@ -487,33 +500,57 @@ export default function PriceResearch() {
   const [mStats, setMStats] = useState<ModelStats | null>(null);
 
   const loadModels = useCallback(async (brand: string) => {
-setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setPickerError(''); setMStats(null);
+setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelImages({}); setReferenceImages({}); setModelQuery(''); setPickerError(''); setMStats(null);
     if (!brand) return;
     setPLoading('models');
     try {
-      const r = await fetch(`/api/catalog-models?brand=${encodeURIComponent(brand)}`);
+      const [r, imageResponse] = await Promise.all([
+        fetch(`/api/catalog-models?brand=${encodeURIComponent(brand)}`),
+        fetch(`/api/reviewed-market-inventory?brand=${encodeURIComponent(brand)}&images=true&pageSize=100`).catch(() => null),
+      ]);
       const d = await r.json();
       if (!r.ok || !d.success) {
         setPickerError(d.error || 'Models are temporarily unavailable');
         return;
       }
       setPModels(d.models || []);
+      if (imageResponse?.ok) {
+        const imagePayload = await imageResponse.json().catch(() => null) as ReviewedMarketResponse | null;
+        const nextImages: Record<string, string> = {};
+        for (const record of imagePayload?.records || []) {
+          const model = String(record.model || '').trim();
+          const image = record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
+          if (model && image && !record.multi_listing && !nextImages[model]) nextImages[model] = image;
+        }
+        setModelImages(nextImages);
+      }
     } catch { /* ignore — direct search still works */ }
     finally { setPLoading(''); }
   }, []);
 
   const loadRefs = useCallback(async (brand: string, model: string) => {
-setPModel(model); setPRefs([]); setPickerError(''); setMStats(null);
+setPModel(model); setPRefs([]); setReferenceImages({}); setPickerError(''); setMStats(null);
     if (!brand || !model) return;
     setPLoading('refs');
     try {
-      const [r, ms] = await Promise.all([
+      const [r, ms, imageResponse] = await Promise.all([
         fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`),
         fetch(`/api/model-stats?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`).catch(() => null),
+        fetch(`/api/reviewed-market-inventory?brand=${encodeURIComponent(brand)}&q=${encodeURIComponent(model)}&images=true&pageSize=100`).catch(() => null),
       ]);
       const d = await r.json();
 if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily unavailable');
       setPRefs(d.references || []);
+      if (imageResponse?.ok) {
+        const imagePayload = await imageResponse.json().catch(() => null) as ReviewedMarketResponse | null;
+        const nextImages: Record<string, string> = {};
+        for (const record of imagePayload?.records || []) {
+          const reference = String(record.reference || '').trim().toUpperCase();
+          const image = record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
+          if (reference && image && !record.multi_listing && !nextImages[reference]) nextImages[reference] = image;
+        }
+        setReferenceImages(nextImages);
+      }
       if (ms) {
         const md = await ms.json().catch(() => null);
         if (md?.success) setMStats({ total: md.total, wts: md.wts, wtb: md.wtb, stats: md.stats, first_seen: md.first_seen, last_seen: md.last_seen });
@@ -636,11 +673,18 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       if (listingRequestRef.current.sequence !== sequence || !contactPayload) return;
       if (workbookListing && contactPayload.status === 'ok') {
         const analytics = contactPayload.analytics as ReviewedSellerAnalytics | null | undefined;
+        const reputation = contactPayload.reputation as ReviewedSellerResponse['reputation'];
         setListingSeller({
           contact_available: Boolean(contactPayload.contact_available),
           dealer_name: contactPayload.seller?.name || undefined,
           phone_display: contactPayload.seller?.phone || undefined,
           contact_source: 'OWNER_APPROVED_WORKBOOK',
+          dealer_country: reputation?.country || null,
+          dealer_city: reputation?.city || null,
+          dealer_profile_url: reputation?.profile_url || undefined,
+          dealer_rating: reputation?.rating ?? null,
+          dealer_review_count: reputation?.review_count ?? 0,
+          dealer_group_count: reputation?.group_count ?? 0,
           dealer_stats: analytics ? {
             total_posts: Number(analytics.total_posts || 0),
             wts_posts: Number(analytics.wts_posts || 0),
@@ -746,6 +790,15 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   }
 
   const displayRef = data?.resolvedRef || data?.reference || query;
+  const selectedWatchImage = data
+    ? referenceImages[displayRef.toUpperCase()]
+      || data.rows.find(row => row.thumbnail_url || row.image_url || row.image_urls?.find(Boolean))?.thumbnail_url
+      || data.rows.find(row => row.image_url)?.image_url
+      || data.rows.flatMap(row => row.image_urls || []).find(Boolean)
+      || data.demand_rows?.find(row => row.image_url || row.image_urls?.find(Boolean))?.image_url
+      || data.demand_rows?.flatMap(row => row.image_urls || []).find(Boolean)
+      || null
+    : null;
 
   const listings = [...(data?.rows || [])]
     .filter(row => !row.is_outlier)
@@ -814,12 +867,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   data-testid="price-reference-input"
                   aria-label="Watch reference"
                   type="text"
+                  list="price-reference-suggestions"
                   value={query}
                   onChange={event => setQuery(event.target.value)}
                   onKeyDown={event => { if (event.key === 'Enter' && !loading) void fetchData(query, '', queryBrand); }}
                   placeholder="Enter a watch reference"
                   className="h-11 w-full rounded-md border border-white/20 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#c9a03a]"
                 />
+                <datalist id="price-reference-suggestions">
+                  {pRefs.map(item => <option key={item.reference} value={item.reference}>{pBrand} {pModel}</option>)}
+                </datalist>
               </label>
               <button type="button" onClick={() => void fetchData(query, '', queryBrand)} disabled={loading} className="h-11 min-w-28 rounded-md bg-[#c9a03a] px-5 text-sm font-semibold text-[#09090d] disabled:cursor-wait disabled:opacity-70">
                 {loading ? 'Searching...' : 'Search'}
@@ -885,12 +942,15 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               {visibleModels.map(m => (
                 <button key={m.model} onClick={() => loadRefs(pBrand, m.model)}
                   style={{
-                    textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                    textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
                     border: `1px solid ${pModel === m.model ? NAVY : BORDER}`,
                     backgroundColor: pModel === m.model ? '#eef1f6' : WHITE,
                   }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.model}</div>
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{m.reference_count} catalog refs</div>
+                  {modelImages[m.model] && <img src={modelImages[m.model]} alt="" loading="lazy" style={{ width: 48, height: 48, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.model}</span>
+                    <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>{m.reference_count} catalog refs</span>
+                  </span>
                 </button>
               ))}
               </div>
@@ -906,9 +966,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           {/* ── Model market stats panel (min-5 exposure) ── */}
           {mStats && mStats.stats && (
             <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 16, marginBottom: 14 }}>
-              <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
-                <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>
-                  {pBrand} {pModel} — Market Overview
+              <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+                <div className="flex items-center gap-3">
+                  {modelImages[pModel] && <img src={modelImages[pModel]} alt={`${pBrand} ${pModel}`} style={{ width: 72, height: 72, borderRadius: 8, objectFit: 'cover', border: `1px solid ${BORDER}` }} />}
+                  <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>
+                    {pBrand} {pModel} — Market Overview
+                  </div>
                 </div>
                 <div style={{ fontSize: 11, color: MUTED }}>
                   {mStats.first_seen && mStats.last_seen && (
@@ -958,13 +1021,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               {pRefs.map(r => (
                 <button key={r.reference} onClick={() => { setQuery(r.reference); setQueryBrand(pBrand); void fetchData(r.reference, '', pBrand); }}
                   style={{
-                    textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                    textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,
                   }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</div>
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
-                    {r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} observations · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}
-                  </div>
+                  {referenceImages[r.reference.toUpperCase()] && <img src={referenceImages[r.reference.toUpperCase()]} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</span>
+                    <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>
+                      {r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} observations · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}
+                    </span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -992,7 +1058,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               <span aria-hidden="true">/</span><span>{displayRef}</span>
             </nav>
             {/* ── Watch Identity ──────────────────────────────── */}
-            <div className="mb-8" style={{ padding: '24px 0', borderBottom: `1px solid ${BORDER}` }}>
+            <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center" style={{ padding: '24px 0', borderBottom: `1px solid ${BORDER}` }}>
+              {selectedWatchImage && <img src={selectedWatchImage} alt={`${data.brand} ${displayRef}`} style={{ width: 132, height: 132, borderRadius: 10, objectFit: 'cover', border: `1px solid ${BORDER}`, background: WHITE }} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
                 {data.brand}
               </div>
@@ -1014,6 +1082,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   <Store size={16} />
                   <span>View on Trading Floor →</span>
                 </Link>
+              </div>
               </div>
             </div>
 
@@ -1055,10 +1124,10 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
             {/* ── Stats Cards ──────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              {/* Liquidity — REAL data only, no invented seller/buyer counts */}
+              {/* Current WTS and WTB activity — real source data only */}
               <div className="order-2" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Liquidity & Demand</h3>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Featured listings for sale</h3>
                   {data.liquidity && (
                     <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, padding: '2px 8px', borderRadius: 10,
                       backgroundColor: data.liquidity.source === 'indicators' ? '#e7f5ec' : '#fff4e5',
@@ -1356,8 +1425,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             </details>
             ) : (
-              <section aria-label="Insufficient qualified market evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
-                <div className="flex items-start gap-3">
+              <details aria-label="Insufficient qualified market evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
+                <summary style={{ cursor: 'pointer', color: NAVY, fontWeight: 700, fontSize: 14 }}>Analysis outcome and methodology</summary>
+                <div className="mt-4 flex items-start gap-3">
                   <AlertTriangle size={20} color="#8a6500" style={{ flexShrink: 0, marginTop: 1 }} />
                   <div>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Insufficient qualified market evidence</h3>
@@ -1369,7 +1439,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     </div>
                   </div>
                 </div>
-              </section>
+              </details>
             )}
 
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
@@ -1601,9 +1671,6 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
   const sellerMetrics: Array<[string, number]> = [
     ['For sale', sellerAnalytics?.wts_posts ?? record.seller_analytics?.wts_posts],
     ['Looking for', sellerAnalytics?.wtb_posts ?? record.seller_analytics?.wtb_posts],
-    ['Other posts', sellerAnalytics?.other_posts],
-    ['Active', record.seller_analytics?.active_listings],
-    ['Total posts', sellerAnalytics?.total_posts ?? record.seller_analytics?.total_posts],
   ].flatMap(([label, value]) => value != null && Number.isFinite(Number(value))
     ? [[String(label), Number(value)] as [string, number]]
     : []);
@@ -1672,6 +1739,13 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
           {sellerOpen && sellerMetrics.length > 0 && (
             <div className="mt-3 grid grid-cols-2 gap-2">
               {sellerMetrics.map(([label, value]) => <Metric key={label} label={label} value={Number(value).toLocaleString()} />)}
+            </div>
+          )}
+          {sellerOpen && sellerSummary?.reputation && (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <Metric label="Rating" value={sellerSummary.reputation.rating == null ? '—' : sellerSummary.reputation.rating.toFixed(1)} />
+              <Metric label="Reviews" value={Number(sellerSummary.reputation.review_count || 0).toLocaleString()} />
+              <Metric label="Groups" value={Number(sellerSummary.reputation.group_count || 0).toLocaleString()} />
             </div>
           )}
           {sellerOpen && sellerAnalytics?.first_post_at && <div style={{ marginTop: 10, color: MUTED }}>First observed: {sellerAnalytics.first_post_at.split('T')[0]}</div>}
@@ -1983,14 +2057,9 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                     )}
                     {seller?.dealer_stats ? (
                       <>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }} aria-label="Source poster activity">
-                          <Metric label="Total posts" value={Number(seller.dealer_stats.total_posts).toLocaleString()} />
+                        <div className="grid grid-cols-2 gap-3" style={{ marginTop: 16 }} aria-label="Source poster activity">
                           <Metric label="For sale" value={Number(seller.dealer_stats.wts_posts).toLocaleString()} />
                           <Metric label="Looking for" value={Number(seller.dealer_stats.wtb_posts).toLocaleString()} />
-                          <Metric
-                            label={seller.dealer_stats.active_listings != null ? 'Active' : 'Other posts'}
-                            value={Number(seller.dealer_stats.active_listings ?? seller.dealer_stats.other_posts ?? 0).toLocaleString()}
-                          />
                         </div>
                         {(seller.dealer_stats.first_post_at || seller.dealer_stats.last_post_at) && (
                           <div className="flex flex-wrap gap-x-4 gap-y-1" style={{ color: MUTED, fontSize: 11, marginTop: 10 }}>
@@ -2000,6 +2069,13 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                         )}
                       </>
                     ) : null}
+                    {(seller?.dealer_rating != null || seller?.dealer_review_count != null || seller?.dealer_group_count != null) && (
+                      <div className="grid grid-cols-3 gap-3" style={{ marginTop: 16 }} aria-label="Verified seller reputation">
+                        <Metric label="Rating" value={seller.dealer_rating == null ? '—' : seller.dealer_rating.toFixed(1)} />
+                        <Metric label="Reviews" value={Number(seller.dealer_review_count || 0).toLocaleString()} />
+                        <Metric label="Groups" value={Number(seller.dealer_group_count || 0).toLocaleString()} />
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-3" style={{ marginTop: 18 }}>
                       {seller?.dealer_profile_url && <Link to={seller.dealer_profile_url} style={{ color: NAVY, border: `1px solid ${BORDER}`, padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>View profile</Link>}
                       {(() => {

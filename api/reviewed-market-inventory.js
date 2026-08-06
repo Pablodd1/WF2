@@ -1,7 +1,6 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
-const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -19,7 +18,7 @@ const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
 const EVIDENCE_CONTRACT = Object.freeze({
   scope: 'returned_page',
   identity_fields: ['brand', 'model', 'reference', 'dial_color'],
-  identity: 'All four identity fields must be present and the reference cannot be a price/currency token.',
+  identity: 'Available identity fields are published; complete valid identity is required only for price-research eligibility.',
   contact: 'Exact supplied contact is public only when owner-approved.',
   image: 'Only an exact supplied HTTP(S) source URL is image-eligible.',
   price: 'Only an exact explicit-source USD match is analytics-eligible.',
@@ -106,6 +105,18 @@ function isNormalizedWorkbookSummary(row) {
     candidates.add(`${base} ${amount}`);
   }
   return candidates.has(raw);
+}
+
+function isMultiListing(row) {
+  return [row.model, row.catalog_model, row.dial_color, row.catalog_dial]
+    .some(value => MULTIPLE_LISTING_IDENTITY_VALUES.includes(cleanExactText(value, 40).toLowerCase()));
+}
+
+function safeSearchTerm(value) {
+  return cleanExactText(value, 120)
+    .replace(/[,%()*]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function recordEvidenceCoverage({
@@ -220,6 +231,8 @@ function mapReviewedRecord(row) {
   const hasCompleteIdentity = locallyCompleteIdentity && !invalidReference;
   const priceEligible = hasCompleteIdentity && verifiedUsd !== null;
   const normalizedSummary = isNormalizedWorkbookSummary(row);
+  const multiListing = isMultiListing(row);
+  const publicImageUrl = multiListing ? null : exactImageUrl;
   const evidenceCoverage = recordEvidenceCoverage({
     brand,
     model,
@@ -277,12 +290,15 @@ function mapReviewedRecord(row) {
     source_row_number: row.source_row_number,
     source_record_id: row.source_record_id || null,
     item_category: 'WATCH',
-    has_images: exactImageUrl !== null,
-    thumbnail_url: exactImageUrl,
-    image_urls: exactImageUrl ? [exactImageUrl] : [],
-    image_evidence_type: exactImageUrl ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
-    image_evidence_label: exactImageUrl ? 'Source-supplied listing image' : null,
-    image_evidence_notice: exactImageUrl
+    multi_listing: multiListing,
+    has_images: publicImageUrl !== null,
+    thumbnail_url: publicImageUrl,
+    image_urls: publicImageUrl ? [publicImageUrl] : [],
+    image_evidence_type: publicImageUrl ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
+    image_evidence_label: publicImageUrl ? 'Source-supplied listing image' : null,
+    image_evidence_notice: multiListing
+      ? 'A multi-item source image is withheld until it can be assigned to the correct child listing.'
+      : publicImageUrl
       ? 'Exact image URL supplied with this source listing.'
       : null,
     evidence_coverage: evidenceCoverage,
@@ -346,11 +362,10 @@ module.exports = async function handler(req, res) {
       ? cursorPage
       : (Number.isInteger(requestedPage) ? Math.max(1, requestedPage) : 1);
     const search = cleanExactText(req.query?.q, 120);
-    const parsedSearch = parseTradingSearch(search);
-    const requestedBrand = cleanExactText(req.query?.brand || parsedSearch.brand, 80);
-    const requestedReference = cleanExactText(req.query?.reference || parsedSearch.reference, 80);
+    const requestedBrand = cleanExactText(req.query?.brand, 80);
+    const requestedReference = cleanExactText(req.query?.reference, 80);
     const reference = referenceComparisonKey(requestedReference);
-    const requestedDial = cleanExactText(parsedSearch.dial, 40);
+    const requestedDial = cleanExactText(req.query?.dial, 40);
     const exactDialVariants = requestedDial
       ? [...new Set([
           requestedDial.toLowerCase(),
@@ -359,6 +374,7 @@ module.exports = async function handler(req, res) {
         ])]
       : [];
     const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
+    const pricedOnly = String(req.query?.priced || '').toLowerCase() === 'true';
     const listingType = cleanExactText(req.query?.type, 12).toUpperCase();
     const condition = cleanExactText(req.query?.condition, 80);
 
@@ -380,8 +396,8 @@ module.exports = async function handler(req, res) {
     const matchedBrand = summary.brands.find(item =>
       item.brand?.toLocaleLowerCase() === requestedBrand.toLocaleLowerCase());
     const brand = matchedBrand?.brand || requestedBrand;
-    // Customer floors publish only complete source-backed watch identities.
-    // Incomplete rows remain preserved in reviewed_workbook_inventory for review.
+    // Cursor pages publish the current reviewed inventory, including incomplete
+    // identities and no-price rows; analytics eligibility remains stricter.
     const scopedFilter = true;
     const preciseCount = Boolean(reference);
     const canReverse = !scopedFilter;
@@ -422,9 +438,28 @@ module.exports = async function handler(req, res) {
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) queryParams.set('normalized_reference', `eq.${reference}`);
     if (exactDialVariants.length) queryParams.set('dial_color', `in.(${exactDialVariants.join(',')})`);
+    if (listingType) queryParams.set('listing_type', `eq.${listingType}`);
+    if (imagesOnly) queryParams.set('has_exact_source_image', 'eq.true');
+    if (pricedOnly) queryParams.set('has_supplied_price', 'eq.true');
+    const genericSearch = safeSearchTerm(search);
+    if (genericSearch && !requestedReference && !requestedDial) {
+      const pattern = `*${genericSearch}*`;
+      queryParams.set('or', [
+        `supplied_brand.ilike.${pattern}`,
+        `canonical_brand.ilike.${pattern}`,
+        `brand_scope.ilike.${pattern}`,
+        `model.ilike.${pattern}`,
+        `catalog_model.ilike.${pattern}`,
+        `raw_reference.ilike.${pattern}`,
+        `normalized_reference.ilike.${pattern}`,
+        `catalog_reference.ilike.${pattern}`,
+        `posted_by.ilike.${pattern}`,
+        `raw_message.ilike.${pattern}`,
+      ].join(','));
+    }
     // ponytail: simplified query — ORDER BY with offset times out on large views
     queryParams.set('order', 'id.desc');
-    queryParams.set('limit', String(pageSize));
+    queryParams.set('limit', String(pageSize + 1));
     if (pageWindow.start > 0) queryParams.set('offset', String(pageWindow.start));
     
     const restUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${queryParams.toString()}`;
@@ -483,6 +518,8 @@ module.exports.recordEvidenceCoverage = recordEvidenceCoverage;
 module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;
+module.exports.isMultiListing = isMultiListing;
+module.exports.safeSearchTerm = safeSearchTerm;
 module.exports.parseCursorPage = parseCursorPage;
 module.exports.publicationBrandsFromSummary = publicationBrandsFromSummary;
 module.exports.boundedPage = boundedPage;

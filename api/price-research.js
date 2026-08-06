@@ -422,7 +422,7 @@ module.exports = async function handler(req, res) {
     // reference does not produce a chart made only from its newest day.
     const pageSize = 1000;
     const sampleLimit = 10000;
-    const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict';
+    const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict,listing_status,thumbnail_url,image_urls,has_images';
     // ponytail: admit all records for analytics. classifyResearchEligibility
     // applies per-row quality gates downstream (missing price/brand/dial,
     // catalog mismatch, reference-as-price). Pre-filtering on verdict/confidence
