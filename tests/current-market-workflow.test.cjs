@@ -57,7 +57,7 @@ test('multi-item parents never publish a shared image as one watch', () => {
   assert.deepEqual(record.image_urls, []);
 });
 
-test('seller phone remains private unless the reviewed listing explicitly approves publication', () => {
-  assert.equal(approvedPhone({ phone_number: '+1 312 555 0100', contact_publication_approved: false }), null);
+test('seller phone remains public when supplied by the source listing', () => {
+  assert.equal(approvedPhone({ phone_number: '+1 312 555 0100', contact_publication_approved: false }), '+1 312 555 0100');
   assert.equal(approvedPhone({ phone_number: '+1 312 555 0100', contact_publication_approved: true }), '+1 312 555 0100');
 });

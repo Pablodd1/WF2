@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { DealerGate } from '@/components/DealerGate';
+import { HireFiScrollRail } from '@/components/HireFiScrollRail';
 
 const OperationsDashboard = lazy(() => import('@/pages/OperationsDashboard'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
@@ -28,8 +29,9 @@ const FlashSaleDetail = lazy(() => import('@/pages/FlashSaleDetail'));
 
 export default function App() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-white" />}>
-      <Routes>
+    <>
+      <Suspense fallback={<div className="min-h-screen bg-white" />}>
+        <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/dealer-login" element={<DealerLogin />} />
         <Route path="/admin-login" element={<DealerLogin />} />
@@ -64,7 +66,9 @@ export default function App() {
         <Route path="/info/:page" element={<PublicInfo />} />
         <Route path="/flash-sales/:id" element={<FlashSaleDetail />} />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+      <HireFiScrollRail />
+    </>
   );
 }

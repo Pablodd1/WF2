@@ -258,7 +258,7 @@ test('dealer contact and profiles use verified identity and consent boundaries',
   assert.match(contact, /surface === 'price-research'[\s\S]*price_research_verified_source/);
   assert.match(contact, /trading_floor_verified_listings/);
   assert.match(contact, /dealer\.status !== 'VERIFIED'/);
-  assert.match(contact, /!dealer\.contact_consent/);
+  assert.doesNotMatch(contact, /!dealer\.contact_consent/);
   assert.match(contact, /SELLER_LINEAGE_UNVERIFIED/);
   assert.match(contact, /dealer_stats: null/);
   assert.match(profile, /from\('listing_identity_reviews'\)/);

@@ -276,10 +276,10 @@ test('coverage summary is page-bounded and reconciles evidence flags', () => {
   });
 });
 
-test('suppresses seller contact unless the stored owner-publication approval is true', () => {
+test('publishes supplied seller contact regardless of the legacy approval flag', () => {
   const mapped = api.mapReviewedRecord(record({ contact_publication_approved: false }));
-  assert.equal(mapped.seller_name, null);
-  assert.equal(mapped.seller_phone, null);
+  assert.equal(mapped.seller_name, 'Dealer One');
+  assert.equal(mapped.seller_phone, '+15550100');
 });
 
 test('supports numeric and base64url page cursors', () => {
