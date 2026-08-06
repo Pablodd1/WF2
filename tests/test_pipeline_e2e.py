@@ -120,5 +120,37 @@ class TestPipelineEndToEnd(unittest.TestCase):
         self.assertEqual(result["trading_floor_status"], "published")
         self.assertEqual(result["price_research_status"], "ineligible_wtb")
 
+    def test_currency_and_multiplier_handling(self):
+        """Test parsing of 34HKD, 475k, and 4.5m values."""
+        # 34HKD
+        res1 = self.processor.extract_price("Hublot 8970 34HKD")
+        self.assertEqual(res1[0], 34.0)
+        self.assertEqual(res1[1], "HKD")
+
+        # 475k HKD
+        res2 = self.processor.extract_price("Rolex 116508 475k HKD")
+        self.assertEqual(res2[0], 475000.0)
+        self.assertEqual(res2[1], "HKD")
+
+        # 4.5m HKD
+        res3 = self.processor.extract_price("Patek 5980 4.5m HKD")
+        self.assertEqual(res3[0], 4500000.0)
+        self.assertEqual(res3[1], "HKD")
+
+    def test_seller_information_public(self):
+        """Test that seller information is publicly preserved and unmasked."""
+        job_data = {
+            "id": str(uuid.uuid4()),
+            "message_text": "Rolex 116508 $68,000",
+            "from_name": "John Doe Watches",
+            "from_number": "+19722176272",
+            "phone_code": "1",
+            "region": "North America"
+        }
+        res = self.processor.process_job(job_data)
+        self.assertEqual(res["from_name"], "John Doe Watches")
+        self.assertEqual(res["from_number"], "+19722176272")
+
+
 if __name__ == "__main__":
     unittest.main()

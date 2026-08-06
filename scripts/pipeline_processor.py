@@ -149,26 +149,31 @@ class WatchFactsPipelineProcessor:
         text_clean = re.sub(r'(\$\s?|\b)(\d{1,3})\.(\d{3})\b', r'\1\2\3', text_parsed)
         text_clean = re.sub(r'(\d),(\d)', r'\1\2', text_clean)
 
-        m = re.search(r'(\d+(?:\.\d+)?)\s*(k|m|million)\b', text_clean, re.I)
+        lower = text_clean.lower()
+        default_curr = "USD"
+        if "hkd" in lower: default_curr = "HKD"
+        elif "eur" in lower: default_curr = "EUR"
+        elif "gbp" in lower: default_curr = "GBP"
+        elif "usdt" in lower: default_curr = "USDT"
+        elif "sgd" in lower: default_curr = "SGD"
+        elif "aed" in lower: default_curr = "AED"
+        elif "chf" in lower: default_curr = "CHF"
+
+        m = re.search(r'(\d+(?:\.\d+)?)\s*(k|m|million)\s*(usd|usdt|hkd|eur|gbp|chf|aed|sgd|\$)?\b', text_clean, re.I)
         if m:
             val = float(m.group(1))
             unit = m.group(2).lower()
             val *= 1000 if unit == 'k' else 1_000_000
-            return (val, "USD")
+            curr_match = m.group(3)
+            curr = curr_match.upper().replace("$", "USD") if curr_match else default_curr
+            return (val, curr)
 
-        m = re.search(r'(?:yours for|price|\$|usd|usdt|hkd|eur|gbp|chf|aed|sgd)\s*:?\s*(\d+(?:\.\d+)?)\s*(usd|usdt|hkd|eur|gbp|chf|aed|sgd|\$)?', text_clean, re.I)
+        m = re.search(r'(?:yours for|price|\$|usd|usdt|hkd|eur|gbp|chf|aed|sgd)\s*:?\s*(\d+(?:\.\d+)?)\s*(usd|usdt|hkd|eur|gbp|chf|aed|sgd|\$)?\b', text_clean, re.I)
         if m:
             val = float(m.group(1))
             if not (1950 <= val <= 2030 and len(str(int(val))) == 4):
                 curr_match = m.group(2)
-                curr = "USD"
-                if curr_match:
-                    curr = curr_match.upper().replace("$", "USD")
-                elif "hkd" in text_clean.lower(): curr = "HKD"
-                elif "eur" in text_clean.lower(): curr = "EUR"
-                elif "gbp" in text_clean.lower(): curr = "GBP"
-                elif "usdt" in text_clean.lower(): curr = "USDT"
-                elif "sgd" in text_clean.lower(): curr = "SGD"
+                curr = curr_match.upper().replace("$", "USD") if curr_match else default_curr
                 return (val, curr)
 
         m = re.search(r'\b(\d+(?:\.\d+)?)\s*(usd|usdt|hkd|eur|gbp|chf|aed|sgd|\$)\b', text_clean, re.I)
@@ -182,8 +187,7 @@ class WatchFactsPipelineProcessor:
         if m:
             val = float(m.group(1))
             if not (1950 <= val <= 2030 and len(str(int(val))) == 4):
-                curr = "HKD" if "hkd" in text_clean.lower() else "USD"
-                return (val, curr)
+                return (val, default_curr)
 
         return (0.0, "USD")
 
@@ -196,6 +200,8 @@ class WatchFactsPipelineProcessor:
     def check_price_plausibility(self, brand, price_usd):
         if price_usd <= 0:
             return (False, "NO_PRICE")
+        if price_usd < 50.0:
+            return (False, f"SUSPICIOUS_LOW_PRICE_${price_usd:.2f}_<_$50")
         if not brand or brand not in BRAND_PRICE_PLAUSIBILITY:
             return (True, "OK")
             
@@ -431,7 +437,7 @@ class WatchFactsPipelineProcessor:
                     "validation_errors":     c_errors,
                     "normalization_status":  c_statuses["normalization_status"],
                     "trading_floor_status":  "bundle_child_pending_review",
-                    "price_research_status": c_statuses["price_research_status"],
+                    "price_research_status": "ineligible_bundle_child_pending_review",
                     "overall_confidence":    self.compute_confidence(
                         {"brand": c_brand, "reference": c_ref, "price": c_price,
                          "dial_color": c_dial, "condition": c_cond}, False, c_statuses["price_plausible"]
