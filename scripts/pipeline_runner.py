@@ -26,6 +26,7 @@ PGPASSWORD = os.environ.get("PGPASSWORD")
 PGDATABASE = os.environ.get("PGDATABASE", "postgres")
 
 IS_SQLITE = False
+REQUIRE_POSTGRES = os.environ.get("REQUIRE_POSTGRES", "0").lower() in ("1", "true", "yes")
 SQLITE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scratch", "pipeline_fallback.db")
 
 def get_db_connection():
@@ -35,8 +36,9 @@ def get_db_connection():
             conn = psycopg2.connect(DATABASE_URL)
             IS_SQLITE = False
             return conn
-        except Exception:
-            pass
+        except Exception as e:
+            if REQUIRE_POSTGRES:
+                raise RuntimeError(f"PostgreSQL connection required via DATABASE_URL, but failed: {e}")
 
     if PGPASSWORD:
         try:
@@ -46,8 +48,12 @@ def get_db_connection():
             )
             IS_SQLITE = False
             return conn
-        except Exception:
-            pass
+        except Exception as e:
+            if REQUIRE_POSTGRES:
+                raise RuntimeError(f"PostgreSQL connection required via PG environment, but failed: {e}")
+
+    if REQUIRE_POSTGRES:
+        raise RuntimeError("PostgreSQL connection required (--require-postgres or REQUIRE_POSTGRES=1), but no PostgreSQL credentials connected.")
 
     os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
     conn = sqlite3.connect(SQLITE_PATH)
@@ -206,8 +212,8 @@ def check_duplicate_payload(cur, checksum, current_payload_id, batch_seen_checks
         row = cur.fetchone()
         return bool(row)
     except Exception as e:
-        print(f"Error checking duplicate payload: {e}")
-        return False
+        print(f"Database error during duplicate check for payload checksum {checksum}: {e}")
+        raise
 
 def run_pipeline_step(limit=50):
     conn = get_db_connection()
@@ -305,21 +311,23 @@ def run_pipeline_step(limit=50):
                 condition_original, condition_normalized, box_original, box_normalized,
                 papers_original, papers_normalized, image_url, report_url, user_name, from_name, contact_number, from_number,
                 phone_code, location, rating, dealer_rating, is_verified_user, is_paid_user, is_seller_approved, company_id,
-                contact_consent, catalog_confirmed, overall_confidence, verdict,
+                contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
                 normalization_status, trading_floor_status, price_research_status
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """
             if IS_SQLITE:
                 parent_query = parent_query.replace("%s", "?") + " ON CONFLICT(id) DO UPDATE SET raw_message_text = excluded.raw_message_text;"
             else:
-                parent_query += " ON CONFLICT (id) DO UPDATE SET raw_message_text = EXCLUDED.raw_message_text, trading_floor_status = EXCLUDED.trading_floor_status;"
+                parent_query += " ON CONFLICT (id) DO UPDATE SET raw_message_text = EXCLUDED.raw_message_text, trading_floor_status = EXCLUDED.trading_floor_status, provenance_metadata = EXCLUDED.provenance_metadata;"
 
             def bool_val(v):
                 return (1 if v else 0) if IS_SQLITE else bool(v)
+
+            prov_json = json.dumps(res["provenance_metadata"])
 
             parent_args = (
                 parent_uuid, job_id, None, None, res["raw_message_text"], res["category"], res["intent"], res["listing_type"],
@@ -334,7 +342,7 @@ def run_pipeline_step(limit=50):
                 res["phone_code"], res["location"], res["rating"], res["dealer_rating"],
                 bool_val(res["is_verified_user"]), bool_val(res["is_paid_user"]), bool_val(res["is_seller_approved"]),
                 res["company_id"], bool_val(res["contact_consent"]), bool_val(res["catalog_confirmed"]),
-                res["overall_confidence"], res["verdict"], res["normalization_status"],
+                res["overall_confidence"], prov_json, res["verdict"], res["normalization_status"],
                 res["trading_floor_status"], res["price_research_status"]
             )
             db_execute(cur, parent_query, parent_args)
@@ -404,10 +412,13 @@ def run_pipeline_step(limit=50):
     return len(jobs)
 
 def start_continuous_worker(poll_interval=2, once=False, require_postgres=False):
+    global REQUIRE_POSTGRES
+    if require_postgres:
+        REQUIRE_POSTGRES = True
     print(f"WatchFacts Continuous Pipeline Worker starting up (Poll Interval: {poll_interval}s)...", flush=True)
     conn = get_db_connection()
     conn.close()
-    if require_postgres and IS_SQLITE:
+    if REQUIRE_POSTGRES and IS_SQLITE:
         raise RuntimeError("CRITICAL: PostgreSQL connection required, but pipeline runner fell back to SQLite!")
     count = 0
     while True:

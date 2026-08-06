@@ -511,6 +511,7 @@ class WatchFactsPipelineProcessor:
                 "reference": "db+parsed" if job_data.get("reference_src") else "parsed",
                 "price":     "db+parsed" if price > 0 else "missing",
                 "dial":      dial_source,
+                "plausibility_reason": statuses["plausibility_reason"],
             },
             "child_listings":    child_listings,
         }
