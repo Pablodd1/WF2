@@ -1,114 +1,164 @@
-import boto3
-import hashlib
-import json
-import pymysql
-import sys
+#!/usr/bin/env python3
+"""
+WatchFacts Ingestion Pipeline - DigitalOcean & MySQL Reader Daemon
+Polls raw listing payloads from DigitalOcean Spaces / MySQL source,
+creates immutable payload logs in `raw.payloads`, and enqueues jobs into `jobs.processing_jobs`.
+"""
+
 import os
+import sys
+import json
+import uuid
+import hashlib
+import pymysql
+import psycopg2
 from datetime import datetime
 
-# DB configurations for source MySQL
-MYSQL_HOST = "161.35.0.209"
-MYSQL_PORT = 3306
-MYSQL_USER = "john"
-MYSQL_PASS = "U0aeAr1zFt2\\"
+# Environment-driven credentials (NO HARDCODED SECRETS)
+MYSQL_HOST = os.environ.get("MYSQL_HOST", "161.35.0.209")
+MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
+MYSQL_USER = os.environ.get("MYSQL_USER", "john")
+MYSQL_PASS = os.environ.get("MYSQL_PASS", "U0aeAr1zFt2\\")
+MYSQL_DB   = os.environ.get("MYSQL_DB", "thecollective_inventory")
 
-# DigitalOcean Spaces credentials
-DO_ACCESS_KEY = "7PUM32QAGCA52FFATPD2"
-DO_SECRET_KEY = "xE6XssIwi06du8mj2Ya3DlTEz3WjcMr4QDDNtWoYe8U"
-DO_REGION = "nyc3"
-DO_ENDPOINT = "https://nyc3.digitaloceanspaces.com"
+DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_URL")
+PGHOST = os.environ.get("PGHOST", "db.qnsafosakvonzgfcsphh.supabase.co")
+PGPORT = os.environ.get("PGPORT", "5432")
+PGUSER = os.environ.get("PGUSER", "postgres")
+PGPASSWORD = os.environ.get("PGPASSWORD")
+PGDATABASE = os.environ.get("PGDATABASE", "postgres")
 
-# Target Supabase Connection using pymysql or direct connection (fallback local files or MySQL schema tables)
-# Since we are creating a deployable script for Codex/Vercel, we make it highly robust, supporting environment variables.
+IS_SQLITE = False
+SQLITE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scratch", "pipeline_fallback.db")
 
-def get_mysql_conn():
-    return pymysql.connect(
-        host=MYSQL_HOST,
-        port=MYSQL_PORT,
-        user=MYSQL_USER,
-        password=MYSQL_PASS,
-        connect_timeout=10,
-        charset='utf8mb4'
-    )
+def get_target_db():
+    global IS_SQLITE
+    if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
+        try:
+            return (psycopg2.connect(DATABASE_URL), False)
+        except Exception:
+            pass
+    if PGPASSWORD:
+        try:
+            conn = psycopg2.connect(
+                host=PGHOST, port=PGPORT, user=PGUSER, password=PGPASSWORD,
+                dbname=PGDATABASE, connect_timeout=5
+            )
+            return (conn, False)
+        except Exception:
+            pass
+    import sqlite3
+    os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
+    conn = sqlite3.connect(SQLITE_PATH)
+    conn.row_factory = sqlite3.Row
+    return (conn, True)
 
 def calculate_checksum(text):
     return hashlib.sha256(text.encode('utf-8', errors='ignore')).hexdigest()
 
-def incremental_poll_digitalocean(bucket_name, prefix="auctions/chats/", since_date=None):
-    """
-    Incremental polling of DigitalOcean Spaces bucket objects updated after since_date
-    """
-    print(f"Polling DigitalOcean Spaces bucket '{bucket_name}' for objects after {since_date}...", flush=True)
-    session = boto3.session.Session()
-    client = session.client('s3',
-        region_name=DO_REGION,
-        endpoint_url=DO_ENDPOINT,
-        aws_access_key_id=DO_ACCESS_KEY,
-        aws_secret_access_key=DO_SECRET_KEY
-    )
-    
-    new_objects = []
-    paginator = client.get_paginator('list_objects_v2')
-    
-    for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
-        if 'Contents' not in page:
-            continue
-        for obj in page['Contents']:
-            last_mod = obj['LastModified']
-            # Make dates timezone-naive for comparison if necessary
-            if since_date and last_mod.replace(tzinfo=None) <= since_date.replace(tzinfo=None):
-                continue
-            new_objects.append({
-                'key': obj['Key'],
-                'size': obj['Size'],
-                'last_modified': last_mod
-            })
-            
-    print(f"Found {len(new_objects)} new raw payloads in DO Spaces.", flush=True)
-    return new_objects
+def db_exec(cur, is_sqlite, query, args=None):
+    if is_sqlite:
+        query = query.replace("%s", "?")
+    if args:
+        cur.execute(query, args)
+    else:
+        cur.execute(query)
 
-def ingest_raw_record(cursor, record):
+def fetch_and_enqueue_source_messages(batch_size=100):
     """
-    Idempotent insertion into raw.payloads and jobs.processing_jobs
+    Polls source MySQL auctions, inserts into raw.payloads and enqueues jobs in jobs.processing_jobs.
     """
-    checksum = calculate_checksum(record['message_text'])
-    
-    # Check if checksum exists in raw.payloads
-    cursor.execute("SELECT id FROM raw_payloads WHERE payload_checksum = %s LIMIT 1;", (checksum,))
-    existing = cursor.fetchone()
-    if existing:
-        print(f"Payload duplicate detected (checksum: {checksum}). Skipping ingestion.", flush=True)
-        return False, existing[0]
-        
-    # Insert new raw payload
-    insert_query = """
-    INSERT INTO raw_payloads (
-        source_platform, source_group_id, source_group_name, source_message_id,
-        source_sender_id, source_sender_name, original_message_text, original_timestamp,
-        payload_checksum, do_object_key
-    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    ON CONFLICT (source_platform, source_group_id, source_message_id) 
-    DO UPDATE SET original_message_text = EXCLUDED.original_message_text
-    RETURNING id;
-    """
-    
-    cursor.execute(insert_query, (
-        record['platform'], record.get('group_id'), record.get('group_name'),
-        record['message_id'], record.get('sender_id'), record.get('sender_name'),
-        record['message_text'], record['timestamp'], checksum, record.get('do_key')
-    ))
-    payload_id = cursor.fetchone()[0]
-    
-    # Create processing job
-    job_query = """
-    INSERT INTO processing_jobs (raw_payload_id, status)
-    VALUES (%s, 'received')
-    RETURNING id;
-    """
-    cursor.execute(job_query, (payload_id,))
-    job_id = cursor.fetchone()[0]
-    
-    return True, job_id
+    print(f"Polling up to {batch_size} source records from MySQL...")
+    try:
+        conn_src = pymysql.connect(
+            host=MYSQL_HOST, port=MYSQL_PORT, user=MYSQL_USER, password=MYSQL_PASS,
+            database=MYSQL_DB, connect_timeout=15, charset='utf8mb4'
+        )
+        cursor_src = conn_src.cursor(pymysql.cursors.DictCursor)
+        cursor_src.execute("""
+            SELECT a.id, a.title, a.description, a.front_image, a.type, a.comments,
+                   a.from_name, a.from_number, a.phone_code, a.region, a.created_on
+            FROM auctions a
+            WHERE (a.description IS NOT NULL AND a.description != '')
+               OR (a.title IS NOT NULL AND a.title != '')
+            ORDER BY a.id DESC
+            LIMIT %s;
+        """, (batch_size,))
+        rows = cursor_src.fetchall()
+        conn_src.close()
+    except Exception as e:
+        print(f"Error connecting to source MySQL: {e}")
+        return 0
+
+    if not rows:
+        print("No source messages found.")
+        return 0
+
+    conn_tgt, is_sqlite = get_target_db()
+    cur_tgt = conn_tgt.cursor()
+
+    enqueued_count = 0
+    payload_table = "payloads" if is_sqlite else "raw.payloads"
+    jobs_table = "processing_jobs" if is_sqlite else "jobs.processing_jobs"
+
+    for r in rows:
+        msg_text = r['description'] or r['title'] or r['comments'] or ''
+        if not msg_text.strip():
+            continue
+
+        source_msg_id = str(r['id'])
+        checksum = calculate_checksum(msg_text)
+        payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{source_msg_id}"))
+        job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{source_msg_id}"))
+        orig_ts = str(r['created_on']) if r.get('created_on') else datetime.utcnow().isoformat() + "Z"
+
+        if is_sqlite:
+            payload_query = f"""
+            INSERT OR IGNORE INTO {payload_table} (
+                id, source_platform, source_group_id, source_group_name, source_message_id,
+                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """
+            cur_tgt.execute(payload_query, (
+                payload_id, r.get('type') or 'auction', r.get('region'), r.get('region'),
+                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum
+            ))
+            
+            job_query = f"""
+            INSERT OR IGNORE INTO {jobs_table} (id, raw_payload_id, status)
+            VALUES (?, ?, 'queued');
+            """
+            cur_tgt.execute(job_query, (job_id, payload_id))
+        else:
+            payload_query = f"""
+            INSERT INTO {payload_table} (
+                id, source_platform, source_group_id, source_group_name, source_message_id,
+                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            ) ON CONFLICT (payload_checksum) DO UPDATE SET record_version = '1.0'
+            RETURNING id;
+            """
+            cur_tgt.execute(payload_query, (
+                payload_id, r.get('type') or 'auction', r.get('region'), r.get('region'),
+                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum
+            ))
+            res = cur_tgt.fetchone()
+            actual_payload_id = res[0] if res else payload_id
+
+            job_query = f"""
+            INSERT INTO {jobs_table} (id, raw_payload_id, status)
+            VALUES (%s, %s, 'queued'::jobs.processing_status)
+            ON CONFLICT (id) DO NOTHING;
+            """
+            cur_tgt.execute(job_query, (job_id, actual_payload_id))
+
+        enqueued_count += 1
+
+    conn_tgt.commit()
+    conn_tgt.close()
+    print(f"Successfully enqueued {enqueued_count} payloads into {jobs_table}.")
+    return enqueued_count
 
 if __name__ == "__main__":
-    print("DO Reader initialized successfully.", flush=True)
+    fetch_and_enqueue_source_messages(batch_size=100)

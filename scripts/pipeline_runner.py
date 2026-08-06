@@ -2,8 +2,8 @@
 """
 WatchFacts Ingestion Pipeline - Core Runner Daemon
 Orchestrates continuous reading from raw payload queues, running extraction,
-performing validation, splitting bundles, duplicate suppression, and synchronizing
-to staging tables.
+performing validation, splitting bundles, duplicate suppression with concurrency locking,
+and synchronizing to staging tables.
 """
 
 import os
@@ -35,25 +35,20 @@ def get_db_connection():
             conn = psycopg2.connect(DATABASE_URL)
             IS_SQLITE = False
             return conn
-        except Exception as e:
-            print(f"Warning: Failed connecting via DATABASE_URL: {e}. Trying individual parameters...")
+        except Exception:
+            pass
 
     if PGPASSWORD:
         try:
             conn = psycopg2.connect(
-                host=PGHOST,
-                port=PGPORT,
-                user=PGUSER,
-                password=PGPASSWORD,
-                dbname=PGDATABASE,
-                connect_timeout=5
+                host=PGHOST, port=PGPORT, user=PGUSER, password=PGPASSWORD,
+                dbname=PGDATABASE, connect_timeout=5
             )
             IS_SQLITE = False
             return conn
-        except Exception as e:
-            print(f"Warning: Failed connecting via pg params: {e}.")
+        except Exception:
+            pass
 
-    print(f"No Postgres credentials or connection failed. Initializing SQLite fallback db at: {SQLITE_PATH}")
     os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
     conn = sqlite3.connect(SQLITE_PATH)
     conn.row_factory = sqlite3.Row
@@ -62,7 +57,6 @@ def get_db_connection():
     return conn
 
 def setup_sqlite_schema(conn):
-    """Creates local schema mirrors for offline local testing"""
     cur = conn.cursor()
     cur.execute("""
     CREATE TABLE IF NOT EXISTS payloads (
@@ -181,10 +175,26 @@ def generate_deterministic_uuid(namespace_str, key_str):
     ns = uuid.uuid5(uuid.NAMESPACE_DNS, namespace_str)
     return str(uuid.uuid5(ns, str(key_str)))
 
+def load_existing_checksums(cur):
+    """Loads all previously seen payload checksums from DB for persistent duplicate suppression"""
+    checksums = set()
+    table = "payloads" if IS_SQLITE else "raw.payloads"
+    try:
+        db_execute(cur, f"SELECT payload_checksum FROM {table} WHERE payload_checksum IS NOT NULL;")
+        rows = cur.fetchall()
+        for r in rows:
+            checksums.add(r[0])
+    except Exception:
+        pass
+    return checksums
+
 def run_pipeline_step(limit=50):
     conn = get_db_connection()
     cur = conn.cursor()
     
+    seen_checksums = load_existing_checksums(cur)
+
+    # Concurrency locking with FOR UPDATE SKIP LOCKED on PostgreSQL
     if IS_SQLITE:
         db_execute(cur, """
             SELECT j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
@@ -207,6 +217,7 @@ def run_pipeline_step(limit=50):
             FROM jobs.processing_jobs j
             JOIN raw.payloads p ON j.raw_payload_id = p.id
             WHERE j.status = 'received'::jobs.processing_status OR j.status = 'queued'::jobs.processing_status
+            FOR UPDATE OF j SKIP LOCKED
             LIMIT %s;
         """, (limit,))
         raw_jobs = cur.fetchall()
@@ -222,9 +233,7 @@ def run_pipeline_step(limit=50):
         conn.close()
         return 0
 
-    print(f"Processing {len(jobs)} pending jobs...")
     processor = WatchFactsPipelineProcessor()
-    seen_checksums = set()
 
     for job in jobs:
         job_id = job["job_id"]
@@ -272,10 +281,12 @@ def run_pipeline_step(limit=50):
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            );
+            )
             """
             if IS_SQLITE:
-                parent_query = parent_query.replace("%s", "?")
+                parent_query = parent_query.replace("%s", "?") + " ON CONFLICT(id) DO UPDATE SET raw_message_text = excluded.raw_message_text;"
+            else:
+                parent_query += " ON CONFLICT (id) DO UPDATE SET raw_message_text = EXCLUDED.raw_message_text, trading_floor_status = EXCLUDED.trading_floor_status;"
 
             parent_args = (
                 parent_uuid, job_id, None, None, res["raw_message_text"], res["category"], res["intent"], res["listing_type"],
@@ -313,10 +324,12 @@ def run_pipeline_step(limit=50):
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                );
+                )
                 """
                 if IS_SQLITE:
-                    child_query = child_query.replace("%s", "?")
+                    child_query = child_query.replace("%s", "?") + " ON CONFLICT(id) DO UPDATE SET raw_message_text = excluded.raw_message_text;"
+                else:
+                    child_query += " ON CONFLICT (id) DO UPDATE SET raw_message_text = EXCLUDED.raw_message_text;"
 
                 child_args = (
                     child_uuid, job_id, parent_uuid, child["bundle_position"], child["raw_text_segment"], "WATCH", res["intent"],

@@ -142,7 +142,6 @@ CREATE TABLE IF NOT EXISTS staging.listings (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexing for Fast Querying & Publication Routing
 CREATE INDEX IF NOT EXISTS idx_staging_brand_ref ON staging.listings(brand_normalized, reference_normalized);
 CREATE INDEX IF NOT EXISTS idx_staging_intent ON staging.listings(intent);
 CREATE INDEX IF NOT EXISTS idx_staging_category ON staging.listings(category);
@@ -153,7 +152,7 @@ CREATE INDEX IF NOT EXISTS idx_staging_norm_status ON staging.listings(normaliza
 CREATE INDEX IF NOT EXISTS idx_staging_contact ON staging.listings(contact_number);
 CREATE INDEX IF NOT EXISTS idx_staging_job_id ON staging.listings(job_id);
 
--- 6. RECONCILIATION LEDGER (Audit & Metrics Trackers)
+-- 6. RECONCILIATION LEDGER
 CREATE TABLE IF NOT EXISTS jobs.reconciliation_ledger (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     run_timestamp TIMESTAMPTZ DEFAULT NOW(),
@@ -173,82 +172,118 @@ CREATE TABLE IF NOT EXISTS jobs.reconciliation_ledger (
     completed_at TIMESTAMPTZ
 );
 
--- 7. ROW LEVEL SECURITY (RLS) & GRANTS
+-- 7. ROW LEVEL SECURITY (RLS) & GRANTS (EXPLICIT TARGETING service_role, anon, authenticated)
 ALTER TABLE raw.payloads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE jobs.processing_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE staging.listings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE jobs.reconciliation_ledger ENABLE ROW LEVEL SECURITY;
 
--- Default RLS Policies (Service role gets full access, anon gets read access via views)
-CREATE POLICY service_role_all_raw ON raw.payloads FOR ALL USING (true);
-CREATE POLICY service_role_all_jobs ON jobs.processing_jobs FOR ALL USING (true);
-CREATE POLICY service_role_all_staging ON staging.listings FOR ALL USING (true);
-CREATE POLICY service_role_all_ledger ON jobs.reconciliation_ledger FOR ALL USING (true);
+DROP POLICY IF EXISTS service_role_all_raw ON raw.payloads;
+DROP POLICY IF EXISTS service_role_all_jobs ON jobs.processing_jobs;
+DROP POLICY IF EXISTS service_role_all_staging ON staging.listings;
+DROP POLICY IF EXISTS service_role_all_ledger ON jobs.reconciliation_ledger;
 
--- 8. CUSTOMER-SAFE READ VIEWS FOR TRADING FLOOR & PRICE RESEARCH
-CREATE OR REPLACE VIEW public.trading_floor_view AS
+CREATE POLICY service_role_all_raw ON raw.payloads FOR ALL TO service_role USING (true);
+CREATE POLICY service_role_all_jobs ON jobs.processing_jobs FOR ALL TO service_role USING (true);
+CREATE POLICY service_role_all_staging ON staging.listings FOR ALL TO service_role USING (true);
+CREATE POLICY service_role_all_ledger ON jobs.reconciliation_ledger FOR ALL TO service_role USING (true);
+
+-- 8. UI READ VIEWS MATCHING EXACT APP CONTRACTS
+
+-- View 1: reviewed_workbook_market_source_v2 (Queried by /api/reviewed-market-inventory.js)
+CREATE OR REPLACE VIEW public.reviewed_workbook_market_source_v2 AS
 SELECT 
     id,
     job_id,
     parent_id,
     bundle_position,
-    listing_type,
+    raw_message_text,
+    raw_message_text AS message_text,
+    raw_message_text AS description,
     category,
     intent,
+    listing_type,
     is_bundle,
     brand_normalized AS brand,
+    model_normalized AS model,
     reference_normalized AS reference,
     dial_color_normalized AS dial_color,
     condition_normalized AS condition,
     box_normalized AS box,
     papers_normalized AS papers,
-    CASE WHEN price_usd > 0 THEN price_usd ELSE NULL END AS price_usd,
+    price_usd AS price,
+    price_usd,
     currency_normalized AS currency,
     CASE WHEN price_usd = 0 THEN 'Price not supplied' ELSE NULL END AS price_display_label,
-    CASE WHEN parent_id IS NULL THEN image_url ELSE '' END AS image_url, -- Suppress multi-watch image on children
+    CASE WHEN parent_id IS NULL THEN image_url ELSE '' END AS image_url,
     COALESCE(from_name, user_name) AS seller_name,
+    COALESCE(from_name, user_name) AS from_name,
+    COALESCE(from_name, user_name) AS user_name,
     CASE WHEN contact_consent = TRUE THEN COALESCE(from_number, contact_number) ELSE NULL END AS seller_contact,
+    CASE WHEN contact_consent = TRUE THEN COALESCE(from_number, contact_number) ELSE NULL END AS contact_number,
     location,
     COALESCE(dealer_rating, rating, 0.0) AS dealer_rating,
+    COALESCE(dealer_rating, rating, 0.0) AS rating,
     created_at AS posted_at,
-    CASE WHEN normalization_status = 'needs_review' THEN TRUE ELSE FALSE END AS is_pending_verification
+    created_at,
+    contact_consent,
+    verdict,
+    normalization_status,
+    trading_floor_status,
+    price_research_status
 FROM staging.listings
 WHERE trading_floor_status IN ('published', 'published_pending_verification', 'bundle_pending_separation');
 
-CREATE OR REPLACE VIEW public.price_research_view AS
+-- View 2: price_research_verified_source (Queried by /api/price-research.js & /api/catalog-references.js)
+CREATE OR REPLACE VIEW public.price_research_verified_source AS
 SELECT 
     id,
+    job_id,
+    parent_id,
+    bundle_position,
+    raw_message_text,
+    raw_message_text AS message_text,
+    raw_message_text AS description,
+    category,
+    intent,
+    listing_type,
+    is_bundle,
     brand_normalized AS brand,
+    model_normalized AS model,
     reference_normalized AS reference,
     dial_color_normalized AS dial_color,
+    condition_normalized AS condition,
+    box_normalized AS box,
+    papers_normalized AS papers,
+    price_usd AS price,
     price_usd,
     currency_normalized AS currency,
-    condition_normalized AS condition,
-    created_at AS price_date,
-    overall_confidence
+    CASE WHEN parent_id IS NULL THEN image_url ELSE '' END AS image_url,
+    COALESCE(from_name, user_name) AS seller_name,
+    COALESCE(from_name, user_name) AS from_name,
+    CASE WHEN contact_consent = TRUE THEN COALESCE(from_number, contact_number) ELSE NULL END AS seller_contact,
+    location,
+    COALESCE(dealer_rating, rating, 0.0) AS dealer_rating,
+    created_at AS line_date,
+    created_at,
+    overall_confidence,
+    contact_consent,
+    verdict,
+    normalization_status,
+    trading_floor_status,
+    price_research_status
 FROM staging.listings
 WHERE price_research_status = 'eligible';
 
--- 9. LEGACY COMPATIBILITY VIEWS (For PR #259 and legacy UI queries)
-CREATE OR REPLACE VIEW public.reviewed_workbook_view AS
-SELECT 
-    id,
-    brand_normalized AS brand,
-    reference_normalized AS reference,
-    dial_color_normalized AS dial_color,
-    price_usd AS price,
-    currency_normalized AS currency,
-    condition_normalized AS condition,
-    COALESCE(from_name, user_name) AS seller,
-    verdict
-FROM staging.listings;
+-- Alias Views for Backward Compatibility
+CREATE OR REPLACE VIEW public.trading_floor_view AS SELECT * FROM public.reviewed_workbook_market_source_v2;
+CREATE OR REPLACE VIEW public.price_research_view AS SELECT * FROM public.price_research_verified_source;
+CREATE OR REPLACE VIEW public.reviewed_workbook_view AS SELECT * FROM public.reviewed_workbook_market_source_v2;
 
-CREATE OR REPLACE VIEW public.price_research_verified_source_view AS
-SELECT * FROM public.price_research_view;
-
--- Grant SELECT access on public views to anon and authenticated roles
+-- Grants for anon and authenticated
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT ON public.reviewed_workbook_market_source_v2 TO anon, authenticated;
+GRANT SELECT ON public.price_research_verified_source TO anon, authenticated;
 GRANT SELECT ON public.trading_floor_view TO anon, authenticated;
 GRANT SELECT ON public.price_research_view TO anon, authenticated;
 GRANT SELECT ON public.reviewed_workbook_view TO anon, authenticated;
-GRANT SELECT ON public.price_research_verified_source_view TO anon, authenticated;
