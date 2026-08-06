@@ -46,7 +46,7 @@ export default function DealerAccount() {
   return (
     <main className="min-h-screen bg-[#08080c] text-white">
       <header className="border-b border-white/10 px-5 py-5 sm:px-8">
-        <div className="mx-auto flex max-w-6xl items-center justify-between"><Link to="/dealer" className="font-serif text-xl">Curated Luxury</Link><span className="text-xs text-white/40">{data?.user.email || 'Dealer workspace'}</span></div>
+        <div className="mx-auto flex max-w-6xl items-center justify-between"><Link to="/dealer/workspace" className="font-serif text-xl">Curated Luxury</Link><span className="text-xs text-white/40">{data?.user.email || 'Dealer workspace'}</span></div>
       </header>
       <div className="mx-auto grid max-w-6xl gap-8 px-5 py-7 sm:px-8 lg:grid-cols-[210px_minmax(0,1fr)]">
         <nav aria-label="Account sections" className="flex gap-2 overflow-x-auto lg:flex-col">

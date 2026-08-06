@@ -150,7 +150,7 @@ export default function DealerSubmitListing() {
     <main className="min-h-screen bg-[#08080c] px-5 py-7 text-white sm:px-8 lg:px-12">
       <div className="mx-auto max-w-7xl">
         <header className="flex items-center justify-between border-b border-white/10 pb-5">
-          <Link to="/dealer" className="flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft size={16} /> Workspace</Link>
+          <Link to="/dealer/workspace" className="flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft size={16} /> Workspace</Link>
           <span className="flex items-center gap-2 text-xs text-[#c9a96e]"><ShieldCheck size={15} /> Authenticated posting</span>
         </header>
 

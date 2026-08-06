@@ -41,7 +41,7 @@ export default function DealerPortal() {
   async function exitAccess() {
     sessionStorage.removeItem('wf_beta_skip');
     await fetch('/api/dealer-auth', { method: 'DELETE', credentials: 'include' }).catch(() => undefined);
-    navigate('/dealer-login', { replace: true });
+    navigate('/dealer', { replace: true });
   }
 
   return (
