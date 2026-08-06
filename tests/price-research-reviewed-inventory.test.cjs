@@ -19,6 +19,8 @@ test('Price Research renders analytics before a compact comparable sample', () =
   assert.match(pageRender, /\.slice\(0, COMPARABLE_LISTING_PREVIEW_LIMIT\)/);
   assert.match(pageRender, /\.sort\(\(left, right\) =>[\s\S]*Number\(left\.price_usd\) - Number\(right\.price_usd\)/);
   assert.doesNotMatch(pageRender, /Available listings|reviewedInventory\.total|fetchReviewedInventory/);
+  assert.doesNotMatch(pageRender, /Comparable evidence|Unique offers after eligibility checks|Final chart set:|Evidence path:/);
+  assert.doesNotMatch(pageRender, /<details open/);
 });
 
 test('qualified comparable listings are ordered from lowest to highest verified USD price', () => {
@@ -33,6 +35,17 @@ test('customer listing rows contain included comparables only', () => {
   assert.match(pageRender, /listings\.map\(row =>/);
   assert.doesNotMatch(pageRender, /retainedListings\.map|data\.outlier_rows\.slice/);
   assert.match(pageRender, /Outliers and other exclusions are summarized above and are not displayed as watch listings/);
+  assert.match(source, /function ComparableThumbnail/);
+  assert.match(source, /row\.raw_message \|\| row\.raw_line/);
+});
+
+test('charts render whenever qualified data exists and use the selected dial color', () => {
+  assert.match(pageRender, /\{chartData\.length >= 1 \? \(/);
+  assert.doesNotMatch(pageRender, /chartData\.length >= 1 && \(data\.monthly \|\| \[\]\)\.length >= 2/);
+  assert.doesNotMatch(pageRender, /\(data\.dial_analysis \|\| \[\]\)\.length > 1 &&/);
+  assert.match(pageRender, /stroke=\{selectedDialLine\}/);
+  assert.match(source, /const cohortLineColor = dialChartColor/);
+  assert.match(source, /stroke=\{cohortLineColor\}/);
 });
 
 test('outliers remain visible as aggregate methodology, never as customer watch rows', () => {

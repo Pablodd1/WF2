@@ -619,15 +619,22 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       const contactEndpoint = workbookListing
         ? `/api/reviewed-seller-summary?id=${encodeURIComponent(row.id)}`
         : `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research`;
-      const [response, contactResponse] = await Promise.all([
-        fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`, { signal: controller.signal }),
-        fetch(contactEndpoint, { signal: controller.signal }),
-      ]);
-      const [payload, contactPayload] = await Promise.all([response.json(), contactResponse.json()]);
+      const contactRequest = fetch(contactEndpoint, { signal: controller.signal }).catch(() => null);
+      const response = await fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`, { signal: controller.signal });
+      const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Listing detail is unavailable');
       if (listingRequestRef.current.sequence !== sequence || payload.listing?.id !== row.id) return;
       setListingDetail(payload.listing);
-      if (contactResponse.ok && workbookListing && contactPayload.status === 'ok') {
+      setDetailLoading(false);
+
+      // Contact data is optional. A failed seller endpoint must never hide an
+      // otherwise valid comparable listing, image, or raw source message.
+      const contactResponse = await contactRequest;
+      const contactPayload = contactResponse?.ok
+        ? await contactResponse.json().catch(() => null)
+        : null;
+      if (listingRequestRef.current.sequence !== sequence || !contactPayload) return;
+      if (workbookListing && contactPayload.status === 'ok') {
         const analytics = contactPayload.analytics as ReviewedSellerAnalytics | null | undefined;
         setListingSeller({
           contact_available: Boolean(contactPayload.contact_available),
@@ -643,7 +650,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             last_post_at: analytics.last_post_at || null,
           } : null,
         });
-      } else if (contactResponse.ok && contactPayload.success) {
+      } else if (contactPayload.success) {
         setListingSeller(contactPayload);
       }
     } catch (requestError) {
@@ -1047,52 +1054,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             )}
 
             {/* ── Stats Cards ──────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              {/* Volume */}
-              <div className="order-2 md:order-1" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Comparable evidence</h3>
-                <div style={{ fontSize: 14, color: MUTED }}>
-                  Unique offers after eligibility checks:{' '}
-                  <span style={{ fontSize: 36, fontWeight: 700, color: NAVY, display: 'block', marginTop: 4 }}>
-                    {(data.unique_offer_count ?? data.count).toLocaleString()}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
-                  Final chart set: {data.count.toLocaleString()} observations · {data.outliersRemoved} statistical price outliers removed
-                </div>
-                <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
-                  Cohort: exact {data.selected_cohort.dial_color} dial · all listing conditions combined
-                </div>
-                {data.eligible_observation_count != null && (
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 6, lineHeight: 1.4 }}>
-                    Evidence path: {data.sampledListings.toLocaleString()} rows sampled → {data.eligible_observation_count.toLocaleString()} passed all analytics evidence checks → {data.count.toLocaleString()} in this chart cohort.
-                  </div>
-                )}
-                {(data.repost_count || 0) > 0 && (
-                  <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
-                    {data.repost_count?.toLocaleString()} dealer reposts counted once.
-                  </div>
-                )}
-                {data.dial_data_quality && data.dial_data_quality.unknown_count > 0 && (
-                  <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6, lineHeight: 1.4 }}>
-                    Dial data {data.dial_data_quality.completeness_percent}% complete.{' '}
-                    {data.dial_data_quality.unknown_count.toLocaleString()} listing observations remain unspecified and are being normalized.
-                  </div>
-                )}
-                {data.currency_data_quality && data.currency_data_quality.corrected_count > 0 && (
-                  <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6, lineHeight: 1.4 }}>
-                    {data.currency_data_quality.corrected_count.toLocaleString()} explicit currency mismatch{data.currency_data_quality.corrected_count === 1 ? '' : 'es'} corrected for analytics; stored values remain auditable.
-                  </div>
-                )}
-                {data.sampleCapped && (
-                  <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6 }}>
-                    At least {data.sampledListings.toLocaleString()} approved WTS observations match. Analytics use the newest bounded sample for database efficiency; this is not an exact lifetime count.
-                  </div>
-                )}
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               {/* Liquidity — REAL data only, no invented seller/buyer counts */}
-              <div className="order-3 md:order-2" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
+              <div className="order-2" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
                 <div className="flex items-center justify-between mb-4">
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Liquidity & Demand</h3>
                   {data.liquidity && (
@@ -1171,7 +1135,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
 
               {/* Pricing Summary */}
-              <div className="order-1 md:order-3" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
+              <div className="order-1" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing</h3>
                 {stats ? (
                   <>
@@ -1213,7 +1177,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
                   Catalog-valid dial cohorts with at least two comparable observations for {displayRef}.
                 </div>
-                {(data.dial_analysis || []).length > 1 && <div role="img" aria-label={`Average comparable price by dial color for ${displayRef}`} style={{ height: 210, marginBottom: 18 }}>
+                <div role="img" aria-label={`Average comparable price by dial color for ${displayRef}`} style={{ height: 210, marginBottom: 18 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={data.dial_analysis} margin={{ top: 8, right: 12, bottom: 12, left: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
@@ -1235,7 +1199,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                       </Bar>
                     </ComposedChart>
                   </ResponsiveContainer>
-                </div>}
+                </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
@@ -1269,7 +1233,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             )}
 
             {/* ── Price Chart ───────────────────────────────── */}
-            {chartData.length >= 1 && (data.monthly || []).length >= 2 ? (
+            {chartData.length >= 1 ? (
               <>
                 <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                   <div className="flex items-center justify-between mb-4">
@@ -1286,7 +1250,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                       <YAxis stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                       <Tooltip content={<PriceHistoryTooltip />} />
                       <Area type="monotone" dataKey="max" name="Maximum price" stroke="none" fill={selectedDialLine} fillOpacity={0.14} />
-                      <Area type="monotone" dataKey="min" name="Minimum price" stroke="none" fill={GREEN} fillOpacity={0.05} />
+                      <Area type="monotone" dataKey="min" name="Minimum price" stroke="none" fill={selectedDialLine} fillOpacity={0.05} />
                       <Area type="monotone" dataKey="forecastUpper" stroke="none" fill={selectedDialLine} fillOpacity={0.09} connectNulls={false} />
                       <Area type="monotone" dataKey="forecastLower" stroke="none" fill={WHITE} fillOpacity={1} connectNulls={false} />
                       <Line type="monotone" dataKey="max" name="Maximum price" stroke={selectedDialLine} strokeOpacity={0.45} strokeWidth={1} dot={false} />
@@ -1298,7 +1262,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
                   <div className="flex items-center gap-6 mt-3" style={{ fontSize: 13, color: MUTED }}>
                     <span className="flex items-center gap-1.5">
-                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: GREEN, display: 'inline-block' }} />
+                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: selectedDialLine, opacity: 0.45, display: 'inline-block' }} />
                       ${stats?.min?.toLocaleString() || 'N/A'} MIN
                     </span>
                     <span className="flex items-center gap-1.5">
@@ -1306,7 +1270,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                       ${stats?.avg?.toLocaleString() || 'N/A'} AVERAGE
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: RED, display: 'inline-block' }} />
+                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: selectedDialLine, opacity: 0.7, display: 'inline-block' }} />
                       ${stats?.max?.toLocaleString() || 'N/A'} MAX
                     </span>
                     {data.forecast?.ready && <span className="flex items-center gap-1.5">
@@ -1332,18 +1296,18 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </>
             ) : (
               <section aria-label="Insufficient price history evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Monthly trend data unavailable — fewer than 2 time-series points for this reference.</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Price chart unavailable — no qualified price observations exist for this reference and dial.</h3>
                 <p style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>Choose another dial color to inspect its independent evidence. Listing condition is descriptive and does not split the analytics cohort.</p>
               </section>
             )}
 
             {/* ── Listings Table ──────────────────────────────── */}
             {data.analytics_ready ? (
-            <details open style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '18px 0', marginBottom: 24 }}>
-              <summary style={{ cursor: 'pointer', color: NAVY, fontWeight: 700, fontSize: 14, marginBottom: 16 }}>
+            <details style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '18px 0', marginBottom: 24 }}>
+              <summary style={{ cursor: 'pointer', color: NAVY, fontWeight: 700, fontSize: 14 }}>
                 Analysis outcome and methodology
               </summary>
-              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+              <div className="mt-4 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
                 <div style={{ flex: 1 }}>
                   <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
                     <CheckCircle2 size={18} color={GREEN} />
@@ -1445,6 +1409,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           seller={listingSeller}
           loading={detailLoading}
           error={detailError}
+          title={`${data?.brand || ''} ${displayRef}`.trim()}
           onClose={closeListing}
           outlierLabel={outlierReason(selectedRow.outlier_reason)}
           benchmark={data?.stats}
@@ -1567,6 +1532,7 @@ function ReviewedPriceContext({ record, analytics }: { record: ReviewedMarketRec
     chartRows.sort((left, right) => left.month.localeCompare(right.month));
   }
   const chartReady = Boolean(postedMonth && chartRows.length > 0);
+  const cohortLineColor = dialChartColor(analytics.selected_cohort.dial_color || record.dial_color || '');
   const chartValues = [
     ...analytics.monthly.map(point => Number(point.avg_price)),
     price,
@@ -1604,7 +1570,7 @@ function ReviewedPriceContext({ record, analytics }: { record: ReviewedMarketRec
                   <XAxis dataKey="month" stroke={MUTED} fontSize={9} tickFormatter={month => String(month).replace(/^(\d{4})-(\d{2})$/, '$2/$1')} />
                   <YAxis domain={chartDomain} stroke={MUTED} fontSize={9} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} width={48} />
                   <Tooltip content={<ListingComparisonTooltip />} />
-                  <Line type="monotone" dataKey="avg_price" name="Verified monthly average" stroke={NAVY} strokeWidth={2.5} dot={{ r: 3, fill: NAVY }} connectNulls />
+                  <Line type="monotone" dataKey="avg_price" name="Verified monthly average" stroke={cohortLineColor} strokeWidth={2.5} dot={{ r: 3, fill: cohortLineColor }} connectNulls />
                   <Scatter dataKey="selected_price" name="Posted listing" fill={GOLD} />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -1725,7 +1691,9 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
 }
 
 function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
-  const date = row.listing_date;
+  const date = row.listing_date || row.created_at;
+  const imageUrl = row.thumbnail_url || row.image_url || row.image_urls?.find(Boolean) || '';
+  const rawMessage = String(row.raw_message || row.raw_line || '').trim();
   const hasUsdPrice = Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0;
   const hasSourcePrice = Boolean(
     row.source_price_amount
@@ -1740,10 +1708,11 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
       : 'Price not available';
   return (
     <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}`}
-      className="min-h-16"
-      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
+      className="min-h-24"
+      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
+      <ComparableThumbnail src={imageUrl} alt={`${title} listing image`} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="flex items-center gap-2">
           <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
@@ -1756,6 +1725,11 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
           <span className="mr-2">· {row.condition || 'Unspecified'}</span>
           {date && <span>· {date.split('T')[0]}</span>}
         </div>
+        {rawMessage && (
+          <div className="line-clamp-2" style={{ color: MUTED, fontSize: 11, lineHeight: 1.45, marginTop: 7, whiteSpace: 'pre-wrap' }}>
+            {rawMessage}
+          </div>
+        )}
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: hasUsdPrice ? GOLD : '#8a6500' }}>{priceLabel}</div>
@@ -1766,12 +1740,24 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
   );
 }
 
-function ListingDetailModal({ summary, detail, seller, loading, error, onClose, outlierLabel, benchmark, comparableCount, monthly, cohortDial }: {
+function ComparableThumbnail({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div aria-hidden={!src || failed} style={{ width: 76, height: 76, flex: '0 0 76px', borderRadius: 8, overflow: 'hidden', display: 'grid', placeItems: 'center', background: '#f1f3f5', color: MUTED, fontSize: 10 }}>
+      {src && !failed
+        ? <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : <span>No image</span>}
+    </div>
+  );
+}
+
+function ListingDetailModal({ summary, detail, seller, loading, error, title, onClose, outlierLabel, benchmark, comparableCount, monthly, cohortDial }: {
   summary: RowData;
   detail: ListingDetailData | null;
   seller: ListingSellerData | null;
   loading: boolean;
   error: string;
+  title: string;
   onClose: () => void;
   outlierLabel: string;
   benchmark: MarketBenchmark | null | undefined;
@@ -1784,9 +1770,11 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   const [copied, setCopied] = useState(false);
   const sourceImageEvidence = ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
     .includes(String(detail?.image_evidence_type || ''));
-  const images = sourceImageEvidence
-    ? [...new Set((detail?.image_urls || []).map(url => String(url || '').trim()).filter(url => url && !failedImages.has(url)))]
-    : [];
+  const detailImages = sourceImageEvidence ? (detail?.image_urls || []) : [];
+  const summaryImages = [summary.thumbnail_url, summary.image_url, ...(summary.image_urls || [])];
+  const images = [...new Set([...detailImages, ...summaryImages]
+    .map(url => String(url || '').trim())
+    .filter(url => url && !failedImages.has(url)))];
   const visibleImageIndex = activeImage < images.length ? activeImage : 0;
   const observedAt = detail?.listing_date || summary.listing_date;
   const sellerLocation = [seller?.dealer_city, seller?.dealer_country]
@@ -1829,6 +1817,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   }
   const cohortAverage = Number(benchmark?.avg || 0);
   const cohortLabel = `${cohortDial || 'Unspecified'} dial · all listing conditions`;
+  const cohortLineColor = dialChartColor(cohortDial || detail?.dial_color || summary.dial_color || '');
   const comparisonPrices = [
     ...monthly.map(point => Number(point.avg_price)),
     displayPrice,
@@ -1858,7 +1847,29 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
         </div>
 
         {loading && <div className="flex items-center justify-center gap-3" style={{ minHeight: 520, color: MUTED }}><Loader2 size={22} className="animate-spin" /> Loading source record…</div>}
-        {!loading && error && <div style={{ margin: 28, padding: 20, border: '1px solid #f1c2c7', background: '#fff5f6', color: RED }}><strong>Detail unavailable.</strong> {error}</div>}
+        {!loading && error && <div style={{ margin: 28, padding: 20, border: '1px solid #ead9a2', background: '#fffaf0', color: '#7a5900' }}><strong>Some source details are unavailable.</strong> The verified comparable summary is shown below.</div>}
+
+        {!loading && !detail && error && (
+          <div className={images.length ? 'grid md:grid-cols-[220px_minmax(0,1fr)]' : ''} style={{ padding: 28, gap: 24 }}>
+            {images.length > 0 && (
+              <img src={images[0]} alt={`${title} listing image`} onError={() => setFailedImages(current => new Set(current).add(images[0]))} style={{ width: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: 10, background: LIGHT_GRAY }} />
+            )}
+            <section>
+              <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 28, lineHeight: 1.15 }}>{title}</h1>
+              <div style={{ color: GOLD, fontSize: 22, fontWeight: 800, marginTop: 10 }}>
+                {Number(summary.price_usd) > 0 ? `$${Number(summary.price_usd).toLocaleString()}` : 'Price not available'}
+              </div>
+              <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>
+                {[summary.dial_color ? `${summary.dial_color} dial` : null, summary.condition, summary.listing_date?.split('T')[0]].filter(Boolean).join(' · ')}
+              </div>
+              {(summary.raw_message || summary.raw_line) && (
+                <pre style={{ marginTop: 18, padding: 16, background: '#111827', color: '#e5e7eb', borderRadius: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 320, overflowY: 'auto', fontSize: 12, lineHeight: 1.55 }}>
+                  {summary.raw_message || summary.raw_line}
+                </pre>
+              )}
+            </section>
+          </div>
+        )}
 
         {!loading && detail && (
           <div className={images.length > 0 ? 'grid lg:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]' : ''}>
@@ -1931,13 +1942,13 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                           <YAxis domain={comparisonDomain} stroke={MUTED} fontSize={10} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} width={52} />
                           <Tooltip content={<ListingComparisonTooltip />} />
                           {cohortAverage > 0 && <ReferenceLine y={cohortAverage} stroke={MUTED} strokeDasharray="5 4" />}
-                          <Line type="monotone" dataKey="avg_price" name="Monthly cohort average" stroke={NAVY} strokeWidth={2.5} dot={{ r: 3, fill: NAVY, stroke: WHITE, strokeWidth: 1.5 }} connectNulls />
+                          <Line type="monotone" dataKey="avg_price" name="Monthly cohort average" stroke={cohortLineColor} strokeWidth={2.5} dot={{ r: 3, fill: cohortLineColor, stroke: WHITE, strokeWidth: 1.5 }} connectNulls />
                           <Scatter dataKey="selected_price" name="Selected listing" fill={GOLD} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                     <div className="flex flex-wrap gap-x-5 gap-y-2" style={{ color: MUTED, fontSize: 11, marginTop: 10 }}>
-                      <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `3px solid ${NAVY}` }} /> Monthly cohort average</span>
+                      <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `3px solid ${cohortLineColor}` }} /> Monthly cohort average</span>
                       <span className="flex items-center gap-2"><span style={{ width: 9, height: 9, borderRadius: '50%', background: GOLD }} /> Selected listing{observedDate ? ` · ${observedDate}` : ''}</span>
                       {cohortAverage > 0 && <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `2px dashed ${MUTED}` }} /> Full cohort average ${Math.round(cohortAverage).toLocaleString()}</span>}
                     </div>
