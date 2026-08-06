@@ -103,7 +103,8 @@ test('browser routes mirror backend authorization for review and demo tools', ()
   // Price Research is intentionally public (2026-08-01 product decision:
   // adaa4e9, 0b92aa3, 0e51450 "remove DealerGate ... no login required").
   assert.match(app, /path="\/price-research" element=\{<PriceResearch \/>\}/);
-  assert.match(app, /path="\/admin-login" element=\{<DealerLogin \/>\}/);
+  assert.match(app, /path="\/cl-login" element=\{<DealerLogin \/>\}/);
+  assert.match(app, /path="\/admin-login" element=\{<Navigate to="\/cl-login" replace \/>\}/);
   assert.match(login, /route === '\/review-queue' \|\| route === '\/reprocess'/);
   assert.match(login, /route === '\/demo' \|\| route === '\/demo-mode'/);
 });

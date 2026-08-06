@@ -18,7 +18,7 @@ export function MarketNav() {
   }, []);
 
   const links = [
-    ...(!role ? [{ to: '/dealer-login', label: 'Login' }] : []),
+    ...(!role ? [{ to: '/dealer', label: 'Login' }] : []),
     ...(role ? [{ to: '/dealers', label: 'Dealers' }] : []),
     ...(role === 'admin' ? [{ to: '/admin', label: 'Admin Panel' }] : []),
   ];

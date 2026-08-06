@@ -2180,8 +2180,8 @@ function Footer() {
         <div>
           <div style={sectionTitle}>Dealers</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Link to="/dealer" style={linkStyle}>Dealer Workspace</Link>
-            <Link to="/dealer-login" style={linkStyle}>Dealer Login</Link>
+            <Link to="/dealer/workspace" style={linkStyle}>Dealer Workspace</Link>
+            <Link to="/dealer" style={linkStyle}>Dealer Login</Link>
           </div>
         </div>
         <div>

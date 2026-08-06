@@ -20,6 +20,57 @@ function sameOrigin(req) {
   try { return new URL(origin).host === host; } catch { return false; }
 }
 
+function credentialedLocation(dealer) {
+  return [clean(dealer?.city, 120), clean(dealer?.country_code, 3)]
+    .filter(Boolean).join(', ') || null;
+}
+
+async function loadCredentialedPoster(client, user) {
+  const { data: dealer, error } = await client.from('dealers')
+    .select('id,display_name,company_name,country_code,city,avatar_url,status,rating,review_count,whatsapp_group_count')
+    .eq('auth_user_id', user.id).maybeSingle();
+  if (error) throw error;
+  if (!dealer) return null;
+
+  const { data: identities, error: identityError } = await client.from('dealer_source_identities')
+    .select('source_identity,identity_type,verification_status')
+    .eq('dealer_id', dealer.id)
+    .eq('verification_status', 'VERIFIED')
+    .in('identity_type', ['PHONE', 'WHATSAPP', 'phone', 'whatsapp']);
+  if (identityError) throw identityError;
+  const phoneIdentity = (identities || []).find(item => /^(?:phone|whatsapp)$/i.test(item.identity_type));
+
+  return {
+    dealer_id: dealer.id,
+    auth_user_id: user.id,
+    email: user.email || null,
+    name: clean(dealer.display_name, 160) || clean(dealer.company_name, 160),
+    company: clean(dealer.company_name, 160),
+    phone: clean(phoneIdentity?.source_identity, 50),
+    location: credentialedLocation(dealer),
+    avatar_url: clean(dealer.avatar_url, 2000),
+    credential_status: dealer.status,
+    rating: dealer.rating == null ? null : Number(dealer.rating),
+    review_count: Number(dealer.review_count || 0),
+    group_count: Number(dealer.whatsapp_group_count || 0),
+  };
+}
+
+function credentialError(poster) {
+  if (!poster) return 'This account is not linked to a dealer profile.';
+  if (['SUSPENDED', 'ARCHIVED'].includes(poster.credential_status)) return 'This dealer credential cannot publish listings.';
+  const missing = [!poster.name && 'name', !poster.phone && 'verified phone', !poster.location && 'location'].filter(Boolean);
+  return missing.length ? `Complete the credentialed dealer profile before posting: ${missing.join(', ')}.` : null;
+}
+
+function ownedMediaUrl(value, userId) {
+  const exact = clean(value, 2000);
+  if (!exact) return null;
+  const base = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
+  const prefix = `${base}/storage/v1/object/public/dealer-listing-media/${userId}/`;
+  return base && exact.startsWith(prefix) ? exact : null;
+}
+
 function validateSubmission(body = {}) {
   const intent = clean(body.intent, 3)?.toUpperCase();
   const category = clean(body.category, 20)?.toUpperCase();
@@ -35,15 +86,11 @@ function validateSubmission(body = {}) {
     dial_color: clean(body.dial_color), condition: clean(body.condition, 40),
     price_amount: body.price_amount == null || body.price_amount === '' ? null : Number(body.price_amount),
     currency: clean(body.currency, 8)?.toUpperCase() || null,
-    location: clean(body.location, 160), title: clean(body.title, 240),
-    poster_name: clean(body.poster_name, 160), poster_phone: clean(body.poster_phone, 50),
+    title: clean(body.title, 240),
   };
   if (category === 'WATCH') {
     const missing = ['brand', 'model', 'reference', 'dial_color'].filter(field => !claimed[field]);
     if (missing.length) return { error: `Required watch fields: ${missing.join(', ')}.` };
-  }
-  if (!claimed.poster_name || !claimed.poster_phone || !claimed.location) {
-    return { error: 'Posting user name, phone number, and location are required.' };
   }
   if (claimed.price_amount != null && (!Number.isFinite(claimed.price_amount) || claimed.price_amount <= 0 || claimed.price_amount > 1_000_000_000)) {
     return { error: 'Enter a valid positive price.' };
@@ -53,21 +100,13 @@ function validateSubmission(body = {}) {
   const imageUrls = Array.isArray(body.image_urls) ? body.image_urls.map(value => clean(value, 2000)).filter(Boolean).slice(0, 5) : [];
   if (!imageUrls.length) return { error: 'Add at least one item photo.' };
   if (imageUrls.some(value => !/^https:\/\//i.test(value))) return { error: 'Invalid item photo URL.' };
-  const posterImageUrl = clean(body.poster_image_url, 2000);
-  if (posterImageUrl && !/^https:\/\//i.test(posterImageUrl)) return { error: 'Invalid posting-user photo URL.' };
-  return { intent, category, rawMessage, claimed, imageUrls, posterImageUrl };
+  return { intent, category, rawMessage, claimed, imageUrls };
 }
 
 function validateBatch(body = {}) {
   const items = Array.isArray(body.items) ? body.items : [body];
   if (!items.length || items.length > MAX_BULK_ITEMS) return { error: `Submit between 1 and ${MAX_BULK_ITEMS} items at a time.` };
-  const validated = items.map(item => validateSubmission({
-    ...item,
-    poster_name: item.poster_name || body.poster_name,
-    poster_phone: item.poster_phone || body.poster_phone,
-    location: item.location || body.location,
-    poster_image_url: item.poster_image_url || body.poster_image_url,
-  }));
+  const validated = items.map(item => validateSubmission(item));
   const failedIndex = validated.findIndex(item => item.error);
   if (failedIndex >= 0) return { error: `Item ${failedIndex + 1}: ${validated[failedIndex].error}` };
   return { items: validated };
@@ -78,28 +117,56 @@ async function handler(req, res) {
   const authorization = await authorizeDealer(req, res);
   if (authorization.error) return res.status(authorization.status).json({ error: authorization.error });
 
+  let poster;
+  try {
+    poster = await loadCredentialedPoster(authorization.client, authorization.user);
+  } catch (error) {
+    console.error('[dealer-submissions-credential]', error.message);
+    return res.status(500).json({ error: 'Unable to load the credentialed poster profile.' });
+  }
+
   if (req.method === 'GET') {
     const { data, error } = await authorization.client.from('dealer_listing_submissions')
       .select('id,intent,category,claimed_fields,review_status,publication_status,created_at')
       .eq('auth_user_id', authorization.user.id)
       .order('created_at', { ascending: false }).limit(25);
     if (error) return res.status(500).json({ error: 'Unable to load submissions.' });
-    return res.status(200).json({ success: true, submissions: data || [] });
+    return res.status(200).json({ success: true, submissions: data || [], poster, credential_error: credentialError(poster) });
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!sameOrigin(req)) return res.status(403).json({ error: 'Invalid request origin.' });
   const batch = validateBatch(req.body);
   if (batch.error) return res.status(400).json({ error: batch.error });
+  const posterError = credentialError(poster);
+  if (posterError) return res.status(409).json({ error: posterError });
 
-  const { data: dealer } = await authorization.client.from('dealers')
-    .select('id,avatar_url,rating').eq('auth_user_id', authorization.user.id).maybeSingle();
+  for (const item of batch.items) {
+    if (item.imageUrls.some(url => !ownedMediaUrl(url, authorization.user.id))) {
+      return res.status(400).json({ error: 'Every item photo must come from this credentialed account upload.' });
+    }
+  }
+  const submittedPosterImage = ownedMediaUrl(req.body?.poster_image_url, authorization.user.id);
+  if (req.body?.poster_image_url && !submittedPosterImage) return res.status(400).json({ error: 'Invalid posting-user photo.' });
+  const posterImageUrl = submittedPosterImage || poster.avatar_url || null;
+  if (submittedPosterImage && submittedPosterImage !== poster.avatar_url) {
+    const { error: avatarError } = await authorization.client.from('dealers')
+      .update({ avatar_url: submittedPosterImage, updated_at: new Date().toISOString() })
+      .eq('id', poster.dealer_id).eq('auth_user_id', authorization.user.id);
+    if (avatarError) return res.status(500).json({ error: 'Unable to update the credentialed profile photo.' });
+  }
+
   const bulkSubmissionId = batch.items.length > 1 ? crypto.randomUUID() : null;
+  const posterSnapshot = {
+    poster_name: poster.name, poster_phone: poster.phone, location: poster.location,
+    dealer_rating: poster.rating, review_count: poster.review_count,
+    group_count: poster.group_count, credential_status: poster.credential_status,
+  };
   const submissionRows = batch.items.map(validated => ({
-    auth_user_id: authorization.user.id, dealer_id: dealer?.id || null,
+    auth_user_id: authorization.user.id, dealer_id: poster.dealer_id,
     intent: validated.intent, category: validated.category, raw_message: validated.rawMessage,
-    claimed_fields: { ...validated.claimed, dealer_rating: dealer?.rating || null }, image_urls: validated.imageUrls,
-    poster_image_url: validated.posterImageUrl || dealer?.avatar_url || null,
+    claimed_fields: { ...validated.claimed, ...posterSnapshot }, image_urls: validated.imageUrls,
+    poster_image_url: posterImageUrl,
     submission_checksum: crypto.createHash('sha256').update(JSON.stringify({
       intent: validated.intent, category: validated.category, raw_message: validated.rawMessage,
       claimed: validated.claimed, image_urls: validated.imageUrls,
@@ -114,11 +181,12 @@ async function handler(req, res) {
     if (error.code === '23505') return res.status(409).json({ error: 'This exact item post already exists.' });
     return res.status(500).json({ error: 'Unable to save the submission.' });
   }
+
   const stagingRows = data.map((submission, index) => {
     const validated = batch.items[index];
     const price = validated.claimed.price_amount;
     return {
-      source_submission_id: submission.id, dealer_id: dealer?.id || null,
+      source_submission_id: submission.id, dealer_id: poster.dealer_id,
       raw_message_text: validated.rawMessage, category: validated.category,
       intent: validated.intent, listing_type: 'SINGLE', is_bundle: false,
       brand_original: validated.claimed.brand, brand_normalized: validated.claimed.brand,
@@ -130,15 +198,20 @@ async function handler(req, res) {
       price_usd: validated.claimed.currency === 'USD' ? price : null,
       currency_original: validated.claimed.currency, currency_normalized: validated.claimed.currency,
       image_url: validated.imageUrls[0], image_urls: validated.imageUrls,
-      user_image_url: validated.posterImageUrl || dealer?.avatar_url || null,
-      user_name: validated.claimed.poster_name, from_name: validated.claimed.poster_name,
-      contact_number: validated.claimed.poster_phone, from_number: validated.claimed.poster_phone,
-      location: validated.claimed.location, rating: dealer?.rating || 0, dealer_rating: dealer?.rating || 0,
-      contact_consent: true, are_attributes_extracted: true,
+      user_image_url: posterImageUrl,
+      user_name: poster.name, from_name: poster.name,
+      contact_number: poster.phone, from_number: poster.phone,
+      location: poster.location, rating: poster.rating || 0, dealer_rating: poster.rating || 0,
+      contact_consent: true, is_verified_user: poster.credential_status === 'VERIFIED',
+      is_seller_approved: poster.credential_status === 'VERIFIED', are_attributes_extracted: true,
       identification_status: validated.category === 'WATCH' ? 'identified' : 'normalized',
       verdict: 'approved', normalization_status: 'normalized', trading_floor_status: 'published',
       price_research_status: validated.category !== 'WATCH' ? 'ineligible_non_watch' : price == null ? 'ineligible_no_price' : validated.claimed.currency === 'USD' ? 'eligible' : 'provisional_needs_review',
-      provenance_metadata: { source: 'authenticated_user_form', submission_id: submission.id, poster_image_url: validated.posterImageUrl || dealer?.avatar_url || null },
+      provenance_metadata: {
+        source: 'authenticated_user_form', submission_id: submission.id,
+        poster_image_url: posterImageUrl,
+        credential_stamp: { auth_user_id: poster.auth_user_id, dealer_id: poster.dealer_id, status: poster.credential_status },
+      },
       overall_confidence: 1,
     };
   });
@@ -155,3 +228,7 @@ module.exports = handler;
 module.exports.validateSubmission = validateSubmission;
 module.exports.validateBatch = validateBatch;
 module.exports.MAX_BULK_ITEMS = MAX_BULK_ITEMS;
+module.exports.credentialError = credentialError;
+module.exports.credentialedLocation = credentialedLocation;
+module.exports.loadCredentialedPoster = loadCredentialedPoster;
+module.exports.ownedMediaUrl = ownedMediaUrl;

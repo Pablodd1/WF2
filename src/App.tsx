@@ -33,9 +33,11 @@ export default function App() {
       <Suspense fallback={<div className="min-h-screen bg-white" />}>
         <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/dealer-login" element={<DealerLogin />} />
-        <Route path="/admin-login" element={<DealerLogin />} />
-        <Route path="/dealer" element={<DealerGate allowBetaSkip><DealerPortal /></DealerGate>} />
+        <Route path="/dealer" element={<DealerLogin />} />
+        <Route path="/dealer-login" element={<Navigate to="/dealer" replace />} />
+        <Route path="/cl-login" element={<DealerLogin />} />
+        <Route path="/admin-login" element={<Navigate to="/cl-login" replace />} />
+        <Route path="/dealer/workspace" element={<DealerGate><DealerPortal /></DealerGate>} />
         <Route path="/dealer/post" element={<DealerGate><DealerSubmitListing /></DealerGate>} />
         <Route path="/dealer/account/:section" element={<DealerGate><DealerAccount /></DealerGate>} />
         <Route path="/dashboard" element={<DealerGate allowedRoles={['admin']}><OperationsDashboard /></DealerGate>} />

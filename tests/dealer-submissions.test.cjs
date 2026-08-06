@@ -4,9 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { validateBatch, validateSubmission } = require('../api/dealer-submissions.js');
+const { credentialError, credentialedLocation, ownedMediaUrl, validateBatch, validateSubmission } = require('../api/dealer-submissions.js');
 
-const poster = { poster_name: 'Alex Dealer', poster_phone: '+1 305 555 0101', location: 'Miami, US' };
 const image_urls = ['https://example.supabase.co/storage/v1/object/public/dealer-listing-media/item.jpg'];
 
 test('requires normalized watch identity and a source item photo while allowing no-price WTS posts', () => {
@@ -14,7 +13,7 @@ test('requires normalized watch identity and a source item photo while allowing 
   assert.match(invalid.error, /brand, model, reference, dial_color/);
 
   const valid = validateSubmission({
-    ...poster, image_urls,
+    image_urls,
     intent: 'WTS', category: 'WATCH', raw_message: 'Rolex Daytona 116500LN white USD 30000',
     brand: 'Rolex', model: 'Daytona', reference: '116500LN', dial_color: 'White',
   });
@@ -24,7 +23,7 @@ test('requires normalized watch identity and a source item photo while allowing 
 
 test('allows a WTB watch request without an asking price', () => {
   const valid = validateSubmission({
-    ...poster, image_urls,
+    image_urls,
     intent: 'WTB', category: 'WATCH', raw_message: 'WTB Patek 5712/1A blue',
     brand: 'Patek Philippe', model: 'Nautilus', reference: '5712/1A', dial_color: 'Blue',
   });
@@ -32,15 +31,31 @@ test('allows a WTB watch request without an asking price', () => {
   assert.equal(valid.claimed.price_amount, null);
 });
 
-test('validates a bulk submission and applies shared posting-user fields', () => {
+test('validates bulk item data without accepting typed poster identity', () => {
   const item = {
     intent: 'WTB', category: 'WATCH', raw_message: 'WTB Patek 5712 blue',
     brand: 'Patek Philippe', model: 'Nautilus', reference: '5712/1A', dial_color: 'Blue', image_urls,
   };
-  const batch = validateBatch({ ...poster, items: [item, { ...item, reference: '5711/1A' }] });
+  const batch = validateBatch({ poster_name: 'Spoofed Person', items: [item, { ...item, reference: '5711/1A' }] });
   assert.equal(batch.error, undefined);
   assert.equal(batch.items.length, 2);
-  assert.equal(batch.items[1].claimed.poster_name, poster.poster_name);
+  assert.equal(batch.items[1].claimed.poster_name, undefined);
+});
+
+test('credential stamp requires linked name, verified phone, and location', () => {
+  const complete = { name: 'Alex Dealer', phone: '+13055550101', location: 'Miami, US', credential_status: 'VERIFIED' };
+  assert.equal(credentialError(complete), null);
+  assert.match(credentialError({ ...complete, phone: null }), /verified phone/);
+  assert.match(credentialError(null), /not linked/);
+  assert.equal(credentialedLocation({ city: 'Miami', country_code: 'US' }), 'Miami, US');
+});
+
+test('uploaded media must belong to the signed-in credential path', () => {
+  const previous = process.env.SUPABASE_URL;
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  assert.equal(ownedMediaUrl('https://example.supabase.co/storage/v1/object/public/dealer-listing-media/user-1/listing/item.jpg', 'user-1')?.endsWith('item.jpg'), true);
+  assert.equal(ownedMediaUrl('https://example.supabase.co/storage/v1/object/public/dealer-listing-media/user-2/listing/item.jpg', 'user-1'), null);
+  if (previous === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = previous;
 });
 
 test('submission migration is service-role only and review-gated', () => {

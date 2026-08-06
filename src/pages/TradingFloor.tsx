@@ -88,6 +88,9 @@ interface ListingRecord {
   seller_phone?: string | null;
   seller_avatar_url?: string | null;
   seller_rating?: number | null;
+  seller_review_count?: number | null;
+  seller_group_count?: number | null;
+  seller_credential_status?: string | null;
   location?: string | null;
   seller_country?: string | null;
   posted_by?: string | null;
@@ -1069,6 +1072,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
                 <div>
                   {(contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name) && <div className="text-base font-semibold" style={{ color: INK }}>{contact?.dealer_name || (listing as any)['Posted By'] || listing.seller_name}</div>}
                   {listing.seller_rating != null && <div className="mt-1 text-xs" style={{ color: GOLD_BRIGHT }}>Rating {Number(listing.seller_rating).toFixed(1)}</div>}
+                  {(listing.seller_review_count != null || listing.seller_group_count != null) && <div className="mt-1 text-xs" style={{ color: MUTED }}>{listing.seller_review_count || 0} reviews · {listing.seller_group_count || 0} groups{listing.seller_credential_status ? ` · ${listing.seller_credential_status.toLowerCase()}` : ''}</div>}
                 </div>
               </div>
               {(contact?.phone_display || (listing as any)['Phone Number'] || listing.seller_phone) && (
