@@ -62,7 +62,7 @@ class TestWatchFactsPipeline(unittest.TestCase):
         self.assertEqual(res3["category"], "WATCH")
         self.assertEqual(res3["intent"], "WTB")
         self.assertEqual(res3["trading_floor_status"], "published")
-        self.assertEqual(res3["price_research_status"], "ineligible_wtb")
+        self.assertEqual(res3["price_research_status"], "ineligible_no_price")
 
     def test_bundle_splitting(self):
         from pipeline_bundle_splitter import split_bundle_listing

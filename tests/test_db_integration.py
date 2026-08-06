@@ -72,5 +72,53 @@ class TestDatabaseAndPostgRESTIntegration(unittest.TestCase):
         processed = run_pipeline_step(limit=1)
         self.assertIsInstance(processed, int)
 
+    def test_05_sqlite_pipeline_step_with_provenance_metadata(self):
+        """Test seeding SQLite pending job, executing run_pipeline_step, and verifying parent insertion with provenance_metadata."""
+        import pipeline_runner
+        old_pgpass = pipeline_runner.PGPASSWORD
+        old_dburl = pipeline_runner.DATABASE_URL
+        old_req_pg = pipeline_runner.REQUIRE_POSTGRES
+        
+        try:
+            pipeline_runner.PGPASSWORD = None
+            pipeline_runner.DATABASE_URL = None
+            pipeline_runner.REQUIRE_POSTGRES = False
+            
+            conn = pipeline_runner.get_db_connection()
+            self.assertTrue(pipeline_runner.IS_SQLITE)
+            cur = conn.cursor()
+            
+            payload_id = str(uuid.uuid4())
+            job_id = str(uuid.uuid4())
+            checksum = hashlib.sha256(f"SQLite Test Listing Rolex Submariner {payload_id}".encode('utf-8')).hexdigest()
+            
+            cur.execute("""
+                INSERT INTO payloads (id, source_platform, source_group_id, source_group_name, source_message_id, source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum)
+                VALUES (?, 'WTS', 'g1', 'Group1', 'm1', 's1', 'Sender1', 'Rolex Submariner 126610LN 2023 New $14000', datetime('now'), ?);
+            """, (payload_id, checksum))
+            cur.execute("""
+                INSERT INTO processing_jobs (id, raw_payload_id, status)
+                VALUES (?, ?, 'queued');
+            """, (job_id, payload_id))
+            conn.commit()
+            conn.close()
+            
+            processed = pipeline_runner.run_pipeline_step(limit=1)
+            self.assertGreaterEqual(processed, 1)
+            
+            conn = pipeline_runner.get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT id, brand_normalized, provenance_metadata, trading_floor_status FROM listings WHERE job_id = ?;", (job_id,))
+            row = cur.fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row['brand_normalized'], 'Rolex')
+            self.assertIsNotNone(row['provenance_metadata'])
+            self.assertIn('plausibility_reason', row['provenance_metadata'])
+            conn.close()
+        finally:
+            pipeline_runner.PGPASSWORD = old_pgpass
+            pipeline_runner.DATABASE_URL = old_dburl
+            pipeline_runner.REQUIRE_POSTGRES = old_req_pg
+
 if __name__ == "__main__":
     unittest.main()

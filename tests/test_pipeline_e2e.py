@@ -80,11 +80,11 @@ class TestPipelineEndToEnd(unittest.TestCase):
         self.assertEqual(result["trading_floor_status"], "bundle_pending_separation")
         self.assertEqual(result["price_research_status"], "ineligible_bundle")
 
-        # Children should be unbundled and quarantined pending review
+        # Normalized children should be published on Trading Floor with parent lineage
         children = result.get("child_listings", [])
         self.assertGreater(len(children), 0)
         for child in children:
-            self.assertEqual(child["trading_floor_status"], "bundle_child_pending_review")
+            self.assertEqual(child["trading_floor_status"], "published")
 
     def test_e2e_rm_price_validation(self):
         """Test Richard Mille price validation check."""
@@ -104,7 +104,7 @@ class TestPipelineEndToEnd(unittest.TestCase):
 
     def test_e2e_wtb_watch_classification(self):
         """Test WTB watch classification."""
-        msg_text = "Looking for Rolex 126333 White Index Oyster BNIB"
+        msg_text = "Looking for Rolex 126333 White Index Oyster BNIB $12000"
         job_id = str(uuid.uuid4())
         job_data = {
             "id": job_id,
@@ -112,13 +112,14 @@ class TestPipelineEndToEnd(unittest.TestCase):
             "message_text": msg_text,
             "type": "buy",
             "brand_src": "Rolex",
-            "reference_src": "126333"
+            "reference_src": "126333",
+            "price_src": 12000.0
         }
 
         result = self.processor.process_job(job_data)
         self.assertEqual(result["category"], "WATCH")
         self.assertEqual(result["trading_floor_status"], "published")
-        self.assertEqual(result["price_research_status"], "ineligible_wtb")
+        self.assertEqual(result["price_research_status"], "eligible")
 
     def test_currency_and_multiplier_handling(self):
         """Test parsing of 34HKD, 475k, and 4.5m values."""

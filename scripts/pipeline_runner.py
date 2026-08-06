@@ -11,6 +11,7 @@ import sys
 import time
 import uuid
 import hashlib
+import json
 import sqlite3
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -140,6 +141,7 @@ def setup_sqlite_schema(conn):
         contact_consent INTEGER DEFAULT 0,
         catalog_confirmed INTEGER DEFAULT 0,
         overall_confidence REAL,
+        provenance_metadata TEXT,
         verdict TEXT DEFAULT 'approved',
         normalization_status TEXT DEFAULT 'normalized',
         trading_floor_status TEXT DEFAULT 'published',
@@ -167,6 +169,10 @@ def setup_sqlite_schema(conn):
         completed_at TEXT
     );
     """)
+    try:
+        cur.execute("ALTER TABLE listings ADD COLUMN provenance_metadata TEXT;")
+    except Exception:
+        pass
     conn.commit()
 
 def db_execute(cur, query, args=None):
@@ -349,6 +355,7 @@ def run_pipeline_step(limit=50):
 
             for idx, child in enumerate(res.get("child_listings", [])):
                 child_uuid = generate_deterministic_uuid("watchfacts.listing.child", f"{job_id}:{idx}")
+                c_prov_json = json.dumps(child.get("provenance_metadata", {}))
                 child_query = f"""
                 INSERT INTO {listings_table} (
                     id, job_id, parent_id, bundle_position, raw_message_text, category, intent, listing_type, is_bundle,
@@ -359,18 +366,18 @@ def run_pipeline_step(limit=50):
                     condition_original, condition_normalized, box_original, box_normalized,
                     papers_original, papers_normalized, image_url, report_url, user_name, from_name, contact_number, from_number,
                     phone_code, location, rating, dealer_rating, is_verified_user, is_paid_user, is_seller_approved, company_id,
-                    contact_consent, catalog_confirmed, overall_confidence, verdict,
+                    contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
                     normalization_status, trading_floor_status, price_research_status
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 """
                 if IS_SQLITE:
                     child_query = child_query.replace("%s", "?") + " ON CONFLICT(id) DO UPDATE SET raw_message_text = excluded.raw_message_text;"
                 else:
-                    child_query += " ON CONFLICT (id) DO UPDATE SET raw_message_text = EXCLUDED.raw_message_text;"
+                    child_query += " ON CONFLICT (id) DO UPDATE SET raw_message_text = EXCLUDED.raw_message_text, provenance_metadata = EXCLUDED.provenance_metadata;"
 
                 child_args = (
                     child_uuid, job_id, parent_uuid, child["bundle_position"], child["raw_text_segment"], "WATCH", res["intent"],
@@ -385,7 +392,7 @@ def run_pipeline_step(limit=50):
                     res["phone_code"], res["location"], res["rating"], res["dealer_rating"],
                     bool_val(res["is_verified_user"]), bool_val(res["is_paid_user"]), bool_val(res["is_seller_approved"]),
                     res["company_id"], bool_val(False), bool_val(False),
-                    child["overall_confidence"], child["verdict"], child["normalization_status"],
+                    child["overall_confidence"], c_prov_json, child["verdict"], child["normalization_status"],
                     child["trading_floor_status"], child["price_research_status"]
                 )
                 db_execute(cur, child_query, child_args)

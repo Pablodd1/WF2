@@ -183,10 +183,14 @@ class WatchFactsPipelineProcessor:
                 curr = m.group(2).upper().replace("$", "USD")
                 return (val, curr)
 
+        ref_val = self.extract_reference(text)
+
         m = re.search(r'\b(\d{3,7})\s*(?:shipped|net|all in|obo|\$)?\b', text_clean, re.I)
         if m:
             val = float(m.group(1))
-            if not (1950 <= val <= 2030 and len(str(int(val))) == 4):
+            if ref_val and str(int(val)) == str(ref_val):
+                pass
+            elif not (1950 <= val <= 2030 and len(str(int(val))) == 4):
                 return (val, default_curr)
 
         return (0.0, "USD")
@@ -276,7 +280,7 @@ class WatchFactsPipelineProcessor:
 
         price_plausible, plausibility_reason = self.check_price_plausibility(parsed["brand"], parsed.get("price_usd", parsed["price"]))
 
-        if has_brand and has_ref and has_price and price_plausible:
+        if has_brand and has_ref:
             normalization_status = "normalized"
         elif has_brand or has_ref or has_price:
             normalization_status = "partially_normalized"
@@ -300,8 +304,6 @@ class WatchFactsPipelineProcessor:
             price_research_status = "ineligible_currency"
         elif not has_brand or not has_ref:
             price_research_status = "ineligible_identity"
-        elif intent in ("WTB", "NEED"):
-            price_research_status = "ineligible_wtb"
         elif not price_plausible:
             price_research_status = "provisional_needs_review"
         else:
@@ -412,6 +414,14 @@ class WatchFactsPipelineProcessor:
                     {"brand": c_brand, "reference": c_ref, "price": c_price, "currency": c_currency, "price_usd": c_usd},
                     False, intent, "WATCH", False
                 )
+
+                if c_statuses["normalization_status"] == "needs_review":
+                    c_tf_status = "bundle_child_pending_review"
+                    c_pr_status = "ineligible_bundle_child_pending_review"
+                else:
+                    c_tf_status = "published"
+                    c_pr_status = c_statuses["price_research_status"]
+
                 child_listings.append({
                     "raw_text_segment":      item["raw_text"],
                     "bundle_position":       idx,
@@ -436,8 +446,15 @@ class WatchFactsPipelineProcessor:
                     "verdict":               c_verdict,
                     "validation_errors":     c_errors,
                     "normalization_status":  c_statuses["normalization_status"],
-                    "trading_floor_status":  "bundle_child_pending_review",
-                    "price_research_status": "ineligible_bundle_child_pending_review",
+                    "trading_floor_status":  c_tf_status,
+                    "price_research_status": c_pr_status,
+                    "provenance_metadata":   {
+                        "brand": "parsed" if c_brand else "missing",
+                        "reference": "parsed" if c_ref else "missing",
+                        "price": "parsed" if c_price > 0 else "missing",
+                        "dial": "parsed" if c_dial else "image_pending",
+                        "plausibility_reason": c_statuses["plausibility_reason"],
+                    },
                     "overall_confidence":    self.compute_confidence(
                         {"brand": c_brand, "reference": c_ref, "price": c_price,
                          "dial_color": c_dial, "condition": c_cond}, False, c_statuses["price_plausible"]
