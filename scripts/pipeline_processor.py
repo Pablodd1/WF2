@@ -200,6 +200,8 @@ class WatchFactsPipelineProcessor:
     def check_price_plausibility(self, brand, price_usd):
         if price_usd <= 0:
             return (False, "NO_PRICE")
+        if price_usd < 50.0:
+            return (False, f"SUSPICIOUS_LOW_PRICE_${price_usd:.2f}_<_$50")
         if not brand or brand not in BRAND_PRICE_PLAUSIBILITY:
             return (True, "OK")
             

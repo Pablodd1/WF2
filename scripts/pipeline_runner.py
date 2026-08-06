@@ -183,18 +183,30 @@ def check_duplicate_payload(cur, checksum, current_payload_id, batch_seen_checks
     payloads_table = "payloads" if IS_SQLITE else "raw.payloads"
     jobs_table = "processing_jobs" if IS_SQLITE else "jobs.processing_jobs"
     try:
-        db_execute(cur, f"""
-            SELECT 1 
-            FROM {payloads_table} p 
-            JOIN {jobs_table} j ON p.id = j.raw_payload_id 
-            WHERE p.payload_checksum = %s 
-              AND p.id != %s 
-              AND j.status IN ('normalized', 'completed', 'processing')
-            LIMIT 1;
-        """, (checksum, current_payload_id))
+        if IS_SQLITE:
+            db_execute(cur, f"""
+                SELECT 1 
+                FROM {payloads_table} p 
+                JOIN {jobs_table} j ON p.id = j.raw_payload_id 
+                WHERE p.payload_checksum = %s 
+                  AND p.id != %s 
+                  AND j.status IN ('normalized', 'processing', 'extracted', 'validated', 'approved')
+                LIMIT 1;
+            """, (checksum, current_payload_id))
+        else:
+            db_execute(cur, f"""
+                SELECT 1 
+                FROM {payloads_table} p 
+                JOIN {jobs_table} j ON p.id = j.raw_payload_id 
+                WHERE p.payload_checksum = %s 
+                  AND p.id != %s 
+                  AND j.status::text IN ('normalized', 'processing', 'extracted', 'validated', 'approved')
+                LIMIT 1;
+            """, (checksum, current_payload_id))
         row = cur.fetchone()
         return bool(row)
-    except Exception:
+    except Exception as e:
+        print(f"Error checking duplicate payload: {e}")
         return False
 
 def run_pipeline_step(limit=50):
@@ -223,7 +235,7 @@ def run_pipeline_step(limit=50):
     else:
         db_execute(cur, """
             WITH target_jobs AS (
-                SELECT j.id
+                SELECT j.id, j.raw_payload_id
                 FROM jobs.processing_jobs j
                 WHERE j.status IN ('received'::jobs.processing_status, 'queued'::jobs.processing_status)
                 ORDER BY j.created_at ASC
@@ -234,7 +246,7 @@ def run_pipeline_step(limit=50):
             SET status = 'processing'::jobs.processing_status,
                 updated_at = NOW()
             FROM target_jobs t
-            JOIN raw.payloads p ON j.raw_payload_id = p.id
+            JOIN raw.payloads p ON t.raw_payload_id = p.id
             WHERE j.id = t.id
             RETURNING j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
                       p.source_sender_name as from_name, p.source_sender_id as from_number,
@@ -306,9 +318,12 @@ def run_pipeline_step(limit=50):
             else:
                 parent_query += " ON CONFLICT (id) DO UPDATE SET raw_message_text = EXCLUDED.raw_message_text, trading_floor_status = EXCLUDED.trading_floor_status;"
 
+            def bool_val(v):
+                return (1 if v else 0) if IS_SQLITE else bool(v)
+
             parent_args = (
                 parent_uuid, job_id, None, None, res["raw_message_text"], res["category"], res["intent"], res["listing_type"],
-                1 if res["is_bundle"] else 0, res["brand_original"], res["brand_normalized"],
+                bool_val(res["is_bundle"]), res["brand_original"], res["brand_normalized"],
                 res["model_original"], res["model_normalized"], res["reference_original"], res["reference_normalized"],
                 res["dial_color_original"], res["dial_color_normalized"], res["dial_color_source"],
                 res["price_original"], res["currency_original"], res["price_normalized"], res["currency_normalized"],
@@ -317,8 +332,8 @@ def run_pipeline_step(limit=50):
                 res["papers_original"], res["papers_normalized"], res["image_url"], res["report_url"],
                 res["user_name"], res["from_name"], res["contact_number"], res["from_number"],
                 res["phone_code"], res["location"], res["rating"], res["dealer_rating"],
-                1 if res["is_verified_user"] else 0, 1 if res["is_paid_user"] else 0, 1 if res["is_seller_approved"] else 0,
-                res["company_id"], 1 if res["contact_consent"] else 0, 1 if res["catalog_confirmed"] else 0,
+                bool_val(res["is_verified_user"]), bool_val(res["is_paid_user"]), bool_val(res["is_seller_approved"]),
+                res["company_id"], bool_val(res["contact_consent"]), bool_val(res["catalog_confirmed"]),
                 res["overall_confidence"], res["verdict"], res["normalization_status"],
                 res["trading_floor_status"], res["price_research_status"]
             )
@@ -351,7 +366,7 @@ def run_pipeline_step(limit=50):
 
                 child_args = (
                     child_uuid, job_id, parent_uuid, child["bundle_position"], child["raw_text_segment"], "WATCH", res["intent"],
-                    child["listing_type"], 0, child["brand_normalized"], child["brand_normalized"],
+                    child["listing_type"], bool_val(False), child["brand_normalized"], child["brand_normalized"],
                     None, None, child["reference_normalized"], child["reference_normalized"],
                     child["dial_color_normalized"], child["dial_color_normalized"], child["dial_color_source"],
                     child["price_normalized"], child["currency_normalized"], child["price_normalized"], child["currency_normalized"],
@@ -360,28 +375,40 @@ def run_pipeline_step(limit=50):
                     child["papers_normalized"], child["papers_normalized"], "", "",
                     res["user_name"], res["from_name"], res["contact_number"], res["from_number"],
                     res["phone_code"], res["location"], res["rating"], res["dealer_rating"],
-                    1 if res["is_verified_user"] else 0, 1 if res["is_paid_user"] else 0, 1 if res["is_seller_approved"] else 0,
-                    res["company_id"], 0, 0,
+                    bool_val(res["is_verified_user"]), bool_val(res["is_paid_user"]), bool_val(res["is_seller_approved"]),
+                    res["company_id"], bool_val(False), bool_val(False),
                     child["overall_confidence"], child["verdict"], child["normalization_status"],
                     child["trading_floor_status"], child["price_research_status"]
                 )
                 db_execute(cur, child_query, child_args)
 
+            jobs_table = "processing_jobs" if IS_SQLITE else "jobs.processing_jobs"
             final_status = "normalized"
-            db_execute(cur, f"UPDATE {status_table} SET status = %s WHERE id = %s;", (final_status, job_id))
+            if IS_SQLITE:
+                db_execute(cur, f"UPDATE {jobs_table} SET status = %s WHERE id = %s;", (final_status, job_id))
+            else:
+                db_execute(cur, f"UPDATE {jobs_table} SET status = %s::jobs.processing_status, updated_at = NOW() WHERE id = %s;", (final_status, job_id))
             conn.commit()
 
         except Exception as e:
             conn.rollback()
             print(f"Error processing job ID {job_id}: {e}")
-            db_execute(cur, f"UPDATE {status_table} SET status = %s WHERE id = %s;", ("failed", job_id))
+            jobs_table = "processing_jobs" if IS_SQLITE else "jobs.processing_jobs"
+            if IS_SQLITE:
+                db_execute(cur, f"UPDATE {jobs_table} SET status = %s WHERE id = %s;", ("failed", job_id))
+            else:
+                db_execute(cur, f"UPDATE {jobs_table} SET status = %s::jobs.processing_status, updated_at = NOW() WHERE id = %s;", ("failed", job_id))
             conn.commit()
 
     conn.close()
     return len(jobs)
 
-def start_continuous_worker(poll_interval=2, once=False):
+def start_continuous_worker(poll_interval=2, once=False, require_postgres=False):
     print(f"WatchFacts Continuous Pipeline Worker starting up (Poll Interval: {poll_interval}s)...", flush=True)
+    conn = get_db_connection()
+    conn.close()
+    if require_postgres and IS_SQLITE:
+        raise RuntimeError("CRITICAL: PostgreSQL connection required, but pipeline runner fell back to SQLite!")
     count = 0
     while True:
         processed = run_pipeline_step(limit=100)
@@ -394,4 +421,6 @@ def start_continuous_worker(poll_interval=2, once=False):
 
 if __name__ == "__main__":
     once_flag = "--once" in sys.argv
-    start_continuous_worker(poll_interval=2, once=once_flag)
+    req_pg_flag = "--require-postgres" in sys.argv
+    start_continuous_worker(poll_interval=2, once=once_flag, require_postgres=req_pg_flag)
+
