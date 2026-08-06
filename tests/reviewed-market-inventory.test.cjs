@@ -6,6 +6,21 @@ const path = require('node:path');
 const test = require('node:test');
 
 const api = require('../api/reviewed-market-inventory.js');
+
+test('authenticated form submissions map into the Trading Floor contract', () => {
+  const record = api.mapDealerSubmission({
+    id: 'submission-1', intent: 'WTS', category: 'WATCH', raw_message: 'WTS Rolex 124060 USD 11000',
+    claimed_fields: { brand: 'Rolex', model: 'Submariner', reference: '124060', dial_color: 'Black', price_amount: 11000, currency: 'USD', poster_name: 'Daisy', poster_phone: '+17860000000', location: 'Miami', dealer_rating: 4.8 },
+    image_urls: ['https://example.com/rolex.jpg'], poster_image_url: 'https://example.com/daisy.jpg',
+    review_status: 'APPROVED', publication_status: 'PUBLISHED', created_at: '2026-08-06T12:00:00Z',
+  });
+  assert.equal(record.source_type, 'authenticated_user_form');
+  assert.equal(record.price_research_eligible, true);
+  assert.equal(record.thumbnail_url, 'https://example.com/rolex.jpg');
+  assert.equal(record.seller_avatar_url, 'https://example.com/daisy.jpg');
+  assert.equal(record.seller_rating, 4.8);
+  assert.equal(record.location, 'Miami');
+});
 const source = fs.readFileSync(
   path.join(__dirname, '../api/reviewed-market-inventory.js'),
   'utf8',

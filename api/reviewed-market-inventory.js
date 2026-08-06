@@ -182,6 +182,69 @@ function summarizeCoverage(records) {
   return totals;
 }
 
+function mapDealerSubmission(row) {
+  const claimed = row.claimed_fields || {};
+  const imageUrls = (row.image_urls || []).filter(value => exactHttpUrl(value));
+  const priceRaw = positiveNumber(claimed.price_amount);
+  const currency = cleanExactText(claimed.currency, 12).toUpperCase() || null;
+  const priceUsd = currency === 'USD' ? priceRaw : null;
+  const brand = cleanExactText(claimed.brand, 80) || null;
+  const model = cleanExactText(claimed.model, 120) || cleanExactText(claimed.title, 240) || null;
+  const reference = cleanExactText(claimed.reference, 80) || null;
+  const dialColor = cleanExactText(claimed.dial_color, 80) || null;
+  const sellerName = cleanExactText(claimed.poster_name, 160) || null;
+  const sellerPhone = cleanExactText(claimed.poster_phone, 50) || null;
+  const hasCompleteIdentity = row.category !== 'WATCH' || Boolean(brand && model && reference && dialColor);
+  const priceEligible = row.category === 'WATCH' && hasCompleteIdentity && priceUsd !== null;
+  const evidenceCoverage = recordEvidenceCoverage({
+    brand, model, reference, dialColor, sellerName, sellerPhone,
+    contactApproved: true, exactImageUrl: imageUrls[0] || null,
+    sourceAmount: priceRaw, sourceCurrency: currency, hasCompleteIdentity,
+    invalidReferenceReason: null, priceEligible,
+  });
+  return {
+    id: row.id, brand, model, reference,
+    reference_search_key: reference ? referenceComparisonKey(reference) : null,
+    raw_reference: reference, normalized_reference: reference, catalog_reference: null,
+    reference_invalid_reason: null, has_complete_identity: hasCompleteIdentity,
+    dial_color: dialColor, condition: claimed.condition || null,
+    listing_type: row.intent, listing_date: row.created_at, created_at: row.created_at,
+    raw_message: row.raw_message, raw_message_scope: 'stored_source_message',
+    raw_message_evidence_type: 'USER_ENTERED_SOURCE_MESSAGE',
+    seller_name: sellerName, seller_phone: sellerPhone, seller_avatar_url: row.poster_image_url || null,
+    seller_rating: positiveNumber(claimed.dealer_rating),
+    contact_publication_approved: true, price_usd: priceUsd, price_raw: priceRaw,
+    currency, workbook_price_usd: null, workbook_price_review_reason: null,
+    source_price_amount: priceRaw, source_price_text: priceRaw == null ? null : String(priceRaw),
+    source_currency: currency, price_evidence_status: priceEligible ? EXPLICIT_USD_STATUS : priceRaw == null ? 'NO_PRICE_SUPPLIED' : 'NON_USD_USER_SUPPLIED',
+    price_research_eligible: priceEligible, confidence: 1, verdict: row.review_status,
+    listing_status: row.publication_status, source: 'AUTHENTICATED_USER_FORM',
+    source_type: 'authenticated_user_form', source_file: null, source_row_number: null,
+    source_record_id: row.id, item_category: row.category, multi_listing: false,
+    has_images: imageUrls.length > 0, thumbnail_url: imageUrls[0] || null,
+    image_urls: imageUrls, image_evidence_type: 'SOURCE_LISTING_IMAGE',
+    image_evidence_label: 'Posting-user supplied item image',
+    image_evidence_notice: 'Photo supplied directly with this authenticated post.',
+    location: claimed.location || null, evidence_coverage: evidenceCoverage,
+  };
+}
+
+function directSubmissionMatches(record, filters) {
+  if (filters.imagesOnly && !record.has_images) return false;
+  if (filters.pricedOnly && record.price_raw == null) return false;
+  if (filters.listingType && record.listing_type !== filters.listingType) return false;
+  if (filters.brand && record.brand?.toLowerCase() !== filters.brand.toLowerCase()) return false;
+  if (filters.reference && record.reference_search_key !== filters.reference) return false;
+  if (filters.dial && record.dial_color?.toLowerCase() !== filters.dial.toLowerCase()) return false;
+  if (filters.condition && record.condition?.toLowerCase() !== filters.condition.toLowerCase()) return false;
+  if (filters.search) {
+    const haystack = [record.brand, record.model, record.reference, record.dial_color, record.seller_name, record.raw_message]
+      .filter(Boolean).join(' ').toLowerCase();
+    if (!haystack.includes(filters.search.toLowerCase())) return false;
+  }
+  return true;
+}
+
 function mapReviewedRecord(row) {
   // Prefer user_image_url (direct source upload) then fall back to display_image_url
   // (platform-curated or reference CDN image already stored in the workbook).
@@ -481,7 +544,20 @@ module.exports = async function handler(req, res) {
     const total = summaryTotal;
     const rows = pageWindow.reverse ? [...(data || [])].reverse() : (data || []);
     const pageResult = boundedPage(rows, pageSize, scopedFilter);
-    const records = pageResult.records.map(mapReviewedRecord);
+    let records = pageResult.records.map(mapReviewedRecord);
+    if (page === 1) {
+      const { data: directRows, error: directError } = await client.from('dealer_listing_submissions')
+        .select('id,intent,category,raw_message,claimed_fields,image_urls,poster_image_url,review_status,publication_status,created_at')
+        .eq('publication_status', 'PUBLISHED')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (!directError) {
+        const directRecords = (directRows || []).map(mapDealerSubmission).filter(record => directSubmissionMatches(record, {
+          imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search,
+        }));
+        records = [...directRecords, ...records].slice(0, pageSize);
+      }
+    }
     const hasMore = scopedFilter
       ? pageResult.hasLookahead
       : pageWindow.requestedStart + records.length < total;
@@ -518,6 +594,8 @@ module.exports.exactHttpUrl = exactHttpUrl;
 module.exports.referenceComparisonKey = referenceComparisonKey;
 module.exports.referenceIsPriceToken = referenceIsPriceToken;
 module.exports.recordEvidenceCoverage = recordEvidenceCoverage;
+module.exports.mapDealerSubmission = mapDealerSubmission;
+module.exports.directSubmissionMatches = directSubmissionMatches;
 module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;
