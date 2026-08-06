@@ -29,10 +29,10 @@ const RED = '#B42318';
 const CATEGORY_OPTIONS = [
   { label: 'All inventory', value: 'all' },
   { label: 'Watches', value: 'watches' },
-  { label: 'Handbags — coming soon', value: 'handbags' },
-  { label: 'Jewelry — coming soon', value: 'jewelry' },
-  { label: 'Accessories — coming soon', value: 'accessories' },
-  { label: 'Other luxury — coming soon', value: 'other' },
+  { label: 'Handbags', value: 'handbags' },
+  { label: 'Jewelry', value: 'jewelry' },
+  { label: 'Accessories', value: 'accessories' },
+  { label: 'Other luxury', value: 'other' },
 ] as const;
 
 const INTENT_OPTIONS = [
@@ -128,6 +128,14 @@ interface ReviewedSellerSummaryResponse {
   contact_available?: boolean;
   seller?: { name?: string | null; phone?: string | null } | null;
   analytics?: ReviewedSellerAnalytics | null;
+  reputation?: {
+    rating?: number | null;
+    review_count?: number;
+    group_count?: number;
+    city?: string | null;
+    country?: string | null;
+    profile_url?: string | null;
+  } | null;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -136,6 +144,7 @@ type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
 function hasListingImage(listing: ListingRecord) {
+  if (isBundleListing(listing) || listing.multi_listing) return false;
   if (listing.thumbnail_url && listing.thumbnail_url.trim().length > 0) return true;
   if (Array.isArray(listing.image_urls) && listing.image_urls.some(url => Boolean(url && String(url).trim().length > 0))) return true;
   if (listing.has_images) return true;
@@ -144,7 +153,7 @@ function hasListingImage(listing: ListingRecord) {
 
 /** Detects bundle/multi-watch listings */
 function isBundleListing(listing: ListingRecord) {
-  if (listing.raw_message_scope === 'normalized_summary') return true;
+  if (listing.multi_listing) return true;
   if (listing.model && /multiple|multi|mixed/i.test(listing.model)) return true;
   if (listing.dial_color && /multiple|multi|mixed/i.test(listing.dial_color)) return true;
   return false;
@@ -203,7 +212,7 @@ export default function TradingFloor() {
     .filter(Boolean))].sort((a, b) => a.localeCompare(b)), [listings]);
   const visibleListings = useMemo(() => listings.filter(listing => {
     if (imagesOnly && !hasListingImage(listing)) return false;
-    if (pricedOnly && getListingMeta(listing).priceLabel.includes('not provided')) return false;
+    if (pricedOnly && getListingMeta(listing).priceLabel.includes('not supplied')) return false;
     if (locationFilter) {
       const location = cleanValue(listing.location || listing.seller_country || listing.region);
       if (location.toLocaleLowerCase() !== locationFilter.toLocaleLowerCase()) return false;
@@ -307,23 +316,25 @@ export default function TradingFloor() {
       setError('');
 
       try {
-        if (!['all', 'watches'].includes(categoryFilter)) {
-          setListings([]);
-          setTotal(0);
-          setTotalIsEstimate(false);
-          setHasMore(false);
-          setNextCursor(null);
-          setError('The current inventory contains watches only.');
-          return;
-        }
         const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
         if (cursor) params.set('cursor', cursor);
         if (brandFilter) params.set('brand', brandFilter);
         if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
         if (imagesOnly) params.set('images', 'true');
+        if (pricedOnly) params.set('priced', 'true');
+        if (locationFilter) params.set('region', locationFilter);
 
-        const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal: controller.signal });
+        const usesReviewedWatchInventory = ['all', 'watches'].includes(categoryFilter);
+        if (!usesReviewedWatchInventory) {
+          params.set('quality', 'market');
+          params.set('item', categoryFilter);
+          params.delete('priced');
+          params.delete('brand');
+          params.delete('type');
+        }
+        const endpoint = usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest';
+        const response = await fetch(`${endpoint}?${params.toString()}`, { signal: controller.signal });
         let data: TradingFloorResponse;
         try {
           data = await response.json() as TradingFloorResponse;
@@ -376,7 +387,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, pageSize, search]);
+  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, search]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -404,7 +415,7 @@ export default function TradingFloor() {
                 type="search"
                 value={searchInput}
                 onChange={event => setSearchInput(event.target.value)}
-                placeholder="Search watch model or reference"
+                placeholder="Search item, model, reference, message, or seller"
                 className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
               />
@@ -434,6 +445,8 @@ export default function TradingFloor() {
           intent={intentFilter}
           imagesOnly={imagesOnly}
           pricedOnly={pricedOnly}
+          location={locationFilter}
+          locations={locationOptions}
           onApply={next => {
             setFiltersOpen(false);
             resetResults();
@@ -443,6 +456,7 @@ export default function TradingFloor() {
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
               images: next.imagesOnly ? 'true' : null,
               priced: next.pricedOnly ? 'true' : null,
+              location: next.location || null,
             });
           }}
           onClose={() => setFiltersOpen(false)}
@@ -631,7 +645,6 @@ function DesktopFilters({
           <FilterCheck
             key={option.value}
             checked={category === option.value}
-            disabled={!['all', 'watches'].includes(option.value)}
             label={option.label}
             onChange={() => onChange({ item: option.value === 'all' ? null : option.value, type: !['all', 'watches'].includes(option.value) ? null : intent || null })}
           />
@@ -670,6 +683,8 @@ function MobileFilterSheet({
   intent,
   imagesOnly,
   pricedOnly,
+  location,
+  locations,
   onApply,
   onClose,
 }: {
@@ -679,7 +694,9 @@ function MobileFilterSheet({
   intent: IntentFilter;
   imagesOnly: boolean;
   pricedOnly: boolean;
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean }) => void;
+  location: string;
+  locations: string[];
+  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; location: string }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
@@ -687,6 +704,7 @@ function MobileFilterSheet({
   const [draftIntent, setDraftIntent] = useState(intent);
   const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
   const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
+  const [draftLocation, setDraftLocation] = useState(location);
 
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="presentation">
@@ -716,7 +734,7 @@ function MobileFilterSheet({
           </FilterGroup>
           <FilterGroup label="Category">
             {CATEGORY_OPTIONS.map(option => (
-              <FilterChoice key={option.value} active={draftCategory === option.value} disabled={!['all', 'watches'].includes(option.value)} label={option.label} onClick={() => {
+              <FilterChoice key={option.value} active={draftCategory === option.value} label={option.label} onClick={() => {
                 setDraftCategory(option.value);
                 if (!['all', 'watches'].includes(option.value)) setDraftIntent('');
               }} />
@@ -731,6 +749,12 @@ function MobileFilterSheet({
               <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
             ))}
           </FilterGroup>
+          <FilterGroup label="Location">
+            <select value={draftLocation} disabled={locations.length === 0} onChange={event => setDraftLocation(event.target.value)} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-50" style={{ borderColor: BORDER, color: INK }}>
+              <option value="">{locations.length ? 'All supplied locations' : 'No supplied locations'}</option>
+              {locations.map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </FilterGroup>
           {!['all', 'watches'].includes(draftCategory) && (
             <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
           )}
@@ -743,8 +767,9 @@ function MobileFilterSheet({
             setDraftIntent('');
             setDraftImagesOnly(false);
             setDraftPricedOnly(false);
+            setDraftLocation('');
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, location: draftLocation })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
         </footer>
       </section>
     </div>
@@ -847,6 +872,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const detailListing = listing;
   const [contact, setContact] = useState<ListingContact | null>(() => sourcePosterContact(listing));
   const [sellerAnalytics, setSellerAnalytics] = useState<ReviewedSellerAnalytics | null>(null);
+  const [sellerReputation, setSellerReputation] = useState<ReviewedSellerSummaryResponse['reputation']>(null);
   const [activeImage, setActiveImage] = useState(0);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const meta = useMemo(() => getListingMeta(listing), [listing]);
@@ -882,14 +908,17 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
     fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
       .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
       .then(payload => {
-        if (!payload || payload.status !== 'ok' || !payload.contact_available) return;
-        const sourceContact = sourcePosterContact({
-          ...listing,
-          seller_name: payload.seller?.name ?? listing.seller_name,
-          seller_phone: payload.seller?.phone ?? listing.seller_phone,
-        });
-        setContact(sourceContact);
+        if (!payload || payload.status !== 'ok') return;
+        if (payload.contact_available) {
+          const sourceContact = sourcePosterContact({
+            ...listing,
+            seller_name: payload.seller?.name ?? listing.seller_name,
+            seller_phone: payload.seller?.phone ?? listing.seller_phone,
+          });
+          setContact(sourceContact);
+        }
         setSellerAnalytics(payload.analytics || null);
+        setSellerReputation(payload.reputation || null);
       })
       .catch(error => { if (error?.name !== 'AbortError') setSellerAnalytics(null); });
 
@@ -1062,6 +1091,13 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
                   )}
                 </div>
               )}
+              {sellerReputation && (
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center" aria-label="Verified seller reputation">
+                  <ContactMetric label="Rating" value={sellerReputation.rating == null ? '—' : sellerReputation.rating.toFixed(1)} />
+                  <ContactMetric label="Reviews" value={sellerReputation.review_count ?? 0} />
+                  <ContactMetric label="Groups" value={sellerReputation.group_count ?? 0} />
+                </div>
+              )}
             </div>
           )}
           {(() => {
@@ -1120,13 +1156,24 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>
         )}
 
+        {listing.item_category === 'WATCH' && listing.brand && listing.reference && (
+          <a
+            href={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference)}`}
+            className="flex h-12 items-center justify-center rounded-md border text-sm font-semibold"
+            style={{ borderColor: GOLD, background: SURFACE, color: GOLD_BRIGHT }}
+          >
+            Open full price research
+          </a>
+        )}
+
       </div>
     </section>
   );
 }
 
-function ContactMetric({ label, value }: { label: string; value: number }) {
-  return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{Number(value || 0).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
+function ContactMetric({ label, value }: { label: string; value: number | string }) {
+  const displayValue = typeof value === 'number' ? Number(value || 0).toLocaleString() : value;
+  return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{displayValue}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
 }
 
 function MarketStat({ label, value }: { label: string; value: number }) {
@@ -1231,7 +1278,7 @@ function getListingMeta(listing: ListingRecord) {
       ? (workbookPlausible ? formatUsdPrice(reviewedWorkbookUsd) : 'Price under review')
       : workbookPriceNeedsReview
         ? 'Price requires review'
-        : sourcePrice || 'Price not provided';
+        : sourcePrice || 'Price not supplied';
 
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'
@@ -1241,7 +1288,7 @@ function getListingMeta(listing: ListingRecord) {
         ? 'Workbook price anomaly - held for review'
         : sourcePrice
           ? 'Original source price · no USD conversion'
-          : 'Price not provided';
+          : 'Price not supplied';
   const title = buildListingTitle(listing);
 
   return {
