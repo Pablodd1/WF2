@@ -29,7 +29,8 @@ export function DealerGate({ children, allowedRoles }: DealerGateProps) {
     return <div className="flex min-h-screen items-center justify-center bg-bg-primary text-sm text-text-secondary">Checking dealer session...</div>;
   }
   if (state === 'denied') {
-    return <Navigate to="/dealer" replace state={{ from: `${location.pathname}${location.search}` }} />;
+    const loginPath = allowedRoles?.length && !allowedRoles.includes('dealer') ? '/cl-login' : '/dealer';
+    return <Navigate to={loginPath} replace state={{ from: `${location.pathname}${location.search}` }} />;
   }
   return children;
 }

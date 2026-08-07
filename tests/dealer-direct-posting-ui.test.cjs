@@ -7,13 +7,16 @@ const test = require('node:test');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'src/pages/DealerSubmitListing.tsx'), 'utf8');
 
-test('authenticated form supports item photos, a posting-user photo, and single or bulk publication', () => {
+test('authenticated form supports item photos, a posting-user photo, and three clear posting paths', () => {
   assert.match(source, /Take or choose item photos/);
   assert.match(source, /Credentialed posting user/);
   assert.match(source, /identity fields cannot be edited here/);
   assert.match(source, /capture="environment"/);
   assert.match(source, /capture="user"/);
-  assert.match(source, /Bulk posting/);
+  assert.match(source, /Several separate items/);
+  assert.match(source, /One bundle or dealer list/);
+  assert.match(source, /Add similar/);
+  assert.match(source, /deferred bundle lane/);
   assert.match(source, /MAX_ITEMS = 20/);
   assert.match(source, /Normalize and publish/);
 });

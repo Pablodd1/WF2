@@ -1,6 +1,7 @@
-import { ArrowLeft, BadgeCheck, CalendarDays, MessageCircle, Star, Users } from 'lucide-react';
+import { BadgeCheck, CalendarDays, MessageCircle, Star, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { Footer } from '@/components/Footer';
 import { MarketNav } from '@/components/MarketNav';
 import { Breadcrumb } from '@/components/Breadcrumb';
 
@@ -108,6 +109,7 @@ export default function DealerProfile() {
           ))}
         </div>
       </section>
+      <Footer />
     </main>
   );
 }

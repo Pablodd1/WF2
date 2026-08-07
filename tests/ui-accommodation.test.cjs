@@ -8,13 +8,15 @@ const test = require('node:test');
 const root = path.resolve(__dirname, '..');
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
-test('primary navigation uses one Workspace entry and the clean Hire Fi rail', () => {
+test('primary navigation exposes the complete Workspace customer flow and clean Hire Fi rail', () => {
   const header = read('src/components/MarketHeader.tsx');
   const rail = read('src/components/HireFiScrollRail.tsx');
 
   assert.match(header, /label: 'WORKSPACE', to: '\/dealer\/workspace'/);
-  assert.doesNotMatch(header, /label: 'DEALER LOGIN'|label: 'ACCOUNT'/);
+  assert.doesNotMatch(header, /label: 'DEALER LOGIN'/);
   assert.match(header, /label: 'POST ITEM', to: '\/dealer\/post'/);
+  assert.match(header, /label: 'ACCOUNT', to: '\/dealer\/account\/profile'/);
+  assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
   assert.match(rail, /Let Fi search the world/);
   assert.match(rail, /sm:text-base/);
   assert.doesNotMatch(rail, /Instagram|Facebook|Linkedin|Twitter/);
@@ -51,18 +53,66 @@ test('Price Research uses dial colors, closed methodology, images, and complete 
 
 test('Workspace includes official community access and install guidance without invented group links', () => {
   const portal = read('src/pages/DealerPortal.tsx');
+  const footer = read('src/components/Footer.tsx');
   const groups = read('src/components/JoinGroupsCta.tsx');
   const index = read('index.html');
   const manifest = JSON.parse(read('public/manifest.webmanifest'));
 
-  assert.match(portal, /B2B Watch Trading Chat/);
-  assert.match(portal, /Community discussions and announcements/);
-  assert.match(portal, /Signed Estate and Branded Jewelry/);
-  assert.match(portal, /Rolex US Sales/);
-  assert.match(portal, /href=\{GROUPS_URL\}/);
+  assert.match(footer, /B2B Watch Trading Chat/);
+  assert.match(footer, /Community discussion\/announcements/);
+  assert.match(footer, /Signed Estate and Branded Jewelry/);
+  assert.match(footer, /Rolex US Only Sales/);
+  assert.match(portal, /href=\{group\.href\}/);
   assert.match(groups, /export const GROUPS_URL = 'https:\/\/watchfacts\.com\//);
   assert.match(portal, /beforeinstallprompt/);
   assert.match(portal, /Add to Home Screen/);
   assert.match(index, /rel="manifest" href="\/manifest\.webmanifest"/);
   assert.equal(manifest.display, 'standalone');
+});
+
+test('footer provides direct contact, community groups, marketplace opportunities, and CL login', () => {
+  const footer = read('src/components/Footer.tsx');
+
+  assert.match(footer, /Contact us on WhatsApp/);
+  assert.match(footer, /phone=17869569201/);
+  assert.match(footer, /Join Our Chats/);
+  assert.match(footer, /JEaK91DatRkLZFKMaJZYIH/);
+  assert.match(footer, /CHLWqKgzO2Y1sdarNTAcEO/);
+  assert.match(footer, /EfL3QcrCVe1F7wKMGjS9WQ/);
+  assert.match(footer, /B8qiBT6JZYyGoNg3CAX5Kw/);
+  assert.match(footer, /DPhtxCrrxES5kyHeO7SmCb/);
+  assert.match(footer, /t\.me\/watchfactsUS/);
+  assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
+  assert.match(footer, /Email destination pending/);
+});
+
+test('dealer directory includes Reference Check and Top Rated views backed by verified profiles', () => {
+  const directory = read('src/pages/DealerDirectory.tsx');
+
+  assert.match(directory, /Reference Check/);
+  assert.match(directory, /Top Rated Dealers/);
+  assert.match(directory, /feedback reviews/);
+  assert.match(directory, /Member since/);
+  assert.match(directory, /label="For sale"/);
+  assert.match(directory, /label="Looking for"/);
+});
+
+test('home and Post an Item share a persistent multilingual interface without changing raw source text', () => {
+  const language = read('src/i18n/LanguageContext.tsx');
+  const toggle = read('src/components/LanguageToggle.tsx');
+  const header = read('src/components/MarketHeader.tsx');
+  const home = read('src/pages/LandingPage.tsx');
+  const post = read('src/pages/DealerSubmitListing.tsx');
+  const main = read('src/main.tsx');
+
+  assert.match(language, /watchfacts-language/);
+  assert.match(language, /'en'.*'es'.*'pt'.*'zh'/s);
+  assert.match(language, /window\.navigator\.language/);
+  assert.match(toggle, /aria-label=\{t\('Language'\)\}/);
+  assert.match(main, /<LanguageProvider>/);
+  assert.match(header, /<LanguageToggle compact/);
+  assert.match(home, /t\('A considered marketplace for collectors, dealers, and wholesalers'\)/);
+  assert.match(post, /<LanguageToggle/);
+  assert.match(post, /Original listing or request message/);
+  assert.match(post, /value=\{item\.raw_message\}/);
 });

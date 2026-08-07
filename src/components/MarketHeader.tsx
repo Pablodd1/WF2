@@ -1,5 +1,7 @@
 import { ExternalLink } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { LanguageToggle } from './LanguageToggle';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 const LUXFI_URL = 'https://luxfi.ai/#add-fi';
 
@@ -7,13 +9,17 @@ const HEADER_LINKS = [
   { label: 'HOME', to: '/' },
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
+  { label: 'DEALER DIRECTORY', to: '/dealers' },
   { label: 'WORKSPACE', to: '/dealer/workspace' },
   { label: 'POST ITEM', to: '/dealer/post' },
+  { label: 'ACCOUNT', to: '/dealer/account/profile' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
 ];
 
 const LANDING_LINKS = [
   { label: 'TRADING FLOOR', to: '/trading' },
+  { label: 'PRICE RESEARCH', to: '/price-research' },
+  { label: 'DEALER DIRECTORY', to: '/dealers' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
   { label: 'WORKSPACE', to: '/dealer/workspace' },
 ];
@@ -27,6 +33,7 @@ type MarketHeaderProps = {
 
 export function MarketHeader({ compact = false, className = '', landing = false, showLogo = true }: MarketHeaderProps) {
   const location = useLocation();
+  const { t } = useLanguage();
   const links = landing ? LANDING_LINKS : HEADER_LINKS;
   const wantsToBuy = location.pathname === '/trading' && new URLSearchParams(location.search).get('type') === 'WTB';
 
@@ -66,7 +73,7 @@ export function MarketHeader({ compact = false, className = '', landing = false,
             if (link.external) {
               return (
                 <a key={link.label} href={link.href} target="_blank" rel="noreferrer" className={linkBtnClass}>
-                  {link.label}
+                  {t(link.label)}
                   <ExternalLink size={12} aria-hidden="true" />
                 </a>
               );
@@ -74,10 +81,11 @@ export function MarketHeader({ compact = false, className = '', landing = false,
 
             return (
               <Link key={link.label} to={link.to || '/'} aria-current={active ? 'page' : undefined} className={linkBtnClass}>
-                {link.label}
+                {t(link.label)}
               </Link>
             );
           })}
+          <LanguageToggle compact />
         </nav>
       </div>
     </header>

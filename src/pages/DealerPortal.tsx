@@ -1,21 +1,12 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, BadgeCheck, Download, Globe2, LogOut, MessageCircle, PlusCircle, Search, ShieldCheck, Smartphone, Store, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GROUPS_URL } from '@/components/JoinGroupsCta';
+import { COMMUNITY_GROUPS, CONTACT_WHATSAPP_URL } from '@/components/Footer';
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
-
-const communityGroups = [
-  { name: 'B2B Watch Trading Chat', network: 'WhatsApp' },
-  { name: 'Community discussions and announcements', network: 'WhatsApp' },
-  { name: 'System Calls', network: 'WhatsApp' },
-  { name: 'International Group', network: 'WhatsApp' },
-  { name: 'Signed Estate and Branded Jewelry', network: 'WhatsApp' },
-  { name: 'Rolex US Sales', network: 'Telegram' },
-];
 
 const portalLinks = [
   {
@@ -123,19 +114,19 @@ export default function DealerPortal() {
               <div className="flex h-10 w-10 items-center justify-center border border-white/15 text-[#c9a96e]"><MessageCircle size={19} /></div>
               <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Community and contact</p>
               <h2 id="community-heading" className="mt-2 font-serif text-3xl">WatchFacts trading groups</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">Open the official WatchFacts access page to contact the team or request entry to the appropriate WhatsApp and Telegram community.</p>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">Contact WatchFacts or open the appropriate official WhatsApp and Telegram community directly.</p>
             </div>
-            <a href={GROUPS_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 border border-[#c9a96e] px-5 text-sm font-semibold text-[#c9a96e] transition-colors hover:bg-[#c9a96e] hover:text-[#09090d]">
-              <Globe2 size={17} /> Open official access page
+            <a href={CONTACT_WHATSAPP_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 border border-[#c9a96e] px-5 text-sm font-semibold text-[#c9a96e] transition-colors hover:bg-[#c9a96e] hover:text-[#09090d]">
+              <Globe2 size={17} /> Contact us on WhatsApp
             </a>
           </div>
 
           <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {communityGroups.map(group => (
-              <a key={`${group.network}-${group.name}`} href={GROUPS_URL} target="_blank" rel="noreferrer" className="group border border-white/12 bg-[#111118] p-5 transition-colors hover:border-[#c9a96e]/55">
+            {COMMUNITY_GROUPS.map(group => (
+              <a key={group.href} href={group.href} target="_blank" rel="noreferrer" className="group border border-white/12 bg-[#111118] p-5 transition-colors hover:border-[#c9a96e]/55">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#c9a96e]">{group.network}</div>
                 <div className="mt-3 text-base font-semibold text-white">{group.name}</div>
-                <div className="mt-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-white/45 group-hover:text-[#c9a96e]">Request access <ArrowRight size={14} /></div>
+                <div className="mt-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-white/45 group-hover:text-[#c9a96e]">Join group <ArrowRight size={14} /></div>
               </a>
             ))}
           </div>

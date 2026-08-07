@@ -31,19 +31,31 @@ module.exports = async function handler(req, res) {
   try {
     const dealer = await linkedDealer(authorization.client, authorization.user.id);
     if (req.method === 'GET') {
-      const [preferencesResult, ticketsResult, submissionsResult, listingsResult, statsResult] = await Promise.all([
+      const [preferencesResult, ticketsResult, submissionsResult, listingsResult, statsResult, phoneResult] = await Promise.all([
         authorization.client.from('dealer_account_preferences').select('*').eq('auth_user_id', authorization.user.id).maybeSingle(),
         authorization.client.from('dealer_support_tickets').select('id,subject,status,created_at').eq('auth_user_id', authorization.user.id).order('created_at', { ascending: false }).limit(20),
         authorization.client.from('dealer_listing_submissions').select('id,intent,category,claimed_fields,review_status,created_at').eq('auth_user_id', authorization.user.id).order('created_at', { ascending: false }).limit(50),
         dealer ? authorization.client.from('watch_records').select('id,brand,reference,dial_color,condition,price_usd,currency,listing_type,listing_date,listing_status').eq('dealer_id', dealer.id).order('listing_date', { ascending: false, nullsFirst: false }).limit(100) : Promise.resolve({ data: [], error: null }),
         dealer ? authorization.client.from('dealer_profile_stats').select('*').eq('dealer_id', dealer.id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+        dealer ? authorization.client.from('dealer_source_identities').select('source_identity,identity_type,verification_status').eq('dealer_id', dealer.id).eq('verification_status', 'VERIFIED').in('identity_type', ['PHONE', 'WHATSAPP', 'phone', 'whatsapp']).limit(1) : Promise.resolve({ data: [], error: null }),
       ]);
-      const error = [preferencesResult, ticketsResult, submissionsResult, listingsResult, statsResult].find(result => result.error)?.error;
+      const error = [preferencesResult, ticketsResult, submissionsResult, listingsResult, statsResult, phoneResult].find(result => result.error)?.error;
       if (error) throw error;
+      const phoneIdentity = phoneResult.data?.[0] || null;
       return res.status(200).json({
         success: true,
         user: { email: authorization.user.email, role: authorization.role },
         dealer,
+        profile_stamp: dealer ? {
+          name: dealer.display_name || dealer.company_name || null,
+          company: dealer.company_name || null,
+          phone: phoneIdentity?.source_identity || null,
+          location: [dealer.city, dealer.country_code].filter(Boolean).join(', ') || null,
+          avatar_url: dealer.avatar_url || null,
+          rating: dealer.rating,
+          review_count: dealer.review_count,
+          group_count: dealer.whatsapp_group_count,
+        } : null,
         preferences: preferencesResult.data || { display_currency: 'USD', email_notifications: true },
         tickets: ticketsResult.data || [], submissions: submissionsResult.data || [],
         listings: listingsResult.data || [], stats: statsResult.data || null,

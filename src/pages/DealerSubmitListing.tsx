@@ -1,7 +1,10 @@
-import { ArrowLeft, Camera, CheckCircle2, ExternalLink, ImagePlus, Plus, Send, ShieldCheck, Trash2, UserRound } from 'lucide-react';
+import { ArrowLeft, Camera, CheckCircle2, CopyPlus, ExternalLink, ImagePlus, Layers3, Plus, Send, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Footer } from '@/components/Footer';
+import { LanguageToggle } from '@/components/LanguageToggle';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 const CATEGORIES = [
   ['WATCH', 'Watch'], ['HANDBAG', 'Handbag'], ['JEWELRY', 'Jewelry'],
@@ -13,7 +16,7 @@ const MAX_ITEMS = 20;
 const MAX_ITEM_PHOTOS = 5;
 
 type Intent = 'WTS' | 'WTB';
-type Mode = 'single' | 'bulk';
+type Mode = 'single' | 'multiple' | 'bundle';
 
 interface Submission {
   id: string;
@@ -41,6 +44,7 @@ interface CredentialedPoster {
 
 interface DraftItem {
   key: string;
+  is_bundle: boolean;
   intent: Intent;
   category: string;
   brand: string;
@@ -55,11 +59,11 @@ interface DraftItem {
   photos: File[];
 }
 
-function createDraft(): DraftItem {
+function createDraft(seed: Partial<Omit<DraftItem, 'key' | 'photos'>> = {}): DraftItem {
   return {
-    key: crypto.randomUUID(), intent: 'WTS', category: 'WATCH', brand: '', model: '',
+    key: crypto.randomUUID(), is_bundle: false, intent: 'WTS', category: 'WATCH', brand: '', model: '',
     reference: '', dial_color: '', condition: '', title: '', price_amount: '',
-    currency: 'USD', raw_message: '', photos: [],
+    currency: 'USD', raw_message: '', photos: [], ...seed,
   };
 }
 
@@ -76,6 +80,7 @@ async function uploadImage(file: File, kind: 'listing' | 'poster') {
 }
 
 export default function DealerSubmitListing() {
+  const { t } = useLanguage();
   const [postingMode, setPostingMode] = useState<'watchfacts' | 'luxury-app'>('watchfacts');
   const [mode, setMode] = useState<Mode>('single');
   const [items, setItems] = useState<DraftItem[]>([createDraft()]);
@@ -87,6 +92,13 @@ export default function DealerSubmitListing() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const totalPhotos = useMemo(() => items.reduce((sum, item) => sum + item.photos.length, 0), [items]);
+  const readyItems = useMemo(() => items.filter(item => {
+    if (!item.raw_message.trim() || !item.photos.length) return false;
+    if (item.is_bundle) return true;
+    return item.category === 'WATCH'
+      ? Boolean(item.brand && item.model && item.reference && item.dial_color)
+      : Boolean(item.title);
+  }).length, [items]);
 
   useEffect(() => {
     fetch('/api/dealer-submissions', { credentials: 'include' })
@@ -105,8 +117,26 @@ export default function DealerSubmitListing() {
 
   function changeMode(nextMode: Mode) {
     setMode(nextMode);
-    if (nextMode === 'single') setItems(current => [current[0] || createDraft()]);
-    if (nextMode === 'bulk' && items.length === 1) setItems(current => [...current, createDraft()]);
+    if (nextMode === 'single') setItems(current => [{ ...(current[0] || createDraft()), is_bundle: false }]);
+    if (nextMode === 'multiple') {
+      setItems(current => {
+        const individualItems = current.map(item => ({ ...item, is_bundle: false }));
+        return individualItems.length > 1 ? individualItems : [...individualItems, createDraft()];
+      });
+    }
+    if (nextMode === 'bundle') {
+      setItems(current => [createDraft({
+        is_bundle: true, intent: 'WTS', category: 'WATCH', currency: current[0]?.currency || 'USD',
+        raw_message: current.length === 1 ? current[0].raw_message : '',
+      })]);
+    }
+  }
+
+  function addSimilarItem(source: DraftItem) {
+    setItems(current => [...current, createDraft({
+      intent: source.intent, category: source.category, brand: source.brand,
+      condition: source.condition, currency: source.currency,
+    })]);
   }
 
   function choosePhotos(key: string, event: ChangeEvent<HTMLInputElement>) {
@@ -124,6 +154,7 @@ export default function DealerSubmitListing() {
       for (const item of items) {
         const imageUrls = await Promise.all(item.photos.map(photo => uploadImage(photo, 'listing')));
         normalizedItems.push({
+          is_bundle: item.is_bundle,
           intent: item.intent, category: item.category, brand: item.brand, model: item.model,
           reference: item.reference, dial_color: item.dial_color, condition: item.condition,
           title: item.title, price_amount: item.price_amount, currency: item.currency,
@@ -132,13 +163,15 @@ export default function DealerSubmitListing() {
       }
       const response = await fetch('/api/dealer-submissions', {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ poster_image_url: posterImageUrl, items: normalizedItems }),
+        body: JSON.stringify({ poster_image_url: posterImageUrl, submission_mode: mode, items: normalizedItems }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to publish listing.');
       const count = Number(result.count || normalizedItems.length);
-      setMessage(`${count} ${count === 1 ? 'item is' : 'items are'} normalized and published to the Trading Floor.`);
-      setItems(mode === 'bulk' ? [createDraft(), createDraft()] : [createDraft()]);
+      setMessage(mode === 'bundle'
+        ? t('Bundle received intact and moved to the deferred bundle lane.')
+        : `${count} ${count === 1 ? t('item is') : t('items are')} ${t('normalized and published to the Trading Floor.')}`);
+      setItems(mode === 'multiple' ? [createDraft(), createDraft()] : [createDraft(mode === 'bundle' ? { is_bundle: true } : {})]);
       setPosterPhoto(null);
       setSubmissions(current => [...(result.submissions || []), ...current]);
     } catch (caught) {
@@ -147,48 +180,58 @@ export default function DealerSubmitListing() {
   }
 
   return (
-    <main className="min-h-screen bg-[#08080c] px-5 py-7 text-white sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-7xl">
-        <header className="flex items-center justify-between border-b border-white/10 pb-5">
-          <Link to="/dealer/workspace" className="flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft size={16} /> Workspace</Link>
-          <span className="flex items-center gap-2 text-xs text-[#c9a96e]"><ShieldCheck size={15} /> Authenticated posting</span>
+    <main className="min-h-screen bg-[#08080c] text-white">
+      <div className="mx-auto max-w-7xl px-5 py-7 sm:px-8 lg:px-12">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-5">
+          <Link to="/dealer/workspace" className="flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft size={16} /> {t('Workspace')}</Link>
+          <div className="flex items-center gap-2"><span className="hidden items-center gap-2 text-xs text-[#c9a96e] sm:flex"><ShieldCheck size={15} /> {t('Authenticated posting')}</span><LanguageToggle /></div>
         </header>
 
         <nav aria-label="Posting applications" className="mt-7 grid grid-cols-2 gap-2 border-b border-white/10 pb-4 sm:flex">
-          <Choice active={postingMode === 'watchfacts'} onClick={() => setPostingMode('watchfacts')}>WatchFacts form</Choice>
+          <Choice active={postingMode === 'watchfacts'} onClick={() => setPostingMode('watchfacts')}>{t('WatchFacts form')}</Choice>
           <Choice active={postingMode === 'luxury-app'} onClick={() => setPostingMode('luxury-app')}>Luxury App</Choice>
         </nav>
 
         {postingMode === 'watchfacts' ? (
           <section className="grid gap-10 py-9 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Direct normalized posting</p>
-              <h1 className="mt-3 font-serif text-4xl sm:text-5xl">Photograph it. Describe it. Post it.</h1>
-              <p className="mt-4 max-w-3xl text-sm leading-7 text-white/55">Required identity and source fields keep each item organized. Price remains optional; when omitted, the Trading Floor displays “Price not supplied.”</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{t('Direct normalized posting')}</p>
+              <h1 className="mt-3 font-serif text-4xl sm:text-5xl">{t('Photograph it. Describe it. Post it.')}</h1>
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-white/55">{t('Required identity and source fields keep each item organized. Price remains optional; when omitted, the Trading Floor displays “Price not supplied.”')}</p>
 
-              <div className="mt-7 grid grid-cols-2 gap-2 sm:max-w-md">
-                <Choice active={mode === 'single'} onClick={() => changeMode('single')}>Single item</Choice>
-                <Choice active={mode === 'bulk'} onClick={() => changeMode('bulk')}>Bulk posting</Choice>
+              <div className="mt-7 grid gap-2 sm:grid-cols-3">
+                <Choice active={mode === 'single'} onClick={() => changeMode('single')}>{t('One item')}</Choice>
+                <Choice active={mode === 'multiple'} onClick={() => changeMode('multiple')}>{t('Several separate items')}</Choice>
+                <Choice active={mode === 'bundle'} onClick={() => changeMode('bundle')}>{t('One bundle or dealer list')}</Choice>
+              </div>
+
+              <div className="mt-4 border-l-2 border-[#c9a96e] bg-[#c9a96e]/[0.08] px-4 py-3 text-xs leading-5 text-white/60">
+                {mode === 'single' && t('Post one watch or luxury item with its own message and photos.')}
+                {mode === 'multiple' && t('Create one card per item. Seller credentials are stamped automatically, while every watch keeps its own reference, price, message, and photos.')}
+                {mode === 'bundle' && t('Paste the complete dealer list once and add the original group photos. We keep it intact in the deferred bundle lane; no group photo is assigned to an individual watch.')}
               </div>
 
               <form onSubmit={submit} className="mt-7 space-y-6">
                 <section className="border border-white/12 bg-white/[0.025] p-4 sm:p-5">
-                  <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-semibold"><UserRound size={17} className="text-[#c9a96e]" /> Credentialed posting user</div>{poster && <span className="border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-200"><ShieldCheck size={12} className="mr-1 inline" /> {poster.credential_status}</span>}</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold"><UserRound size={17} className="text-[#c9a96e]" /> {t('Credentialed posting user')}</div>
+                    {poster && <span className="border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-200"><ShieldCheck size={12} className="mr-1 inline" /> {poster.credential_status}</span>}
+                  </div>
                   {poster ? (
                     <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
                       {posterPhoto ? <FilePreview file={posterPhoto} alt="Updated credentialed profile" className="h-20 w-20 rounded-full border border-[#c9a96e]/50 object-cover" /> : poster.avatar_url ? <img src={poster.avatar_url} alt="Credentialed profile" className="h-20 w-20 rounded-full border border-[#c9a96e]/50 object-cover" /> : <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/15 bg-white/5"><UserRound size={28} className="text-white/35" /></div>}
                       <div className="min-w-0 flex-1">
                         <p className="text-lg font-semibold">{poster.name}</p>
                         {poster.company && poster.company !== poster.name && <p className="mt-1 text-xs text-white/45">{poster.company}</p>}
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/60"><span>{poster.phone}</span><span>{poster.location}</span><span>Rating {poster.rating == null ? '—' : poster.rating.toFixed(1)}</span><span>{poster.review_count} reviews</span><span>{poster.group_count} groups</span></div>
-                        <p className="mt-2 text-[11px] text-white/35">Stamped from the signed-in credential · identity fields cannot be edited here.</p>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/60"><span>{poster.phone}</span><span>{poster.location}</span><span>{t('Rating')} {poster.rating == null ? '—' : poster.rating.toFixed(1)}</span><span>{poster.review_count} {t('reviews')}</span><span>{poster.group_count} {t('groups')}</span></div>
+                        <p className="mt-2 text-[11px] text-white/35">{t('Stamped from the signed-in credential · identity fields cannot be edited here.')}</p>
                       </div>
                     </div>
                   ) : <p className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">{credentialError || 'Loading credentialed dealer profile...'}</p>}
                   {poster && credentialError && <p className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">{credentialError}</p>}
                   <PhotoPicker
-                    label={poster?.avatar_url ? 'Update credentialed profile photo' : 'Add credentialed profile photo'}
-                    hint="Optional. This becomes the posting-user photo attached to the credential."
+                    label={t(poster?.avatar_url ? 'Update credentialed profile photo' : 'Add credentialed profile photo')}
+                    hint={t('Optional. This becomes the posting-user photo attached to the credential.')}
                     capture="user"
                     files={posterPhoto ? [posterPhoto] : []}
                     onChange={files => setPosterPhoto(files[0] || null)}
@@ -201,34 +244,40 @@ export default function DealerSubmitListing() {
                     key={item.key}
                     item={item}
                     number={index + 1}
-                    canRemove={mode === 'bulk' && items.length > 2}
+                    mode={mode}
+                    canRemove={mode === 'multiple' && items.length > 1}
+                    canAddSimilar={mode === 'multiple' && items.length < MAX_ITEMS}
                     onChange={patch => updateItem(item.key, patch)}
                     onPhotos={event => choosePhotos(item.key, event)}
                     onRemove={() => setItems(current => current.filter(candidate => candidate.key !== item.key))}
+                    onAddSimilar={() => addSimilarItem(item)}
                   />
                 ))}
 
-                {mode === 'bulk' && (
+                {mode === 'multiple' && (
                   <button type="button" disabled={items.length >= MAX_ITEMS} onClick={() => setItems(current => [...current, createDraft()])} className="flex h-11 w-full items-center justify-center gap-2 border border-dashed border-white/25 text-sm text-white/70 hover:border-[#c9a96e] hover:text-white disabled:opacity-40">
-                    <Plus size={16} /> Add another item ({items.length}/{MAX_ITEMS})
+                    <Plus size={16} /> {t('Add a blank item')} ({items.length}/{MAX_ITEMS})
                   </button>
                 )}
 
                 {error && <p role="alert" className="border-l-2 border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
                 {message && <p role="status" className="flex items-center gap-2 border-l-2 border-emerald-400 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100"><CheckCircle2 size={15} /> {message}</p>}
-                <button disabled={saving || !poster || Boolean(credentialError)} className="flex h-12 w-full items-center justify-center gap-2 bg-[#c9a96e] text-sm font-semibold text-[#09090d] disabled:opacity-60"><Send size={16} /> {saving ? `Uploading ${totalPhotos + Number(Boolean(posterPhoto))} photos and publishing...` : `Normalize and publish ${items.length === 1 ? 'item' : `${items.length} items`}`}</button>
+                <div className="sticky bottom-3 border border-white/15 bg-[#0d0d13]/95 p-3 shadow-2xl backdrop-blur">
+                  <div className="mb-2 flex items-center justify-between text-[11px] text-white/45"><span>{readyItems}/{items.length} {t('ready')} · {totalPhotos} {t('item photos')}</span><span>{t(mode === 'bundle' ? 'Deferred bundle lane' : 'Trading Floor publication')}</span></div>
+                  <button disabled={saving || !poster || Boolean(credentialError) || readyItems !== items.length} className="flex h-12 w-full items-center justify-center gap-2 bg-[#c9a96e] text-sm font-semibold text-[#09090d] disabled:opacity-60"><Send size={16} /> {saving ? `Uploading ${totalPhotos + Number(Boolean(posterPhoto))} photos and publishing...` : mode === 'bundle' ? 'Submit intact bundle for later separation' : `Normalize and publish ${items.length === 1 ? 'item' : `${items.length} separate items`}`}</button>
+                </div>
               </form>
             </div>
 
             <aside>
-              <h2 className="text-lg font-semibold">Your recent posts</h2>
-              <p className="mt-2 text-xs leading-5 text-white/40">Published items remain available for later human quality review.</p>
+              <h2 className="text-lg font-semibold">{t('Your recent posts')}</h2>
+              <p className="mt-2 text-xs leading-5 text-white/40">{t('Published items remain available for later human quality review.')}</p>
               <div className="mt-4 divide-y divide-white/10 border-y border-white/10">
-                {submissions.length === 0 && <p className="py-5 text-sm text-white/40">No posts yet.</p>}
+                {submissions.length === 0 && <p className="py-5 text-sm text-white/40">{t('No posts yet.')}</p>}
                 {submissions.map(item => (
                   <div key={item.id} className="py-4">
                     <div className="flex items-center justify-between gap-3 text-xs"><span className="font-semibold text-[#c9a96e]">{item.intent} / {item.category}</span><span className="text-emerald-300/70">{(item.publication_status || 'published').replaceAll('_', ' ')}</span></div>
-                    <p className="mt-2 text-sm text-white/70">{[item.claimed_fields?.brand, item.claimed_fields?.model, item.claimed_fields?.reference, item.claimed_fields?.title].filter(Boolean).join(' ') || 'Post received'}</p>
+                    <p className="mt-2 text-sm text-white/70">{[item.claimed_fields?.brand, item.claimed_fields?.model, item.claimed_fields?.reference, item.claimed_fields?.title].filter(Boolean).join(' ') || t('Post received')}</p>
                     <p className="mt-1 text-[11px] text-white/30">{new Date(item.created_at).toLocaleDateString()}</p>
                   </div>
                 ))}
@@ -238,40 +287,47 @@ export default function DealerSubmitListing() {
         ) : (
           <section className="py-9">
             <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Luxury App</p><h1 className="mt-3 font-serif text-4xl sm:text-5xl">Post an item.</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">Use the connected Luxury App without leaving WatchFacts.</p></div>
-              <a href={LUXURY_APP_URL} target="_blank" rel="noreferrer" className="inline-flex h-11 shrink-0 items-center justify-center gap-2 border border-white/20 px-4 text-xs font-semibold text-white/75 hover:border-[#c9a96e] hover:text-white">Open full page <ExternalLink size={14} /></a>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Luxury App</p><h1 className="mt-3 font-serif text-4xl sm:text-5xl">{t('Post an item.')}</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{t('Use the connected Luxury App without leaving WatchFacts.')}</p></div>
+              <a href={LUXURY_APP_URL} target="_blank" rel="noreferrer" className="inline-flex h-11 shrink-0 items-center justify-center gap-2 border border-white/20 px-4 text-xs font-semibold text-white/75 hover:border-[#c9a96e] hover:text-white">{t('Open full page')} <ExternalLink size={14} /></a>
             </div>
             <iframe src={LUXURY_APP_URL} title="Luxury App posting experience" className="min-h-[820px] w-full border border-white/12 bg-white" allow="camera; microphone; clipboard-write" />
           </section>
         )}
       </div>
+      <Footer />
     </main>
   );
 }
 
-function ItemEditor({ item, number, canRemove, onChange, onPhotos, onRemove }: { item: DraftItem; number: number; canRemove: boolean; onChange: (patch: Partial<DraftItem>) => void; onPhotos: (event: ChangeEvent<HTMLInputElement>) => void; onRemove: () => void }) {
+function ItemEditor({ item, number, mode, canRemove, canAddSimilar, onChange, onPhotos, onRemove, onAddSimilar }: { item: DraftItem; number: number; mode: Mode; canRemove: boolean; canAddSimilar: boolean; onChange: (patch: Partial<DraftItem>) => void; onPhotos: (event: ChangeEvent<HTMLInputElement>) => void; onRemove: () => void; onAddSimilar: () => void }) {
+  const { t } = useLanguage();
   const isWatch = item.category === 'WATCH';
+  const isBundle = mode === 'bundle' || item.is_bundle;
   return (
     <section className="border border-white/12 bg-white/[0.025] p-4 sm:p-5">
-      <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Item {number}</h2>{canRemove && <button type="button" onClick={onRemove} aria-label={`Remove item ${number}`} className="text-white/40 hover:text-red-300"><Trash2 size={17} /></button>}</div>
-      <fieldset className="mt-4"><legend className="mb-2 text-xs text-white/45">Listing type</legend><div className="grid grid-cols-2 gap-2"><Choice active={item.intent === 'WTS'} onClick={() => onChange({ intent: 'WTS' })}>For sale</Choice><Choice active={item.intent === 'WTB'} onClick={() => onChange({ intent: 'WTB' })}>Want to buy</Choice></div></fieldset>
-      <label className="mt-4 block text-xs text-white/60">Category<select value={item.category} onChange={event => onChange({ category: event.target.value })} className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white">{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        {isWatch ? <><Field value={item.brand} onChange={brand => onChange({ brand })} label="Brand" required /><Field value={item.model} onChange={model => onChange({ model })} label="Model" required /><Field value={item.reference} onChange={reference => onChange({ reference })} label="Reference" required /><Field value={item.dial_color} onChange={dial_color => onChange({ dial_color })} label="Dial color" required /></> : <Field value={item.title} onChange={title => onChange({ title })} label="Item title" required />}
-        <Field value={item.condition} onChange={condition => onChange({ condition })} label="Condition" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">{isBundle ? t('Complete bundle or dealer list') : `${t('Item')} ${number}`}</h2>{isBundle && <span className="flex items-center gap-1 bg-amber-400/10 px-2 py-1 text-[10px] uppercase tracking-wider text-amber-200"><Layers3 size={12} /> {t('Kept together')}</span>}</div>
+        <div className="flex items-center gap-3">{canAddSimilar && <button type="button" onClick={onAddSimilar} className="flex items-center gap-1 text-xs text-white/45 hover:text-[#c9a96e]"><CopyPlus size={15} /> {t('Add similar')}</button>}{canRemove && <button type="button" onClick={onRemove} aria-label={`${t('Remove item')} ${number}`} className="text-white/40 hover:text-red-300"><Trash2 size={17} /></button>}</div>
       </div>
-      {item.intent === 'WTS' && <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_150px]"><Field value={item.price_amount} onChange={price_amount => onChange({ price_amount })} label="Asking price (optional)" type="number" /><label className="block text-xs text-white/60">Currency<select value={item.currency} onChange={event => onChange({ currency: event.target.value })} className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white">{CURRENCIES.map(currency => <option key={currency}>{currency}</option>)}</select></label></div>}
-      <label className="mt-4 block text-xs text-white/60">Original listing or request message<textarea value={item.raw_message} onChange={event => onChange({ raw_message: event.target.value })} required minLength={3} maxLength={10000} rows={5} className="mt-2 w-full resize-y border border-white/15 bg-[#111118] px-3 py-3 text-sm leading-6 text-white outline-none focus:border-[#c9a96e]" /></label>
+      {!isBundle && <fieldset className="mt-4"><legend className="mb-2 text-xs text-white/45">{t('Listing type')}</legend><div className="grid grid-cols-2 gap-2"><Choice active={item.intent === 'WTS'} onClick={() => onChange({ intent: 'WTS' })}>{t('For sale')}</Choice><Choice active={item.intent === 'WTB'} onClick={() => onChange({ intent: 'WTB' })}>{t('Want to buy')}</Choice></div></fieldset>}
+      {!isBundle && <label className="mt-4 block text-xs text-white/60">{t('Category')}<select value={item.category} onChange={event => onChange({ category: event.target.value })} className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white">{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}</select></label>}
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {isBundle ? <Field value={item.title} onChange={title => onChange({ title })} label={t('Bundle title (optional)')} /> : isWatch ? <><Field value={item.brand} onChange={brand => onChange({ brand })} label={t('Brand')} required /><Field value={item.model} onChange={model => onChange({ model })} label={t('Model')} required /><Field value={item.reference} onChange={reference => onChange({ reference })} label={t('Reference')} required /><Field value={item.dial_color} onChange={dial_color => onChange({ dial_color })} label={t('Dial color')} required /></> : <Field value={item.title} onChange={title => onChange({ title })} label={t('Item title')} required />}
+        <Field value={item.condition} onChange={condition => onChange({ condition })} label={t('Condition')} />
+      </div>
+      {item.intent === 'WTS' && <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_150px]"><Field value={item.price_amount} onChange={price_amount => onChange({ price_amount })} label={t('Asking price (optional)')} type="number" /><label className="block text-xs text-white/60">{t('Currency')}<select value={item.currency} onChange={event => onChange({ currency: event.target.value })} className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white">{CURRENCIES.map(currency => <option key={currency}>{currency}</option>)}</select></label></div>}
+      <label className="mt-4 block text-xs text-white/60">{t(isBundle ? 'Paste the complete original bundle or dealer list' : 'Original listing or request message')}<textarea value={item.raw_message} onChange={event => onChange({ raw_message: event.target.value })} required minLength={3} maxLength={10000} rows={isBundle ? 9 : 5} placeholder={isBundle ? t('Paste the full message exactly as written. Keep every watch, price, currency, and line break.') : undefined} className="mt-2 w-full resize-y border border-white/15 bg-[#111118] px-3 py-3 text-sm leading-6 text-white outline-none focus:border-[#c9a96e]" /></label>
       <div className="mt-4">
-        <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center border border-dashed border-white/25 bg-black/20 px-4 text-center hover:border-[#c9a96e]"><Camera size={22} className="text-[#c9a96e]" /><span className="mt-2 text-sm font-semibold">Take or choose item photos</span><span className="mt-1 text-xs text-white/40">1–{MAX_ITEM_PHOTOS} photos · first photo is the Trading Floor cover</span><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" multiple required={!item.photos.length} onChange={onPhotos} /></label>
-        {!!item.photos.length && <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">{item.photos.map((file, index) => <div key={`${file.name}-${index}`} className="relative aspect-square overflow-hidden border border-white/10"><FilePreview file={file} alt={`Item ${number} photo ${index + 1}`} className="h-full w-full object-cover" />{index === 0 && <span className="absolute bottom-1 left-1 bg-black/75 px-1.5 py-0.5 text-[9px] uppercase">Cover</span>}</div>)}</div>}
+        <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center border border-dashed border-white/25 bg-black/20 px-4 text-center hover:border-[#c9a96e]"><Camera size={22} className="text-[#c9a96e]" /><span className="mt-2 text-sm font-semibold">{t(isBundle ? 'Take or choose the original group photos' : 'Take or choose item photos')}</span><span className="mt-1 text-xs text-white/40">1–{MAX_ITEM_PHOTOS} {t(isBundle ? 'photos · preserved with this bundle only' : 'photos · first photo is the Trading Floor cover')}</span><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" multiple required={!item.photos.length} onChange={onPhotos} /></label>
+        {!!item.photos.length && <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">{item.photos.map((file, index) => <div key={`${file.name}-${index}`} className="relative aspect-square overflow-hidden border border-white/10"><FilePreview file={file} alt={`${t('Item')} ${number} photo ${index + 1}`} className="h-full w-full object-cover" />{index === 0 && <span className="absolute bottom-1 left-1 bg-black/75 px-1.5 py-0.5 text-[9px] uppercase">{t('Cover')}</span>}</div>)}</div>}
       </div>
     </section>
   );
 }
 
 function PhotoPicker({ label, hint, capture, files, onChange, onRemove }: { label: string; hint: string; capture: 'user' | 'environment'; files: File[]; onChange: (files: File[]) => void; onRemove: () => void }) {
-  return <div className="mt-4"><label className="flex cursor-pointer items-center gap-3 border border-dashed border-white/20 px-4 py-3 hover:border-[#c9a96e]"><ImagePlus size={20} className="text-[#c9a96e]" /><span><span className="block text-sm font-semibold">{label}</span><span className="text-xs text-white/40">{hint}</span></span><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture={capture} onChange={event => onChange([...(event.target.files || [])].slice(0, 1))} /></label>{files[0] && <div className="mt-3 flex items-center gap-3"><FilePreview file={files[0]} alt="Posting user preview" className="h-16 w-16 rounded-full object-cover" /><div className="min-w-0 flex-1"><p className="truncate text-xs text-white/70">{files[0].name}</p><button type="button" onClick={onRemove} className="mt-1 text-xs text-red-300">Remove photo</button></div></div>}</div>;
+  const { t } = useLanguage();
+  return <div className="mt-4"><label className="flex cursor-pointer items-center gap-3 border border-dashed border-white/20 px-4 py-3 hover:border-[#c9a96e]"><ImagePlus size={20} className="text-[#c9a96e]" /><span><span className="block text-sm font-semibold">{label}</span><span className="text-xs text-white/40">{hint}</span></span><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture={capture} onChange={event => onChange([...(event.target.files || [])].slice(0, 1))} /></label>{files[0] && <div className="mt-3 flex items-center gap-3"><FilePreview file={files[0]} alt="Posting user preview" className="h-16 w-16 rounded-full object-cover" /><div className="min-w-0 flex-1"><p className="truncate text-xs text-white/70">{files[0].name}</p><button type="button" onClick={onRemove} className="mt-1 text-xs text-red-300">{t('Remove photo')}</button></div></div>}</div>;
 }
 
 function FilePreview({ file, alt, className }: { file: File; alt: string; className: string }) {

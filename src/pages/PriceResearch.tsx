@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, Loader2
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
+import { Footer as CommunityFooter } from '../components/Footer';
 import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -624,23 +625,25 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         // the API's publication brand names here; exact counts are shown after
         // the customer selects a reference and the service performs an exact
         // count against the gated market view.
-        const cleanBrandStr = (raw: any): string => {
+        const cleanBrandStr = (raw: unknown): string => {
           if (!raw) return '';
           if (typeof raw === 'string') return raw.replace(/^[({"'`\s]+|[)}"'`\s]+$/g, '').trim();
           if (Array.isArray(raw)) return cleanBrandStr(raw[0]);
-          if (typeof raw === 'object' && raw.brand) return cleanBrandStr(raw.brand);
+          if (typeof raw === 'object' && 'brand' in raw) return cleanBrandStr((raw as { brand?: unknown }).brand);
           return String(raw).replace(/^[({"'`\s]+|[)}"'`\s]+$/g, '').trim();
         };
         const brands = payload.publicationBrands || payload.summary?.publicationBrands || [];
         if (Array.isArray(brands) && brands.length) {
-          setPBrands(brands.map((item: any) => typeof item === 'string'
-            ? { brand: cleanBrandStr(item) }
-            : {
-                brand: cleanBrandStr(item.brand || item.name || item),
-                listing_count: Number(item.listing_count ?? item.canonical_listings ?? 0),
-                model_count: item.model_count,
-                reference_count: item.reference_count,
-              }).filter(b => Boolean(b.brand)));
+          setPBrands(brands.map((item: unknown) => {
+            if (typeof item === 'string') return { brand: cleanBrandStr(item) };
+            const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+            return {
+              brand: cleanBrandStr(record.brand || record.name || item),
+              listing_count: Number(record.listing_count ?? record.canonical_listings ?? 0),
+              model_count: Number(record.model_count || 0) || undefined,
+              reference_count: Number(record.reference_count || 0) || undefined,
+            };
+          }).filter(b => Boolean(b.brand)));
         }
       })
       .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load reviewed inventory brands:', error); });
@@ -1475,7 +1478,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           </>
         )}
 
-        <Footer />
+        <CommunityFooter />
       </div>
 
       {selectedRow && (
@@ -2193,40 +2196,6 @@ function forecastReason(reason?: string) {
     FEATURE_NOT_RELEASED: 'validation is complete for this cohort, but public forecasts are awaiting the controlled release approval',
   };
   return messages[reason || ''] || 'the forecast release gate was not satisfied';
-}
-
-function Footer() {
-  const linkStyle: React.CSSProperties = { color: MUTED, fontSize: 13, textDecoration: 'none', cursor: 'pointer' };
-  const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 8 };
-
-  return (
-    <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 32, marginTop: 16 }}>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
-        <div>
-          <div style={sectionTitle}>Features</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Link to="/trading" style={linkStyle}>Trading Floor</Link>
-            <Link to="/price-research" style={linkStyle}>Price Research</Link>
-          </div>
-        </div>
-        <div>
-          <div style={sectionTitle}>Dealers</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Link to="/dealer/workspace" style={linkStyle}>Workspace</Link>
-          </div>
-        </div>
-        <div>
-          <div style={sectionTitle}>Company</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Link to="/" style={linkStyle}>Home</Link>
-          </div>
-        </div>
-      </div>
-      <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16, paddingBottom: 32, fontSize: 12, color: MUTED, textAlign: 'center' }}>
-        &copy; 2026 Watchfacts Inc. All Rights Reserved.
-      </div>
-    </div>
-  );
 }
 
 function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpenListing: (row: RowData) => void }) {

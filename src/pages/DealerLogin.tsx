@@ -2,6 +2,7 @@ import { ArrowLeft, LockKeyhole } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MarketNav } from '../components/MarketNav';
+import { Footer } from '../components/Footer';
 
 type DealerRole = 'dealer' | 'reviewer' | 'admin';
 
@@ -107,7 +108,7 @@ export default function DealerLogin() {
         <Link to="/" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> Curated Luxury</Link>
         <div className="flex flex-1 items-center justify-center py-10">
           <section className="w-full max-w-[420px] border border-white/12 bg-[#111118] p-6 sm:p-8">
-            <div className="mb-6 flex items-center gap-3"><LockKeyhole size={20} className="text-[#c9a96e]" /><h2 className="text-lg font-semibold">{adminEntry ? 'CL Login' : 'Login'}</h2></div>
+            <div className="mb-6 flex items-center gap-3"><LockKeyhole size={20} className="text-[#c9a96e]" /><h2 className="text-lg font-semibold">{adminEntry ? 'CL Login' : 'Workspace Login'}</h2></div>
             <div className="mb-5 border-l-2 border-[#c9a96e] bg-[#c9a96e]/10 px-3 py-2 text-xs leading-5 text-[#ead7ae]">
               {accessMessage} Existing secure sessions open automatically.
             </div>
@@ -130,6 +131,7 @@ export default function DealerLogin() {
         </div>
       </div>
       </div>
+      <Footer />
     </main>
   );
 }
