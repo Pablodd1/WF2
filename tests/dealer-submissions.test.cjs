@@ -42,6 +42,25 @@ test('validates bulk item data without accepting typed poster identity', () => {
   assert.equal(batch.items[1].claimed.poster_name, undefined);
 });
 
+test('accepts one intact WTS watch bundle without inventing child identities', () => {
+  const bundle = validateBatch({ items: [{
+    is_bundle: true, intent: 'WTS', category: 'WATCH',
+    raw_message: 'WTS dealer list\nRolex 126610LN 14000 USD\nOmega 310.30 7000 USD', image_urls,
+  }] });
+  assert.equal(bundle.error, undefined);
+  assert.equal(bundle.items[0].isBundle, true);
+  assert.equal(bundle.items[0].claimed.reference, null);
+});
+
+test('requires a bundle to be submitted alone', () => {
+  const bundle = { is_bundle: true, intent: 'WTS', category: 'WATCH', raw_message: 'WTS two watches', image_urls };
+  const single = {
+    intent: 'WTS', category: 'WATCH', raw_message: 'WTS Rolex 126610LN black', image_urls,
+    brand: 'Rolex', model: 'Submariner', reference: '126610LN', dial_color: 'Black',
+  };
+  assert.match(validateBatch({ items: [bundle, single] }).error, /bundle by itself/);
+});
+
 test('credential stamp requires linked name, verified phone, and location', () => {
   const complete = { name: 'Alex Dealer', phone: '+13055550101', location: 'Miami, US', credential_status: 'VERIFIED' };
   assert.equal(credentialError(complete), null);

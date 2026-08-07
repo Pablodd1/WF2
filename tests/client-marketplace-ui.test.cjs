@@ -19,25 +19,21 @@ test('customer marketplace has direct primary navigation and the approved Hire F
 
   assert.match(header, /label: 'HOME', to: '\/'/);
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
-  assert.match(header, /label: 'WANT TO BUY', to: '\/trading\?type=WTB'/);
   assert.match(header, /label: 'PRICE RESEARCH', to: '\/price-research'/);
+  assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
   assert.match(header, /label: 'POST ITEM', to: '\/dealer\/post'/);
   assert.doesNotMatch(header, /luxuryapp-wf-w5o1/);
   assert.match(header, /label: 'ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'HIRE FI'/);
-  assert.match(header, /const LANDING_LINKS = \[[\s\S]*label: 'TRADING FLOOR'[\s\S]*label: 'HIRE FI'[\s\S]*label: 'LOGIN'/);
+  assert.match(header, /const LANDING_LINKS = \[[\s\S]*label: 'TRADING FLOOR'[\s\S]*label: 'HIRE FI'[\s\S]*label: 'WORKSPACE'/);
   assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
-  assert.match(home, /to="\/dealer\/post"[\s\S]*Post an offer/);
+  assert.match(footer, /\['Post an Item', '\/dealer\/post'\]/);
   assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
   assert.match(postItem, /const LUXURY_APP_URL = 'https:\/\/luxuryapp-wf\.vercel\.app\/'/);
   assert.match(postItem, /WatchFacts form/);
   assert.match(postItem, /Luxury App/);
   assert.match(postItem, /<iframe[\s\S]*src=\{LUXURY_APP_URL\}[\s\S]*title="Luxury App posting experience"/);
   assert.match(postItem, /Open full page/);
-  assert.match(home, /const LUXURY_MARKETPLACE_URL = 'https:\/\/luxuryapp-wf-w5o1\.vercel\.app\/marketplace\/'/);
-  assert.match(home, /Luxury item marketplace/);
-  assert.match(home, /href=\{LUXURY_MARKETPLACE_URL\}[\s\S]*target="_blank"[\s\S]*rel="noreferrer"/);
-  assert.match(home, /to="\/cl-login"[\s\S]*CL Login/);
   assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
   assert.match(header, /src="\/images\/curated-luxury-logo-dark\.png"/);
   assert.match(header, /alt="Curated Luxury"/);
@@ -47,13 +43,11 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /location\.pathname === '\/trading' && !wantsToBuy/);
   assert.match(header, /link\.to === '\/trading\?type=WTB'[\s\S]*\? wantsToBuy/);
   assert.match(banner, /href="https:\/\/luxfi\.ai\/#add-fi"/);
-  assert.match(floor, /<MarketNav \/>[\s\S]*<LuxFiBanner \/>/);
-  assert.match(research, /<MarketNav \/>[\s\S]*<LuxFiBanner \/>/);
   assert.match(home, /className="luxury-wordmark/);
   assert.match(styles, /@keyframes luxury-gold-flow-down/);
   assert.match(styles, /animation: luxury-gold-flow-down 6s ease-in-out infinite/);
   assert.match(styles, /prefers-reduced-motion: reduce/);
-  assert.match(home, /Curated Luxury marketplace · WatchFacts market intelligence/);
+  assert.match(footer, /Curated Luxury marketplace with WatchFacts market intelligence/);
 });
 
 test('Trading Floor watch view does not render internal listing labels or identifiers', () => {
@@ -70,19 +64,15 @@ test('Trading Floor watch view does not render internal listing labels or identi
 test('Trading Floor uses the server-ranked reviewed release and fails closed on images', () => {
   const floor = read('src/pages/TradingFloor.tsx');
 
-  assert.match(floor, /media\.matches \? 24 : 100/);
+  assert.match(floor, /media\.matches \? 24 : 50/);
   assert.match(floor, /function hasListingImage/);
-  assert.match(floor, /'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'/);
-  assert.match(floor, /fetch\(`\/api\/reviewed-market-inventory\?/);
+  assert.match(floor, /listing\.thumbnail_url[\s\S]*listing\.image_urls[\s\S]*listing\.has_images/);
+  assert.match(floor, /usesReviewedWatchInventory \? '\/api\/reviewed-market-inventory' : '\/api\/ingest'/);
   assert.doesNotMatch(floor, /fetch\(`\/api\/ingest\?/);
   assert.match(floor, /params\.set\('images', 'true'\)/);
-  assert.match(floor, /Source-confirmed USD first; other supplied prices next; no-price requests last\./);
   assert.match(floor, /Price requires review/);
   assert.match(floor, /Workbook price anomaly - held for review/);
-  assert.doesNotMatch(floor, /Data under review/);
-  assert.doesNotMatch(floor, /Price under review/);
-  assert.doesNotMatch(floor, /Exact source currency is being verified/);
-  assert.match(floor, /setListings\(\[\.\.\.withImages, \.\.\.withoutImages\]\)/);
+  assert.match(floor, /setListings\(\[\.\.\.tier1, \.\.\.tier2, \.\.\.tier3, \.\.\.tier4\]\)/);
   assert.match(floor, /aria-label="Trading Floor pages"/);
   assert.match(floor, /Page \{cursorHistory\.length \+ 1\}/);
   assert.match(floor, /onUnavailable=\{\(\) => setImageAvailable\(false\)\}/);
@@ -90,7 +80,7 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.doesNotMatch(floor, /Reference image · not seller photo/);
   assert.doesNotMatch(floor, /\/api\/featured-listings/);
   assert.match(floor, /fetch\(`\/api\/reviewed-seller-summary\?id=/);
-  assert.match(floor, /Raw source message/);
+  assert.match(floor, /Original raw message/);
   assert.match(floor, /Source poster activity/);
   assert.doesNotMatch(floor, /EvidenceIndicators|aria-label="Listing evidence"/);
   assert.doesNotMatch(floor, /per request keeps mobile memory bounded/);
@@ -119,20 +109,18 @@ test('CL control access is kept in the customer footer', () => {
 
   assert.match(app, /path="\/cl-login" element=\{<DealerLogin \/>\}/);
   assert.match(app, /path="\/dashboard"[\s\S]*allowedRoles=\{\['admin'\]\}/);
-  assert.match(home, /to="\/cl-login"[\s\S]*CL Login/);
   assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
 });
 
-test('customer workflows link to the official WatchFacts groups marketplace with public metrics', () => {
-  const cta = read('src/components/JoinGroupsCta.tsx');
+test('customer workflows expose direct official WatchFacts contact and community links', () => {
+  const footer = read('src/components/Footer.tsx');
   const floor = read('src/pages/TradingFloor.tsx');
   const research = read('src/pages/PriceResearch.tsx');
 
-  assert.match(cta, /JOIN THE GROUPS/);
-  assert.match(cta, /2\.7M\+ listings · 30,609\+ global dealers · 132 countries/);
-  assert.match(cta, /https:\/\/watchfacts\.com\/buy\/all\?listing_type=sale&displayModal=hide&tradingFloorStats%5Bid%5D=1&tradingFloorStats%5Btotal_listings%5D=1322815&tradingFloorStats%5Btotal_dealers%5D=30609&tradingFloorStats%5Btotal_countries%5D=132#/);
-  assert.match(cta, /target="_blank"/);
-  assert.match(cta, /rel="noreferrer"/);
-  assert.match(floor, /<JoinGroupsCta dark \/>/);
-  assert.match(research, /<JoinGroupsCta \/>/);
+  assert.match(footer, /CONTACT_WHATSAPP_URL/);
+  assert.match(footer, /COMMUNITY_GROUPS/);
+  assert.match(footer, /target="_blank"/);
+  assert.match(footer, /rel="noreferrer"/);
+  assert.match(floor, /import \{ Footer \}/);
+  assert.match(research, /Footer as CommunityFooter/);
 });

@@ -1,11 +1,13 @@
 import { CreditCard, FileText, HelpCircle, Settings, Store, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { Footer } from '@/components/Footer';
 
 type Section = 'profile' | 'listings' | 'settings' | 'billing' | 'help';
 interface WorkspacePayload {
   user: { email: string; role: string };
-  dealer: null | { display_name: string | null; company_name: string | null; city: string | null; country_code: string | null; profile_summary: string | null; contact_consent: boolean; rating: number | null; review_count: number; whatsapp_group_count: number };
+  dealer: null | { display_name: string | null; company_name: string | null; city: string | null; country_code: string | null; profile_summary: string | null; avatar_url: string | null; contact_consent: boolean; rating: number | null; review_count: number; whatsapp_group_count: number };
+  profile_stamp: null | { name: string | null; company: string | null; phone: string | null; location: string | null; avatar_url: string | null; rating: number | null; review_count: number; group_count: number };
   preferences: { display_currency: string; email_notifications: boolean };
   stats: null | { active_listings: number; wts_posts: number; wtb_posts: number; posting_years: number };
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; listing_type: string; listing_date: string | null; price_usd: number | null }>;
@@ -58,6 +60,7 @@ export default function DealerAccount() {
           {!data ? <p className="text-sm text-white/40">Loading workspace...</p> : <AccountSection section={section} data={data} update={update} />}
         </section>
       </div>
+      <Footer />
     </main>
   );
 }
@@ -74,7 +77,13 @@ function Profile({ data, update }: { data: WorkspacePayload; update: AccountProp
   const dealer = data.dealer;
   if (!dealer) return <Empty title="Profile awaiting linkage" copy="Your credential is active, but it is not yet linked to a verified dealer identity. WatchFacts must complete that match before profile edits or contact publication." />;
   return <form onSubmit={event => { event.preventDefault(); const values = Object.fromEntries(new FormData(event.currentTarget)); void update('profile', { ...values, contact_consent: values.contact_consent === 'on' }); }}>
-    <Heading title="Dealer profile" copy="Public identity and contact consent. Ratings and historical activity are source-derived and cannot be edited here." />
+    <Heading title="Account and posting profile" copy="Your saved identity, demographics, reputation, and preferences are reused when you post an item. Ratings and verified phone lineage cannot be edited here." />
+    <div className="mb-7 grid gap-px bg-white/10 sm:grid-cols-2 lg:grid-cols-4">
+      <ProfileFact label="Account email" value={data.user.email} />
+      <ProfileFact label="Verified phone" value={data.profile_stamp?.phone} />
+      <ProfileFact label="Posting location" value={data.profile_stamp?.location} />
+      <ProfileFact label="Reputation" value={data.profile_stamp?.rating == null ? `${data.profile_stamp?.review_count || 0} reviews` : `${Number(data.profile_stamp.rating).toFixed(2)} · ${data.profile_stamp.review_count} reviews`} />
+    </div>
     <div className="grid gap-4 sm:grid-cols-2"><Input name="display_name" label="Display name" defaultValue={dealer.display_name} /><Input name="company_name" label="Company" defaultValue={dealer.company_name} /><Input name="city" label="City" defaultValue={dealer.city} /><Input name="country_code" label="Country code" defaultValue={dealer.country_code} maxLength={3} /></div>
     <label className="mt-4 block text-xs text-white/60">Profile summary<textarea name="profile_summary" defaultValue={dealer.profile_summary || ''} maxLength={1000} rows={5} className="mt-2 w-full border border-white/15 bg-[#111118] p-3 text-sm" /></label>
     <label className="mt-4 flex items-start gap-3 text-sm text-white/60"><input name="contact_consent" type="checkbox" defaultChecked={dealer.contact_consent} className="mt-1" /> Allow verified contact details to appear on linked listings.</label>
@@ -112,4 +121,5 @@ function Help({ data, update }: { data: WorkspacePayload; update: AccountProps['
 function Heading({ title, copy }: { title: string; copy: string }) { return <div className="mb-7 border-b border-white/10 pb-5"><h1 className="font-serif text-3xl sm:text-4xl">{title}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/50">{copy}</p></div>; }
 function Input({ name, label, defaultValue, required = false, maxLength = 200 }: { name: string; label: string; defaultValue?: string | null; required?: boolean; maxLength?: number }) { return <label className="block text-xs text-white/60">{label}<input name={name} defaultValue={defaultValue || ''} required={required} maxLength={maxLength} className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm" /></label>; }
 function Metric({ label, value }: { label: string; value: number }) { return <div className="bg-[#111118] p-4"><strong className="font-mono text-2xl">{Number(value).toLocaleString()}</strong><p className="mt-1 text-[10px] uppercase tracking-wider text-white/35">{label}</p></div>; }
+function ProfileFact({ label, value }: { label: string; value?: string | null }) { return <div className="bg-[#111118] p-4"><div className="break-words text-sm text-white">{value || 'Not provided'}</div><p className="mt-2 text-[10px] uppercase tracking-wider text-white/35">{label}</p></div>; }
 function Empty({ title, copy }: { title: string; copy: string }) { return <div className="border-l-2 border-[#c9a96e] bg-[#111118] px-5 py-4"><h2 className="font-semibold">{title}</h2><p className="mt-2 text-sm leading-6 text-white/50">{copy}</p></div>; }

@@ -1,0 +1,118 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+
+const root = path.resolve(__dirname, '..');
+const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
+
+test('primary navigation exposes the complete Workspace customer flow and clean Hire Fi rail', () => {
+  const header = read('src/components/MarketHeader.tsx');
+  const rail = read('src/components/HireFiScrollRail.tsx');
+
+  assert.match(header, /label: 'WORKSPACE', to: '\/dealer\/workspace'/);
+  assert.doesNotMatch(header, /label: 'DEALER LOGIN'/);
+  assert.match(header, /label: 'POST ITEM', to: '\/dealer\/post'/);
+  assert.match(header, /label: 'ACCOUNT', to: '\/dealer\/account\/profile'/);
+  assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
+  assert.match(rail, /Let Fi search the world/);
+  assert.match(rail, /sm:text-base/);
+  assert.doesNotMatch(rail, /Instagram|Facebook|Linkedin|Twitter/);
+});
+
+test('Trading Floor preserves source text and orders price intelligence before poster details', () => {
+  const floor = read('src/pages/TradingFloor.tsx');
+
+  assert.match(floor, /listing\.raw_message \?\? listing\.raw_line \?\? listing\.description/);
+  assert.match(floor, />Original raw message</);
+  assert.match(floor, /order-2 rounded-md border[\s\S]*>Price Rating</);
+  assert.match(floor, /order-3 rounded-md border[\s\S]*>Posted by</);
+  assert.match(floor, /listing\.intent \|\| listing\.listing_type/);
+  assert.match(floor, /label="Source image only"/);
+  assert.match(floor, /label="Price supplied"/);
+  assert.match(floor, /Location/);
+});
+
+test('Price Research uses dial colors, closed methodology, images, and complete fallback evidence', () => {
+  const research = read('src/pages/PriceResearch.tsx');
+
+  assert.doesNotMatch(research, /\['white', 'white dial', 'silver'[\s\S]*return NAVY/);
+  assert.match(research, /fill=\{dialChartColor\(dial\.dial_color\)\}/);
+  assert.match(research, /dialChartStroke\(dial\.dial_color\)/);
+  assert.match(research, /key=\{`methodology-/);
+  assert.doesNotMatch(research, /<details open/);
+  assert.match(research, /row\.display_image_url/);
+  assert.match(research, /Source listing image unavailable/);
+  assert.match(research, /const rawSourceMessage = detail\?\.raw_message \?\? summary\.raw_message \?\? summary\.raw_line/);
+  assert.match(research, /void fetch\(contactEndpoint[\s\S]*setListingSeller/);
+  assert.match(research, /<DetailCard title="Original listing"/);
+  assert.match(research, /<DetailCard title="Posted by"/);
+});
+
+test('Workspace includes official community access and install guidance without invented group links', () => {
+  const portal = read('src/pages/DealerPortal.tsx');
+  const footer = read('src/components/Footer.tsx');
+  const groups = read('src/components/JoinGroupsCta.tsx');
+  const index = read('index.html');
+  const manifest = JSON.parse(read('public/manifest.webmanifest'));
+
+  assert.match(footer, /B2B Watch Trading Chat/);
+  assert.match(footer, /Community discussion\/announcements/);
+  assert.match(footer, /Signed Estate and Branded Jewelry/);
+  assert.match(footer, /Rolex US Only Sales/);
+  assert.match(portal, /href=\{group\.href\}/);
+  assert.match(groups, /export const GROUPS_URL = 'https:\/\/watchfacts\.com\//);
+  assert.match(portal, /beforeinstallprompt/);
+  assert.match(portal, /Add to Home Screen/);
+  assert.match(index, /rel="manifest" href="\/manifest\.webmanifest"/);
+  assert.equal(manifest.display, 'standalone');
+});
+
+test('footer provides direct contact, community groups, marketplace opportunities, and CL login', () => {
+  const footer = read('src/components/Footer.tsx');
+
+  assert.match(footer, /Contact us on WhatsApp/);
+  assert.match(footer, /phone=17869569201/);
+  assert.match(footer, /Join Our Chats/);
+  assert.match(footer, /JEaK91DatRkLZFKMaJZYIH/);
+  assert.match(footer, /CHLWqKgzO2Y1sdarNTAcEO/);
+  assert.match(footer, /EfL3QcrCVe1F7wKMGjS9WQ/);
+  assert.match(footer, /B8qiBT6JZYyGoNg3CAX5Kw/);
+  assert.match(footer, /DPhtxCrrxES5kyHeO7SmCb/);
+  assert.match(footer, /t\.me\/watchfactsUS/);
+  assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
+  assert.match(footer, /Email destination pending/);
+});
+
+test('dealer directory includes Reference Check and Top Rated views backed by verified profiles', () => {
+  const directory = read('src/pages/DealerDirectory.tsx');
+
+  assert.match(directory, /Reference Check/);
+  assert.match(directory, /Top Rated Dealers/);
+  assert.match(directory, /feedback reviews/);
+  assert.match(directory, /Member since/);
+  assert.match(directory, /label="For sale"/);
+  assert.match(directory, /label="Looking for"/);
+});
+
+test('home and Post an Item share a persistent multilingual interface without changing raw source text', () => {
+  const language = read('src/i18n/LanguageContext.tsx');
+  const toggle = read('src/components/LanguageToggle.tsx');
+  const header = read('src/components/MarketHeader.tsx');
+  const home = read('src/pages/LandingPage.tsx');
+  const post = read('src/pages/DealerSubmitListing.tsx');
+  const main = read('src/main.tsx');
+
+  assert.match(language, /watchfacts-language/);
+  assert.match(language, /'en'.*'es'.*'pt'.*'zh'/s);
+  assert.match(language, /window\.navigator\.language/);
+  assert.match(toggle, /aria-label=\{t\('Language'\)\}/);
+  assert.match(main, /<LanguageProvider>/);
+  assert.match(header, /<LanguageToggle compact/);
+  assert.match(home, /t\('A considered marketplace for collectors, dealers, and wholesalers'\)/);
+  assert.match(post, /<LanguageToggle/);
+  assert.match(post, /Original listing or request message/);
+  assert.match(post, /value=\{item\.raw_message\}/);
+});

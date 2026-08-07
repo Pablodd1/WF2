@@ -72,12 +72,14 @@ function ownedMediaUrl(value, userId) {
 }
 
 function validateSubmission(body = {}) {
+  const isBundle = body.is_bundle === true;
   const intent = clean(body.intent, 3)?.toUpperCase();
   const category = clean(body.category, 20)?.toUpperCase();
   const rawInput = String(body.raw_message || '').trim();
   const rawMessage = rawInput || null;
   if (!INTENTS.has(intent)) return { error: 'Choose For sale or Want to buy.' };
   if (!CATEGORIES.has(category)) return { error: 'Choose a valid category.' };
+  if (isBundle && (intent !== 'WTS' || category !== 'WATCH')) return { error: 'A deferred bundle must be a For sale watch listing.' };
   if (!rawMessage || rawMessage.length < 3) return { error: 'Enter the original listing or request message.' };
   if (rawMessage.length > 10000) return { error: 'Original message is limited to 10,000 characters.' };
 
@@ -88,7 +90,7 @@ function validateSubmission(body = {}) {
     currency: clean(body.currency, 8)?.toUpperCase() || null,
     title: clean(body.title, 240),
   };
-  if (category === 'WATCH') {
+  if (category === 'WATCH' && !isBundle) {
     const missing = ['brand', 'model', 'reference', 'dial_color'].filter(field => !claimed[field]);
     if (missing.length) return { error: `Required watch fields: ${missing.join(', ')}.` };
   }
@@ -100,7 +102,7 @@ function validateSubmission(body = {}) {
   const imageUrls = Array.isArray(body.image_urls) ? body.image_urls.map(value => clean(value, 2000)).filter(Boolean).slice(0, 5) : [];
   if (!imageUrls.length) return { error: 'Add at least one item photo.' };
   if (imageUrls.some(value => !/^https:\/\//i.test(value))) return { error: 'Invalid item photo URL.' };
-  return { intent, category, rawMessage, claimed, imageUrls };
+  return { intent, category, rawMessage, claimed, imageUrls, isBundle };
 }
 
 function validateBatch(body = {}) {
@@ -109,6 +111,7 @@ function validateBatch(body = {}) {
   const validated = items.map(item => validateSubmission(item));
   const failedIndex = validated.findIndex(item => item.error);
   if (failedIndex >= 0) return { error: `Item ${failedIndex + 1}: ${validated[failedIndex].error}` };
+  if (validated.some(item => item.isBundle) && validated.length !== 1) return { error: 'Submit a bundle by itself so its message and group photos stay together.' };
   return { items: validated };
 }
 
@@ -165,14 +168,14 @@ async function handler(req, res) {
   const submissionRows = batch.items.map(validated => ({
     auth_user_id: authorization.user.id, dealer_id: poster.dealer_id,
     intent: validated.intent, category: validated.category, raw_message: validated.rawMessage,
-    claimed_fields: { ...validated.claimed, ...posterSnapshot }, image_urls: validated.imageUrls,
+    claimed_fields: { ...validated.claimed, ...posterSnapshot, is_bundle: validated.isBundle }, image_urls: validated.imageUrls,
     poster_image_url: posterImageUrl,
     submission_checksum: crypto.createHash('sha256').update(JSON.stringify({
-      intent: validated.intent, category: validated.category, raw_message: validated.rawMessage,
+      intent: validated.intent, category: validated.category, raw_message: validated.rawMessage, is_bundle: validated.isBundle,
       claimed: validated.claimed, image_urls: validated.imageUrls,
     })).digest('hex'),
     bulk_submission_id: bulkSubmissionId, publication_status: 'PUBLISHED',
-    review_status: 'APPROVED', normalized_at: new Date().toISOString(),
+    review_status: validated.isBundle ? 'IN_REVIEW' : 'APPROVED', normalized_at: new Date().toISOString(),
   }));
   const { data, error } = await authorization.client.from('dealer_listing_submissions').insert(submissionRows)
     .select('id,review_status,publication_status,created_at,intent,category,claimed_fields,image_urls,poster_image_url');
@@ -188,7 +191,7 @@ async function handler(req, res) {
     return {
       source_submission_id: submission.id, dealer_id: poster.dealer_id,
       raw_message_text: validated.rawMessage, category: validated.category,
-      intent: validated.intent, listing_type: 'SINGLE', is_bundle: false,
+      intent: validated.intent, listing_type: validated.isBundle ? 'BUNDLE' : validated.intent, is_bundle: validated.isBundle,
       brand_original: validated.claimed.brand, brand_normalized: validated.claimed.brand,
       model_original: validated.claimed.model, model_normalized: validated.claimed.model,
       reference_original: validated.claimed.reference, reference_normalized: validated.claimed.reference,
@@ -201,18 +204,20 @@ async function handler(req, res) {
       user_image_url: posterImageUrl,
       user_name: poster.name, from_name: poster.name,
       contact_number: poster.phone, from_number: poster.phone,
-      location: poster.location, rating: poster.rating || 0, dealer_rating: poster.rating || 0,
+      location: poster.location, rating: poster.rating, dealer_rating: poster.rating,
       contact_consent: true, is_verified_user: poster.credential_status === 'VERIFIED',
-      is_seller_approved: poster.credential_status === 'VERIFIED', are_attributes_extracted: true,
-      identification_status: validated.category === 'WATCH' ? 'identified' : 'normalized',
-      verdict: 'approved', normalization_status: 'normalized', trading_floor_status: 'published',
-      price_research_status: validated.category !== 'WATCH' ? 'ineligible_non_watch' : price == null ? 'ineligible_no_price' : validated.claimed.currency === 'USD' ? 'eligible' : 'provisional_needs_review',
+      is_seller_approved: poster.credential_status === 'VERIFIED', are_attributes_extracted: !validated.isBundle,
+      identification_status: validated.isBundle ? 'bundle_pending_separation' : validated.category === 'WATCH' ? 'identified' : 'normalized',
+      verdict: validated.isBundle ? 'needs_review' : 'approved',
+      normalization_status: validated.isBundle ? 'needs_review' : 'normalized',
+      trading_floor_status: validated.isBundle ? 'bundle_pending_separation' : 'published',
+      price_research_status: validated.isBundle ? 'ineligible_bundle' : validated.category !== 'WATCH' ? 'ineligible_non_watch' : price == null ? 'ineligible_no_price' : validated.claimed.currency === 'USD' ? 'eligible' : 'provisional_needs_review',
       provenance_metadata: {
         source: 'authenticated_user_form', submission_id: submission.id,
         poster_image_url: posterImageUrl,
         credential_stamp: { auth_user_id: poster.auth_user_id, dealer_id: poster.dealer_id, status: poster.credential_status },
       },
-      overall_confidence: 1,
+      overall_confidence: validated.isBundle ? 0 : 1,
     };
   });
   const { error: publicationError } = await authorization.client.schema('staging').from('listings').insert(stagingRows);

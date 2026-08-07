@@ -36,7 +36,7 @@ test('customer listing rows contain included comparables only', () => {
   assert.doesNotMatch(pageRender, /retainedListings\.map|data\.outlier_rows\.slice/);
   assert.match(pageRender, /Outliers and other exclusions are summarized above and are not displayed as watch listings/);
   assert.match(source, /function ComparableThumbnail/);
-  assert.match(source, /row\.raw_message \|\| row\.raw_line/);
+  assert.match(source, /row\.raw_message \?\? row\.raw_line/);
 });
 
 test('charts render whenever qualified data exists and use the selected dial color', () => {
