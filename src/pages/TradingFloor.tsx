@@ -79,6 +79,7 @@ interface ListingRecord {
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
   multi_listing?: boolean;
+  is_unbundled_child?: boolean;
   raw_message?: string | null;
   raw_line?: string | null;
   description?: string | null;
@@ -360,25 +361,10 @@ export default function TradingFloor() {
         if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
           setReleaseBrands(data.publicationBrands);
         }
-        const nextListings = data.records || [];
-        // Client-side multi-tier partition:
-        // Tier 1: Normal listings with images (best experience)
-        // Tier 2: Normal listings without images
-        // Tier 3: Unbundled/summary listings with images
-        // Tier 4: Unbundled/summary listings without images
-        const tier1: ListingRecord[] = [];
-        const tier2: ListingRecord[] = [];
-        const tier3: ListingRecord[] = [];
-        const tier4: ListingRecord[] = [];
-        for (const listing of nextListings) {
-          const isBundle = isBundleListing(listing);
-          const hasImg = hasListingImage(listing);
-          if (!isBundle && hasImg) tier1.push(listing);
-          else if (!isBundle && !hasImg) tier2.push(listing);
-          else if (isBundle && hasImg) tier3.push(listing);
-          else tier4.push(listing);
-        }
-        setListings([...tier1, ...tier2, ...tier3, ...tier4]);
+        const nextListings = (data.records || [])
+          .filter(listing => !isBundleListing(listing))
+          .sort((left, right) => Number(hasListingImage(right)) - Number(hasListingImage(left)));
+        setListings(nextListings);
         const parsedTotal = data.total == null ? null : Number(data.total);
         setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
         setTotalIsEstimate(parsedTotal !== null && Boolean(data.totalIsEstimate));

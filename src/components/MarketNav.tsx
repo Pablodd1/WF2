@@ -17,11 +17,7 @@ export function MarketNav() {
     return () => controller.abort();
   }, []);
 
-  const links = [
-    ...(!role ? [{ to: '/dealer', label: 'Workspace Login' }] : []),
-    ...(role ? [{ to: '/dealers', label: 'Dealers' }] : []),
-    ...(role === 'admin' ? [{ to: '/admin', label: 'Admin Panel' }] : []),
-  ];
+  const links = role === 'admin' ? [{ to: '/admin', label: 'Admin Panel' }] : [];
 
   return (
     <div className="bg-[#09090d] text-white">

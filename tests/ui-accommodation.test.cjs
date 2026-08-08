@@ -15,10 +15,12 @@ test('primary navigation exposes the complete Workspace customer flow and clean 
   assert.match(header, /label: 'WORKSPACE', to: '\/dealer\/workspace'/);
   assert.doesNotMatch(header, /label: 'DEALER LOGIN'/);
   assert.match(header, /label: 'POST ITEM', to: '\/dealer\/post'/);
-  assert.match(header, /label: 'ACCOUNT', to: '\/dealer\/account\/profile'/);
+  assert.match(header, /label: 'DEALER ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
   assert.ok(header.indexOf("label: 'TRADING FLOOR'") < header.indexOf("label: 'PRICE RESEARCH'"));
-  assert.ok(header.indexOf("label: 'PRICE RESEARCH'") < header.indexOf("label: 'DEALER DIRECTORY'"));
+  assert.ok(header.indexOf("label: 'PRICE RESEARCH'") < header.indexOf("label: 'POST ITEM'"));
+  assert.ok(header.indexOf("label: 'POST ITEM'") < header.indexOf("label: 'HIRE FI'"));
+  assert.ok(header.indexOf("label: 'HIRE FI'") < header.indexOf("label: 'DEALER DIRECTORY'"));
   assert.match(rail, /Let Fi search the world/);
   assert.match(rail, /sm:text-base/);
   assert.doesNotMatch(rail, /Instagram|Facebook|Linkedin|Twitter/);
@@ -44,6 +46,19 @@ test('Workspace login provides a review-gated dealer application instead of inst
   assert.match(registration, /DIRECT_DEALER_APPLICATION/);
   assert.match(registration, /comparison_status: 'PENDING'/);
   assert.doesNotMatch(registration, /app_metadata.*role|createUser|inviteUserByEmail/);
+});
+
+test('customer Workspace routes are visible without a route-level authentication gate', () => {
+  const app = read('src/App.tsx');
+  const portal = read('src/pages/DealerPortal.tsx');
+  assert.match(app, /path="\/dealer\/workspace" element=\{<DealerPortal \/>\}/);
+  assert.match(app, /path="\/dealer\/post" element=\{<DealerSubmitListing \/>\}/);
+  assert.match(app, /path="\/dealer\/account\/:section" element=\{<DealerAccount \/>\}/);
+  assert.match(app, /path="\/dealers" element=\{<DealerDirectory \/>\}/);
+  assert.doesNotMatch(app, /path="\/dealer\/(?:workspace|post|account\/)[^\n]*<DealerGate>/);
+  for (const title of ['Trading Floor', 'Price Research', 'Post Item', 'Hire FI', 'Dealer Directory', 'Dealer Account']) {
+    assert.match(portal, new RegExp(`title: '${title}'`));
+  }
 });
 
 test('Trading Floor preserves source text and orders price intelligence before poster details', () => {

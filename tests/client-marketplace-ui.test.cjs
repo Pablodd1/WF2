@@ -17,15 +17,17 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   const postItem = read('src/pages/DealerSubmitListing.tsx');
   const styles = read('src/index.css');
 
-  assert.match(header, /label: 'HOME', to: '\/'/);
+  assert.match(header, /<Link to="\/" aria-label="Curated Luxury home"/);
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
   assert.match(header, /label: 'PRICE RESEARCH', to: '\/price-research'/);
   assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
   assert.match(header, /label: 'POST ITEM', to: '\/dealer\/post'/);
   assert.doesNotMatch(header, /luxuryapp-wf-w5o1/);
-  assert.match(header, /label: 'ACCOUNT', to: '\/dealer\/account\/profile'/);
+  assert.match(header, /label: 'DEALER ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'HIRE FI'/);
-  assert.match(header, /const LANDING_LINKS = \[[\s\S]*label: 'TRADING FLOOR'[\s\S]*label: 'HIRE FI'[\s\S]*label: 'WORKSPACE'/);
+  assert.match(header, /const LANDING_LINKS = \[[\s\S]*label: 'HIRE FI'[\s\S]*label: 'WORKSPACE', to: '\/dealer\/workspace'/);
+  assert.doesNotMatch(header, /label: 'ADM PANEL'/);
+  assert.match(header, /!landing && <LanguageToggle compact/);
   assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
   assert.match(footer, /\['Post an Item', '\/dealer\/post'\]/);
   assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
@@ -72,7 +74,8 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.match(floor, /params\.set\('images', 'true'\)/);
   assert.match(floor, /Price requires review/);
   assert.match(floor, /Workbook price anomaly - held for review/);
-  assert.match(floor, /setListings\(\[\.\.\.tier1, \.\.\.tier2, \.\.\.tier3, \.\.\.tier4\]\)/);
+  assert.match(floor, /filter\(listing => !isBundleListing\(listing\)\)/);
+  assert.match(floor, /Number\(hasListingImage\(right\)\) - Number\(hasListingImage\(left\)\)/);
   assert.match(floor, /aria-label="Trading Floor pages"/);
   assert.match(floor, /Page \{cursorHistory\.length \+ 1\}/);
   assert.match(floor, /onUnavailable=\{\(\) => setImageAvailable\(false\)\}/);
