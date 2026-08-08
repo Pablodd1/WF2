@@ -92,3 +92,10 @@ test('direct-publication migration isolates media and staging publication from i
   assert.match(migration, /submission_checksum/);
   assert.doesNotMatch(migration, /jobs\.processing_jobs/);
 });
+
+test('every authenticated posting event receives a stable batch receipt', () => {
+  const route = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealer-submissions.js'), 'utf8');
+  assert.match(route, /const bulkSubmissionId = crypto\.randomUUID\(\)/);
+  assert.match(route, /bulk_submission_id: bulkSubmissionId/);
+  assert.match(route, /bulk_submission_id: bulkSubmissionId, publication/);
+});
