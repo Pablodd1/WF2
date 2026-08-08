@@ -185,7 +185,7 @@ export default function DealerSubmitListing() {
       <div className="mx-auto max-w-7xl px-5 py-7 sm:px-8 lg:px-12">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-5">
           <Link to="/dealer/workspace" className="flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft size={16} /> {t('Workspace')}</Link>
-          <div className="flex items-center gap-2"><span className="hidden items-center gap-2 text-xs text-[#c9a96e] sm:flex"><ShieldCheck size={15} /> {t('Authenticated posting')}</span><LanguageToggle /></div>
+          <div className="flex items-center gap-2"><span className="hidden items-center gap-2 text-xs text-[#c9a96e] sm:flex"><ShieldCheck size={15} /> {t('Credential required to publish')}</span><LanguageToggle /></div>
         </header>
 
         <nav aria-label="Posting applications" className="mt-7 grid grid-cols-2 gap-2 border-b border-white/10 pb-4 sm:flex">

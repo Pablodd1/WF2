@@ -8,18 +8,13 @@ const LUXFI_URL = 'https://luxfi.ai/#add-fi';
 const HEADER_LINKS = [
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
-  { label: 'DEALER DIRECTORY', to: '/dealers' },
   { label: 'POST ITEM', to: '/dealer/post' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
-  { label: 'WORKSPACE', to: '/dealer/workspace' },
-  { label: 'ACCOUNT', to: '/dealer/account/profile' },
+  { label: 'DEALER DIRECTORY', to: '/dealers' },
+  { label: 'DEALER ACCOUNT', to: '/dealer/account/profile' },
 ];
 
 const LANDING_LINKS = [
-  { label: 'TRADING FLOOR', to: '/trading' },
-  { label: 'PRICE RESEARCH', to: '/price-research' },
-  { label: 'DEALER DIRECTORY', to: '/dealers' },
-  { label: 'POST ITEM', to: '/dealer/post' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
   { label: 'WORKSPACE', to: '/dealer/workspace' },
 ];
@@ -85,7 +80,7 @@ export function MarketHeader({ compact = false, className = '', landing = false,
               </Link>
             );
           })}
-          <LanguageToggle compact />
+          {!landing && <LanguageToggle compact />}
         </nav>
       </div>
     </header>
