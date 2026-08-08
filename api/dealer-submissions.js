@@ -130,7 +130,7 @@ async function handler(req, res) {
 
   if (req.method === 'GET') {
     const { data, error } = await authorization.client.from('dealer_listing_submissions')
-      .select('id,intent,category,claimed_fields,review_status,publication_status,created_at')
+      .select('id,intent,category,claimed_fields,review_status,publication_status,bulk_submission_id,created_at')
       .eq('auth_user_id', authorization.user.id)
       .order('created_at', { ascending: false }).limit(25);
     if (error) return res.status(500).json({ error: 'Unable to load submissions.' });
@@ -159,7 +159,9 @@ async function handler(req, res) {
     if (avatarError) return res.status(500).json({ error: 'Unable to update the credentialed profile photo.' });
   }
 
-  const bulkSubmissionId = batch.items.length > 1 ? crypto.randomUUID() : null;
+  // Every posting event has a batch identity, even when it contains one item.
+  // This gives the user one stable receipt for single, multi-item, and bundle flows.
+  const bulkSubmissionId = crypto.randomUUID();
   const posterSnapshot = {
     poster_name: poster.name, poster_phone: poster.phone, location: poster.location,
     dealer_rating: poster.rating, review_count: poster.review_count,
@@ -214,6 +216,7 @@ async function handler(req, res) {
       price_research_status: validated.isBundle ? 'ineligible_bundle' : validated.category !== 'WATCH' ? 'ineligible_non_watch' : price == null ? 'ineligible_no_price' : validated.claimed.currency === 'USD' ? 'eligible' : 'provisional_needs_review',
       provenance_metadata: {
         source: 'authenticated_user_form', submission_id: submission.id,
+        bulk_submission_id: bulkSubmissionId,
         poster_image_url: posterImageUrl,
         credential_stamp: { auth_user_id: poster.auth_user_id, dealer_id: poster.dealer_id, status: poster.credential_status },
       },
@@ -226,7 +229,7 @@ async function handler(req, res) {
     console.error('[dealer-submissions-publication]', publicationError.message);
     return res.status(500).json({ error: 'Listings were saved, but publication needs attention.' });
   }
-  return res.status(201).json({ success: true, submissions: data, submission: data[0], publication: 'PUBLISHED', count: data.length });
+  return res.status(201).json({ success: true, submissions: data, submission: data[0], bulk_submission_id: bulkSubmissionId, publication: 'PUBLISHED', count: data.length });
 }
 
 module.exports = handler;

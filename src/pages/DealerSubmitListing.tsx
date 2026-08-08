@@ -20,6 +20,7 @@ type Mode = 'single' | 'multiple' | 'bundle';
 
 interface Submission {
   id: string;
+  bulk_submission_id?: string | null;
   intent: Intent;
   category: string;
   claimed_fields: { brand?: string; model?: string; reference?: string; title?: string };
@@ -169,8 +170,8 @@ export default function DealerSubmitListing() {
       if (!response.ok) throw new Error(result.error || 'Unable to publish listing.');
       const count = Number(result.count || normalizedItems.length);
       setMessage(mode === 'bundle'
-        ? t('Bundle received intact and moved to the deferred bundle lane.')
-        : `${count} ${count === 1 ? t('item is') : t('items are')} ${t('normalized and published to the Trading Floor.')}`);
+        ? `${t('Bundle received intact and moved to the deferred bundle lane.')} Batch ${String(result.bulk_submission_id || '').slice(0, 8)}.`
+        : `${count} ${count === 1 ? t('item is') : t('items are')} ${t('normalized and published to the Trading Floor.')} Batch ${String(result.bulk_submission_id || '').slice(0, 8)}.`);
       setItems(mode === 'multiple' ? [createDraft(), createDraft()] : [createDraft(mode === 'bundle' ? { is_bundle: true } : {})]);
       setPosterPhoto(null);
       setSubmissions(current => [...(result.submissions || []), ...current]);
@@ -227,8 +228,8 @@ export default function DealerSubmitListing() {
                         <p className="mt-2 text-[11px] text-white/35">{t('Stamped from the signed-in credential · identity fields cannot be edited here.')}</p>
                       </div>
                     </div>
-                  ) : <p className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">{credentialError || 'Loading credentialed dealer profile...'}</p>}
-                  {poster && credentialError && <p className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">{credentialError}</p>}
+                  ) : <div className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-3 text-xs text-amber-100"><p>{credentialError || 'Loading credentialed dealer profile...'}</p>{credentialError && <Link to="/dealer/account/profile" className="mt-2 inline-block font-semibold text-[#f4d99c] underline underline-offset-4">Complete dealer onboarding</Link>}</div>}
+                  {poster && credentialError && <div className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-3 text-xs text-amber-100"><p>{credentialError}</p><Link to="/dealer/account/profile" className="mt-2 inline-block font-semibold text-[#f4d99c] underline underline-offset-4">Complete dealer onboarding</Link></div>}
                   <PhotoPicker
                     label={t(poster?.avatar_url ? 'Update credentialed profile photo' : 'Add credentialed profile photo')}
                     hint={t('Optional. This becomes the posting-user photo attached to the credential.')}
@@ -278,6 +279,7 @@ export default function DealerSubmitListing() {
                   <div key={item.id} className="py-4">
                     <div className="flex items-center justify-between gap-3 text-xs"><span className="font-semibold text-[#c9a96e]">{item.intent} / {item.category}</span><span className="text-emerald-300/70">{(item.publication_status || 'published').replaceAll('_', ' ')}</span></div>
                     <p className="mt-2 text-sm text-white/70">{[item.claimed_fields?.brand, item.claimed_fields?.model, item.claimed_fields?.reference, item.claimed_fields?.title].filter(Boolean).join(' ') || t('Post received')}</p>
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-white/35">Batch {item.bulk_submission_id ? item.bulk_submission_id.slice(0, 8) : 'legacy'}</p>
                     <p className="mt-1 text-[11px] text-white/30">{new Date(item.created_at).toLocaleDateString()}</p>
                   </div>
                 ))}

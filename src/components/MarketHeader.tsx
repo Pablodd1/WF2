@@ -6,20 +6,20 @@ import { useLanguage } from '@/i18n/LanguageContext';
 const LUXFI_URL = 'https://luxfi.ai/#add-fi';
 
 const HEADER_LINKS = [
-  { label: 'HOME', to: '/' },
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
   { label: 'DEALER DIRECTORY', to: '/dealers' },
-  { label: 'WORKSPACE', to: '/dealer/workspace' },
   { label: 'POST ITEM', to: '/dealer/post' },
-  { label: 'ACCOUNT', to: '/dealer/account/profile' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
+  { label: 'WORKSPACE', to: '/dealer/workspace' },
+  { label: 'ACCOUNT', to: '/dealer/account/profile' },
 ];
 
 const LANDING_LINKS = [
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
   { label: 'DEALER DIRECTORY', to: '/dealers' },
+  { label: 'POST ITEM', to: '/dealer/post' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
   { label: 'WORKSPACE', to: '/dealer/workspace' },
 ];

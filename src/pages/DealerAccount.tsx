@@ -6,12 +6,12 @@ import { Footer } from '@/components/Footer';
 type Section = 'profile' | 'listings' | 'settings' | 'billing' | 'help';
 interface WorkspacePayload {
   user: { email: string; role: string };
-  dealer: null | { display_name: string | null; company_name: string | null; city: string | null; country_code: string | null; profile_summary: string | null; avatar_url: string | null; contact_consent: boolean; rating: number | null; review_count: number; whatsapp_group_count: number };
+  dealer: null | { display_name: string | null; company_name: string | null; city: string | null; country_code: string | null; profile_summary: string | null; avatar_url: string | null; contact_consent: boolean; rating: number | null; review_count: number; whatsapp_group_count: number; metadata?: { account_type?: string; website_url?: string; preferred_language?: string; timezone?: string; telegram_username?: string } };
   profile_stamp: null | { name: string | null; company: string | null; phone: string | null; location: string | null; avatar_url: string | null; rating: number | null; review_count: number; group_count: number };
   preferences: { display_currency: string; email_notifications: boolean };
   stats: null | { active_listings: number; wts_posts: number; wtb_posts: number; posting_years: number };
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; listing_type: string; listing_date: string | null; price_usd: number | null }>;
-  submissions: Array<{ id: string; intent: string; category: string; review_status: string; created_at: string; claimed_fields: Record<string, string> }>;
+  submissions: Array<{ id: string; intent: string; category: string; review_status: string; publication_status?: string; bulk_submission_id?: string | null; created_at: string; claimed_fields: Record<string, string> }>;
   tickets: Array<{ id: string; subject: string; status: string; created_at: string }>;
 }
 
@@ -76,15 +76,26 @@ function AccountSection({ section, data, update }: { section: Section; data: Wor
 function Profile({ data, update }: { data: WorkspacePayload; update: AccountProps['update'] }) {
   const dealer = data.dealer;
   if (!dealer) return <Empty title="Profile awaiting linkage" copy="Your credential is active, but it is not yet linked to a verified dealer identity. WatchFacts must complete that match before profile edits or contact publication." />;
+  const onboarding = [
+    ['Identity', Boolean(dealer.display_name || dealer.company_name)],
+    ['Verified phone', Boolean(data.profile_stamp?.phone)],
+    ['Location', Boolean(dealer.city && dealer.country_code)],
+    ['Profile type', Boolean(dealer.metadata?.account_type)],
+  ] as const;
+  const completed = onboarding.filter(([, ready]) => ready).length;
   return <form onSubmit={event => { event.preventDefault(); const values = Object.fromEntries(new FormData(event.currentTarget)); void update('profile', { ...values, contact_consent: values.contact_consent === 'on' }); }}>
     <Heading title="Account and posting profile" copy="Your saved identity, demographics, reputation, and preferences are reused when you post an item. Ratings and verified phone lineage cannot be edited here." />
+    <section className="mb-7 border border-white/12 bg-[#111118] p-5" aria-label="Dealer onboarding progress">
+      <div className="flex items-center justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c9a96e]">Dealer onboarding</p><h2 className="mt-2 text-xl font-semibold">{completed}/{onboarding.length} posting requirements complete</h2></div><Link to="/dealer/post" className="text-xs font-semibold text-[#c9a96e]">Post an item</Link></div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">{onboarding.map(([label, ready]) => <div key={label} className={`border px-3 py-2 text-xs ${ready ? 'border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-100' : 'border-amber-300/25 bg-amber-300/[0.07] text-amber-100'}`}>{ready ? 'Complete' : 'Required'} · {label}</div>)}</div>
+    </section>
     <div className="mb-7 grid gap-px bg-white/10 sm:grid-cols-2 lg:grid-cols-4">
       <ProfileFact label="Account email" value={data.user.email} />
       <ProfileFact label="Verified phone" value={data.profile_stamp?.phone} />
       <ProfileFact label="Posting location" value={data.profile_stamp?.location} />
       <ProfileFact label="Reputation" value={data.profile_stamp?.rating == null ? `${data.profile_stamp?.review_count || 0} reviews` : `${Number(data.profile_stamp.rating).toFixed(2)} · ${data.profile_stamp.review_count} reviews`} />
     </div>
-    <div className="grid gap-4 sm:grid-cols-2"><Input name="display_name" label="Display name" defaultValue={dealer.display_name} /><Input name="company_name" label="Company" defaultValue={dealer.company_name} /><Input name="city" label="City" defaultValue={dealer.city} /><Input name="country_code" label="Country code" defaultValue={dealer.country_code} maxLength={3} /></div>
+    <div className="grid gap-4 sm:grid-cols-2"><Input name="display_name" label="Display name" defaultValue={dealer.display_name} /><Input name="company_name" label="Company" defaultValue={dealer.company_name} /><Input name="city" label="City" defaultValue={dealer.city} /><Input name="country_code" label="Country code" defaultValue={dealer.country_code} maxLength={3} /><label className="block text-xs text-white/60">Account type<select name="account_type" defaultValue={dealer.metadata?.account_type || 'dealer'} className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm">{['individual','dealer','company','broker'].map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label><Input name="website_url" label="Website" defaultValue={dealer.metadata?.website_url} maxLength={500} /><Input name="telegram_username" label="Telegram username" defaultValue={dealer.metadata?.telegram_username} /><Input name="timezone" label="Timezone" defaultValue={dealer.metadata?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone} /><label className="block text-xs text-white/60">Preferred language<select name="preferred_language" defaultValue={dealer.metadata?.preferred_language || 'en'} className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm"><option value="en">English</option><option value="es">Español</option><option value="pt">Português</option><option value="zh">简体中文</option></select></label></div>
     <label className="mt-4 block text-xs text-white/60">Profile summary<textarea name="profile_summary" defaultValue={dealer.profile_summary || ''} maxLength={1000} rows={5} className="mt-2 w-full border border-white/15 bg-[#111118] p-3 text-sm" /></label>
     <label className="mt-4 flex items-start gap-3 text-sm text-white/60"><input name="contact_consent" type="checkbox" defaultChecked={dealer.contact_consent} className="mt-1" /> Allow verified contact details to appear on linked listings.</label>
     <button className="mt-6 h-11 bg-[#c9a96e] px-5 text-sm font-semibold text-black">Save profile</button>
@@ -93,10 +104,15 @@ function Profile({ data, update }: { data: WorkspacePayload; update: AccountProp
 
 type AccountProps = { update: (section: string, payload: Record<string, unknown>) => Promise<boolean> };
 function Listings({ data }: { data: WorkspacePayload }) {
+  const batches = Object.entries(data.submissions.reduce<Record<string, typeof data.submissions>>((groups, item) => {
+    const key = item.bulk_submission_id || `legacy-${item.id}`;
+    (groups[key] ||= []).push(item);
+    return groups;
+  }, {}));
   return <><Heading title="My listings" copy="Verified historical activity and new moderated submissions remain separate until review is complete." />
     <div className="grid gap-px bg-white/10 sm:grid-cols-4"><Metric label="Active" value={data.stats?.active_listings || 0} /><Metric label="For sale" value={data.stats?.wts_posts || 0} /><Metric label="Looking for" value={data.stats?.wtb_posts || 0} /><Metric label="Years active" value={data.stats?.posting_years || 0} /></div>
     <div className="mt-8 flex items-center justify-between"><h2 className="text-lg font-semibold">Moderated submissions</h2><Link to="/dealer/post" className="text-xs font-semibold text-[#c9a96e]">Post new</Link></div>
-    <div className="mt-3 divide-y divide-white/10 border-y border-white/10">{data.submissions.length ? data.submissions.map(item => <div key={item.id} className="flex items-center justify-between gap-4 py-4"><span className="text-sm">{item.intent} / {item.category}</span><span className="text-xs text-white/40">{item.review_status.replaceAll('_', ' ')}</span></div>) : <p className="py-5 text-sm text-white/40">No submissions yet.</p>}</div>
+    <div className="mt-3 divide-y divide-white/10 border-y border-white/10">{batches.length ? batches.map(([batchId, items]) => <section key={batchId} className="py-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-wider text-[#c9a96e]">Batch {batchId.startsWith('legacy-') ? 'legacy' : batchId.slice(0, 8)}</p><p className="mt-1 text-sm font-semibold">{items.length} {items.length === 1 ? 'item' : 'items'}</p></div><span className="text-xs text-white/45">{items.every(item => item.publication_status === 'PUBLISHED') ? 'Published' : items.some(item => item.publication_status === 'PUBLICATION_FAILED') ? 'Needs attention' : 'Processing'}</span></div><div className="mt-3 flex flex-wrap gap-2">{items.map(item => <span key={item.id} className="border border-white/10 px-2 py-1 text-[11px] text-white/55">{item.intent} / {item.category} · {item.review_status.replaceAll('_', ' ')}</span>)}</div></section>) : <p className="py-5 text-sm text-white/40">No submissions yet.</p>}</div>
   </>;
 }
 

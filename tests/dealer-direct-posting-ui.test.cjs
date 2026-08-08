@@ -19,6 +19,8 @@ test('authenticated form supports item photos, a posting-user photo, and three c
   assert.match(source, /deferred bundle lane/);
   assert.match(source, /MAX_ITEMS = 20/);
   assert.match(source, /Normalize and publish/);
+  assert.match(source, /Complete dealer onboarding/);
+  assert.match(source, /Batch \{item\.bulk_submission_id/);
 });
 
 test('direct form keeps price optional and sends normalized items to the publication API', () => {
