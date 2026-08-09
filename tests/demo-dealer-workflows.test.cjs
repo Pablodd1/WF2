@@ -31,3 +31,15 @@ test('demo workflow is discoverable and never writes to production', () => {
   assert.match(posting, /if \(demoPoster\)/);
   assert.match(posting, /setSubmissions\(current => \[\.\.\.demoSubmissions, \.\.\.current\]\)/);
 });
+
+test('POST IT is marked coming soon and explains the organized seller workflow', () => {
+  const header = read('src/components/MarketHeader.tsx');
+  const portal = read('src/pages/DealerPortal.tsx');
+  const posting = read('src/pages/DealerSubmitListing.tsx');
+  assert.match(header, /label: 'POST IT'/);
+  assert.match(portal, /title: 'POST IT'/);
+  assert.match(posting, />POST IT</);
+  assert.match(posting, /Coming soon/);
+  assert.match(posting, /keeps the seller identity, raw message, item details, price, and photos together/);
+  assert.match(posting, /helps approved listings reach the Trading Floor faster/);
+});

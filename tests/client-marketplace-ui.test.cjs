@@ -21,7 +21,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
   assert.match(header, /label: 'PRICE RESEARCH', to: '\/price-research'/);
   assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
-  assert.match(header, /label: 'POST ITEM', to: '\/dealer\/post'/);
+  assert.match(header, /label: 'POST IT', to: '\/dealer\/post'/);
   assert.doesNotMatch(header, /luxuryapp-wf-w5o1/);
   assert.match(header, /label: 'DEALER ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'HIRE FI'/);
@@ -29,7 +29,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.doesNotMatch(header, /label: 'ADM PANEL'/);
   assert.match(header, /!landing && <LanguageToggle compact/);
   assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
-  assert.match(footer, /\['Post an Item', '\/dealer\/post'\]/);
+  assert.match(footer, /\['POST IT', '\/dealer\/post'\]/);
   assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
   assert.match(postItem, /const LUXURY_APP_URL = 'https:\/\/luxuryapp-wf\.vercel\.app\/'/);
   assert.match(postItem, /WatchFacts form/);
@@ -69,7 +69,7 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.match(floor, /media\.matches \? 24 : 50/);
   assert.match(floor, /function hasListingImage/);
   assert.match(floor, /listing\.thumbnail_url[\s\S]*listing\.image_urls[\s\S]*listing\.has_images/);
-  assert.match(floor, /usesReviewedWatchInventory \? '\/api\/reviewed-market-inventory' : '\/api\/ingest'/);
+  assert.match(floor, /const endpoint = '\/api\/reviewed-market-inventory'/);
   assert.doesNotMatch(floor, /fetch\(`\/api\/ingest\?/);
   assert.match(floor, /params\.set\('images', 'true'\)/);
   assert.match(floor, /Price requires review/);

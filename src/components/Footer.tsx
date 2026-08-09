@@ -5,6 +5,7 @@ import { LUXFI_URL } from './MarketHeader';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 export const CONTACT_WHATSAPP_URL = 'https://api.whatsapp.com/send?phone=17869569201&text=Hello,%20I%20would%20like%20more%20information%20about%20your%20services.';
+export const CONTACT_EMAIL = 'Aduenas@watchfacts.com';
 
 export const COMMUNITY_GROUPS = [
   { name: 'WatchFacts | B2B Watch Trading Chat', network: 'WhatsApp', href: 'https://chat.whatsapp.com/JEaK91DatRkLZFKMaJZYIH?mode=gi_t' },
@@ -19,7 +20,7 @@ const MARKET_LINKS = [
   ['Trading Floor', '/trading'],
   ['Price Research', '/price-research'],
   ['Dealer Directory', '/dealers'],
-  ['Post an Item', '/dealer/post'],
+  ['POST IT', '/dealer/post'],
   ['Workspace', '/dealer/workspace'],
   ['Account', '/dealer/account/profile'],
 ] as const;
@@ -81,16 +82,22 @@ export function Footer() {
             <a href={CONTACT_WHATSAPP_URL} target="_blank" rel="noreferrer" className="mt-6 inline-flex min-h-11 items-center gap-2 bg-[#25D366] px-5 text-sm font-bold text-[#07130a]">
               <MessageCircle size={17} /> {t('Contact us on WhatsApp')}
             </a>
-            <form className="mt-7 grid gap-3" aria-label="Contact form" onSubmit={event => event.preventDefault()}>
+            <form className="mt-7 grid gap-3" aria-label="Contact form" onSubmit={event => {
+              event.preventDefault();
+              const values = Object.fromEntries(new FormData(event.currentTarget));
+              const subject = `WatchFacts contact from ${String(values.name || 'website visitor')}`;
+              const body = [`Name: ${String(values.name || '')}`, `Email: ${String(values.email || '')}`, '', String(values.message || '')].join('\n');
+              window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            }}>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-xs text-white/55">{t('Name')}<input name="name" className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white" /></label>
-                <label className="text-xs text-white/55">{t('Email')}<input name="email" type="email" className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white" /></label>
+                <label className="text-xs text-white/55">{t('Name')}<input name="name" required className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white" /></label>
+                <label className="text-xs text-white/55">{t('Email')}<input name="email" type="email" required className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white" /></label>
               </div>
-              <label className="text-xs text-white/55">{t('How can we help?')}<textarea name="message" rows={4} className="mt-2 w-full border border-white/15 bg-[#111118] px-3 py-3 text-sm text-white" /></label>
-              <button type="button" disabled className="flex min-h-11 items-center justify-center gap-2 border border-white/15 px-5 text-sm font-semibold text-white/38">
-                <Send size={15} /> {t('Email destination pending')}
+              <label className="text-xs text-white/55">{t('How can we help?')}<textarea name="message" required rows={4} className="mt-2 w-full border border-white/15 bg-[#111118] px-3 py-3 text-sm text-white" /></label>
+              <button type="submit" className="flex min-h-11 items-center justify-center gap-2 border border-[#c9a96e] px-5 text-sm font-semibold text-[#e6cf9a] transition-colors hover:bg-[#c9a96e] hover:text-[#09090d]">
+                <Send size={15} /> {t('Send email')}
               </button>
-              <p className="text-[11px] leading-5 text-white/35">{t('The form will be activated after the receiving email or support system is confirmed.')}</p>
+              <p className="text-[11px] leading-5 text-white/35">{t('Email WatchFacts at')} <a className="text-white/60 hover:text-[#c9a96e]" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
             </form>
           </section>
 

@@ -226,8 +226,10 @@ export default function DealerSubmitListing() {
           <section className="grid gap-10 py-9 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{t('Reviewed normalized posting')}</p>
-              <h1 className="mt-3 font-serif text-4xl sm:text-5xl">{t('Photograph it. Describe it. Post it.')}</h1>
-              <p className="mt-4 max-w-3xl text-sm leading-7 text-white/55">{t('Required identity and source fields keep each item organized. Price remains optional; when omitted, the Trading Floor displays “Price not supplied.”')}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3"><h1 className="font-serif text-4xl sm:text-5xl">POST IT</h1><span className="border border-[#c9a96e]/45 bg-[#c9a96e]/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#ead6aa]">{t('Coming soon')}</span></div>
+              <h2 className="mt-4 text-xl font-semibold text-white/88">{t('Photograph it. Describe it. Post it.')}</h2>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/55">POST IT keeps the seller identity, raw message, item details, price, and photos together from the beginning. That organization reduces corrections, protects the original evidence, and helps approved listings reach the Trading Floor faster.</p>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/45">{t('Required identity and source fields keep each item organized. Price remains optional; when omitted, the Trading Floor displays “Price not supplied.”')}</p>
 
               <div className="mt-7 grid gap-2 sm:grid-cols-3">
                 <Choice active={mode === 'single'} onClick={() => changeMode('single')}>{t('One item')}</Choice>

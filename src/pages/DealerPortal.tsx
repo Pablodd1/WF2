@@ -18,8 +18,8 @@ const portalLinks = [
     icon: Search,
   },
   {
-    title: 'Post Item',
-    description: 'Submit a WTS offer or WTB request for moderated review before publication.',
+    title: 'POST IT',
+    description: 'Coming soon: organize photos and seller details once, then send each item through a faster moderated publication workflow.',
     to: '/dealer/post',
     icon: PlusCircle,
   },
