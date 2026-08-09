@@ -30,6 +30,11 @@ test('Account exposes dealer onboarding and batches every posting event', () => 
   const account = read('src/pages/DealerAccount.tsx');
   const workspaceApi = read('api/dealer-workspace.js');
   assert.match(account, /Dealer onboarding/);
+  assert.match(account, /Account analytics/);
+  assert.match(account, /Market participation and reputation/);
+  assert.match(account, /Identity and demographics/);
+  assert.match(account, /For sale posts/);
+  assert.match(account, /Common groups/);
   assert.match(account, /Account type/);
   assert.match(account, /Preferred language/);
   assert.match(account, /bulk_submission_id/);
@@ -69,8 +74,13 @@ test('Trading Floor preserves source text and orders price intelligence before p
   assert.match(floor, /order-2 rounded-md border[\s\S]*>Price Rating</);
   assert.match(floor, /order-3 rounded-md border[\s\S]*>Posted by</);
   assert.match(floor, /listing\.intent \|\| listing\.listing_type/);
-  assert.match(floor, /label="Source image only"/);
+  assert.match(floor, /label="Only with images"/);
+  assert.match(floor, /verified source images only/);
+  assert.match(floor, /Bundle, multi-listing, and unbundled-child images remain excluded/);
   assert.match(floor, /label="Price supplied"/);
+  assert.ok(floor.indexOf(': sourcePrice') < floor.indexOf(': reviewedWorkbookUsd !== null'));
+  assert.match(floor, /currency not supplied/);
+  assert.match(floor, /Original source price · no verified USD conversion/);
   assert.match(floor, /Location/);
 });
 
@@ -90,7 +100,7 @@ test('Price Research uses dial colors, closed methodology, images, and complete 
   assert.match(research, /<DetailCard title="Posted by"/);
 });
 
-test('Workspace includes official community access and install guidance without invented group links', () => {
+test('Workspace includes official community access and marks phone installation as coming soon', () => {
   const portal = read('src/pages/DealerPortal.tsx');
   const footer = read('src/components/Footer.tsx');
   const groups = read('src/components/JoinGroupsCta.tsx');
@@ -103,8 +113,9 @@ test('Workspace includes official community access and install guidance without 
   assert.match(footer, /Rolex US Only Sales/);
   assert.match(portal, /href=\{group\.href\}/);
   assert.match(groups, /export const GROUPS_URL = 'https:\/\/watchfacts\.com\//);
-  assert.match(portal, /beforeinstallprompt/);
-  assert.match(portal, /Add to Home Screen/);
+  assert.match(portal, /Add WatchFacts to your phone/);
+  assert.match(portal, /Coming soon/);
+  assert.doesNotMatch(portal, /beforeinstallprompt/);
   assert.match(index, /rel="manifest" href="\/manifest\.webmanifest"/);
   assert.equal(manifest.display, 'standalone');
 });
@@ -123,6 +134,23 @@ test('footer provides direct contact, community groups, marketplace opportunitie
   assert.match(footer, /t\.me\/watchfactsUS/);
   assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
   assert.match(footer, /Email destination pending/);
+});
+
+test('footer provides the complete social media watch dealer glossary in an accessible modal', () => {
+  const footer = read('src/components/Footer.tsx');
+
+  assert.match(footer, /Social Media Watch Dealer Glossary/);
+  assert.match(footer, /role="dialog"/);
+  assert.match(footer, /aria-modal="true"/);
+  assert.match(footer, /Close glossary/);
+  assert.match(footer, /Buying & Selling Terms/);
+  assert.match(footer, /Condition & Packaging/);
+  assert.match(footer, /Pricing & Payment/);
+  assert.match(footer, /Watch Specifications & Market Terms/);
+  assert.match(footer, /Deal Communication/);
+  for (const term of ['WTB', 'WTS', 'WTT', 'OBO', 'BNIB', 'LNIB', 'NOS', 'MINT', 'B&P', 'T/T', 'DLC', 'PVD', 'OEM', 'FRANKEN', 'DIBS', 'SPF']) {
+    assert.match(footer, new RegExp(`['"]${term.replace(/[&/]/g, '\\$&')}['"]`));
+  }
 });
 
 test('dealer directory includes Reference Check and Top Rated views backed by verified profiles', () => {

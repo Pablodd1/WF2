@@ -111,7 +111,7 @@ test('dealer login does not redirect unauthorized roles into protected review ro
   assert.match(page, /Review Queue accepts reviewer or admin/);
 });
 
-test('public listing evidence is withheld and public dealer profiles omit raw messages', () => {
+test('listing detail stays release-gated while approved dealer profiles expose source evidence', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const listingRoute = fs.readFileSync(path.join(__dirname, '..', 'api', 'trading-listing.js'), 'utf8');
@@ -123,7 +123,8 @@ test('public listing evidence is withheld and public dealer profiles omit raw me
   assert.doesNotMatch(listingRoute, /const publicTable[\s\S]*trading_floor_listings/);
   assert.match(listingRoute, /isReleaseListingEligible/);
   assert.match(listingRoute, /\.from\(publicTable\)/);
-  assert.doesNotMatch(profileRoute, /select\([^)]*raw_message/);
+  assert.match(profileRoute, /raw_message/);
+  assert.match(profileRoute, /raw_message_access: true/);
 });
 
 test('Price Research shows unredacted raw source evidence and verified seller activity on click', () => {
@@ -136,12 +137,12 @@ test('Price Research shows unredacted raw source evidence and verified seller ac
   assert.match(page, /api\/listing-contact/);
   assert.match(page, /api\/reviewed-seller-summary/);
   assert.match(page, /Source poster activity/);
-  assert.match(page, /Total posts/);
   assert.match(page, /For sale/);
   assert.match(page, /Looking for/);
-  assert.doesNotMatch(page, /dealer_review_count|dealer_group_count|Common groups/);
+  assert.doesNotMatch(page, /Total posts/);
+  assert.match(page, /Groups/);
   assert.doesNotMatch(page, /title\.startsWith\('Raw source'\)/);
-  assert.match(page, /seller\.dealer_stats \?/);
+  assert.match(page, /seller\?\.dealer_stats \?/);
   assert.doesNotMatch(page, /seller\.dealer_stats\?\.wts_posts \|\| 0/);
 });
 
@@ -165,7 +166,7 @@ test('Trading Floor click-through shows source evidence and only verified seller
   assert.match(page, /api\/reviewed-market-inventory/);
   assert.match(page, /api\/reviewed-seller-summary/);
   assert.doesNotMatch(page, /api\/(?:price-research-listing|listing-contact|trading-listing)\?id=/);
-  assert.match(page, /Original listing/);
+  assert.match(page, /Original raw message/);
   assert.match(page, /sellerAnalytics/);
   assert.match(page, /For sale/);
   assert.match(page, /Want to buy/);

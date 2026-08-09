@@ -29,7 +29,7 @@ const RED = '#B42318';
 const CATEGORY_OPTIONS = [
   { label: 'All inventory', value: 'all' },
   { label: 'Watches', value: 'watches' },
-  { label: 'Handbags', value: 'handbags' },
+  { label: 'Handbags & purses', value: 'handbags' },
   { label: 'Jewelry', value: 'jewelry' },
   { label: 'Accessories', value: 'accessories' },
   { label: 'Other luxury', value: 'other' },
@@ -655,8 +655,9 @@ function DesktopFilters({
 
       <fieldset>
         <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Availability</legend>
-        <FilterCheck checked={imagesOnly} label="Source image only" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
+        <FilterCheck checked={imagesOnly} label="Only with images" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
         <FilterCheck checked={pricedOnly} label="Price supplied" onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
+        <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>Shows verified source images only. Bundle, multi-listing, and unbundled-child images remain excluded.</p>
       </fieldset>
 
       <fieldset>
@@ -736,7 +737,7 @@ function MobileFilterSheet({
             ))}
           </FilterGroup>
           <FilterGroup label="Availability">
-            <FilterCheck checked={draftImagesOnly} label="Source image only" onChange={() => setDraftImagesOnly(value => !value)} />
+            <FilterCheck checked={draftImagesOnly} label="Only with images" onChange={() => setDraftImagesOnly(value => !value)} />
             <FilterCheck checked={draftPricedOnly} label="Price supplied" onChange={() => setDraftPricedOnly(value => !value)} />
           </FilterGroup>
           <FilterGroup label="Intent">
@@ -1272,20 +1273,22 @@ function getListingMeta(listing: ListingRecord) {
   
   const priceLabel = verifiedUsd !== null
     ? (verifiedPlausible ? formatUsdPrice(verifiedUsd) : 'Price under review')
-    : reviewedWorkbookUsd !== null
-      ? (workbookPlausible ? formatUsdPrice(reviewedWorkbookUsd) : 'Price under review')
-      : workbookPriceNeedsReview
-        ? 'Price requires review'
-        : sourcePrice || 'Price not supplied';
+    : sourcePrice
+      ? sourcePrice
+      : reviewedWorkbookUsd !== null
+        ? (workbookPlausible ? formatUsdPrice(reviewedWorkbookUsd) : 'Price under review')
+        : workbookPriceNeedsReview
+          ? 'Price requires review'
+          : 'Price not supplied';
 
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'
-    : reviewedWorkbookUsd !== null
-      ? 'Workbook-reviewed USD - not in averages'
-      : workbookPriceNeedsReview
-        ? 'Workbook price anomaly - held for review'
-        : sourcePrice
-          ? 'Original source price · no USD conversion'
+    : sourcePrice
+      ? 'Original source price · no verified USD conversion'
+      : reviewedWorkbookUsd !== null
+        ? 'Workbook-reviewed USD - not in averages'
+        : workbookPriceNeedsReview
+          ? 'Workbook price anomaly - held for review'
           : 'Price not supplied';
   const title = buildListingTitle(listing);
 
@@ -1350,10 +1353,11 @@ function formatSourcePrice(listing: ListingRecord) {
   if (sourceText && currency) {
     return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (sourceText) return sourceText;
+  if (sourceText) return `${sourceText} · currency not supplied`;
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
-  if (!currency || !Number.isFinite(amount) || amount <= 0) return '';
+  if (!Number.isFinite(amount) || amount <= 0) return '';
+  if (!currency) return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)} · currency not supplied`;
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 

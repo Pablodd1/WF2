@@ -1,13 +1,7 @@
-import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Download, Globe2, MessageCircle, PlusCircle, Search, ShieldCheck, Smartphone, Store, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Globe2, MessageCircle, PlusCircle, Search, ShieldCheck, Smartphone, Store, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { COMMUNITY_GROUPS, CONTACT_WHATSAPP_URL } from '@/components/Footer';
 import { LUXFI_URL } from '@/components/MarketHeader';
-
-interface InstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
 
 const portalLinks = [
   {
@@ -50,24 +44,6 @@ const portalLinks = [
 ];
 
 export default function DealerPortal() {
-  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
-
-  useEffect(() => {
-    const captureInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as InstallPromptEvent);
-    };
-    window.addEventListener('beforeinstallprompt', captureInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', captureInstallPrompt);
-  }, []);
-
-  async function installApp() {
-    if (!installPrompt) return;
-    await installPrompt.prompt();
-    await installPrompt.userChoice;
-    setInstallPrompt(null);
-  }
-
   return (
     <main className="min-h-screen bg-[#08080c] px-5 py-7 text-white sm:px-8 lg:px-12">
       <div className="mx-auto max-w-6xl">
@@ -136,21 +112,15 @@ export default function DealerPortal() {
           <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
             <div className="border border-white/12 bg-[#111118] p-7">
               <div className="flex h-12 w-12 items-center justify-center border border-[#c9a96e]/40 text-[#c9a96e]"><Smartphone size={22} /></div>
-              <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Quick access</p>
+              <div className="mt-6 flex flex-wrap items-center gap-3"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Quick access</p><span className="border border-[#c9a96e]/40 bg-[#c9a96e]/10 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#ead6aa]">Coming soon</span></div>
               <h2 id="install-heading" className="mt-2 font-serif text-3xl">Add WatchFacts to your phone</h2>
-              <p className="mt-3 text-sm leading-6 text-white/55">Keep trading, sourcing, Price Research, and your workspace one tap away.</p>
-              {installPrompt ? (
-                <button type="button" onClick={() => void installApp()} className="mt-7 flex min-h-12 w-full items-center justify-center gap-2 bg-[#c9a96e] px-5 text-sm font-extrabold text-[#09090d]">
-                  <Download size={17} /> Install WatchFacts
-                </button>
-              ) : (
-                <div className="mt-7 border border-white/10 px-4 py-3 text-xs leading-5 text-white/45">If your browser supports direct installation, use its Install app or Add to Home screen command.</div>
-              )}
+              <p className="mt-3 text-sm leading-6 text-white/55">A dedicated WatchFacts phone experience is being prepared. Installation is not active during this beta.</p>
+              <div className="mt-7 border border-white/10 bg-black/20 px-4 py-3 text-xs leading-5 text-white/45">Coming soon for supported Android and iPhone devices.</div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="border border-white/12 p-6">
-                <div className="text-sm font-semibold text-white">Android</div>
+                <div className="text-sm font-semibold text-white">Android · Coming soon</div>
                 <ol className="mt-4 space-y-3 text-sm leading-6 text-white/55">
                   <li>1. Open WatchFacts in Chrome.</li>
                   <li>2. Open the browser menu.</li>
@@ -158,7 +128,7 @@ export default function DealerPortal() {
                 </ol>
               </div>
               <div className="border border-white/12 p-6">
-                <div className="text-sm font-semibold text-white">iPhone</div>
+                <div className="text-sm font-semibold text-white">iPhone · Coming soon</div>
                 <ol className="mt-4 space-y-3 text-sm leading-6 text-white/55">
                   <li>1. Open WatchFacts in Safari.</li>
                   <li>2. Tap the Share button.</li>
