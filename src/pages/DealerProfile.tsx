@@ -10,7 +10,7 @@ interface ProfilePayload {
     id: string; display_name: string | null; company_name: string | null; country_code: string | null; city: string | null;
     rating: number | null; review_count: number; whatsapp_group_count: number; avatar_url: string | null; profile_summary: string | null;
   };
-  stats: { total_posts: number | null; wts_posts: number | null; wtb_posts: number | null; active_listings: number | null; dated_posts: number | null; undated_posts: number | null; first_post_at: string | null; last_post_at: string | null; posting_years: number | null } | null;
+  stats: { wts_count: number; wtb_count: number; group_count: number; first_post: string | null; latest_post: string | null; verified_contact_info: { phone: string; verification_status: 'VERIFIED' } | null } | null;
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; listing_type: string; listing_date: string | null; created_at: string; raw_message?: string }>;
   raw_message_access: boolean;
 }
@@ -72,15 +72,17 @@ export default function DealerProfile() {
       </section>
 
       <section className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-12">
-        <div className="grid gap-px bg-white/10 sm:grid-cols-2 lg:grid-cols-6">
-          <ProfileMetric label="Total linked posts" value={count(stats?.total_posts)} />
-          <ProfileMetric label="Active listings" value={count(stats?.active_listings)} />
-          <ProfileMetric label="For sale posts" value={count(stats?.wts_posts)} />
-          <ProfileMetric label="Looking for posts" value={count(stats?.wtb_posts)} />
-          <ProfileMetric label="Posting years" value={count(stats?.posting_years)} />
-          <ProfileMetric label="Dated / undated" value={`${count(stats?.dated_posts)} / ${count(stats?.undated_posts)}`} />
+        <div className="grid gap-px bg-white/10 sm:grid-cols-3">
+          <ProfileMetric label="For sale posts" value={count(stats?.wts_count)} />
+          <ProfileMetric label="Want to buy posts" value={count(stats?.wtb_count)} />
+          <ProfileMetric label="Common groups" value={count(stats?.group_count)} />
         </div>
-        <p className="mt-5 text-xs text-white/40">Original posting range: {date(stats?.first_post_at)} to {date(stats?.last_post_at)}. Import timestamps are never substituted for missing source dates.</p>
+        <p className="mt-5 text-xs text-white/40">First post: {date(stats?.first_post)} · Latest post: {date(stats?.latest_post)}. Import timestamps are never substituted for missing source dates.</p>
+        {stats?.verified_contact_info?.phone && (
+          <a className="mt-4 inline-flex items-center gap-2 text-sm text-[#d4b87a] hover:text-white" href={`https://wa.me/${stats.verified_contact_info.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer">
+            <MessageCircle size={15} /> Contact verified poster on WhatsApp
+          </a>
+        )}
         {dealer.profile_summary && <p className="mt-8 max-w-3xl text-sm leading-7 text-white/55">{dealer.profile_summary}</p>}
 
         <div className="mt-10 flex items-center justify-between border-b border-white/10 pb-4">

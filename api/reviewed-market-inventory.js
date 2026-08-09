@@ -1,6 +1,7 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
+const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -182,8 +183,21 @@ function summarizeCoverage(records) {
   return totals;
 }
 
+function isApprovedInventoryRecord(record) {
+  const storedConfidence = Number(record?.confidence);
+  const confidence = storedConfidence >= 0 && storedConfidence <= 1
+    ? storedConfidence * 100
+    : storedConfidence;
+  const status = String(record?.listing_status || '').trim().toUpperCase();
+  return String(record?.verdict || '').trim().toUpperCase() === 'APPROVED'
+    && Number.isFinite(confidence)
+    && confidence >= 90
+    && !['BUNDLE_CHILD_PENDING_REVIEW', 'BUNDLE_PENDING_SEPARATION', 'SUPPRESSED_EXACT_DUPLICATE', 'HIDDEN', 'REJECTED', 'DELETED'].includes(status);
+}
+
 function mapDealerSubmission(row) {
   const claimed = row.claimed_fields || {};
+  const multiListing = claimed.is_bundle === true;
   const imageUrls = (row.image_urls || []).filter(value => exactHttpUrl(value));
   const priceRaw = positiveNumber(claimed.price_amount);
   const currency = cleanExactText(claimed.currency, 12).toUpperCase() || null;
@@ -223,16 +237,22 @@ function mapDealerSubmission(row) {
     price_research_eligible: priceEligible, confidence: 1, verdict: row.review_status,
     listing_status: row.publication_status, source: 'AUTHENTICATED_USER_FORM',
     source_type: 'authenticated_user_form', source_file: null, source_row_number: null,
-    source_record_id: row.id, item_category: row.category, multi_listing: false,
-    has_images: imageUrls.length > 0, thumbnail_url: imageUrls[0] || null,
-    image_urls: imageUrls, image_evidence_type: 'SOURCE_LISTING_IMAGE',
-    image_evidence_label: 'Posting-user supplied item image',
-    image_evidence_notice: 'Photo supplied directly with this authenticated post.',
+    source_record_id: row.id, item_category: row.category, multi_listing: multiListing,
+    is_unbundled_child: false,
+    has_images: !multiListing && imageUrls.length > 0,
+    thumbnail_url: multiListing ? null : (imageUrls[0] || null),
+    image_urls: multiListing ? [] : imageUrls,
+    image_evidence_type: multiListing ? 'NO_IMAGE' : 'SOURCE_LISTING_IMAGE',
+    image_evidence_label: multiListing ? null : 'Posting-user supplied item image',
+    image_evidence_notice: multiListing
+      ? 'A multi-item source image is withheld until each item is separated and verified.'
+      : 'Photo supplied directly with this authenticated post.',
     location: claimed.location || null, evidence_coverage: evidenceCoverage,
   };
 }
 
 function directSubmissionMatches(record, filters) {
+  if (filters.itemCategory && filters.itemCategory !== 'ALL' && record.item_category !== filters.itemCategory) return false;
   if (filters.imagesOnly && !record.has_images) return false;
   if (filters.pricedOnly && record.price_raw == null) return false;
   if (filters.listingType && record.listing_type !== filters.listingType) return false;
@@ -240,6 +260,10 @@ function directSubmissionMatches(record, filters) {
   if (filters.reference && record.reference_search_key !== filters.reference) return false;
   if (filters.dial && record.dial_color?.toLowerCase() !== filters.dial.toLowerCase()) return false;
   if (filters.condition && record.condition?.toLowerCase() !== filters.condition.toLowerCase()) return false;
+  if (filters.region) {
+    const location = String(record.location || '').trim().toLowerCase();
+    if (location !== filters.region.toLowerCase()) return false;
+  }
   if (filters.search) {
     const haystack = [record.brand, record.model, record.reference, record.dial_color, record.seller_name, record.raw_message]
       .filter(Boolean).join(' ').toLowerCase();
@@ -249,8 +273,7 @@ function directSubmissionMatches(record, filters) {
 }
 
 function mapReviewedRecord(row) {
-  // Prefer user_image_url (direct source upload) then fall back to display_image_url
-  // (platform-curated or reference CDN image already stored in the workbook).
+  // Publish only user_image_url, the exact source upload retained by the view.
   const candidateImageUrl = row.user_image_url || null;
   const hasExactSourceImage = row.has_exact_source_image === true
     && candidateImageUrl
@@ -285,11 +308,11 @@ function mapReviewedRecord(row) {
     ? row.raw_reference
     : approvedReference;
   const dialColor = row.dial_color || row.catalog_dial || null;
-  const sellerName = evidenceValuePresent(row.posted_by)
-    ? row.posted_by
+  const sellerName = evidenceValuePresent(row.posted_by || row.seller_name || row.from_name)
+    ? (row.posted_by || row.seller_name || row.from_name)
     : null;
-  const sellerPhone = evidenceValuePresent(row.phone_number)
-    ? row.phone_number
+  const sellerPhone = evidenceValuePresent(row.phone_number || row.seller_phone || row.from_number)
+    ? (row.phone_number || row.seller_phone || row.from_number)
     : null;
   const referenceSearchKey = row.reference_search_key
     || referenceComparisonKey(reference)
@@ -301,7 +324,8 @@ function mapReviewedRecord(row) {
   const priceEligible = hasCompleteIdentity && verifiedUsd !== null;
   const normalizedSummary = isNormalizedWorkbookSummary(row);
   const multiListing = isMultiListing(row);
-  const publicImageUrl = multiListing ? null : exactImageUrl;
+  const isUnbundledChild = evidenceValuePresent(row.parent_id);
+  const publicImageUrl = multiListing || isUnbundledChild ? null : exactImageUrl;
   const evidenceCoverage = recordEvidenceCoverage({
     brand,
     model,
@@ -310,7 +334,7 @@ function mapReviewedRecord(row) {
     sellerName,
     sellerPhone,
     contactApproved,
-    exactImageUrl,
+    exactImageUrl: publicImageUrl,
     sourceAmount,
     sourceCurrency: row.source_currency,
     hasCompleteIdentity,
@@ -351,8 +375,8 @@ function mapReviewedRecord(row) {
     price_evidence_status: row.price_evidence_status,
     price_research_eligible: priceEligible,
     confidence: row.confidence == null ? null : Number(row.confidence),
-    verdict: row.verification_status || null,
-    listing_status: row.verification_status || null,
+    verdict: row.verdict || row.verification_status || null,
+    listing_status: row.trading_floor_status || row.listing_status || row.verification_status || null,
     source: 'REVIEWED_WORKBOOK_INVENTORY',
     source_type: 'owner_reviewed_workbook',
     source_file: row.source_file,
@@ -360,12 +384,13 @@ function mapReviewedRecord(row) {
     source_record_id: row.source_record_id || null,
     item_category: 'WATCH',
     multi_listing: multiListing,
+    is_unbundled_child: isUnbundledChild,
     has_images: publicImageUrl !== null,
     thumbnail_url: publicImageUrl,
     image_urls: publicImageUrl ? [publicImageUrl] : [],
     image_evidence_type: publicImageUrl ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
     image_evidence_label: publicImageUrl ? 'Source-supplied listing image' : null,
-    image_evidence_notice: multiListing
+    image_evidence_notice: multiListing || isUnbundledChild
       ? 'A multi-item source image is withheld until it can be assigned to the correct child listing.'
       : publicImageUrl
       ? 'Exact image URL supplied with this source listing.'
@@ -431,10 +456,11 @@ module.exports = async function handler(req, res) {
       ? cursorPage
       : (Number.isInteger(requestedPage) ? Math.max(1, requestedPage) : 1);
     const search = cleanExactText(req.query?.q, 120);
-    const requestedBrand = cleanExactText(req.query?.brand, 80);
-    const requestedReference = cleanExactText(req.query?.reference, 80);
+    const parsedSearch = parseTradingSearch(search);
+    const requestedBrand = cleanExactText(req.query?.brand || parsedSearch.brand, 80);
+    const requestedReference = cleanExactText(req.query?.reference || parsedSearch.reference, 80);
     const reference = referenceComparisonKey(requestedReference);
-    const requestedDial = cleanExactText(req.query?.dial, 40);
+    const requestedDial = cleanExactText(req.query?.dial || parsedSearch.dial, 40);
     const exactDialVariants = requestedDial
       ? [...new Set([
           requestedDial.toLowerCase(),
@@ -446,6 +472,10 @@ module.exports = async function handler(req, res) {
     const pricedOnly = String(req.query?.priced || '').toLowerCase() === 'true';
     const listingType = cleanExactText(req.query?.type, 12).toUpperCase();
     const condition = cleanExactText(req.query?.condition, 80);
+    const requestedItem = cleanExactText(req.query?.item, 20).toLowerCase();
+    const itemCategories = { all: 'ALL', watches: 'WATCH', handbags: 'HANDBAG', jewelry: 'JEWELRY', accessories: 'ACCESSORY', other: 'OTHER' };
+    const itemCategory = requestedItem ? itemCategories[requestedItem] : 'ALL';
+    const region = cleanExactText(req.query?.region, 100);
 
     if (listingType && !['WTS', 'WTB', 'OTHER'].includes(listingType)) {
       return res.status(400).json({ status: 'error', error: 'Invalid listing type' });
@@ -492,24 +522,26 @@ module.exports = async function handler(req, res) {
     }
 
     const columns = [
-      'id,source_file,source_row_number,source_record_id,posting_date,posted_by',
-      'phone_number,contact_publication_approved,raw_message,listing_type,brand_scope',
+      'id,parent_id,source_file,source_row_number,source_record_id,posting_date,seller_name',
+      'seller_phone,contact_publication_approved,raw_message,listing_type,brand_scope',
       'supplied_brand,canonical_brand,model,catalog_model,raw_reference',
       'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
-      'workbook_price_usd,source_price_amount,source_price_text,source_currency',
-      'price_evidence_status,confidence,verification_status,user_image_url,imported_at',
-      'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity',
+      'workbook_price_usd,source_price_amount,source_currency',
+      'price_evidence_status,confidence,verdict,verification_status,user_image_url,imported_at',
+      'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity,trading_floor_status,reference_search_key',
     ].join(',');
 
     // ponytail: use raw REST instead of Supabase client to avoid client-side issues
     const queryParams = new URLSearchParams();
     queryParams.set('select', columns);
+    queryParams.set('verdict', 'in.(APPROVED,approved)');
+    queryParams.set('trading_floor_status', 'not.in.(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate)');
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
-    if (reference) queryParams.set('normalized_reference', `eq.${reference}`);
+    if (reference) queryParams.set('reference_search_key', `eq.${reference}`);
     if (exactDialVariants.length) queryParams.set('dial_color', `in.(${exactDialVariants.join(',')})`);
     if (listingType) queryParams.set('listing_type', `eq.${listingType}`);
     if (imagesOnly) queryParams.set('has_exact_source_image', 'eq.true');
-    if (pricedOnly) queryParams.set('has_supplied_price', 'eq.true');
+    if (pricedOnly) queryParams.set('source_price_amount', 'gt.0');
     const genericSearch = safeSearchTerm(search);
     if (genericSearch && !requestedReference && !requestedDial) {
       const pattern = `*${genericSearch}*`;
@@ -522,12 +554,14 @@ module.exports = async function handler(req, res) {
         `raw_reference.ilike.${pattern}`,
         `normalized_reference.ilike.${pattern}`,
         `catalog_reference.ilike.${pattern}`,
-        `posted_by.ilike.${pattern}`,
+        `seller_name.ilike.${pattern}`,
+        `seller_phone.ilike.${pattern}`,
         `raw_message.ilike.${pattern}`,
       ].join(','));
     }
+    if (!itemCategory) return res.status(400).json({ status: 'error', error: 'Invalid item category' });
     // ponytail: simplified query — ORDER BY with offset times out on large views
-    queryParams.set('order', 'id.desc');
+    queryParams.set('order', 'has_exact_source_image.desc.nullslast,id.desc');
     queryParams.set('limit', String(pageSize + 1));
     if (pageWindow.start > 0) queryParams.set('offset', String(pageWindow.start));
     
@@ -547,18 +581,28 @@ module.exports = async function handler(req, res) {
     const total = summaryTotal;
     const rows = pageWindow.reverse ? [...(data || [])].reverse() : (data || []);
     const pageResult = boundedPage(rows, pageSize, scopedFilter);
-    let records = pageResult.records.map(mapReviewedRecord);
+    let records = pageResult.records
+      .map(mapReviewedRecord)
+      .filter(record => isApprovedInventoryRecord(record) && !record.multi_listing)
+      .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
     if (page === 1) {
-      const { data: directRows, error: directError } = await client.from('dealer_listing_submissions')
+      let directQuery = client.from('dealer_listing_submissions')
         .select('id,intent,category,raw_message,claimed_fields,image_urls,poster_image_url,review_status,publication_status,created_at')
         .eq('publication_status', 'PUBLISHED')
+        .eq('review_status', 'APPROVED')
         .order('created_at', { ascending: false })
         .limit(100);
+      if (itemCategory !== 'ALL') directQuery = directQuery.eq('category', itemCategory);
+      const { data: directRows, error: directError } = await directQuery;
       if (!directError) {
-        const directRecords = (directRows || []).map(mapDealerSubmission).filter(record => directSubmissionMatches(record, {
-          imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search,
-        }));
-        records = [...directRecords, ...records].slice(0, pageSize);
+        const directRecords = (directRows || [])
+          .map(mapDealerSubmission)
+          .filter(record => !record.multi_listing && directSubmissionMatches(record, {
+            imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search, itemCategory, region,
+          }));
+        records = [...directRecords, ...records]
+          .sort((left, right) => Number(right.has_images) - Number(left.has_images))
+          .slice(0, pageSize);
       }
     }
     const hasMore = scopedFilter
@@ -600,6 +644,7 @@ module.exports.recordEvidenceCoverage = recordEvidenceCoverage;
 module.exports.mapDealerSubmission = mapDealerSubmission;
 module.exports.directSubmissionMatches = directSubmissionMatches;
 module.exports.summarizeCoverage = summarizeCoverage;
+module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;
 module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;
 module.exports.isMultiListing = isMultiListing;

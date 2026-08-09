@@ -1,4 +1,5 @@
-import { ExternalLink, MessageCircle, Send } from 'lucide-react';
+import { ExternalLink, MessageCircle, Send, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LUXFI_URL } from './MarketHeader';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -23,8 +24,52 @@ const MARKET_LINKS = [
   ['Account', '/dealer/account/profile'],
 ] as const;
 
+export const DEALER_GLOSSARY = [
+  {
+    title: 'Buying & Selling Terms',
+    terms: [
+      ['WTB', 'Want to Buy'], ['WTS', 'Want to Sell'], ['WTT', 'Want to Trade'],
+      ['FS', 'For Sale'], ['OBO', 'Or Best Offer'], ['BIN', 'Buy It Now'], ['PM for Price', 'Price on Request'],
+    ],
+  },
+  {
+    title: 'Condition & Packaging',
+    terms: [
+      ['BNIB', 'Brand New in Box'], ['LNIB', 'Like New in Box'], ['NIB', 'New in Box'],
+      ['NOS', 'New Old Stock (Unworn but from an older production batch)'], ['U', 'Used'],
+      ['MINT', 'Excellent condition, nearly new'], ['Unpolished', 'Factory-original case, never polished'],
+      ['Full Set', 'Watch comes with original box, papers, and accessories'], ['B&P', 'Box and Papers included'],
+    ],
+  },
+  {
+    title: 'Pricing & Payment',
+    terms: [['PP', 'PayPal'], ['T/T', 'Bank Wire Transfer (Telegraphic Transfer)']],
+  },
+  {
+    title: 'Watch Specifications & Market Terms',
+    terms: [
+      ['Ref', 'Reference number'], ['DLC', 'Diamond-Like Carbon (Black-coated watches)'],
+      ['PVD', 'Physical Vapor Deposition (Coated watches)'],
+      ['OEM', 'Original Equipment Manufacturer (Factory-original parts)'],
+      ['FRANKEN', 'A watch with mixed, non-matching parts'], ['HYPE', 'High-demand, sought-after model'],
+    ],
+  },
+  {
+    title: 'Deal Communication',
+    terms: [['DIBS', 'Claiming first right to buy'], ['SPF', 'Sold Pending Funds'], ['LO', 'Low Offer']],
+  },
+] as const;
+
 export function Footer() {
   const { t } = useLanguage();
+  const [glossaryOpen, setGlossaryOpen] = useState(false);
+
+  useEffect(() => {
+    if (!glossaryOpen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setGlossaryOpen(false); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [glossaryOpen]);
   return (
     <footer className="border-t border-white/10 bg-[#08080c] px-5 py-12 text-white sm:px-8 lg:px-12">
       <div className="mx-auto max-w-7xl">
@@ -75,12 +120,37 @@ export function Footer() {
           </nav>
           <div className="flex flex-col items-start gap-3 text-sm">
             <Link to="/cl-login" className="text-[#c9a96e] transition-colors hover:text-white">CL Login</Link>
+            <button type="button" onClick={() => setGlossaryOpen(true)} className="text-left text-white/50 transition-colors hover:text-white">{t('Glossary')}</button>
             <Link to="/info/company" className="text-white/50 transition-colors hover:text-white">{t('Company')}</Link>
             <Link to="/info/community" className="text-white/50 transition-colors hover:text-white">{t('Community')}</Link>
           </div>
         </div>
         <div className="border-t border-white/10 pt-5 text-center text-[11px] text-white/30">© 2026 WatchFacts Inc. All Rights Reserved.</div>
       </div>
+      {glossaryOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="presentation" onMouseDown={() => setGlossaryOpen(false)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="dealer-glossary-title" onMouseDown={event => event.stopPropagation()} className="relative max-h-[88vh] w-full max-w-4xl overflow-y-auto border border-white/15 bg-[#101016] p-6 shadow-2xl sm:p-9">
+            <button type="button" aria-label="Close glossary" onClick={() => setGlossaryOpen(false)} className="absolute right-4 top-4 grid h-11 w-11 place-items-center border border-white/15 text-white/60 transition-colors hover:border-[#c9a96e] hover:text-white"><X size={20} /></button>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c9a96e]">WatchFacts terminology</p>
+            <h2 id="dealer-glossary-title" className="mt-3 pr-14 font-serif text-3xl sm:text-4xl">Social Media Watch Dealer Glossary</h2>
+            <div className="mt-8 grid gap-8 md:grid-cols-2">
+              {DEALER_GLOSSARY.map(section => (
+                <section key={section.title} className="border-t border-white/10 pt-5">
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[#d4b87a]">{section.title}</h3>
+                  <dl className="mt-4 space-y-3">
+                    {section.terms.map(([term, meaning]) => (
+                      <div key={term} className="grid gap-1 text-sm sm:grid-cols-[110px_1fr] sm:gap-4">
+                        <dt className="font-semibold text-white">{term}</dt>
+                        <dd className="leading-6 text-white/55">{meaning}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
     </footer>
   );
 }

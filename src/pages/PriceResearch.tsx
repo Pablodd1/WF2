@@ -800,19 +800,23 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   }
 
   const displayRef = data?.resolvedRef || data?.reference || query;
+  const listingEvidence = data
+    ? [...data.rows, ...(data.retained_rows || []), ...(data.outlier_rows || [])]
+    : [];
   const selectedWatchImage = data
     ? referenceImages[displayRef.toUpperCase()]
-      || data.rows.find(row => row.thumbnail_url || row.image_url || row.image_urls?.find(Boolean))?.thumbnail_url
-      || data.rows.find(row => row.image_url)?.image_url
-      || data.rows.flatMap(row => row.image_urls || []).find(Boolean)
+      || listingEvidence.find(row => row.thumbnail_url || row.image_url || row.image_urls?.find(Boolean))?.thumbnail_url
+      || listingEvidence.find(row => row.image_url)?.image_url
+      || listingEvidence.flatMap(row => row.image_urls || []).find(Boolean)
       || data.demand_rows?.find(row => row.image_url || row.image_urls?.find(Boolean))?.image_url
       || data.demand_rows?.flatMap(row => row.image_urls || []).find(Boolean)
       || null
     : null;
 
-  const listings = [...(data?.rows || [])]
-    .filter(row => !row.is_outlier)
+  const listings = [...new Map(listingEvidence.map(row => [row.id, row])).values()]
     .sort((left, right) => {
+      const eligibilityDifference = Number(right.price_usd != null && !right.is_outlier) - Number(left.price_usd != null && !left.is_outlier);
+      if (eligibilityDifference !== 0) return eligibilityDifference;
       const priceDifference = Number(left.price_usd) - Number(right.price_usd);
       if (Number.isFinite(priceDifference) && priceDifference !== 0) return priceDifference;
       return String(left.listing_date || left.created_at || '').localeCompare(String(right.listing_date || right.created_at || ''))
@@ -1454,11 +1458,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
               <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
-                Qualified comparable listings ({listings.length} shown of {data.count.toLocaleString()} included)
+                Featured listings for sale ({listings.length} shown)
               </div>
               {listings.length === 0 && (
                 <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: 14 }}>
-                  No qualified comparable listings are available for this cohort.
+                  No source listings are available for this reference yet.
+                </div>
+              )}
+              {listings.length > 0 && (
+                <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
+                  Qualified WTS observations power the chart and statistics. Additional real source listings remain visible here with their exclusion reason and never alter the averages.
                 </div>
               )}
               {listings.map(row => (
@@ -1469,9 +1478,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   onOpen={() => void openListing(row)}
                 />
               ))}
-              {data.count > COMPARABLE_LISTING_PREVIEW_LIMIT && (
+              {listingEvidence.length > COMPARABLE_LISTING_PREVIEW_LIMIT && (
                 <div style={{ padding: '12px 24px', borderTop: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
-                  Showing a compact source-evidence sample for speed. Outliers and other exclusions are summarized above and are not displayed as watch listings.
+                  Showing a compact source-evidence sample for speed. Complete qualification and exclusion counts remain available in Analysis outcome and methodology.
                 </div>
               )}
             </div>

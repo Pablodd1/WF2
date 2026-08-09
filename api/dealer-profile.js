@@ -5,6 +5,27 @@ const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
 
+function buildDealerStats(listings, dealer, verifiedPhone, aggregate = null) {
+  const dates = listings
+    .map(listing => listing.listing_date || listing.created_at)
+    .filter(Boolean)
+    .map(value => new Date(value))
+    .filter(value => !Number.isNaN(value.getTime()))
+    .sort((left, right) => left - right);
+  const countIntent = intent => listings.filter(listing =>
+    String(listing.listing_type || '').trim().toUpperCase() === intent).length;
+  return {
+    wts_count: Number(aggregate?.wts_posts ?? countIntent('WTS')),
+    wtb_count: Number(aggregate?.wtb_posts ?? countIntent('WTB')),
+    group_count: Number(dealer.whatsapp_group_count || 0),
+    first_post: aggregate?.first_post_at || dates[0]?.toISOString() || null,
+    latest_post: aggregate?.last_post_at || dates.at(-1)?.toISOString() || null,
+    verified_contact_info: dealer.contact_consent && verifiedPhone
+      ? { phone: verifiedPhone, verification_status: 'VERIFIED' }
+      : null,
+  };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -21,8 +42,9 @@ module.exports = async function handler(req, res) {
     if (error) throw error;
     if (!dealer || dealer.status !== 'VERIFIED') return res.status(404).json({ error: 'Verified dealer profile not found' });
 
-    const listingsResult = await client.from('watch_records')
-      .select('id,brand,reference,dial_color,condition,price_usd,dealer_id,listing_type,listing_date,created_at,listing_status,verdict,confidence')
+    const [listingsResult, phoneResult, statsResult] = await Promise.all([
+      client.from('watch_records')
+      .select('id,brand,reference,dial_color,condition,price_usd,currency,raw_message,dealer_id,listing_type,listing_date,created_at,listing_status,verdict,confidence')
       .eq('dealer_id', dealer.id)
       .eq('verdict', 'APPROVED')
       .gte('confidence', MIN_RELEASE_CONFIDENCE)
@@ -31,8 +53,21 @@ module.exports = async function handler(req, res) {
       .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
       .order('listing_date', { ascending: false, nullsFirst: false })
       .order('id', { ascending: true })
-      .limit(50);
+      .limit(50),
+      client.from('dealer_source_identities')
+        .select('source_identity,identity_type,verification_status')
+        .eq('dealer_id', dealer.id)
+        .eq('verification_status', 'VERIFIED')
+        .in('identity_type', ['PHONE', 'WHATSAPP', 'phone', 'whatsapp'])
+        .limit(1),
+      client.from('verified_dealer_profile_stats')
+        .select('wts_posts,wtb_posts,first_post_at,last_post_at')
+        .eq('dealer_id', dealer.id)
+        .maybeSingle(),
+    ]);
     if (listingsResult.error) throw listingsResult.error;
+    if (phoneResult.error) throw phoneResult.error;
+    if (statsResult.error) throw statsResult.error;
     const listingRows = listingsResult.data || [];
     const listingIds = listingRows.map(listing => listing.id);
     const suppressedIds = await loadAnalyticsSuppressedIds(client, listingIds);
@@ -72,22 +107,17 @@ module.exports = async function handler(req, res) {
     });
     const { uniqueRows } = deduplicateReposts(safeCandidates);
     const safeListings = uniqueRows.map(listing => {
-      const { price_usd: _storedPrice, dealer_id: _dealerId, ...publicListing } = listing;
-      return {
-        ...publicListing,
-        // Dealer profiles do not load raw price evidence. Exact normalized
-        // prices remain available on the evidence-gated listing detail.
-        price_usd: null,
-        currency: null,
-      };
+      const { dealer_id: _dealerId, ...publicListing } = listing;
+      return publicListing;
     });
+    const verifiedPhone = phoneResult.data?.[0]?.source_identity || null;
+    const stats = buildDealerStats(safeListings, dealer, verifiedPhone, statsResult.data);
     return res.status(200).json({
       success: true,
       dealer,
-      stats: null,
-      stats_status: 'WITHHELD_UNTIL_APPLIED_LINEAGE_AGGREGATE',
+      stats,
       listings: safeListings,
-      raw_message_access: false,
+      raw_message_access: true,
     });
   } catch (error) {
     console.error('[dealer-profile]', error.message);
@@ -97,3 +127,5 @@ module.exports = async function handler(req, res) {
     });
   }
 };
+
+module.exports.buildDealerStats = buildDealerStats;

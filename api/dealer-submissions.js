@@ -27,7 +27,7 @@ function credentialedLocation(dealer) {
 
 async function loadCredentialedPoster(client, user) {
   const { data: dealer, error } = await client.from('dealers')
-    .select('id,display_name,company_name,country_code,city,avatar_url,status,rating,review_count,whatsapp_group_count')
+    .select('id,display_name,company_name,country_code,city,avatar_url,status,rating,review_count,whatsapp_group_count,metadata')
     .eq('auth_user_id', user.id).maybeSingle();
   if (error) throw error;
   if (!dealer) return null;
@@ -53,6 +53,9 @@ async function loadCredentialedPoster(client, user) {
     rating: dealer.rating == null ? null : Number(dealer.rating),
     review_count: Number(dealer.review_count || 0),
     group_count: Number(dealer.whatsapp_group_count || 0),
+    account_type: clean(dealer.metadata?.account_type, 30),
+    preferred_language: clean(dealer.metadata?.preferred_language, 20),
+    telegram_username: clean(dealer.metadata?.telegram_username, 100),
   };
 }
 
@@ -166,8 +169,11 @@ async function handler(req, res) {
     poster_name: poster.name, poster_phone: poster.phone, location: poster.location,
     dealer_rating: poster.rating, review_count: poster.review_count,
     group_count: poster.group_count, credential_status: poster.credential_status,
+    account_type: poster.account_type, preferred_language: poster.preferred_language,
+    telegram_username: poster.telegram_username,
   };
   const submissionRows = batch.items.map(validated => ({
+    id: crypto.randomUUID(),
     auth_user_id: authorization.user.id, dealer_id: poster.dealer_id,
     intent: validated.intent, category: validated.category, raw_message: validated.rawMessage,
     claimed_fields: { ...validated.claimed, ...posterSnapshot, is_bundle: validated.isBundle }, image_urls: validated.imageUrls,
@@ -176,8 +182,8 @@ async function handler(req, res) {
       intent: validated.intent, category: validated.category, raw_message: validated.rawMessage, is_bundle: validated.isBundle,
       claimed: validated.claimed, image_urls: validated.imageUrls,
     })).digest('hex'),
-    bulk_submission_id: bulkSubmissionId, publication_status: 'PUBLISHED',
-    review_status: validated.isBundle ? 'IN_REVIEW' : 'APPROVED', normalized_at: new Date().toISOString(),
+    bulk_submission_id: bulkSubmissionId, publication_status: 'QUEUED',
+    review_status: 'PENDING_REVIEW', normalized_at: null,
   }));
   const { data, error } = await authorization.client.from('dealer_listing_submissions').insert(submissionRows)
     .select('id,review_status,publication_status,created_at,intent,category,claimed_fields,image_urls,poster_image_url');
@@ -187,49 +193,26 @@ async function handler(req, res) {
     return res.status(500).json({ error: 'Unable to save the submission.' });
   }
 
-  const stagingRows = data.map((submission, index) => {
-    const validated = batch.items[index];
-    const price = validated.claimed.price_amount;
-    return {
-      source_submission_id: submission.id, dealer_id: poster.dealer_id,
-      raw_message_text: validated.rawMessage, category: validated.category,
-      intent: validated.intent, listing_type: validated.isBundle ? 'BUNDLE' : validated.intent, is_bundle: validated.isBundle,
-      brand_original: validated.claimed.brand, brand_normalized: validated.claimed.brand,
-      model_original: validated.claimed.model, model_normalized: validated.claimed.model,
-      reference_original: validated.claimed.reference, reference_normalized: validated.claimed.reference,
-      dial_color_original: validated.claimed.dial_color, dial_color_normalized: validated.claimed.dial_color,
-      condition_original: validated.claimed.condition, condition_normalized: validated.claimed.condition,
-      price_original: price, price_normalized: price,
-      price_usd: validated.claimed.currency === 'USD' ? price : null,
-      currency_original: validated.claimed.currency, currency_normalized: validated.claimed.currency,
-      image_url: validated.imageUrls[0], image_urls: validated.imageUrls,
-      user_image_url: posterImageUrl,
-      user_name: poster.name, from_name: poster.name,
-      contact_number: poster.phone, from_number: poster.phone,
-      location: poster.location, rating: poster.rating, dealer_rating: poster.rating,
-      contact_consent: true, is_verified_user: poster.credential_status === 'VERIFIED',
-      is_seller_approved: poster.credential_status === 'VERIFIED', are_attributes_extracted: !validated.isBundle,
-      identification_status: validated.isBundle ? 'bundle_pending_separation' : validated.category === 'WATCH' ? 'identified' : 'normalized',
-      verdict: validated.isBundle ? 'needs_review' : 'approved',
-      normalization_status: validated.isBundle ? 'needs_review' : 'normalized',
-      trading_floor_status: validated.isBundle ? 'bundle_pending_separation' : 'published',
-      price_research_status: validated.isBundle ? 'ineligible_bundle' : validated.category !== 'WATCH' ? 'ineligible_non_watch' : price == null ? 'ineligible_no_price' : validated.claimed.currency === 'USD' ? 'eligible' : 'provisional_needs_review',
-      provenance_metadata: {
-        source: 'authenticated_user_form', submission_id: submission.id,
-        bulk_submission_id: bulkSubmissionId,
-        poster_image_url: posterImageUrl,
-        credential_stamp: { auth_user_id: poster.auth_user_id, dealer_id: poster.dealer_id, status: poster.credential_status },
-      },
-      overall_confidence: validated.isBundle ? 0 : 1,
-    };
+  const submissionIds = data.map(item => item.id);
+  const { data: queued, error: queueError } = await authorization.client.rpc('enqueue_dealer_submission_batch', {
+    p_submission_ids: submissionIds,
   });
-  const { error: publicationError } = await authorization.client.schema('staging').from('listings').insert(stagingRows);
-  if (publicationError) {
-    await authorization.client.from('dealer_listing_submissions').update({ publication_status: 'PUBLICATION_FAILED', review_status: 'IN_REVIEW' }).in('id', data.map(item => item.id));
-    console.error('[dealer-submissions-publication]', publicationError.message);
-    return res.status(500).json({ error: 'Listings were saved, but publication needs attention.' });
+  if (queueError) {
+    await authorization.client.from('dealer_listing_submissions')
+      .update({ publication_status: 'QUEUE_FAILED', review_status: 'IN_REVIEW' })
+      .in('id', submissionIds);
+    console.error('[dealer-submissions-queue]', queueError.message);
+    return res.status(500).json({ error: 'Items were saved, but the review queue needs attention.' });
   }
-  return res.status(201).json({ success: true, submissions: data, submission: data[0], bulk_submission_id: bulkSubmissionId, publication: 'PUBLISHED', count: data.length });
+  return res.status(202).json({
+    success: true,
+    submissions: data,
+    submission: data[0],
+    bulk_submission_id: bulkSubmissionId,
+    publication: 'QUEUED_FOR_REVIEW',
+    queue: queued || [],
+    count: data.length,
+  });
 }
 
 module.exports = handler;

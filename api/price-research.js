@@ -408,12 +408,13 @@ module.exports = async function handler(req, res) {
           referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
         }
         else {
-          // ponytail: auto-expand referenceVariants to include prefix-matched
-          // references when the exact reference has no exact match in the DB.
-          // A user searching "126500" should get results for "126500LN" etc.
-          // without needing to select from a candidate list.
-          referenceVariants = [...new Set([...equivalentReferences, ...foundRefs])];
-          if (foundRefs.length > 0) targetRef = foundRefs[0];
+          // Prefix matches are suggestions only and must never silently become
+          // a specific watch. The client can present foundRefs for selection,
+          // then repeat the request with the chosen exact reference.
+          return res.status(400).json({
+            error: 'Enter an exact reference. Prefix matches require an explicit selection.',
+            suggestions: foundRefs.slice(0, 20),
+          });
         }
       }
     }
@@ -437,7 +438,10 @@ module.exports = async function handler(req, res) {
       .select(columns)
       .eq('brand', brand)
       .in('reference', referenceVariants)
+      .in('verdict', ['APPROVED', 'approved'])
+      .eq('listing_type', 'WTS')
       .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
       .range(from, to);
 
     // Avoid a filtered COUNT over the multi-million-row table. Fetch bounded,
@@ -874,15 +878,15 @@ module.exports = async function handler(req, res) {
         listing_description_retained: true,
       },
       admission_policy: {
-        verdict: 'ALL_VERDICTS',
-        minimum_confidence: 0,
+        verdict: 'APPROVED',
+        minimum_confidence: MIN_RELEASE_CONFIDENCE,
         confidence_is_probability: false,
-        exact_release_reference_required: false,
-        canonical_identity_review_required: false,
-        explicit_currency_evidence_required: false,
+        exact_release_reference_required: true,
+        canonical_identity_review_required: true,
+        explicit_currency_evidence_required: true,
         verified_fx_provenance_required: false,
-        catalog_model_and_dial_required: false,
-        catalog_or_owner_reviewed_identity_required: false,
+        catalog_model_and_dial_required: true,
+        catalog_or_owner_reviewed_identity_required: true,
         unsplit_bundles_excluded: true,
         reviewed_duplicates_excluded: true,
       },
@@ -973,6 +977,7 @@ module.exports = async function handler(req, res) {
       monthly, prices, forecast,
       retained_rows: serializedRetainedEvidence.map(r => ({
         id: r.id,
+        raw_message: r.raw_message || null,
         price_usd: null,
         created_at: r.created_at,
         listing_date: r.listing_date,
@@ -984,6 +989,16 @@ module.exports = async function handler(req, res) {
         outlier_reason: r.outlier_reason,
         source_price_amount: r.source_price_amount || null,
         source_currency: r.source_currency || null,
+        thumbnail_url: r.thumbnail_url || null,
+        image_urls: r.image_urls || null,
+        has_images: r.has_images || false,
+        seller_name: r.seller_name || null,
+        seller_phone: r.seller_phone || null,
+        verdict: r.verdict || null,
+        confidence: r.confidence || null,
+        listing_status: r.listing_status || null,
+        contact_publication_approved: r.contact_publication_approved || false,
+        source_file: r.source_file || null,
       })),
       rows: serializedComparables.map(r => ({
         id: r.id,

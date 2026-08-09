@@ -84,18 +84,29 @@ test('submission migration is service-role only and review-gated', () => {
   assert.doesNotMatch(migration, /GRANT INSERT ON public\.dealer_listing_submissions TO authenticated/i);
 });
 
-test('direct-publication migration isolates media and staging publication from ingestion jobs', () => {
+test('legacy direct-publication migration is superseded by a forward review-pipeline migration', () => {
   const migration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260806160000_dealer_direct_publication.sql'), 'utf8');
+  const correction = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260809120000_dealer_submission_pipeline_review.sql'), 'utf8');
   assert.match(migration, /dealer-listing-media/);
   assert.match(migration, /source_submission_id/);
   assert.match(migration, /publication_status/);
   assert.match(migration, /submission_checksum/);
   assert.doesNotMatch(migration, /jobs\.processing_jobs/);
+  assert.match(correction, /enqueue_dealer_submission_batch/);
+  assert.match(correction, /jobs\.processing_jobs/);
+  assert.match(correction, /'needs_review'::jobs\.processing_status/);
+  assert.match(correction, /review_dealer_submission/);
+  assert.match(correction, /WHEN s\.category <> 'WATCH' THEN 'ineligible_non_watch'/);
+  assert.match(correction, /WHEN s\.intent = 'WTB' THEN 'ineligible_demand'/);
+  assert.match(correction, /ELSE 'eligible'/);
+  assert.match(correction, /REVOKE ALL ON FUNCTION[\s\S]*FROM PUBLIC, anon, authenticated/);
 });
 
 test('every authenticated posting event receives a stable batch receipt', () => {
   const route = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealer-submissions.js'), 'utf8');
   assert.match(route, /const bulkSubmissionId = crypto\.randomUUID\(\)/);
   assert.match(route, /bulk_submission_id: bulkSubmissionId/);
-  assert.match(route, /bulk_submission_id: bulkSubmissionId, publication/);
+  assert.match(route, /publication: 'QUEUED_FOR_REVIEW'/);
+  assert.match(route, /enqueue_dealer_submission_batch/);
+  assert.doesNotMatch(route, /trading_floor_status: validated\.isBundle \? 'bundle_pending_separation' : 'published'/);
 });

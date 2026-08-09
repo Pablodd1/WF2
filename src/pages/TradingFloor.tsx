@@ -29,7 +29,7 @@ const RED = '#B42318';
 const CATEGORY_OPTIONS = [
   { label: 'All inventory', value: 'all' },
   { label: 'Watches', value: 'watches' },
-  { label: 'Handbags', value: 'handbags' },
+  { label: 'Handbags & purses', value: 'handbags' },
   { label: 'Jewelry', value: 'jewelry' },
   { label: 'Accessories', value: 'accessories' },
   { label: 'Other luxury', value: 'other' },
@@ -180,7 +180,7 @@ export default function TradingFloor() {
   const categoryFilter = CATEGORY_OPTIONS.some(option => option.value === requestedCategory)
     ? requestedCategory as CategoryFilter
     : 'all';
-  const intentFilter = ['all', 'watches'].includes(categoryFilter) && INTENT_OPTIONS.some(option => option.value === requestedIntent)
+  const intentFilter = INTENT_OPTIONS.some(option => option.value === requestedIntent)
     ? requestedIntent as IntentFilter
     : '';
   const search = searchParams.get('q') || '';
@@ -335,15 +335,9 @@ export default function TradingFloor() {
         if (pricedOnly) params.set('priced', 'true');
         if (locationFilter) params.set('region', locationFilter);
 
-        const usesReviewedWatchInventory = ['all', 'watches'].includes(categoryFilter);
-        if (!usesReviewedWatchInventory) {
-          params.set('quality', 'market');
-          params.set('item', categoryFilter);
-          params.delete('priced');
-          params.delete('brand');
-          params.delete('type');
-        }
-        const endpoint = usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest';
+        if (categoryFilter !== 'all') params.set('item', categoryFilter);
+        if (!['all', 'watches'].includes(categoryFilter)) params.delete('brand');
+        const endpoint = '/api/reviewed-market-inventory';
         const response = await fetch(`${endpoint}?${params.toString()}`, { signal: controller.signal });
         let data: TradingFloorResponse;
         try {
@@ -448,7 +442,7 @@ export default function TradingFloor() {
             updateViewParams({
               brand: next.brand || null,
               item: next.category === 'all' ? null : next.category,
-              type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
+              type: next.intent || null,
               images: next.imagesOnly ? 'true' : null,
               priced: next.pricedOnly ? 'true' : null,
               location: next.location || null,
@@ -641,7 +635,7 @@ function DesktopFilters({
             key={option.value}
             checked={category === option.value}
             label={option.label}
-            onChange={() => onChange({ item: option.value === 'all' ? null : option.value, type: !['all', 'watches'].includes(option.value) ? null : intent || null })}
+            onChange={() => onChange({ item: option.value === 'all' ? null : option.value, type: intent || null })}
           />
         ))}
       </fieldset>
@@ -655,8 +649,9 @@ function DesktopFilters({
 
       <fieldset>
         <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Availability</legend>
-        <FilterCheck checked={imagesOnly} label="Source image only" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
+        <FilterCheck checked={imagesOnly} label="Only with images" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
         <FilterCheck checked={pricedOnly} label="Price supplied" onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
+        <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>Shows verified source images only. Bundle, multi-listing, and unbundled-child images remain excluded.</p>
       </fieldset>
 
       <fieldset>
@@ -729,19 +724,16 @@ function MobileFilterSheet({
           </FilterGroup>
           <FilterGroup label="Category">
             {CATEGORY_OPTIONS.map(option => (
-              <FilterChoice key={option.value} active={draftCategory === option.value} label={option.label} onClick={() => {
-                setDraftCategory(option.value);
-                if (!['all', 'watches'].includes(option.value)) setDraftIntent('');
-              }} />
+              <FilterChoice key={option.value} active={draftCategory === option.value} label={option.label} onClick={() => setDraftCategory(option.value)} />
             ))}
           </FilterGroup>
           <FilterGroup label="Availability">
-            <FilterCheck checked={draftImagesOnly} label="Source image only" onChange={() => setDraftImagesOnly(value => !value)} />
+            <FilterCheck checked={draftImagesOnly} label="Only with images" onChange={() => setDraftImagesOnly(value => !value)} />
             <FilterCheck checked={draftPricedOnly} label="Price supplied" onChange={() => setDraftPricedOnly(value => !value)} />
           </FilterGroup>
           <FilterGroup label="Intent">
             {INTENT_OPTIONS.map(option => (
-              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
+              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} onClick={() => setDraftIntent(option.value)} />
             ))}
           </FilterGroup>
           <FilterGroup label="Location">
@@ -751,7 +743,7 @@ function MobileFilterSheet({
             </select>
           </FilterGroup>
           {!['all', 'watches'].includes(draftCategory) && (
-            <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
+            <p className="text-xs leading-5" style={{ color: MUTED }}>Category and WTS/WTB intent come from preserved source evidence and the reviewed posting workflow.</p>
           )}
         </div>
 
@@ -1272,20 +1264,22 @@ function getListingMeta(listing: ListingRecord) {
   
   const priceLabel = verifiedUsd !== null
     ? (verifiedPlausible ? formatUsdPrice(verifiedUsd) : 'Price under review')
-    : reviewedWorkbookUsd !== null
-      ? (workbookPlausible ? formatUsdPrice(reviewedWorkbookUsd) : 'Price under review')
-      : workbookPriceNeedsReview
-        ? 'Price requires review'
-        : sourcePrice || 'Price not supplied';
+    : sourcePrice
+      ? sourcePrice
+      : reviewedWorkbookUsd !== null
+        ? (workbookPlausible ? formatUsdPrice(reviewedWorkbookUsd) : 'Price under review')
+        : workbookPriceNeedsReview
+          ? 'Price requires review'
+          : 'Price not supplied';
 
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'
-    : reviewedWorkbookUsd !== null
-      ? 'Workbook-reviewed USD - not in averages'
-      : workbookPriceNeedsReview
-        ? 'Workbook price anomaly - held for review'
-        : sourcePrice
-          ? 'Original source price · no USD conversion'
+    : sourcePrice
+      ? 'Original source price · no verified USD conversion'
+      : reviewedWorkbookUsd !== null
+        ? 'Workbook-reviewed USD - not in averages'
+        : workbookPriceNeedsReview
+          ? 'Workbook price anomaly - held for review'
           : 'Price not supplied';
   const title = buildListingTitle(listing);
 
@@ -1350,10 +1344,11 @@ function formatSourcePrice(listing: ListingRecord) {
   if (sourceText && currency) {
     return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (sourceText) return sourceText;
+  if (sourceText) return `${sourceText} · currency not supplied`;
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
-  if (!currency || !Number.isFinite(amount) || amount <= 0) return '';
+  if (!Number.isFinite(amount) || amount <= 0) return '';
+  if (!currency) return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)} · currency not supplied`;
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 
