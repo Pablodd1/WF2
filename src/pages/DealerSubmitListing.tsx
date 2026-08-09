@@ -167,16 +167,16 @@ export default function DealerSubmitListing() {
         body: JSON.stringify({ poster_image_url: posterImageUrl, submission_mode: mode, items: normalizedItems }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Unable to publish listing.');
+      if (!response.ok) throw new Error(result.error || 'Unable to queue listing for review.');
       const count = Number(result.count || normalizedItems.length);
       setMessage(mode === 'bundle'
         ? `${t('Bundle received intact and moved to the deferred bundle lane.')} Batch ${String(result.bulk_submission_id || '').slice(0, 8)}.`
-        : `${count} ${count === 1 ? t('item is') : t('items are')} ${t('normalized and published to the Trading Floor.')} Batch ${String(result.bulk_submission_id || '').slice(0, 8)}.`);
+        : `${count} ${count === 1 ? t('item is') : t('items are')} ${t('secured in the review pipeline. Approved items publish to the Trading Floor.')} Batch ${String(result.bulk_submission_id || '').slice(0, 8)}.`);
       setItems(mode === 'multiple' ? [createDraft(), createDraft()] : [createDraft(mode === 'bundle' ? { is_bundle: true } : {})]);
       setPosterPhoto(null);
       setSubmissions(current => [...(result.submissions || []), ...current]);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to publish listing.');
+      setError(caught instanceof Error ? caught.message : 'Unable to queue listing for review.');
     } finally { setSaving(false); }
   }
 
@@ -196,7 +196,7 @@ export default function DealerSubmitListing() {
         {postingMode === 'watchfacts' ? (
           <section className="grid gap-10 py-9 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{t('Direct normalized posting')}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{t('Reviewed normalized posting')}</p>
               <h1 className="mt-3 font-serif text-4xl sm:text-5xl">{t('Photograph it. Describe it. Post it.')}</h1>
               <p className="mt-4 max-w-3xl text-sm leading-7 text-white/55">{t('Required identity and source fields keep each item organized. Price remains optional; when omitted, the Trading Floor displays “Price not supplied.”')}</p>
 
@@ -264,15 +264,15 @@ export default function DealerSubmitListing() {
                 {error && <p role="alert" className="border-l-2 border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
                 {message && <p role="status" className="flex items-center gap-2 border-l-2 border-emerald-400 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100"><CheckCircle2 size={15} /> {message}</p>}
                 <div className="sticky bottom-3 border border-white/15 bg-[#0d0d13]/95 p-3 shadow-2xl backdrop-blur">
-                  <div className="mb-2 flex items-center justify-between text-[11px] text-white/45"><span>{readyItems}/{items.length} {t('ready')} · {totalPhotos} {t('item photos')}</span><span>{t(mode === 'bundle' ? 'Deferred bundle lane' : 'Trading Floor publication')}</span></div>
-                  <button disabled={saving || !poster || Boolean(credentialError) || readyItems !== items.length} className="flex h-12 w-full items-center justify-center gap-2 bg-[#c9a96e] text-sm font-semibold text-[#09090d] disabled:opacity-60"><Send size={16} /> {saving ? `Uploading ${totalPhotos + Number(Boolean(posterPhoto))} photos and publishing...` : mode === 'bundle' ? 'Submit intact bundle for later separation' : `Normalize and publish ${items.length === 1 ? 'item' : `${items.length} separate items`}`}</button>
+                  <div className="mb-2 flex items-center justify-between text-[11px] text-white/45"><span>{readyItems}/{items.length} {t('ready')} · {totalPhotos} {t('item photos')}</span><span>{t(mode === 'bundle' ? 'Deferred bundle lane' : 'Pipeline review')}</span></div>
+                  <button disabled={saving || !poster || Boolean(credentialError) || readyItems !== items.length} className="flex h-12 w-full items-center justify-center gap-2 bg-[#c9a96e] text-sm font-semibold text-[#09090d] disabled:opacity-60"><Send size={16} /> {saving ? `Uploading ${totalPhotos + Number(Boolean(posterPhoto))} photos and securing evidence...` : mode === 'bundle' ? 'Submit intact bundle for later separation' : `Submit ${items.length === 1 ? 'item' : `${items.length} separate items`} for review`}</button>
                 </div>
               </form>
             </div>
 
             <aside>
               <h2 className="text-lg font-semibold">{t('Your recent posts')}</h2>
-              <p className="mt-2 text-xs leading-5 text-white/40">{t('Published items remain available for later human quality review.')}</p>
+              <p className="mt-2 text-xs leading-5 text-white/40">{t('Every post keeps its batch receipt and review status. Publication occurs only after approval.')}</p>
               <div className="mt-4 divide-y divide-white/10 border-y border-white/10">
                 {submissions.length === 0 && <p className="py-5 text-sm text-white/40">{t('No posts yet.')}</p>}
                 {submissions.map(item => (

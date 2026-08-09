@@ -252,6 +252,7 @@ function mapDealerSubmission(row) {
 }
 
 function directSubmissionMatches(record, filters) {
+  if (filters.itemCategory && filters.itemCategory !== 'ALL' && record.item_category !== filters.itemCategory) return false;
   if (filters.imagesOnly && !record.has_images) return false;
   if (filters.pricedOnly && record.price_raw == null) return false;
   if (filters.listingType && record.listing_type !== filters.listingType) return false;
@@ -259,6 +260,10 @@ function directSubmissionMatches(record, filters) {
   if (filters.reference && record.reference_search_key !== filters.reference) return false;
   if (filters.dial && record.dial_color?.toLowerCase() !== filters.dial.toLowerCase()) return false;
   if (filters.condition && record.condition?.toLowerCase() !== filters.condition.toLowerCase()) return false;
+  if (filters.region) {
+    const location = String(record.location || '').trim().toLowerCase();
+    if (location !== filters.region.toLowerCase()) return false;
+  }
   if (filters.search) {
     const haystack = [record.brand, record.model, record.reference, record.dial_color, record.seller_name, record.raw_message]
       .filter(Boolean).join(' ').toLowerCase();
@@ -467,6 +472,10 @@ module.exports = async function handler(req, res) {
     const pricedOnly = String(req.query?.priced || '').toLowerCase() === 'true';
     const listingType = cleanExactText(req.query?.type, 12).toUpperCase();
     const condition = cleanExactText(req.query?.condition, 80);
+    const requestedItem = cleanExactText(req.query?.item, 20).toLowerCase();
+    const itemCategories = { all: 'ALL', watches: 'WATCH', handbags: 'HANDBAG', jewelry: 'JEWELRY', accessories: 'ACCESSORY', other: 'OTHER' };
+    const itemCategory = requestedItem ? itemCategories[requestedItem] : 'ALL';
+    const region = cleanExactText(req.query?.region, 100);
 
     if (listingType && !['WTS', 'WTB', 'OTHER'].includes(listingType)) {
       return res.status(400).json({ status: 'error', error: 'Invalid listing type' });
@@ -550,6 +559,7 @@ module.exports = async function handler(req, res) {
         `raw_message.ilike.${pattern}`,
       ].join(','));
     }
+    if (!itemCategory) return res.status(400).json({ status: 'error', error: 'Invalid item category' });
     // ponytail: simplified query — ORDER BY with offset times out on large views
     queryParams.set('order', 'has_exact_source_image.desc.nullslast,id.desc');
     queryParams.set('limit', String(pageSize + 1));
@@ -573,19 +583,22 @@ module.exports = async function handler(req, res) {
     const pageResult = boundedPage(rows, pageSize, scopedFilter);
     let records = pageResult.records
       .map(mapReviewedRecord)
-      .filter(record => isApprovedInventoryRecord(record) && !record.multi_listing);
+      .filter(record => isApprovedInventoryRecord(record) && !record.multi_listing)
+      .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
     if (page === 1) {
-      const { data: directRows, error: directError } = await client.from('dealer_listing_submissions')
+      let directQuery = client.from('dealer_listing_submissions')
         .select('id,intent,category,raw_message,claimed_fields,image_urls,poster_image_url,review_status,publication_status,created_at')
         .eq('publication_status', 'PUBLISHED')
         .eq('review_status', 'APPROVED')
         .order('created_at', { ascending: false })
         .limit(100);
+      if (itemCategory !== 'ALL') directQuery = directQuery.eq('category', itemCategory);
+      const { data: directRows, error: directError } = await directQuery;
       if (!directError) {
         const directRecords = (directRows || [])
           .map(mapDealerSubmission)
           .filter(record => !record.multi_listing && directSubmissionMatches(record, {
-            imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search,
+            imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search, itemCategory, region,
           }));
         records = [...directRecords, ...records]
           .sort((left, right) => Number(right.has_images) - Number(left.has_images))

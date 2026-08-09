@@ -487,11 +487,12 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.doesNotMatch(floor, /label: 'Bulk listings'/);
   assert.doesNotMatch(floor, /label: 'Trade'/);
   assert.match(floor, /Want to buy/);
-  assert.match(floor, /const endpoint = usesReviewedWatchInventory \? '\/api\/reviewed-market-inventory' : '\/api\/ingest'/);
+  assert.match(floor, /const endpoint = '\/api\/reviewed-market-inventory'/);
   assert.match(floor, /fetch\(`\$\{endpoint\}\?\$\{params\.toString\(\)\}`/);
   assert.doesNotMatch(floor, /InventoryScope|Full archive/);
   assert.match(floor, /const categoryFilter = CATEGORY_OPTIONS\.some/);
-  assert.match(floor, /const intentFilter = \['all', 'watches'\]\.includes\(categoryFilter\)/);
+  assert.match(floor, /const intentFilter = INTENT_OPTIONS\.some/);
+  assert.match(floor, /params\.set\('item', categoryFilter\)/);
   assert.match(floor, /MobileFilterSheet/);
   assert.match(floor, /Filter inventory/);
   assert.match(floor, /View results/);

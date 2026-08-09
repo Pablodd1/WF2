@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import { verifyImageReference, type VerifyImageResult } from '@/lib/verifyImage';
+import { DealerSubmissionReviewLane } from '@/components/DealerSubmissionReviewLane';
 import {
   CheckCircle2, AlertTriangle, Eye,
   Search, Clock, MessageSquare, Shield, Database, RefreshCw, KeyRound,
@@ -1653,7 +1654,7 @@ function SellerLineageReviewLane() {
 }
 
 export default function ReviewQueue() {
-  const [lane, setLane] = useState<'identity' | 'shadow' | 'unbundled' | 'duplicates' | 'price' | 'packets' | 'images' | 'sellers'>('identity');
+  const [lane, setLane] = useState<'dealer-posts' | 'identity' | 'shadow' | 'unbundled' | 'duplicates' | 'price' | 'packets' | 'images' | 'sellers'>('dealer-posts');
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [reasonFilter, setReasonFilter] = useState('');
@@ -1858,7 +1859,7 @@ export default function ReviewQueue() {
         });
       return () => { active = false; };
     }
-    if (lane === 'identity' || lane === 'images' || lane === 'sellers' || lane === 'packets') {
+    if (lane === 'dealer-posts' || lane === 'identity' || lane === 'images' || lane === 'sellers' || lane === 'packets') {
       setItems([]);
       return () => { active = false; };
     }
@@ -2140,7 +2141,7 @@ export default function ReviewQueue() {
     }
   };
 
-  const dedicatedLane = lane === 'identity' || lane === 'packets' || lane === 'images' || lane === 'sellers';
+  const dedicatedLane = lane === 'dealer-posts' || lane === 'identity' || lane === 'packets' || lane === 'images' || lane === 'sellers';
 
   return (
     <Layout>
@@ -2172,6 +2173,12 @@ export default function ReviewQueue() {
         </div>
 
         <div className="mb-6 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => { setLane('dealer-posts'); setSelected(null); }}
+            className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'dealer-posts' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
+          >
+            Post an Item
+          </button>
           <button
             onClick={() => { setLane('identity'); setSelected(null); }}
             className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'identity' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
@@ -2225,6 +2232,7 @@ export default function ReviewQueue() {
           )}
         </div>
 
+        {lane === 'dealer-posts' && <DealerSubmissionReviewLane />}
         {lane === 'identity' && <IdentityReviewLane />}
         {lane === 'packets' && (
           <PacketReviewLane openUnbundled={() => { setLane('unbundled'); setSelected(null); }} />

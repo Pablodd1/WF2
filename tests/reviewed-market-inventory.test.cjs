@@ -23,6 +23,16 @@ test('authenticated form submissions map into the Trading Floor contract', () =>
   assert.equal(record.seller_group_count, 3);
   assert.equal(record.location, 'Miami');
 });
+
+test('reviewed direct submissions support category, intent, image, price, and location filters together', () => {
+  const record = api.mapDealerSubmission({
+    id: 'bag-1', intent: 'WTS', category: 'HANDBAG', raw_message: 'WTS Birkin 30 USD 25000',
+    claimed_fields: { title: 'Birkin 30', price_amount: 25000, currency: 'USD', location: 'Miami, US', poster_name: 'Dealer' },
+    image_urls: ['https://example.com/bag.jpg'], review_status: 'APPROVED', publication_status: 'PUBLISHED', created_at: '2026-08-09T12:00:00Z',
+  });
+  assert.equal(api.directSubmissionMatches(record, { itemCategory: 'HANDBAG', listingType: 'WTS', imagesOnly: true, pricedOnly: true, region: 'Miami, US' }), true);
+  assert.equal(api.directSubmissionMatches(record, { itemCategory: 'JEWELRY' }), false);
+});
 const source = fs.readFileSync(
   path.join(__dirname, '../api/reviewed-market-inventory.js'),
   'utf8',
