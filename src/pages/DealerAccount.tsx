@@ -1,7 +1,8 @@
 import { CreditCard, FileText, HelpCircle, Settings, Store, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { Footer } from '@/components/Footer';
+import { demoDealerLabels, getDemoDealerWorkflow } from '@/data/demoDealerWorkflows';
 
 type Section = 'profile' | 'listings' | 'settings' | 'billing' | 'help';
 interface WorkspacePayload {
@@ -22,18 +23,35 @@ const tabs = [
 
 export default function DealerAccount() {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const demoUser = searchParams.get('demoUser');
+  const demoQuery = demoUser ? `?demoUser=${encodeURIComponent(demoUser)}` : '';
   const section = (location.pathname.split('/').at(-1) || 'profile') as Section;
   const [data, setData] = useState<WorkspacePayload | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const reload = () => fetch('/api/dealer-workspace', { credentials: 'include' })
+  const reload = () => {
+    const demo = getDemoDealerWorkflow(demoUser);
+    if (demo) {
+      setData(demo);
+      setError('');
+      return Promise.resolve();
+    }
+    return fetch('/api/dealer-workspace', { credentials: 'include' })
     .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Unable to load workspace'); return body; })
     .then(setData).catch(caught => setError(caught.message));
-  useEffect(() => { void reload(); }, []);
+  };
+  useEffect(() => { void reload(); }, [demoUser]);
 
   async function update(sectionName: string, payload: Record<string, unknown>) {
     setError(''); setNotice('');
+    if (demoUser && getDemoDealerWorkflow(demoUser)) {
+      setNotice('Synthetic preview updated locally. No production data was changed.');
+      if (sectionName === 'preferences') setData(current => current ? { ...current, preferences: { display_currency: String(payload.display_currency || 'USD'), email_notifications: payload.email_notifications !== false } } : current);
+      if (sectionName === 'ticket') setData(current => current ? { ...current, tickets: [{ id: `demo-ticket-${Date.now()}`, subject: String(payload.subject || 'Demo ticket'), status: 'OPEN', created_at: new Date().toISOString() }, ...current.tickets] } : current);
+      return true;
+    }
     const response = await fetch('/api/dealer-workspace', {
       method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ section: sectionName, ...payload }),
@@ -52,12 +70,13 @@ export default function DealerAccount() {
       </header>
       <div className="mx-auto grid max-w-6xl gap-8 px-5 py-7 sm:px-8 lg:grid-cols-[210px_minmax(0,1fr)]">
         <nav aria-label="Account sections" className="flex gap-2 overflow-x-auto lg:flex-col">
-          {tabs.map(([value, label, Icon]) => <Link key={value} to={`/dealer/account/${value}`} className={`flex h-11 shrink-0 items-center gap-2 border px-3 text-sm ${section === value ? 'border-[#c9a96e] bg-[#c9a96e] text-black' : 'border-white/12 text-white/60'}`}><Icon size={16} /> {label}</Link>)}
+          {tabs.map(([value, label, Icon]) => <Link key={value} to={`/dealer/account/${value}${demoQuery}`} className={`flex h-11 shrink-0 items-center gap-2 border px-3 text-sm ${section === value ? 'border-[#c9a96e] bg-[#c9a96e] text-black' : 'border-white/12 text-white/60'}`}><Icon size={16} /> {label}</Link>)}
         </nav>
         <section className="min-w-0">
+          {demoUser && getDemoDealerWorkflow(demoUser) && <DemoWorkflowSwitcher active={demoUser} section={section} />}
           {error && <p role="alert" className="mb-5 border-l-2 border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
           {notice && <p role="status" className="mb-5 border-l-2 border-emerald-400 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100">{notice}</p>}
-          {!data ? <p className="text-sm text-white/40">Loading workspace...</p> : <AccountSection section={section} data={data} update={update} />}
+          {!data ? <p className="text-sm text-white/40">Loading workspace...</p> : <AccountSection section={section} data={data} update={update} demoUser={demoUser} />}
         </section>
       </div>
       <Footer />
@@ -65,15 +84,15 @@ export default function DealerAccount() {
   );
 }
 
-function AccountSection({ section, data, update }: { section: Section; data: WorkspacePayload; update: (section: string, payload: Record<string, unknown>) => Promise<boolean> }) {
-  if (section === 'profile') return <Profile data={data} update={update} />;
-  if (section === 'listings') return <Listings data={data} />;
+function AccountSection({ section, data, update, demoUser }: { section: Section; data: WorkspacePayload; update: (section: string, payload: Record<string, unknown>) => Promise<boolean>; demoUser: string | null }) {
+  if (section === 'profile') return <Profile data={data} update={update} demoUser={demoUser} />;
+  if (section === 'listings') return <Listings data={data} demoUser={demoUser} />;
   if (section === 'settings') return <Preferences data={data} update={update} />;
   if (section === 'billing') return <Billing />;
   return <Help data={data} update={update} />;
 }
 
-function Profile({ data, update }: { data: WorkspacePayload; update: AccountProps['update'] }) {
+function Profile({ data, update, demoUser }: { data: WorkspacePayload; update: AccountProps['update']; demoUser: string | null }) {
   const dealer = data.dealer;
   if (!dealer) return <Empty title="Profile awaiting linkage" copy="Your credential is active, but it is not yet linked to a verified dealer identity. WatchFacts must complete that match before profile edits or contact publication." />;
   const onboarding = [
@@ -95,7 +114,7 @@ function Profile({ data, update }: { data: WorkspacePayload; update: AccountProp
       </div>
     </section>
     <section className="mb-7 border border-white/12 bg-[#111118] p-5" aria-label="Dealer onboarding progress">
-      <div className="flex items-center justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c9a96e]">Dealer onboarding</p><h2 className="mt-2 text-xl font-semibold">{completed}/{onboarding.length} posting requirements complete</h2></div><Link to="/dealer/post" className="text-xs font-semibold text-[#c9a96e]">Post an item</Link></div>
+      <div className="flex items-center justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c9a96e]">Dealer onboarding</p><h2 className="mt-2 text-xl font-semibold">{completed}/{onboarding.length} posting requirements complete</h2></div><Link to={`/dealer/post${demoUser ? `?demoUser=${encodeURIComponent(demoUser)}` : ''}`} className="text-xs font-semibold text-[#c9a96e]">Post an item</Link></div>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">{onboarding.map(([label, ready]) => <div key={label} className={`border px-3 py-2 text-xs ${ready ? 'border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-100' : 'border-amber-300/25 bg-amber-300/[0.07] text-amber-100'}`}>{ready ? 'Complete' : 'Required'} · {label}</div>)}</div>
     </section>
     <div className="mb-7 grid gap-px bg-white/10 sm:grid-cols-2 lg:grid-cols-4">
@@ -113,7 +132,7 @@ function Profile({ data, update }: { data: WorkspacePayload; update: AccountProp
 }
 
 type AccountProps = { update: (section: string, payload: Record<string, unknown>) => Promise<boolean> };
-function Listings({ data }: { data: WorkspacePayload }) {
+function Listings({ data, demoUser }: { data: WorkspacePayload; demoUser: string | null }) {
   const batches = Object.entries(data.submissions.reduce<Record<string, typeof data.submissions>>((groups, item) => {
     const key = item.bulk_submission_id || `legacy-${item.id}`;
     (groups[key] ||= []).push(item);
@@ -121,7 +140,7 @@ function Listings({ data }: { data: WorkspacePayload }) {
   }, {}));
   return <><Heading title="My listings" copy="Verified historical activity and new moderated submissions remain separate until review is complete." />
     <div className="grid gap-px bg-white/10 sm:grid-cols-4"><Metric label="Active" value={data.stats?.active_listings || 0} /><Metric label="For sale" value={data.stats?.wts_posts || 0} /><Metric label="Looking for" value={data.stats?.wtb_posts || 0} /><Metric label="Years active" value={data.stats?.posting_years || 0} /></div>
-    <div className="mt-8 flex items-center justify-between"><h2 className="text-lg font-semibold">Moderated submissions</h2><Link to="/dealer/post" className="text-xs font-semibold text-[#c9a96e]">Post new</Link></div>
+    <div className="mt-8 flex items-center justify-between"><h2 className="text-lg font-semibold">Moderated submissions</h2><Link to={`/dealer/post${demoUser ? `?demoUser=${encodeURIComponent(demoUser)}` : ''}`} className="text-xs font-semibold text-[#c9a96e]">Post new</Link></div>
     <div className="mt-3 divide-y divide-white/10 border-y border-white/10">{batches.length ? batches.map(([batchId, items]) => <section key={batchId} className="py-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-wider text-[#c9a96e]">Batch {batchId.startsWith('legacy-') ? 'legacy' : batchId.slice(0, 8)}</p><p className="mt-1 text-sm font-semibold">{items.length} {items.length === 1 ? 'item' : 'items'}</p></div><span className="text-xs text-white/45">{items.every(item => item.publication_status === 'PUBLISHED') ? 'Published' : items.some(item => ['QUEUE_FAILED', 'PUBLICATION_FAILED'].includes(item.publication_status || '')) ? 'Needs attention' : items.every(item => item.publication_status === 'REJECTED') ? 'Rejected' : 'In review'}</span></div><div className="mt-3 flex flex-wrap gap-2">{items.map(item => <span key={item.id} className="border border-white/10 px-2 py-1 text-[11px] text-white/55">{item.intent} / {item.category} · {item.review_status.replaceAll('_', ' ')}</span>)}</div></section>) : <p className="py-5 text-sm text-white/40">No submissions yet.</p>}</div>
   </>;
 }
@@ -149,3 +168,10 @@ function Input({ name, label, defaultValue, required = false, maxLength = 200 }:
 function Metric({ label, value }: { label: string; value: number }) { return <div className="bg-[#111118] p-4"><strong className="font-mono text-2xl">{Number(value).toLocaleString()}</strong><p className="mt-1 text-[10px] uppercase tracking-wider text-white/35">{label}</p></div>; }
 function ProfileFact({ label, value }: { label: string; value?: string | null }) { return <div className="bg-[#111118] p-4"><div className="break-words text-sm text-white">{value || 'Not provided'}</div><p className="mt-2 text-[10px] uppercase tracking-wider text-white/35">{label}</p></div>; }
 function Empty({ title, copy }: { title: string; copy: string }) { return <div className="border-l-2 border-[#c9a96e] bg-[#111118] px-5 py-4"><h2 className="font-semibold">{title}</h2><p className="mt-2 text-sm leading-6 text-white/50">{copy}</p></div>; }
+
+function DemoWorkflowSwitcher({ active, section }: { active: string; section: Section }) {
+  return <aside className="mb-6 border border-amber-300/30 bg-amber-300/[0.08] p-4" aria-label="Synthetic workflow profiles">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">Synthetic visual workflow</p><p className="mt-1 text-xs text-white/55">No authentication account, production row, or market analytic is created.</p></div><Link to={`/dealer/account/${section}`} className="text-xs text-white/55 underline underline-offset-4">Exit demo</Link></div>
+    <div className="mt-3 flex flex-wrap gap-2">{Object.entries(demoDealerLabels).map(([id, label]) => <Link key={id} to={`/dealer/account/${section}?demoUser=${id}`} className={`border px-3 py-2 text-xs ${active === id ? 'border-[#c9a96e] bg-[#c9a96e] text-black' : 'border-white/15 text-white/65'}`}>{label}</Link>)}</div>
+  </aside>;
+}

@@ -1,10 +1,11 @@
 import { ArrowLeft, Camera, CheckCircle2, CopyPlus, ExternalLink, ImagePlus, Layers3, Plus, Send, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Footer } from '@/components/Footer';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { demoDealerLabels, getDemoDealerWorkflow, getDemoPoster } from '@/data/demoDealerWorkflows';
 
 const CATEGORIES = [
   ['WATCH', 'Watch'], ['HANDBAG', 'Handbag'], ['JEWELRY', 'Jewelry'],
@@ -82,6 +83,9 @@ async function uploadImage(file: File, kind: 'listing' | 'poster') {
 
 export default function DealerSubmitListing() {
   const { t } = useLanguage();
+  const [searchParams] = useSearchParams();
+  const demoUser = searchParams.get('demoUser');
+  const demoPoster = getDemoPoster(demoUser);
   const [postingMode, setPostingMode] = useState<'watchfacts' | 'luxury-app'>('watchfacts');
   const [mode, setMode] = useState<Mode>('single');
   const [items, setItems] = useState<DraftItem[]>([createDraft()]);
@@ -102,6 +106,13 @@ export default function DealerSubmitListing() {
   }).length, [items]);
 
   useEffect(() => {
+    if (demoPoster) {
+      const workflow = getDemoDealerWorkflow(demoUser);
+      setPoster(demoPoster);
+      setCredentialError('');
+      setSubmissions((workflow?.submissions || []) as Submission[]);
+      return;
+    }
     fetch('/api/dealer-submissions', { credentials: 'include' })
       .then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load submissions')))
       .then(payload => {
@@ -110,7 +121,7 @@ export default function DealerSubmitListing() {
         setCredentialError(payload.credential_error || '');
       })
       .catch(() => undefined);
-  }, []);
+  }, [demoUser]);
 
   function updateItem(key: string, patch: Partial<DraftItem>) {
     setItems(current => current.map(item => item.key === key ? { ...item, ...patch } : item));
@@ -150,6 +161,19 @@ export default function DealerSubmitListing() {
     event.preventDefault();
     setSaving(true); setError(''); setMessage('');
     try {
+      if (demoPoster) {
+        const batchId = `demo-${Date.now().toString(36)}`;
+        const demoSubmissions = items.map((item, index) => ({
+          id: `${batchId}-${index + 1}`, bulk_submission_id: batchId, intent: item.intent,
+          category: item.category, claimed_fields: { brand: item.brand, model: item.model, reference: item.reference, title: item.title },
+          review_status: 'PENDING_REVIEW', publication_status: 'QUEUED', created_at: new Date().toISOString(),
+        }));
+        setSubmissions(current => [...demoSubmissions, ...current]);
+        setMessage(`${demoSubmissions.length} synthetic ${demoSubmissions.length === 1 ? 'item was' : 'items were'} queued locally for visual review. No upload, database write, or market analytic was created.`);
+        setItems(mode === 'multiple' ? [createDraft(), createDraft()] : [createDraft(mode === 'bundle' ? { is_bundle: true } : {})]);
+        setPosterPhoto(null);
+        return;
+      }
       const posterImageUrl = posterPhoto ? await uploadImage(posterPhoto, 'poster') : null;
       const normalizedItems = [];
       for (const item of items) {
@@ -192,6 +216,11 @@ export default function DealerSubmitListing() {
           <Choice active={postingMode === 'watchfacts'} onClick={() => setPostingMode('watchfacts')}>{t('WatchFacts form')}</Choice>
           <Choice active={postingMode === 'luxury-app'} onClick={() => setPostingMode('luxury-app')}>Luxury App</Choice>
         </nav>
+
+        {demoPoster && <aside className="mt-5 border border-amber-300/30 bg-amber-300/[0.08] p-4" aria-label="Synthetic posting workflow">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">Synthetic posting workflow</p><p className="mt-1 text-xs text-white/55">Uploads and submissions remain in this browser and never enter production or Price Research.</p></div><Link to={`/dealer/account/profile?demoUser=${encodeURIComponent(demoUser || '')}`} className="text-xs text-[#f4d99c] underline underline-offset-4">View full demo account</Link></div>
+          <div className="mt-3 flex flex-wrap gap-2">{Object.entries(demoDealerLabels).map(([id, label]) => <Link key={id} to={`/dealer/post?demoUser=${id}`} className={`border px-3 py-2 text-xs ${demoUser === id ? 'border-[#c9a96e] bg-[#c9a96e] text-black' : 'border-white/15 text-white/65'}`}>{label}</Link>)}</div>
+        </aside>}
 
         {postingMode === 'watchfacts' ? (
           <section className="grid gap-10 py-9 xl:grid-cols-[minmax(0,1fr)_320px]">

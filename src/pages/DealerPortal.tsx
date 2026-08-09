@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight, Globe2, MessageCircle, PlusCircle, Search, Shiel
 import { Link } from 'react-router-dom';
 import { COMMUNITY_GROUPS, CONTACT_WHATSAPP_URL } from '@/components/Footer';
 import { LUXFI_URL } from '@/components/MarketHeader';
+import { demoDealerLabels } from '@/data/demoDealerWorkflows';
 
 const portalLinks = [
   {
@@ -82,6 +83,11 @@ export default function DealerPortal() {
               : <Link key={to} to={to} className={className}>{content}</Link>;
           })}
 
+        </section>
+
+        <section className="border-y border-amber-300/20 bg-amber-300/[0.05] p-5 sm:p-6" aria-labelledby="demo-workflows-heading">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">Testing and visual review</p>
+          <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><h2 id="demo-workflows-heading" className="text-xl font-semibold">Three synthetic dealer workflows</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">Preview complete demographics, reputation, WTS/WTB activity, non-watch categories, moderated batches, and Post an Item without creating authentication accounts or production data.</p></div><div className="flex flex-wrap gap-2">{Object.entries(demoDealerLabels).map(([id, label]) => <Link key={id} to={`/dealer/account/profile?demoUser=${id}`} className="border border-white/15 px-3 py-2 text-xs text-white/70 hover:border-[#c9a96e] hover:text-[#c9a96e]">{label}</Link>)}</div></div>
         </section>
 
         <section className="border-t border-white/10 py-10" aria-labelledby="community-heading">
