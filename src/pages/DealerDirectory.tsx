@@ -1,4 +1,4 @@
-import { BadgeCheck, Building2, CalendarDays, Search, Star, Trophy, Users } from 'lucide-react';
+import { BadgeCheck, Building2, CalendarDays, ExternalLink, MessageCircle, Search, Star, Trophy, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Footer } from '@/components/Footer';
@@ -28,6 +28,16 @@ interface DealerSummary {
   profile_summary: string | null;
   verified_at: string | null;
   stats: DealerStats | null;
+  source_rank?: number;
+  source_system?: string;
+  verified_phone?: string | null;
+  source_links?: {
+    profile: string | null;
+    reviews: string | null;
+    wts: string | null;
+    wtb: string | null;
+    whatsapp: string | null;
+  };
 }
 
 type DirectoryView = 'reference' | 'top-rated';
@@ -80,7 +90,7 @@ export default function DealerDirectory() {
             </div>
             {view === 'reference' && <label className="relative block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={17} />
-              <input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder="Search dealer, company, or city" className="h-12 w-full border border-white/15 bg-[#111118] pl-10 pr-3 text-sm outline-none focus:border-[#c9a96e]" />
+              <input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder="Search dealer, company, city, or phone" className="h-12 w-full border border-white/15 bg-[#111118] pl-10 pr-3 text-sm outline-none focus:border-[#c9a96e]" />
             </label>}
           </div>
           <div className="mt-7 flex flex-wrap gap-2" role="tablist" aria-label="Dealer directory views">
@@ -102,18 +112,22 @@ export default function DealerDirectory() {
             const stats = dealer.stats;
             const name = dealer.display_name || dealer.company_name || 'Verified dealer';
             return (
-              <Link key={dealer.id} to={`/dealers/${dealer.slug || dealer.id}`} className="group relative min-h-72 bg-[#101016] p-6 transition-colors hover:bg-[#15151d]">
-                {view === 'top-rated' && <span className="absolute right-6 top-6 font-mono text-xl text-[#c9a96e]">#{(page - 1) * pageSize + dealers.indexOf(dealer) + 1}</span>}
+              <article key={dealer.id} className="group relative min-h-72 bg-[#101016] p-6 transition-colors hover:bg-[#15151d]">
+                {view === 'top-rated' && <span className="absolute right-6 top-6 font-mono text-xl text-[#c9a96e]">#{dealer.source_rank || ((page - 1) * pageSize + dealers.indexOf(dealer) + 1)}</span>}
                 <div className="flex items-start justify-between gap-4">
                   <div className="grid h-12 w-12 place-items-center border border-[#c9a96e]/35 bg-[#08080c] text-[#c9a96e]">
                     {dealer.avatar_url ? <img src={dealer.avatar_url} alt="" className="h-full w-full object-cover" /> : <Building2 size={21} />}
                   </div>
                   {view !== 'top-rated' && <BadgeCheck size={19} className="text-[#c9a96e]" aria-label="Verified dealer" />}
                 </div>
-                <h2 className="mt-7 text-xl font-semibold">{name}</h2>
+                <h2 className="mt-7 pr-12 text-xl font-semibold">
+                  {dealer.source_system === 'WATCHFACTS_TOP_RATED_2026_08_08' && dealer.source_links?.profile
+                    ? <a href={dealer.source_links.profile} target="_blank" rel="noreferrer" className="hover:text-[#d4b87a]">{name}</a>
+                    : <Link to={`/dealers/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>}
+                </h2>
                 <p className="mt-1 text-xs text-white/42">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
                 <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/60">
-                  <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? 'Unrated' : Number(dealer.rating).toFixed(2)}</span>
+                  <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? 'Top rated' : Number(dealer.rating).toFixed(2)}</span>
                   <span>{dealer.review_count.toLocaleString()} feedback reviews</span>
                   <span className="flex items-center gap-1"><Users size={13} /> {dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} groups` : 'Groups not published'}</span>
                   <span className="flex items-center gap-1"><CalendarDays size={13} /> {dealer.verified_at ? `Member since ${new Date(dealer.verified_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : 'Member date unavailable'}</span>
@@ -123,7 +137,14 @@ export default function DealerDirectory() {
                   <Metric label="Looking for" value={stats?.wtb_posts || 0} />
                   <Metric label="Groups" value={dealer.whatsapp_group_count || 0} />
                 </div>
-              </Link>
+                <div className="mt-5 flex flex-wrap gap-x-4 gap-y-3 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
+                  {dealer.source_links?.profile && <a href={dealer.source_links.profile} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-white/55 hover:text-[#d4b87a]"><ExternalLink size={12} /> Profile</a>}
+                  {dealer.source_links?.reviews && <a href={dealer.source_links.reviews} target="_blank" rel="noreferrer" className="text-white/55 hover:text-[#d4b87a]">Reviews</a>}
+                  {dealer.source_links?.wts && <a href={dealer.source_links.wts} target="_blank" rel="noreferrer" className="text-white/55 hover:text-[#d4b87a]">WTS</a>}
+                  {dealer.source_links?.wtb && <a href={dealer.source_links.wtb} target="_blank" rel="noreferrer" className="text-white/55 hover:text-[#d4b87a]">WTB</a>}
+                  {dealer.source_links?.whatsapp && <a href={dealer.source_links.whatsapp} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><MessageCircle size={12} /> WhatsApp</a>}
+                </div>
+              </article>
             );
           })}
         </div>
