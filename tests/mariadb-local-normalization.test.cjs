@@ -53,3 +53,29 @@ test('local normalization resumes from durable evidence lines and buffers output
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('local normalization processes an exact non-overlapping source range', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-normalize-range-'));
+  const input = path.join(root, 'raw.jsonl');
+  const output = path.join(root, 'output');
+  try {
+    fs.writeFileSync(input, `${jsonLine(source('1'))}${jsonLine(source('2'))}${jsonLine(source('3'))}`);
+    await run({ env: {
+      MARIADB_NORMALIZE_INPUT: input,
+      MARIADB_NORMALIZE_OUTPUT: output,
+      MARIADB_NORMALIZE_START_ROW: '1',
+      MARIADB_NORMALIZE_MAX_ROWS: '1',
+      MARIADB_NORMALIZE_FLUSH_ROWS: '10',
+    } });
+    const proposals = fs.readFileSync(path.join(output, 'normalization-proposals.jsonl'), 'utf8')
+      .trim().split(/\r?\n/).map(line => JSON.parse(line));
+    const coverage = JSON.parse(fs.readFileSync(path.join(output, 'coverage-report.json'), 'utf8'));
+    assert.equal(proposals.length, 1);
+    assert.equal(proposals[0].source_record_id, 'mysql_auctions_2');
+    assert.equal(coverage.source_start_row, 2);
+    assert.equal(coverage.source_end_row, 2);
+    assert.equal(coverage.input_rows, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
