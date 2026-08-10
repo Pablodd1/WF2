@@ -62,8 +62,7 @@ jobs:
 
           $managementHeaders = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $migrationPaths = @(
-            'supabase/migrations/20260810100000_immutable_mariadb_raw_import.sql',
-            'supabase/migrations/20260810103000_complete_immutable_mariadb_raw_import.sql'
+            'supabase/migrations/20260810104500_self_contained_immutable_mariadb_raw_import.sql'
           )
           foreach ($migrationPath in $migrationPaths) {
             if (-not (Test-Path -LiteralPath $migrationPath)) { throw "Required forward migration is missing: $migrationPath" }
