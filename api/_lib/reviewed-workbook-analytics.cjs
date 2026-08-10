@@ -101,18 +101,6 @@ async function executeAnalyticsQuery(client, columns, { brand, keys, limit }) {
     .limit(Math.min(10000, Math.max(1, Number(limit) || 10000)));
 }
 
-async function executeDemandLaneQuery(client, columns, { brand, keys, limit, hasImage }) {
-  return client
-    .from(MARKET_SOURCE_VIEW)
-    .select(columns)
-    .eq('brand_scope', clean(brand))
-    .in('reference_search_key', keys)
-    .in('listing_type', ['WTB', 'NTQ'])
-    .eq('has_exact_source_image', hasImage)
-    .order('id', { ascending: false })
-    .limit(Math.min(501, Math.max(1, Number(limit) || 101)));
-}
-
 async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys, limit = 10000 }) {
   const keys = [...new Set((referenceKeys || []).map(clean).filter(Boolean))];
   if (!clean(brand) || !keys.length) return [];
@@ -128,45 +116,6 @@ async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys,
 
   if (error) throw error;
   return (data || []).map(mapWorkbookAnalyticsRow);
-}
-
-async function loadReviewedWorkbookDemandRows(client, { brand, referenceKeys, limit = 100 }) {
-  const keys = [...new Set((referenceKeys || []).map(clean).filter(Boolean))];
-  if (!clean(brand) || !keys.length) return [];
-  const boundedLimit = Math.min(500, Math.max(1, Number(limit) || 100));
-
-  let { data: imageData, error } = await executeDemandLaneQuery(client, WORKBOOK_COLUMNS, {
-    brand, keys, limit: boundedLimit + 1, hasImage: true,
-  });
-  if (error && isMissingColumnError(error)) {
-    ({ data: imageData, error } = await executeDemandLaneQuery(client, LEGACY_WORKBOOK_COLUMNS, {
-      brand, keys, limit: boundedLimit + 1, hasImage: true,
-    }));
-  }
-  if (error) throw error;
-
-  const imageRows = imageData || [];
-  let combinedRows = imageRows.slice(0, boundedLimit);
-  let sampleCapped = imageRows.length > boundedLimit;
-  if (!sampleCapped && combinedRows.length < boundedLimit) {
-    const remaining = boundedLimit - combinedRows.length;
-    let noImageResult = await executeDemandLaneQuery(client, WORKBOOK_COLUMNS, {
-      brand, keys, limit: remaining + 1, hasImage: false,
-    });
-    if (noImageResult.error && isMissingColumnError(noImageResult.error)) {
-      noImageResult = await executeDemandLaneQuery(client, LEGACY_WORKBOOK_COLUMNS, {
-        brand, keys, limit: remaining + 1, hasImage: false,
-      });
-    }
-    if (noImageResult.error) throw noImageResult.error;
-    const noImageRows = noImageResult.data || [];
-    sampleCapped = noImageRows.length > remaining;
-    combinedRows = combinedRows.concat(noImageRows.slice(0, remaining));
-  }
-
-  const mappedRows = combinedRows.map(mapWorkbookAnalyticsRow);
-  mappedRows.sampleCapped = sampleCapped;
-  return mappedRows;
 }
 
 async function loadReviewedWorkbookListing(client, id) {
@@ -192,7 +141,6 @@ module.exports = {
   LEGACY_WORKBOOK_COLUMNS,
   isMissingColumnError,
   loadReviewedWorkbookAnalyticsRows,
-  loadReviewedWorkbookDemandRows,
   loadReviewedWorkbookListing,
   mapWorkbookAnalyticsRow,
 };

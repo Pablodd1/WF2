@@ -22,10 +22,7 @@ const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
-const {
-  loadReviewedWorkbookAnalyticsRows,
-  loadReviewedWorkbookDemandRows,
-} = require('./_lib/reviewed-workbook-analytics.cjs');
+const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -311,24 +308,17 @@ module.exports = async function handler(req, res) {
   // even when an older deployment allowlist has not yet been expanded.
   const client = getClient();
   const preloadReferenceKeys = listEquivalentReferences(rawRef, brand).map(normRef);
-  const preloadResults = await Promise.allSettled([
-    loadReviewedWorkbookAnalyticsRows(client, {
+  let preloadedReviewedWorkbookRows = [];
+  try {
+    preloadedReviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
       brand,
       referenceKeys: preloadReferenceKeys,
       limit: 10000,
-    }),
-    loadReviewedWorkbookDemandRows(client, {
-      brand,
-      referenceKeys: preloadReferenceKeys,
-      limit: 100,
-    }),
-  ]);
-  const preloadedReviewedWorkbookRows = preloadResults[0].status === 'fulfilled'
-    ? preloadResults[0].value
-    : [];
-  const preloadedReviewedWorkbookDemandRows = preloadResults[1].status === 'fulfilled'
-    ? preloadResults[1].value
-    : null;
+    });
+  } catch {
+    // The legacy release gates below remain fail-closed when the reviewed view
+    // is temporarily unavailable.
+  }
   const exactReviewedWorkbookRelease = preloadedReviewedWorkbookRows.length > 0;
   if (!exactReviewedWorkbookRelease && !isPublicationBrandAllowed(brand)) {
     return res.status(404).json({ error: 'Brand is not included in this release' });
@@ -810,7 +800,7 @@ module.exports = async function handler(req, res) {
       referenceVariants,
       catalogHit,
       selection,
-      preloadedReviewedWorkbookDemandRows,
+      null,
     );
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 

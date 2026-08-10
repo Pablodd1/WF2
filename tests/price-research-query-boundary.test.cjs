@@ -20,11 +20,11 @@ test('high-volume Price Research uses one bounded strict-source query', () => {
   assert.doesNotMatch(source, /buildRowsQuery\(from, from \+ pageSize - 1\)/);
 });
 
-test('legacy fallback remains bounded and WTB demand is loaded independently', () => {
+test('legacy fallback remains bounded and WTB demand avoids the unindexed workbook lane', () => {
   assert.match(source, /sourceTable = 'watch_records';\s*result = await buildRowsQuery\(sourceTable\)/);
-  assert.match(source, /loadReviewedWorkbookDemandRows/);
-  assert.match(source, /Promise\.allSettled/);
   assert.match(source, /lookupDemand\(\s*client,\s*'watch_records'/);
-  assert.match(source, /selection,\s*preloadedReviewedWorkbookDemandRows,\s*\)/);
+  assert.match(source, /selection,\s*null,\s*\)/);
   assert.match(source, /if \(Array\.isArray\(preloadedRows\)\)/);
+  assert.doesNotMatch(source, /loadReviewedWorkbookDemandRows/);
+  assert.doesNotMatch(source, /executeDemandLaneQuery/);
 });
