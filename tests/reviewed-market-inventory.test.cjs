@@ -33,6 +33,13 @@ test('reviewed direct submissions support category, intent, image, price, and lo
   assert.equal(api.directSubmissionMatches(record, { itemCategory: 'HANDBAG', listingType: 'WTS', imagesOnly: true, pricedOnly: true, region: 'Miami, US' }), true);
   assert.equal(api.directSubmissionMatches(record, { itemCategory: 'JEWELRY' }), false);
 });
+
+test('direct submissions cannot cross the global image boundary', () => {
+  assert.equal(api.directSubmissionMatchesImageLane({ has_images: true }, 'images'), true);
+  assert.equal(api.directSubmissionMatchesImageLane({ has_images: false }, 'images'), false);
+  assert.equal(api.directSubmissionMatchesImageLane({ has_images: false }, 'no-images'), true);
+  assert.equal(api.directSubmissionMatchesImageLane({ has_images: true }, 'no-images'), false);
+});
 const source = fs.readFileSync(
   path.join(__dirname, '../api/reviewed-market-inventory.js'),
   'utf8',
@@ -169,6 +176,15 @@ test('removes the entire image contract when no exact supplied image exists', ()
   assert.deepEqual(mapped.image_urls, []);
   assert.equal(mapped.image_evidence_type, 'NO_IMAGE');
   assert.doesNotMatch(JSON.stringify(mapped), /catalog\.example\.test/);
+});
+
+test('preserves a database-qualified legacy HTTP image token in the image lane', () => {
+  const mapped = api.mapReviewedRecord(record({
+    has_exact_source_image: true,
+    user_image_url: 'https://example.com/listings/legacy%object.jpg',
+  }));
+  assert.equal(mapped.has_images, true);
+  assert.equal(mapped.thumbnail_url, 'https://example.com/listings/legacy%object.jpg');
 });
 
 test('customer image copy contains no internal review-process labels', () => {
