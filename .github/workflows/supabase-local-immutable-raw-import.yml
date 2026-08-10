@@ -67,7 +67,7 @@ jobs:
           )
           foreach ($migrationPath in $migrationPaths) {
             if (-not (Test-Path -LiteralPath $migrationPath)) { throw "Required forward migration is missing: $migrationPath" }
-            $migrationSql = Get-Content -Raw -LiteralPath $migrationPath
+            $migrationSql = [string](Get-Content -Raw -LiteralPath $migrationPath)
             $migrationBody = @{ query = $migrationSql; read_only = $false } | ConvertTo-Json -Depth 3
             Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $managementHeaders -ContentType 'application/json' -Body $migrationBody | Out-Null
           }

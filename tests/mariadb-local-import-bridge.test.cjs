@@ -23,6 +23,7 @@ test('local import workflow is manual, production-scoped, and uniquely self-host
   assert.match(workflow, /20260810103000_complete_immutable_mariadb_raw_import\.sql/);
   assert.match(workflow, /database\/query/);
   assert.match(workflow, /NOTIFY pgrst, 'reload schema'/);
+  assert.match(workflow, /\$migrationSql = \[string\]\(Get-Content -Raw/);
   assert.doesNotMatch(workflow, /SUPABASE_DB_PASSWORD|PGPASSWORD/);
   assert.doesNotMatch(workflow, /pull_request:|push:/);
 });
