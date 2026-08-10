@@ -161,3 +161,29 @@ test('forward completion migration repairs the exact RPC signature atomically', 
   assert.match(sql, /normalization_writes', 0/);
   assert.doesNotMatch(sql, /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?public\.watch_records/i);
 });
+
+test('self-contained forward migration creates only the raw import contract', () => {
+  const sql = fs.readFileSync(
+    path.join(
+      __dirname,
+      '..',
+      'supabase',
+      'migrations',
+      '20260810104500_self_contained_immutable_mariadb_raw_import.sql',
+    ),
+    'utf8',
+  );
+  assert.match(sql, /BEGIN;/);
+  assert.match(sql, /COMMIT;/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.raw_messages/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.raw_message_versions/);
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.ingest_mariadb_raw_batch/);
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.complete_mariadb_raw_import/);
+  assert.match(
+    sql,
+    /GRANT EXECUTE ON FUNCTION public\.ingest_mariadb_raw_batch\(\s*TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB\s*\)/,
+  );
+  assert.match(sql, /REVOKE ALL ON public\.raw_messages FROM PUBLIC, anon, authenticated/);
+  assert.doesNotMatch(sql, /CREATE TABLE IF NOT EXISTS public\.listing_prices/);
+  assert.doesNotMatch(sql, /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?public\.watch_records/i);
+});
