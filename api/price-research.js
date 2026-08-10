@@ -817,18 +817,20 @@ module.exports = async function handler(req, res) {
       retainedOffset + evidencePageSize,
     );
 
-    const totalTrackedListings = rows.length;
     const wtsEligibleAnalyticsCount = includedRows.length;
     const outliersCount = statisticalOutlierRows.length;
     const unsplitBundlesCount = bundleParentExcludedCount;
-    const wtbInRows = rows.filter(r => ['WTB', 'NTQ'].includes(String(r.listing_type || '').toUpperCase())).length;
     const rawWtbDemand = demand?.demand_count;
-    const maxWtbCapacity = Math.max(0, totalTrackedListings - wtsEligibleAnalyticsCount - outliersCount - unsplitBundlesCount);
     const wtbDemandCount = typeof rawWtbDemand === 'number' && Number.isFinite(rawWtbDemand) && rawWtbDemand >= 0
-      ? Math.min(rawWtbDemand, maxWtbCapacity)
-      : Math.min(wtbInRows, maxWtbCapacity);
-    const unpricedCount = Math.max(0, totalTrackedListings - wtsEligibleAnalyticsCount - wtbDemandCount - outliersCount - unsplitBundlesCount);
+      ? rawWtbDemand
+      : 0;
+    // WTS evidence and verified WTB demand are loaded through independent
+    // lanes. Count both populations explicitly; capping demand to the number
+    // of WTS rows made valid buyer signals disappear from reconciliation.
+    const wtsTrackedListings = rows.length;
+    const unpricedCount = Math.max(0, wtsTrackedListings - wtsEligibleAnalyticsCount - outliersCount - unsplitBundlesCount);
     const excludedTotalCount = unpricedCount + outliersCount + unsplitBundlesCount;
+    const totalTrackedListings = wtsTrackedListings + wtbDemandCount;
 
     const reconciliation = {
       total_tracked_listings: totalTrackedListings,
