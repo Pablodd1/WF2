@@ -8,7 +8,9 @@ const test = require('node:test');
 const {
   compareCursor,
   discoverInputFiles,
+  isTransientStatus,
   prepareOutput,
+  rpc,
   run,
   submitBatch,
 } = require('../tools/mariadb-live/import-raw.cjs');
@@ -17,6 +19,48 @@ const { sourceRecord } = require('../tools/mariadb-live/lib.cjs');
 function record(id, createdOn, title = `Rolex ${id} USD 10000`) {
   return sourceRecord({ id, created_on: createdOn, title }, '2026-08-10T12:00:00.000Z');
 }
+
+test('raw import retries transient transport and server failures only', async () => {
+  assert.equal(isTransientStatus(408), true);
+  assert.equal(isTransientStatus(429), true);
+  assert.equal(isTransientStatus(503), true);
+  assert.equal(isTransientStatus(400), false);
+
+  const calls = [];
+  const fetchImpl = async () => {
+    calls.push(calls.length + 1);
+    if (calls.length === 1) throw new TypeError('fetch failed');
+    if (calls.length === 2) return { ok: false, status: 503, text: async () => 'temporary' };
+    return { ok: true, status: 200, text: async () => '{"ok":true}' };
+  };
+  const result = await rpc(
+    { baseUrl: 'https://example.supabase.co', key: 'masked' },
+    'ingest_mariadb_raw_batch',
+    {},
+    fetchImpl,
+    { maxAttempts: 4, baseDelayMs: 0, sleep: async () => {} },
+  );
+  assert.deepEqual(result, { ok: true });
+  assert.equal(calls.length, 3);
+});
+
+test('raw import fails deterministic client errors without retrying', async () => {
+  let calls = 0;
+  await assert.rejects(
+    rpc(
+      { baseUrl: 'https://example.supabase.co', key: 'masked' },
+      'ingest_mariadb_raw_batch',
+      {},
+      async () => {
+        calls += 1;
+        return { ok: false, status: 400, text: async () => 'invalid batch' };
+      },
+      { maxAttempts: 4, baseDelayMs: 0, sleep: async () => {} },
+    ),
+    /failed \(400\): invalid batch/,
+  );
+  assert.equal(calls, 1);
+});
 
 test('raw import rejects non-increasing keyset input', () => {
   assert.deepEqual(
