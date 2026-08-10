@@ -28,6 +28,7 @@ test('maps only supplied reviewed-workbook evidence into the analytics contract'
     source_price_amount: 120000,
     source_currency: 'USD',
     verified_price_usd: 120000,
+    has_verified_usd_price: true,
     has_exact_source_image: true,
     user_image_url: 'https://example.test/source.jpg',
   });
@@ -61,6 +62,16 @@ test('never promotes an unverified workbook amount into USD analytics', () => {
   assert.equal(row.analytics_currency_status, 'CURRENCY_UNVERIFIED');
   assert.equal(row.seller_name, 'Legacy Seller');
   assert.equal(row.seller_phone, '+15551234567');
+});
+
+test('requires the verified-price flag even when a USD value is populated', () => {
+  const row = mapWorkbookAnalyticsRow({
+    verified_price_usd: 120000,
+    has_verified_usd_price: false,
+  });
+  assert.equal(row.price_usd, null);
+  assert.equal(row.has_verified_usd_price, false);
+  assert.equal(row.analytics_currency_status, 'CURRENCY_UNVERIFIED');
 });
 
 test('Price Research prefers verified reviewed-workbook cohorts and keeps legacy fallback', () => {

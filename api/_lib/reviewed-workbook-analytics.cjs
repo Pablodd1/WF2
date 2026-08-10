@@ -13,7 +13,10 @@ function mapWorkbookAnalyticsRow(row) {
   const exactImage = !isBundle && (row.has_exact_source_image === true || Boolean(imageCandidate)) ? imageCandidate : null;
   const contactApproved = row.contact_publication_approved === true;
   const verifiedUsd = row.verified_price_usd == null ? null : Number(row.verified_price_usd);
-  const priceUsd = Number.isFinite(verifiedUsd) && verifiedUsd > 0 ? verifiedUsd : null;
+  const hasVerifiedUsd = row.has_verified_usd_price === true
+    && Number.isFinite(verifiedUsd)
+    && verifiedUsd > 0;
+  const priceUsd = hasVerifiedUsd ? verifiedUsd : null;
   return {
     id: row.id,
     brand: clean(row.supplied_brand) || clean(row.canonical_brand) || clean(row.brand_scope),
@@ -25,7 +28,7 @@ function mapWorkbookAnalyticsRow(row) {
     price_raw: row.source_price_amount == null ? null : Number(row.source_price_amount),
     price_usd: priceUsd,
     verified_price_usd: verifiedUsd,
-    has_verified_usd_price: row.has_verified_usd_price === true,
+    has_verified_usd_price: hasVerifiedUsd,
     currency: clean(row.source_currency),
     raw_message: clean(row.raw_message),
     flags: {},
