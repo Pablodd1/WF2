@@ -192,3 +192,27 @@ test('flags a text and structured dial conflict instead of silently overwriting 
   assert.ok(result.change_flags.includes('DIAL_CHANGED'));
 });
 
+test('inherits authoritative source WTB intent when the message omits a repeated intent token', () => {
+  const result = analyzeRecord({
+    id: 'source-wtb-fallback',
+    raw_message: 'Patek Philippe 5712/1A blue dial full set',
+    brand: 'Patek Philippe',
+    reference: '5712/1A',
+    listing_type: 'WTB',
+  });
+  assert.equal(result.proposed_candidates[0].listing_type, 'WTB');
+  assert.ok(!result.change_flags.includes('INTENT_CHANGED'));
+});
+
+test('explicit listing intent overrides a conflicting source-type fallback and is flagged', () => {
+  const result = analyzeRecord({
+    id: 'explicit-wts-override',
+    raw_message: 'WTS Rolex 116500LN white dial USD 28000',
+    brand: 'Rolex',
+    reference: '116500LN',
+    listing_type: 'WTB',
+  });
+  assert.equal(result.proposed_candidates[0].listing_type, 'WTS');
+  assert.ok(result.change_flags.includes('INTENT_CHANGED'));
+});
+
