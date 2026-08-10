@@ -18,7 +18,7 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      MIGRATION_COMMIT: e55ca461c845f48cdb40deeb3e36af18435c8fc7
+      MIGRATION_COMMIT: b8260f8be09ec4141345b9383caaf5d705753c69
       MIGRATION_FILE: supabase/migrations/20260810045000_reviewed_workbook_verified_reference_analytics.sql
       MIGRATION_SHA256: 80c17271693eaba0647595059eeda29c0c8e5aa7f1d9c85ea21134daea637dc7
       DEMAND_MIGRATION_FILE: supabase/migrations/20260810054000_watch_records_wtb_reference_lookup.sql
@@ -26,7 +26,7 @@ jobs:
       IDENTITY_MIGRATION_FILE: supabase/migrations/20260810060000_listing_identity_wtb_reference_lookup.sql
       IDENTITY_MIGRATION_SHA256: 439cbe5c6a5ee4a5a45033f0f9b3b7e0f37093b47e5579f03dfd84e42d6db3d1
       IDENTITY_RECOVERY_MIGRATION_FILE: supabase/migrations/20260810062000_listing_identity_wtb_reference_lookup_recovery.sql
-      IDENTITY_RECOVERY_MIGRATION_SHA256: 245fbc401e3e7d538ffa19abc0b15091cb81e6e8caef9286453a99f2b9a8ebd3
+      IDENTITY_RECOVERY_MIGRATION_SHA256: 7c0f0413e48335db65cb9e1ec95e42bfb372aba690aeec8861760a57c8836d68
     steps:
       - name: Check out the reviewed migration commit
         uses: actions/checkout@v4
