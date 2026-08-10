@@ -11,7 +11,8 @@ const source = fs.readFileSync(
 );
 
 test('high-volume Price Research uses one bounded strict-source query', () => {
-  assert.match(source, /let sourceTable = 'price_research_verified_source'/);
+  assert.match(source, /let sourceTable = !exactReviewedWorkbookRelease/);
+  assert.match(source, /\? 'watch_records'\s*: 'price_research_verified_source'/);
   assert.match(source, /const buildRowsQuery = table => client\s*\.from\(table\)/);
   assert.match(source, /\.limit\(pageSize\)/);
   assert.match(source, /const sourceSampleCapped = usingReviewedWorkbook/);
@@ -24,6 +25,12 @@ test('verified workbook preload short-circuits redundant legacy lookups', () => 
   assert.match(source, /if \(exactReviewedWorkbookRelease\) \{/);
   assert.match(source, /preloadedReviewedWorkbookRows[\s\S]*\.map\(row => row\.reference\)/);
   assert.match(source, /else if \(preloadedReviewedWorkbookRows\.length\) \{[\s\S]*rows = preloadedReviewedWorkbookRows;/);
+});
+
+test('exact catalog references bypass legacy discovery without admitting prefixes', () => {
+  assert.match(source, /requestedCatalogHit\.matchType !== 'partial'/);
+  assert.match(source, /!exactReviewedWorkbookRelease[\s\S]*exactCatalogReference[\s\S]*directWatchRecordBrand[\s\S]*\? 'watch_records'/);
+  assert.match(source, /else if \(exactCatalogReference\) \{[\s\S]*targetRef = requestedCatalogHit\.reference/);
 });
 
 test('legacy fallback remains bounded and WTB demand avoids the unindexed workbook lane', () => {

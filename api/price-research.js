@@ -340,7 +340,23 @@ module.exports = async function handler(req, res) {
 
   try {
     const controlledPaneraiRelease = brand.toLowerCase() === 'panerai';
-    let sourceTable = 'price_research_verified_source';
+    const requestedCatalogHit = lookupCatalog(rawRef, brand || null);
+    const exactCatalogReference = Boolean(
+      requestedCatalogHit?.found
+      && requestedCatalogHit.matchType !== 'partial'
+      && requestedCatalogHit.reference
+    );
+    const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet']
+      .includes(brand.toLowerCase());
+    // Reviewed workbooks remain first. When an exact catalog reference has no
+    // workbook cohort, query the bounded approved watch-record lane directly;
+    // the legacy release view is not needed to rediscover an identity already
+    // proven by the catalog. Partial references never enter this path.
+    let sourceTable = !exactReviewedWorkbookRelease
+      && exactCatalogReference
+      && directWatchRecordBrand
+      ? 'watch_records'
+      : 'price_research_verified_source';
 
     // Resolve exact stored spellings only. Prefix matches are suggestions for
     // an explicit customer choice; they must never silently become a specific
@@ -375,6 +391,12 @@ module.exports = async function handler(req, res) {
           ? catalogHit.reference
           : exact;
         referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
+      } else if (exactCatalogReference) {
+        targetRef = requestedCatalogHit.reference;
+        referenceVariants = [...new Set([
+          ...equivalentReferences,
+          requestedCatalogHit.reference,
+        ])];
       } else {
         const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
           .from(sourceTable)
