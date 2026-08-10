@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const zlib = require('node:zlib');
 
 const CONTRACT = 'wf-mariadb-auctions-raw-v1';
 const SOURCE_TABLE = 'auctions';
@@ -138,6 +139,31 @@ function sourceRecord(row, observedAt = new Date().toISOString()) {
   };
 }
 
+function jsonLine(value) {
+  return `${JSON.stringify(value)
+    .replaceAll('\u2028', '\\u2028')
+    .replaceAll('\u2029', '\\u2029')}\n`;
+}
+
+async function* readJsonLines(file) {
+  const source = fs.createReadStream(file);
+  const input = file.toLowerCase().endsWith('.gz') ? source.pipe(zlib.createGunzip()) : source;
+  input.setEncoding('utf8');
+  let buffer = '';
+  for await (const chunk of input) {
+    buffer += chunk;
+    let boundary = buffer.indexOf('\n');
+    while (boundary >= 0) {
+      let line = buffer.slice(0, boundary);
+      if (line.endsWith('\r')) line = line.slice(0, -1);
+      yield line;
+      buffer = buffer.slice(boundary + 1);
+      boundary = buffer.indexOf('\n');
+    }
+  }
+  if (buffer.length) yield buffer.endsWith('\r') ? buffer.slice(0, -1) : buffer;
+}
+
 function normalizationInput(record) {
   const raw = record.raw_data || {};
   const listingType = String(raw.type || '').toLowerCase() === 'search' ? 'WTB' : 'WTS';
@@ -174,7 +200,9 @@ module.exports = {
   atomicJson,
   boundedInteger,
   csv,
+  jsonLine,
   normalizationInput,
+  readJsonLines,
   sha256,
   sourceRecord,
   stableJson,

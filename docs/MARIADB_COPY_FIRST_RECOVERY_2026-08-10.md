@@ -29,6 +29,10 @@ Neither gate normalizes or publishes `watch_records`.
 - The database checkpoint advances in the same transaction as the raw versions.
 - Customer tables, Price Research, and Trading Floor are not mutated by raw copy.
 - Bare `$` and missing currency never become USD.
+- One collector process exclusively owns an output directory; a concurrent writer
+  fails before opening MariaDB or appending evidence.
+- JSONL readers split only on ASCII LF. Unicode line separators inside untouched
+  source messages remain evidence, not accidental record boundaries.
 
 ## Review and deploy schema
 

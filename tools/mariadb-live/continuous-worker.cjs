@@ -12,6 +12,7 @@ const {
   atomicJson,
   boundedInteger,
   csv,
+  jsonLine,
   sourceRecord,
 } = require('./lib.cjs');
 const { normalizeSourceRecord } = require('./normalize-local.cjs');
@@ -169,7 +170,7 @@ function writeBatchSegments(paths, state, rows) {
     let source;
     try {
       source = sourceRecord(row);
-      rawLines.push(`${JSON.stringify(source)}\n`);
+      rawLines.push(jsonLine(source));
       state.raw_output_rows += 1;
     } catch (error) {
       collectionErrorLines.push(`${csv(row.id)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`);
@@ -177,7 +178,7 @@ function writeBatchSegments(paths, state, rows) {
       continue;
     }
     try {
-      proposalLines.push(`${JSON.stringify(normalizeSourceRecord(source))}\n`);
+      proposalLines.push(jsonLine(normalizeSourceRecord(source)));
       state.normalization_output_rows += 1;
     } catch (error) {
       normalizationErrorLines.push(`${csv(source.source_record_id)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`);

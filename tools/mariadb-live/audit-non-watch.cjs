@@ -2,9 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const readline = require('node:readline');
-const zlib = require('node:zlib');
-const { atomicJson, boundedInteger } = require('./lib.cjs');
+const { atomicJson, boundedInteger, readJsonLines } = require('./lib.cjs');
 const { discoverInputFiles } = require('./import-raw.cjs');
 
 const CONTRACT = 'wf-mariadb-non-watch-audit-v1';
@@ -41,12 +39,6 @@ function classify(record) {
   return { category: 'UNCLASSIFIED', reasons: ['NO_DETERMINISTIC_CATEGORY_EVIDENCE'], text };
 }
 
-function openLines(file) {
-  const source = fs.createReadStream(file);
-  const input = file.toLowerCase().endsWith('.gz') ? source.pipe(zlib.createGunzip()) : source;
-  return readline.createInterface({ input, crlfDelay: Infinity });
-}
-
 async function run(env = process.env) {
   if (!env.MARIADB_NON_WATCH_AUDIT_INPUT) throw new Error('MARIADB_NON_WATCH_AUDIT_INPUT is required');
   const input = path.resolve(env.MARIADB_NON_WATCH_AUDIT_INPUT);
@@ -64,7 +56,7 @@ async function run(env = process.env) {
   let inputRows = 0;
   let outputRows = 0;
   for (const file of files) {
-    const lines = openLines(file);
+    const lines = readJsonLines(file);
     for await (const line of lines) {
       if (!line.trim()) continue;
       inputRows += 1;

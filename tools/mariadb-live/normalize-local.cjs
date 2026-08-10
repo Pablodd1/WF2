@@ -2,11 +2,10 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const readline = require('node:readline');
 const { analyzeRecord } = require('../shadow-reprocess/shadow-reprocess.cjs');
 const { confirmCatalogCandidate } = require('../../api/_lib/catalog-confirmation.cjs');
 const { buildPromotionDecision } = require('../shadow-reprocess/promotion-policy.cjs');
-const { atomicJson, boundedInteger, csv, normalizationInput } = require('./lib.cjs');
+const { atomicJson, boundedInteger, csv, jsonLine, normalizationInput, readJsonLines } = require('./lib.cjs');
 
 function increment(map, key) {
   map[key] = (map[key] || 0) + 1;
@@ -53,8 +52,7 @@ async function run() {
     if (fs.existsSync(target)) throw new Error(`Output already exists: ${target}`);
   }
   fs.writeFileSync(paths.errors, 'source_record_id,error_name,error_message\n');
-  const inputStream = fs.createReadStream(input, { encoding: 'utf8' });
-  const lines = readline.createInterface({ input: inputStream, crlfDelay: Infinity });
+  const lines = readJsonLines(input);
   const reasons = {};
   const dispositions = {};
   const bundles = {};
@@ -73,7 +71,7 @@ async function run() {
       increment(bundles, proposal.bundle_status);
       increment(dispositions, proposal.review_disposition);
       for (const reason of proposal.review_reasons) increment(reasons, reason);
-      fs.appendFileSync(paths.proposals, `${JSON.stringify(proposal)}\n`);
+      fs.appendFileSync(paths.proposals, jsonLine(proposal));
       outputRows += 1;
     } catch (error) {
       fs.appendFileSync(paths.errors, `${csv(sourceId)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`);
