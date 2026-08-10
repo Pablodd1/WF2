@@ -1,0 +1,204 @@
+'use strict';
+
+const { extractPriceObservations, explicitIntent } = require('../../api/_lib/normalization-v4.cjs');
+const { classify } = require('./audit-non-watch.cjs');
+
+const ACCEPTABLE_PRICE_EVIDENCE = new Set(['explicit_line_currency', 'section_context', 'message_context']);
+const PUBLIC_CATEGORIES = new Set(['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY']);
+const DO_LISTINGS_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/';
+
+function text(value) {
+  const cleaned = value == null ? '' : String(value).trim();
+  return cleaned || null;
+}
+
+function sourceIntent(source) {
+  const explicit = explicitIntent(source.raw_message);
+  if (explicit) return explicit;
+  return String(source.raw_data?.type || '').toLowerCase() === 'search' ? 'WTB' : 'WTS';
+}
+
+function mediaEvidence(source) {
+  const supplied = text(source.raw_data?.front_image);
+  if (!supplied) {
+    return {
+      source_media_key: null,
+      source_media_url_candidate: null,
+      exact_source_lineage: false,
+      visually_verified: false,
+      public_image_eligible: false,
+      review_reason: 'NO_SOURCE_MEDIA',
+    };
+  }
+  const url = /^https?:\/\//i.test(supplied)
+    ? supplied
+    : `${DO_LISTINGS_BASE}${supplied.replace(/^\/+/, '')}`;
+  return {
+    source_media_key: supplied,
+    source_media_url_candidate: url,
+    exact_source_lineage: true,
+    visually_verified: false,
+    public_image_eligible: false,
+    review_reason: 'VISUAL_IDENTITY_REVIEW_REQUIRED',
+  };
+}
+
+function sellerEvidence(source) {
+  const raw = source.raw_data || {};
+  return {
+    public: {
+      name: text(raw.from_name),
+      location: text(raw.region),
+      phone: null,
+      rating: null,
+    },
+    private_verified_source: {
+      phone: text(raw.from_number),
+      phone_code: text(raw.phone_code),
+      company_id: raw.company_id == null ? null : raw.company_id,
+      source_claimed_rating: text(raw.dealer_rating),
+      is_from_verified_user: raw.is_from_verified_user === true,
+      is_from_paid_user: raw.is_from_paid_user === true,
+      is_seller_approved: raw.is_seller_approved === true,
+    },
+    contact_publication_approved: false,
+    rating_publication_status: 'UNVERIFIED_SOURCE_FIELD',
+  };
+}
+
+function normalizedPrice(candidate) {
+  const primary = candidate?.prices?.find(price => price.is_primary) || candidate?.prices?.[0] || null;
+  if (!primary?.amount_original || !primary.currency_original) return null;
+  return {
+    amount_original: primary.amount_original,
+    currency_original: primary.currency_original,
+    amount_usd: primary.amount_usd || null,
+    raw_price_text: primary.raw_price_text || null,
+    currency_evidence: primary.currency_evidence || null,
+    analytics_currency_evidence_eligible: ACCEPTABLE_PRICE_EVIDENCE.has(primary.currency_evidence),
+  };
+}
+
+function nonWatchCandidate(source, category) {
+  const raw = source.raw_data || {};
+  const prices = extractPriceObservations(source.raw_message || '', {});
+  const primary = prices.find(price => price.is_primary) || prices[0] || null;
+  return {
+    raw_line: source.raw_message || null,
+    brand: text(raw.brand),
+    model: text(raw.model),
+    reference: text(raw.reference || raw.normalized_reference),
+    dial_color: null,
+    condition: null,
+    listing_type: sourceIntent(source),
+    category,
+    prices,
+    price: primary ? normalizedPrice({ prices }) : null,
+  };
+}
+
+function priceResearchStatus({ category, bundleStatus, candidate, catalogConfirmation, reviewDisposition }) {
+  if (category !== 'WATCH') return 'INELIGIBLE_NON_WATCH';
+  if (bundleStatus !== 'SINGLE_CANDIDATE') return 'INELIGIBLE_BUNDLE_OR_IDENTITY';
+  if (!candidate?.brand || !candidate?.reference) return 'INELIGIBLE_IDENTITY';
+  if (!catalogConfirmation?.confirmed) return 'INELIGIBLE_UNCONFIRMED_IDENTITY';
+  if (candidate.listing_type === 'WTB') return 'DEMAND_PENDING_HUMAN_APPROVAL';
+  const price = normalizedPrice(candidate);
+  if (!price) return 'INELIGIBLE_NO_PRICE';
+  if (!price.analytics_currency_evidence_eligible || !price.amount_usd) return 'INELIGIBLE_CURRENCY_OR_FX';
+  if (!['USD', 'USDT'].includes(String(price.currency_original).toUpperCase())) return 'INELIGIBLE_FX_UNVERIFIED';
+  if (!candidate.dial_color) return 'INELIGIBLE_DIAL';
+  return reviewDisposition === 'READY_FOR_HUMAN_APPROVAL'
+    ? 'SALE_PENDING_HUMAN_APPROVAL'
+    : 'INELIGIBLE_REVIEW_REQUIRED';
+}
+
+function tradingFloorStatus({ category, bundleStatus, hasCandidate, reviewDisposition }) {
+  if (!PUBLIC_CATEGORIES.has(category)) return 'CATEGORY_REVIEW_ONLY';
+  if (bundleStatus === 'BUNDLE_SPLIT_REQUIRED') return 'BUNDLE_REVIEW_ONLY';
+  if (category === 'WATCH' && !hasCandidate) return 'PUBLISHED_PENDING_VERIFICATION';
+  return reviewDisposition === 'READY_FOR_HUMAN_APPROVAL'
+    ? 'READY_FOR_PUBLICATION_REVIEW'
+    : 'PUBLISHED_PENDING_VERIFICATION';
+}
+
+function assertLineage(source, proposal) {
+  if (!source?.source_record_id || source.source_record_id !== proposal?.source_record_id) {
+    throw new Error('Source/proposal record identity mismatch');
+  }
+  if (!source.raw_sha256 || source.raw_sha256 !== proposal.source_hash) {
+    throw new Error(`Source/proposal hash mismatch for ${source.source_record_id}`);
+  }
+}
+
+function buildPublicationReview(source, proposal) {
+  assertLineage(source, proposal);
+  const categoryResult = classify(source);
+  const category = categoryResult.category;
+  const candidates = proposal.normalization?.proposed_candidates || [];
+  const candidate = candidates.length === 1
+    ? { ...candidates[0], category, price: normalizedPrice(candidates[0]) }
+    : (category !== 'WATCH' && PUBLIC_CATEGORIES.has(category) ? nonWatchCandidate(source, category) : null);
+  const media = mediaEvidence(source);
+  const bundleStatus = proposal.bundle_status;
+  const tradingStatus = tradingFloorStatus({
+    category,
+    bundleStatus,
+    hasCandidate: Boolean(candidate),
+    reviewDisposition: proposal.review_disposition,
+  });
+  const researchStatus = priceResearchStatus({
+    category,
+    bundleStatus,
+    candidate,
+    catalogConfirmation: proposal.catalog_confirmation,
+    reviewDisposition: proposal.review_disposition,
+  });
+  const reviewChildren = bundleStatus === 'BUNDLE_SPLIT_REQUIRED'
+    ? candidates.map((child, index) => ({
+      candidate_index: index,
+      ...child,
+      category: 'WATCH',
+      price: normalizedPrice(child),
+      source_media_key: null,
+      source_media_url_candidate: null,
+      public_image_eligible: false,
+      trading_floor_status: 'BUNDLE_CHILD_REVIEW_ONLY',
+      price_research_status: 'INELIGIBLE_BUNDLE_CHILD_PENDING_REVIEW',
+    }))
+    : [];
+
+  return {
+    contract: 'wf-mariadb-publication-review-v1',
+    source_record_id: source.source_record_id,
+    source_id: source.source_id,
+    source_hash: source.raw_sha256,
+    source_created_on: source.source_created_on,
+    raw_message: source.raw_message,
+    raw_message_source: source.raw_message_source,
+    category,
+    category_reasons: categoryResult.reasons,
+    bundle_status: bundleStatus,
+    normalization_version: proposal.normalization?.normalization_version || null,
+    review_disposition: proposal.review_disposition,
+    review_reasons: proposal.review_reasons || [],
+    trading_floor_status: tradingStatus,
+    price_research_status: researchStatus,
+    candidate,
+    review_children: reviewChildren,
+    media,
+    seller: sellerEvidence(source),
+    publication_write_authorized: false,
+  };
+}
+
+module.exports = {
+  ACCEPTABLE_PRICE_EVIDENCE,
+  buildPublicationReview,
+  mediaEvidence,
+  normalizedPrice,
+  priceResearchStatus,
+  sellerEvidence,
+  sourceIntent,
+  tradingFloorStatus,
+};
