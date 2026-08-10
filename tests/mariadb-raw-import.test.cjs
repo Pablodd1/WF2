@@ -138,3 +138,26 @@ test('forward migration is copy-first and denies customer roles', () => {
   assert.match(sql, /REVOKE ALL ON public\.raw_message_versions FROM PUBLIC, anon, authenticated/);
   assert.doesNotMatch(sql, /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?public\.watch_records/i);
 });
+
+test('forward completion migration repairs the exact RPC signature atomically', () => {
+  const sql = fs.readFileSync(
+    path.join(
+      __dirname,
+      '..',
+      'supabase',
+      'migrations',
+      '20260810103000_complete_immutable_mariadb_raw_import.sql',
+    ),
+    'utf8',
+  );
+  assert.match(sql, /BEGIN;/);
+  assert.match(sql, /COMMIT;/);
+  assert.match(
+    sql,
+    /GRANT EXECUTE ON FUNCTION public\.ingest_mariadb_raw_batch\(\s*TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB\s*\)/,
+  );
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.complete_mariadb_raw_import/);
+  assert.match(sql, /watch_records_writes', 0/);
+  assert.match(sql, /normalization_writes', 0/);
+  assert.doesNotMatch(sql, /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?public\.watch_records/i);
+});

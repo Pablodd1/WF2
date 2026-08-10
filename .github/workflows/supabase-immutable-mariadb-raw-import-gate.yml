@@ -24,7 +24,7 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      MIGRATION_FILE: supabase/migrations/20260810100000_immutable_mariadb_raw_import.sql
+      MIGRATION_FILE: supabase/migrations/20260810103000_complete_immutable_mariadb_raw_import.sql
     steps:
       - uses: actions/checkout@v4
 
@@ -36,8 +36,8 @@ jobs:
           test -n "$SUPABASE_DB_PASSWORD"
           test -n "$SUPABASE_PROJECT_REF"
           test -f "$MIGRATION_FILE"
-          grep -q "CREATE TABLE IF NOT EXISTS public.raw_message_versions" "$MIGRATION_FILE"
-          grep -q "CREATE OR REPLACE FUNCTION public.ingest_mariadb_raw_batch" "$MIGRATION_FILE"
+          grep -q "CREATE OR REPLACE FUNCTION public.complete_mariadb_raw_import" "$MIGRATION_FILE"
+          grep -q "GRANT EXECUTE ON FUNCTION public.ingest_mariadb_raw_batch" "$MIGRATION_FILE"
           ! grep -Eiq "(INSERT|UPDATE|DELETE|TRUNCATE)[[:space:]]+(INTO[[:space:]]+|FROM[[:space:]]+)?public\.watch_records" "$MIGRATION_FILE"
 
       - name: Install PostgreSQL client
@@ -80,7 +80,7 @@ jobs:
           "
           echo "WATCH_RECORDS_BEFORE=$(psql -X -A -t -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.watch_records;')" >> "$GITHUB_ENV"
 
-      - name: Apply only the immutable raw-import migration
+      - name: Apply only the forward raw-import completion migration
         shell: bash
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
