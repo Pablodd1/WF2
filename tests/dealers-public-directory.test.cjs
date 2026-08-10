@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { publicDealer } = require('../api/dealers.js');
-const { topRatedProfiles, sourceProfilePayload } = require('../api/_lib/dealer-directory-source.cjs');
+const { parsedSourceDate, topRatedProfiles, sourceProfilePayload } = require('../api/_lib/dealer-directory-source.cjs');
 const dealersHandler = require('../api/dealers.js');
 const dealerProfileHandler = require('../api/dealer-profile.js');
 
@@ -59,6 +59,13 @@ test('source snapshot accounts for every crawled listing and review once', () =>
   const payloads = profiles.map(profile => sourceProfilePayload(profile.slug));
   assert.equal(payloads.reduce((sum, payload) => sum + payload.listings.length, 0), 376);
   assert.equal(payloads.reduce((sum, payload) => sum + payload.reviews.length, 0), 268);
+});
+
+test('source dates remove repost annotations and remain sortable', () => {
+  assert.equal(parsedSourceDate('Aug 7, 2026· Reposted 26x').toISOString(), '2026-08-07T00:00:00.000Z');
+  const payload = sourceProfilePayload('watchfacts-source-3435');
+  assert.equal(payload.stats.first_post, '2026-08-04T00:00:00.000Z');
+  assert.equal(payload.stats.latest_post, '2026-08-09T00:00:00.000Z');
 });
 
 test('verified phone is published only when the dealer consent flag is true', () => {

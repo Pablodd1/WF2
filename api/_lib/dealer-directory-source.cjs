@@ -56,6 +56,13 @@ function sourceListings(sourceId) {
   return (crawl.listings || []).filter(row => String(row.dealer_id) === String(sourceId));
 }
 
+function parsedSourceDate(value) {
+  const token = String(value || '').split('·')[0].trim();
+  if (!token) return null;
+  const parsed = new Date(`${token} UTC`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function sourceProfilePayload(identity) {
   const sourceId = sourceIdFromIdentity(identity);
   if (!sourceId) return null;
@@ -63,7 +70,10 @@ function sourceProfilePayload(identity) {
   if (sourceIndex < 0) return null;
   const profile = crawl.profiles[sourceIndex];
   const sourceRows = sourceListings(sourceId);
-  const dates = sourceRows.map(row => row.posted_on).filter(Boolean).sort();
+  const dates = sourceRows
+    .map(row => parsedSourceDate(row.posted_on))
+    .filter(Boolean)
+    .sort((left, right) => left - right);
   const publicListings = sourceRows.map(row => ({
     id: `watchfacts-source-listing-${row.id}`,
     brand: null,
@@ -92,8 +102,8 @@ function sourceProfilePayload(identity) {
       wts_count: nonNegativeInteger(profile.wts) || publicListings.filter(row => row.listing_type === 'WTS').length,
       wtb_count: nonNegativeInteger(profile.wtb) || publicListings.filter(row => row.listing_type === 'WTB').length,
       group_count: nonNegativeInteger(profile.common_groups) || 0,
-      first_post: dates[0] || null,
-      latest_post: dates.at(-1) || null,
+      first_post: dates[0]?.toISOString() || null,
+      latest_post: dates.at(-1)?.toISOString() || null,
       verified_contact_info: null,
       source_contact_url: profile.whatsapp_url || profile.chat_url || null,
     },
@@ -120,6 +130,7 @@ function sourceProfilePayload(identity) {
 
 module.exports = {
   SOURCE_SYSTEM,
+  parsedSourceDate,
   sourceProfilePayload,
   topRatedProfiles,
 };

@@ -39,7 +39,13 @@ export default function DealerProfile() {
   const isPublicSourceProfile = dealer.source_system === 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT';
   const name = dealer.display_name || dealer.company_name || 'Verified dealer';
   const count = (value: number | null | undefined) => value == null ? 'Not available' : Number(value).toLocaleString();
-  const date = (value: string | null | undefined) => value ? value.slice(0, 10) : 'Original date unavailable';
+  const date = (value: string | null | undefined) => {
+    if (!value) return 'Original date unavailable';
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime())
+      ? value
+      : new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
+  };
 
   return (
     <main className="min-h-screen bg-[#08080c] text-white">
@@ -103,7 +109,7 @@ export default function DealerProfile() {
         {dealer.profile_summary && <p className="mt-8 max-w-3xl text-sm leading-7 text-white/55">{dealer.profile_summary}</p>}
         <div className="mt-10 flex items-center justify-between border-b border-white/10 pb-4">
           <h2 className="text-xl font-semibold">Recent market activity</h2>
-          <span className="text-xs text-white/35">{listings.length} verified posts</span>
+          <span className="text-xs text-white/35">{listings.length} {isPublicSourceProfile ? 'source listing cards' : 'verified posts'}</span>
         </div>
         <div className="divide-y divide-white/10">
           {listings.map(listing => (
