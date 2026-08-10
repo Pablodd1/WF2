@@ -99,6 +99,20 @@ test('reviewed workbook loader requires complete identity and explicit verified 
   assert.match(source, /posted_by,phone_number/);
 });
 
+test('reviewed workbook demand loader keeps WTB separate from verified sales prices', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'api', '_lib', 'reviewed-workbook-analytics.cjs'),
+    'utf8',
+  );
+  const demandStart = source.indexOf('async function executeDemandQuery');
+  const demandEnd = source.indexOf('async function loadReviewedWorkbookAnalyticsRows');
+  const demandSource = source.slice(demandStart, demandEnd);
+  assert.ok(demandStart >= 0 && demandEnd > demandStart);
+  assert.match(demandSource, /in\('listing_type', \['WTB', 'NTQ'\]\)/);
+  assert.match(demandSource, /eq\('has_complete_identity', true\)/);
+  assert.doesNotMatch(demandSource, /has_verified_usd_price/);
+});
+
 test('legacy column fallback is narrow and recognizes Postgres missing-column errors', () => {
   assert.match(LEGACY_WORKBOOK_COLUMNS, /posted_by,phone_number/);
   assert.doesNotMatch(LEGACY_WORKBOOK_COLUMNS, /seller_name|seller_phone|,verdict|listing_status/);

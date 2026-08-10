@@ -101,6 +101,27 @@ async function executeAnalyticsQuery(client, columns, { brand, keys, limit }) {
     .limit(Math.min(10000, Math.max(1, Number(limit) || 10000)));
 }
 
+async function executeDemandQuery(client, columns, { brand, keys, limit }) {
+  let query = client
+    .from(MARKET_SOURCE_VIEW)
+    .select(columns)
+    .eq('brand_scope', clean(brand))
+    .in('reference_search_key', keys)
+    .neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT')
+    .eq('has_complete_identity', true)
+    .in('listing_type', ['WTB', 'NTQ']);
+
+  for (const value of ['multiple', 'multi', 'mixed']) {
+    query = query.not('dial_color', 'ilike', value);
+    query = query.not('model', 'ilike', value);
+  }
+
+  return query
+    .order('posting_date', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: true })
+    .limit(Math.min(5000, Math.max(1, Number(limit) || 5000)));
+}
+
 async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys, limit = 10000 }) {
   const keys = [...new Set((referenceKeys || []).map(clean).filter(Boolean))];
   if (!clean(brand) || !keys.length) return [];
@@ -110,6 +131,23 @@ async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys,
   });
   if (error && isMissingColumnError(error)) {
     ({ data, error } = await executeAnalyticsQuery(client, LEGACY_WORKBOOK_COLUMNS, {
+      brand, keys, limit,
+    }));
+  }
+
+  if (error) throw error;
+  return (data || []).map(mapWorkbookAnalyticsRow);
+}
+
+async function loadReviewedWorkbookDemandRows(client, { brand, referenceKeys, limit = 5000 }) {
+  const keys = [...new Set((referenceKeys || []).map(clean).filter(Boolean))];
+  if (!clean(brand) || !keys.length) return [];
+
+  let { data, error } = await executeDemandQuery(client, WORKBOOK_COLUMNS, {
+    brand, keys, limit,
+  });
+  if (error && isMissingColumnError(error)) {
+    ({ data, error } = await executeDemandQuery(client, LEGACY_WORKBOOK_COLUMNS, {
       brand, keys, limit,
     }));
   }
@@ -141,6 +179,7 @@ module.exports = {
   LEGACY_WORKBOOK_COLUMNS,
   isMissingColumnError,
   loadReviewedWorkbookAnalyticsRows,
+  loadReviewedWorkbookDemandRows,
   loadReviewedWorkbookListing,
   mapWorkbookAnalyticsRow,
 };

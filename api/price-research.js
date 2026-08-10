@@ -22,7 +22,10 @@ const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
-const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
+const {
+  loadReviewedWorkbookAnalyticsRows,
+  loadReviewedWorkbookDemandRows,
+} = require('./_lib/reviewed-workbook-analytics.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -120,17 +123,18 @@ async function retainVerifiedIdentityRows(client, rows) {
 }
 
 function isOwnerReviewedWorkbookRow(row) {
-  return isReviewedPaneraiReleaseRecord(row) || (
+  return row?.owner_reviewed_identity === true
+    || isReviewedPaneraiReleaseRecord(row) || (
     String(row?.brand || '').trim().toLowerCase() === 'zenith'
       && String(row?.source || '') === REVIEWED_ZENITH_SOURCE
   ) || isReviewedZenithIdentityCorrectionRecord(row);
 }
 
-async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = []) {
+async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null) {
   // ponytail: admit all demand-side records. classifyDemandEligibility
   // handles per-row quality downstream.
   let data;
-  if (Array.isArray(preloadedRows) && preloadedRows.length > 0) {
+  if (Array.isArray(preloadedRows)) {
     data = preloadedRows.filter(row => ['WTB', 'NTQ'].includes(String(row.listing_type || '').toUpperCase()));
   } else {
     const columns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,phone_number,posted_by,image_url,thumbnail_url,display_image_url,image_urls,price_raw,price_usd,currency,created_at,listing_date';
@@ -305,17 +309,26 @@ module.exports = async function handler(req, res) {
   // A reviewed workbook cohort is already constrained to complete identity and
   // source-explicit USD evidence. It may authorize its exact brand/reference
   // even when an older deployment allowlist has not yet been expanded.
-  let preloadedReviewedWorkbookRows = [];
-  try {
-    preloadedReviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(getClient(), {
+  const client = getClient();
+  const preloadReferenceKeys = listEquivalentReferences(rawRef, brand).map(normRef);
+  const preloadResults = await Promise.allSettled([
+    loadReviewedWorkbookAnalyticsRows(client, {
       brand,
-      referenceKeys: listEquivalentReferences(rawRef, brand).map(normRef),
+      referenceKeys: preloadReferenceKeys,
       limit: 10000,
-    });
-  } catch {
-    // The legacy release gates below remain fail-closed when the reviewed view
-    // is temporarily unavailable.
-  }
+    }),
+    loadReviewedWorkbookDemandRows(client, {
+      brand,
+      referenceKeys: preloadReferenceKeys,
+      limit: 5000,
+    }),
+  ]);
+  const preloadedReviewedWorkbookRows = preloadResults[0].status === 'fulfilled'
+    ? preloadResults[0].value
+    : [];
+  const preloadedReviewedWorkbookDemandRows = preloadResults[1].status === 'fulfilled'
+    ? preloadResults[1].value
+    : null;
   const exactReviewedWorkbookRelease = preloadedReviewedWorkbookRows.length > 0;
   if (!exactReviewedWorkbookRelease && !isPublicationBrandAllowed(brand)) {
     return res.status(404).json({ error: 'Brand is not included in this release' });
@@ -325,7 +338,6 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const client = getClient();
     const controlledPaneraiRelease = brand.toLowerCase() === 'panerai';
     let sourceTable = 'price_research_verified_source';
 
@@ -798,7 +810,7 @@ module.exports = async function handler(req, res) {
       referenceVariants,
       catalogHit,
       selection,
-      [],
+      preloadedReviewedWorkbookDemandRows,
     );
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
