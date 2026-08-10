@@ -26,12 +26,22 @@ test('top-rated snapshot preserves all 25 source cards and their workflow links'
   assert.equal(federico.source_links.wts, 'https://watchfacts.com/profile-listings?profileId=916&for=sale');
   assert.equal(federico.source_links.wtb, 'https://watchfacts.com/profile-listings?profileId=916&for=search');
   assert.equal(federico.source_links.whatsapp, 'https://wa.me/13059888263');
+  assert.equal(federico.whatsapp_group_count, 25);
+  assert.equal(federico.source_metrics.profile_listing_total, 162);
+  assert.equal(federico.source_metrics.feedback_received, 22);
 });
 
 test('Reference Check snapshot supports case-insensitive name and phone search', () => {
   assert.equal(snapshotDirectory('JAZTIME', 1, 24).dealers[0].display_name, 'Jaztime Watches');
   assert.equal(snapshotDirectory('7869569201', 1, 24).total, 0);
   assert.equal(snapshotDirectory('3059888263', 1, 24).dealers[0].display_name, 'Federico Maman');
+});
+
+test('crawled top-rated profiles route through the internal dealer profile workflow', () => {
+  const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
+  assert.match(page, /to=\{`\/dealers\/\$\{dealer\.slug \|\| dealer\.id\}`\}/);
+  assert.match(page, /Full profile/);
+  assert.match(page, /Source profile:/);
 });
 
 test('source links follow the original profile, feedback, WTS, WTB and WhatsApp routes', () => {

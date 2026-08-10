@@ -1,7 +1,8 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
-const topRatedSnapshot = require('../data/dealer-directory/top-rated-2026-08-08.json');
+const fullDirectoryCrawl = require('../data/dealer-directory/full-crawl-2026-08-09.json');
+const topRatedSnapshot = fullDirectoryCrawl.profiles;
 
 const SOURCE_ROOT = 'https://watchfacts.com';
 
@@ -34,29 +35,39 @@ function buildSourceLinks(dealer, verifiedPhone = null) {
 }
 
 function snapshotDealer(row, index) {
-  const directoryUrl = `${SOURCE_ROOT}/user/${row.source_id}/profile`;
+  const sourceId = String(row.id || row.source_id);
+  const directoryUrl = row.profile_url || `${SOURCE_ROOT}/user/${sourceId}/profile`;
+  const reviewCount = Number(row.profile_rating_count ?? row.reviews ?? row.review_count ?? 0);
+  const groupCount = Number(row.common_groups ?? row.whatsapp_group_count ?? 0);
+  const phone = row.whatsapp_url || row.phone || null;
   return {
-    id: `watchfacts-source-${row.source_id}`,
+    id: `watchfacts-source-${sourceId}`,
     slug: null,
-    display_name: row.display_name,
+    display_name: row.name || row.display_name,
     company_name: null,
-    country_code: row.region,
+    country_code: row.country || row.region,
     city: null,
     rating: null,
-    review_count: row.review_count,
-    whatsapp_group_count: 0,
+    review_count: reviewCount,
+    whatsapp_group_count: groupCount,
     avatar_url: null,
-    profile_summary: null,
-    verified_at: row.member_since,
+    profile_summary: row.trust_status || null,
+    verified_at: row.member_since?.replace('Member since ', '') || row.member_since || null,
     directory_url: directoryUrl,
-    directory_source_id: row.source_id,
+    directory_source_id: sourceId,
     source_rank: index + 1,
-    source_system: 'WATCHFACTS_TOP_RATED_2026_08_08',
-    verified_phone: row.phone,
-    source_links: buildSourceLinks({ directory_url: directoryUrl, directory_source_id: row.source_id }, row.phone),
+    source_system: 'WATCHFACTS_TOP_RATED_2026_08_09',
+    verified_phone: phone,
+    source_links: buildSourceLinks({ directory_url: directoryUrl, directory_source_id: sourceId }, phone),
+    source_metrics: {
+      profile_listing_total: row.listing_total ?? null,
+      feedback_received: row.feedback_received ?? null,
+      rendered_feedback_rows: Array.isArray(row.reviews) ? row.reviews.length : null,
+      source_crawled_at: fullDirectoryCrawl.crawled_at,
+    },
     stats: {
-      wts_posts: row.wts_posts,
-      wtb_posts: row.wtb_posts,
+      wts_posts: Number(row.wts ?? row.wts_posts ?? 0),
+      wtb_posts: Number(row.wtb ?? row.wtb_posts ?? 0),
       first_post_at: null,
       last_post_at: null,
     },
@@ -68,8 +79,8 @@ function snapshotDirectory(search, page, pageSize) {
   const phoneNeedle = digits(search);
   const matched = topRatedSnapshot.filter(row => {
     if (!needle) return true;
-    return [row.display_name, row.region].some(value => String(value || '').toLocaleLowerCase().includes(needle))
-      || (phoneNeedle.length >= 4 && digits(row.phone).includes(phoneNeedle));
+    return [row.name, row.display_name, row.country, row.region].some(value => String(value || '').toLocaleLowerCase().includes(needle))
+      || (phoneNeedle.length >= 4 && digits(row.whatsapp_url || row.phone).includes(phoneNeedle));
   });
   const from = (page - 1) * pageSize;
   return {
@@ -114,8 +125,14 @@ module.exports = async function handler(req, res) {
   const page = boundedInteger(req.query?.page, 1, 1, 100000);
   const pageSize = boundedInteger(req.query?.pageSize, 24, 1, 100);
   const search = String(req.query?.q || '').trim().slice(0, 100);
+  const mode = String(req.query?.mode || '').trim().toLowerCase();
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
+
+  if (mode === 'top-rated') {
+    const snapshot = snapshotDirectory('', page, pageSize);
+    return res.status(200).json({ success: true, page, pageSize, ...snapshot, source: 'watchfacts_top_rated_crawl' });
+  }
 
   try {
     const client = getClient();

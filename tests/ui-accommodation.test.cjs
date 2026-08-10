@@ -164,6 +164,13 @@ test('dealer directory includes Reference Check and Top Rated views backed by ve
   assert.match(directory, /Member since/);
   assert.match(directory, /label="For sale"/);
   assert.match(directory, /label="Looking for"/);
+  assert.match(directory, /Full profile/);
+  assert.match(directory, /Source profile:/);
+  const profile = read('src/pages/DealerProfile.tsx');
+  assert.match(profile, /Actual listing/);
+  assert.match(profile, /Raw source message/);
+  assert.match(profile, /Dealer feedback/);
+  assert.match(profile, /Source workflow/);
 });
 
 test('home and Post an Item share a persistent multilingual interface without changing raw source text', () => {
