@@ -27,4 +27,27 @@ test('legacy fallback remains bounded and WTB demand avoids the unindexed workbo
   assert.match(source, /if \(Array\.isArray\(preloadedRows\)\)/);
   assert.doesNotMatch(source, /loadReviewedWorkbookDemandRows/);
   assert.doesNotMatch(source, /executeDemandLaneQuery/);
+  assert.match(source, /const DEMAND_SAMPLE_LIMIT = 500/);
+  assert.match(source, /\.in\('reference', demandReferenceVariants\)/);
+  assert.match(source, /\.limit\(DEMAND_SAMPLE_LIMIT \+ 1\)/);
+  assert.match(source, /demandSampleCapped = \(dbData \|\| \[\]\)\.length > DEMAND_SAMPLE_LIMIT/);
+  assert.doesNotMatch(source, /\.limit\(5000\)/);
+});
+
+test('WTB demand has an exact-reference partial production index', () => {
+  const migration = fs.readFileSync(
+    path.join(
+      __dirname,
+      '..',
+      'supabase',
+      'migrations',
+      '20260810054000_watch_records_wtb_reference_lookup.sql',
+    ),
+    'utf8',
+  );
+  assert.match(migration, /CREATE INDEX CONCURRENTLY IF NOT EXISTS/);
+  assert.match(migration, /idx_watch_records_wtb_reference_lookup/);
+  assert.match(migration, /ON public\.watch_records[\s\S]*brand,[\s\S]*reference,[\s\S]*id DESC/);
+  assert.match(migration, /WHERE listing_type IN \('WTB', 'NTQ'\)/);
+  assert.doesNotMatch(migration, /UPDATE|DELETE|TRUNCATE|DROP TABLE/i);
 });

@@ -38,6 +38,8 @@ const {
   isReviewedZenithIdentityCorrectionRecord,
 } = require('./_lib/publication-references.cjs');
 
+const DEMAND_SAMPLE_LIMIT = 500;
+
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
 // by /api/catalog-lookup. The Supabase cached_price_guide_watches table is empty
@@ -131,20 +133,29 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
   // ponytail: admit all demand-side records. classifyDemandEligibility
   // handles per-row quality downstream.
   let data;
+  let demandSampleCapped = false;
   if (Array.isArray(preloadedRows)) {
     data = preloadedRows.filter(row => ['WTB', 'NTQ'].includes(String(row.listing_type || '').toUpperCase()));
+    demandSampleCapped = preloadedRows.sampleCapped === true;
   } else {
     const columns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,phone_number,posted_by,image_url,thumbnail_url,display_image_url,image_urls,price_raw,price_usd,currency,created_at,listing_date';
+    const demandReferenceVariants = [...new Set(referenceVariants.flatMap(reference => [
+      String(reference),
+      String(reference).toUpperCase(),
+      String(reference).toLowerCase(),
+    ]))];
     const { data: dbData, error } = await client
       .from(sourceTable)
       .select(columns)
       .eq('brand', brand)
-      .in('reference', referenceVariants)
+      .in('reference', demandReferenceVariants)
       .in('listing_type', ['WTB', 'NTQ'])
       .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
-      .limit(5000);
+      .order('id', { ascending: false })
+      .limit(DEMAND_SAMPLE_LIMIT + 1);
     if (error) return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
-    data = dbData || [];
+    demandSampleCapped = (dbData || []).length > DEMAND_SAMPLE_LIMIT;
+    data = (dbData || []).slice(0, DEMAND_SAMPLE_LIMIT);
   }
 
   let demandRows;
@@ -228,7 +239,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     demand_count: eligible.length,
     demand_cohorts: demandCohorts,
     demand_rows: demandRowsSerialized,
-    demand_sample_capped: preloadedRows?.sampleCapped === true || (data || []).length >= 5000,
+    demand_sample_capped: demandSampleCapped,
     demand_repost_count: repostRows.length,
     demand_suppressed_duplicate_count: suppressedIds.size,
   };
