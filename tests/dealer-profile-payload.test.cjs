@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { buildDealerStats, sourceProfilePayload } = require('../api/dealer-profile.js');
+const { buildDealerStats } = require('../api/dealer-profile.js');
 
 test('dealer profile exposes only approved activity metrics and verified contact', () => {
   const stats = buildDealerStats([
@@ -37,20 +37,10 @@ test('dealer profile keeps raw messages, currency, and normalized prices in its 
   assert.doesNotMatch(source, /price_usd:\s*null/);
 });
 
-test('source-backed dealer profile exposes the inspected profile, feedback, images and WTS/WTB routes', () => {
-  const payload = sourceProfilePayload('watchfacts-source-916');
-  assert.equal(payload.dealer.display_name, 'Federico Maman');
-  assert.equal(payload.dealer.rating, null);
-  assert.equal(payload.dealer.review_count, 22);
-  assert.equal(payload.stats.wts_count, 3);
-  assert.equal(payload.stats.wtb_count, 1);
-  assert.equal(payload.stats.group_count, 25);
-  assert.equal(payload.source_metrics.profile_listing_total, 162);
-  assert.equal(payload.reviews.length, 22);
-  assert.equal(payload.listings.length, 16);
-  assert.ok(payload.listings.every(listing => listing.image_url));
-  assert.ok(payload.listings.some(listing => listing.listing_type === 'WTS'));
-  assert.ok(payload.listings.some(listing => listing.listing_type === 'WTB'));
-  assert.equal(payload.source_workflow.wts, 'https://watchfacts.com/profile-listings?profileId=916&for=sale');
-  assert.equal(payload.source_workflow.wtb, 'https://watchfacts.com/profile-listings?profileId=916&for=search');
+test('dealer profile rejects crawl-derived identities and loads verified database dealers only', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealer-profile.js'), 'utf8');
+  assert.doesNotMatch(source, /fullDirectoryCrawl|sourceProfilePayload|watchfacts_directory_crawl|SOURCE_PUBLISHED/);
+  assert.match(source, /dealer\.status !== 'VERIFIED'/);
+  assert.match(source, /listing_identity_reviews/);
+  assert.match(source, /seller_listing_lineage_staging/);
 });
