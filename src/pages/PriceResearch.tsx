@@ -1475,6 +1475,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   key={row.id}
                   row={row}
                   title={`${data?.brand || ''} ${displayRef}`.trim()}
+                  exclusionLabel={outlierReason(row.outlier_reason)}
                   onOpen={() => void openListing(row)}
                 />
               ))}
@@ -1783,7 +1784,12 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
   );
 }
 
-function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
+function ListingRow({ row, title, exclusionLabel, onOpen }: {
+  row: RowData;
+  title: string;
+  exclusionLabel: string;
+  onOpen: () => void;
+}) {
   const date = row.listing_date || row.created_at;
   const imageUrl = row.thumbnail_url || row.display_image_url || row.image_url || row.image_urls?.find(Boolean) || '';
   const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
@@ -1799,8 +1805,12 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
     : hasSourcePrice
       ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
       : 'Price not available';
+  const excludedFromAverages = row.is_outlier === true || !hasUsdPrice;
+  const evidenceStatus = excludedFromAverages
+    ? `Excluded from averages · ${exclusionLabel}`
+    : 'Included in qualified comparable average';
   return (
-    <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}`}
+    <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}, ${evidenceStatus}`}
       className="min-h-24"
       style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
@@ -1818,6 +1828,16 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
           <span className="mr-2">· {row.condition || 'Unspecified'}</span>
           {date && <span>· {date.split('T')[0]}</span>}
         </div>
+        <div
+          style={{
+            display: 'inline-flex', marginTop: 7, borderRadius: 999, padding: '4px 8px',
+            background: excludedFromAverages ? '#fff4d6' : '#eaf7ef',
+            color: excludedFromAverages ? '#7a5900' : '#166534',
+            fontSize: 10, fontWeight: 800,
+          }}
+        >
+          {evidenceStatus}
+        </div>
         {rawMessage && (
           <div className="line-clamp-2" style={{ color: MUTED, fontSize: 11, lineHeight: 1.45, marginTop: 7, whiteSpace: 'pre-wrap' }}>
             {rawMessage}
@@ -1825,8 +1845,10 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
         )}
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: hasUsdPrice ? GOLD : '#8a6500' }}>{priceLabel}</div>
-        {!hasUsdPrice && <div style={{ color: MUTED, fontSize: 10, marginTop: 2 }}>Excluded from averages</div>}
+        <div style={{ fontSize: 14, fontWeight: 600, color: excludedFromAverages ? '#8a6500' : GOLD }}>{priceLabel}</div>
+        <div style={{ color: MUTED, fontSize: 10, marginTop: 2 }}>
+          {excludedFromAverages ? 'Not used in chart or statistics' : 'Used in chart and statistics'}
+        </div>
       </div>
       <Eye className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
     </button>
