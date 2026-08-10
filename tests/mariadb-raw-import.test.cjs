@@ -9,6 +9,7 @@ const {
   compareCursor,
   discoverInputFiles,
   isTransientStatus,
+  postgresSafeRecord,
   prepareOutput,
   rpc,
   run,
@@ -19,6 +20,29 @@ const { sourceRecord } = require('../tools/mariadb-live/lib.cjs');
 function record(id, createdOn, title = `Rolex ${id} USD 10000`) {
   return sourceRecord({ id, created_on: createdOn, title }, '2026-08-10T12:00:00.000Z');
 }
+
+test('raw import losslessly transports PostgreSQL-incompatible NUL strings', () => {
+  const original = JSON.stringify({
+    ...record('nul', '2026-08-01 00:00:00'),
+    raw_message: 'before\u0000after',
+    raw_data: { title: 'watch\u0000title' },
+  });
+  const parsed = JSON.parse(original);
+  const safe = postgresSafeRecord(parsed, original);
+  assert.equal(safe.raw_message, 'before\\u0000after');
+  assert.equal(safe.raw_data.title, 'watch\\u0000title');
+  assert.equal(Buffer.from(safe.wf_transport_evidence.original_json_utf8_base64, 'base64').toString('utf8'), original);
+  assert.equal(
+    safe.wf_transport_evidence.original_json_sha256,
+    require('node:crypto').createHash('sha256').update(original).digest('hex'),
+  );
+  assert.equal(parsed.raw_message, 'before\u0000after');
+});
+
+test('raw import does not wrap PostgreSQL-safe source records', () => {
+  const safe = record('safe', '2026-08-01 00:00:00', String.raw`literal \\u0000 text`);
+  assert.equal(postgresSafeRecord(safe, JSON.stringify(safe)), safe);
+});
 
 test('raw import retries transient transport and server failures only', async () => {
   assert.equal(isTransientStatus(408), true);
@@ -126,7 +150,7 @@ test('raw import streams a canary, checkpoints after RPC, and completes with zer
     const input = path.join(root, 'raw-records.jsonl');
     fs.writeFileSync(input, [
       record('a', '2026-08-01 00:00:00'),
-      record('b', '2026-08-01 00:00:01'),
+      record('b', '2026-08-01 00:00:01', 'Rolex 116500LN\u0000USD 25000'),
       record('c', '2026-08-01 00:00:02'),
     ].map(value => `${JSON.stringify(value)}\n`).join(''));
     const output = path.join(root, 'output');
@@ -160,6 +184,11 @@ test('raw import streams a canary, checkpoints after RPC, and completes with zer
     });
     assert.equal(calls.filter(call => call.url.endsWith('/ingest_mariadb_raw_batch')).length, 2);
     assert.equal(report.input_rows, 3);
+    assert.equal(report.transport_encoded_rows, 1);
+    assert.equal(
+      calls.flatMap(call => call.body.p_records || []).filter(value => value.wf_transport_evidence).length,
+      1,
+    );
     assert.equal(report.reconciled, true);
     assert.equal(report.watch_records_writes, 0);
     assert.equal(report.normalization_writes, 0);
