@@ -1,0 +1,66 @@
+name: Supabase production capacity audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_SUPABASE_CAPACITY
+        required: true
+        type: string
+
+jobs:
+  audit-capacity:
+    if: ${{ inputs.confirmation == 'AUDIT_SUPABASE_CAPACITY' }}
+    runs-on: [self-hosted, Windows, X64, watchfacts-raw-import]
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+    steps:
+      - name: Query safe capacity metrics
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @'
+          WITH relation_sizes AS (
+            SELECT
+              namespace.nspname AS schema_name,
+              relation.relname AS relation_name,
+              pg_total_relation_size(relation.oid) AS total_bytes,
+              pg_relation_size(relation.oid) AS heap_bytes,
+              pg_indexes_size(relation.oid) AS index_bytes
+            FROM pg_class AS relation
+            JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+            WHERE namespace.nspname IN ('public', 'staging', 'raw', 'jobs')
+              AND relation.relkind IN ('r', 'm')
+          ), largest AS (
+            SELECT * FROM relation_sizes ORDER BY total_bytes DESC LIMIT 30
+          )
+          SELECT jsonb_build_object(
+            'project_ref', 'qnsafosakvonzgfcsphh',
+            'database_bytes', pg_database_size(current_database()),
+            'database_gib', round(pg_database_size(current_database())::numeric / 1073741824, 3),
+            'mariadb_envelopes', (SELECT count(*) FROM public.raw_messages WHERE source_platform = 'mariadb'),
+            'mariadb_versions', (SELECT count(*) FROM public.raw_message_versions),
+            'checkpoint', (
+              SELECT to_jsonb(checkpoint) - 'run_key'
+              FROM public.mariadb_raw_import_checkpoints AS checkpoint
+              ORDER BY updated_at DESC
+              LIMIT 1
+            ),
+            'largest_relations', (
+              SELECT jsonb_agg(to_jsonb(largest) ORDER BY total_bytes DESC)
+              FROM largest
+            )
+          ) AS capacity_audit;
+          '@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          if (-not $result -or -not $result[0].capacity_audit) {
+            throw 'Capacity audit returned no metrics.'
+          }
+          $result[0].capacity_audit | ConvertTo-Json -Depth 8
