@@ -61,6 +61,20 @@ jobs:
           }
 
           $managementHeaders = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $migrationPaths = @(
+            'supabase/migrations/20260810100000_immutable_mariadb_raw_import.sql',
+            'supabase/migrations/20260810103000_complete_immutable_mariadb_raw_import.sql'
+          )
+          foreach ($migrationPath in $migrationPaths) {
+            if (-not (Test-Path -LiteralPath $migrationPath)) { throw "Required forward migration is missing: $migrationPath" }
+            $migrationSql = Get-Content -Raw -LiteralPath $migrationPath
+            $migrationBody = @{ query = $migrationSql; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $managementHeaders -ContentType 'application/json' -Body $migrationBody | Out-Null
+          }
+          $reloadBody = @{ query = "NOTIFY pgrst, 'reload schema';"; read_only = $false } | ConvertTo-Json
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $managementHeaders -ContentType 'application/json' -Body $reloadBody | Out-Null
+          Start-Sleep -Seconds 3
+
           $keys = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/api-keys?reveal=true" -Headers $managementHeaders
           $serverKey = $keys | Where-Object {
             $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret')
