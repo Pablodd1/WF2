@@ -102,7 +102,21 @@ jobs:
           PGSSLMODE: require
         run: |
           set -euo pipefail
-          psql -X -v ON_ERROR_STOP=1 -f "$MIGRATION_FILE"
+          existing_valid="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_reviewed_workbook_verified_reference_wts'
+              AND i.indisvalid
+              AND i.indisready;
+          ")"
+          if [ "$existing_valid" = "1" ]; then
+            echo "Verified reference index already exists and is valid; skipping migration replay."
+          else
+            psql -X -v ON_ERROR_STOP=1 -f "$MIGRATION_FILE"
+          fi
 
       - name: Verify index validity and exact-reference query plans
         shell: bash
@@ -125,7 +139,7 @@ jobs:
             brand="${target%%|*}"
             reference="${target#*|}"
             safe_name="$(printf '%s_%s' "$brand" "$reference" | tr -cd '[:alnum:]_')"
-            psql -X -v ON_ERROR_STOP=1 -v brand="$brand" -v reference="$reference" -c "
+            psql -X -v ON_ERROR_STOP=1 -v brand="$brand" -v reference="$reference" <<'SQL' | tee "$RUNNER_TEMP/${safe_name}.plan.txt"
               EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
               SELECT id, workbook_price_usd, posting_date
               FROM public.reviewed_workbook_inventory
@@ -144,6 +158,6 @@ jobs:
                 )
               ORDER BY posting_date DESC NULLS LAST, id
               LIMIT 200;
-            " | tee "$RUNNER_TEMP/${safe_name}.plan.txt"
+          SQL
             grep -q 'idx_reviewed_workbook_verified_reference_wts' "$RUNNER_TEMP/${safe_name}.plan.txt"
           done
