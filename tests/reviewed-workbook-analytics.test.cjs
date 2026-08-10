@@ -104,12 +104,13 @@ test('reviewed workbook demand loader keeps WTB separate from verified sales pri
     path.join(__dirname, '..', 'api', '_lib', 'reviewed-workbook-analytics.cjs'),
     'utf8',
   );
-  const demandStart = source.indexOf('async function executeDemandQuery');
+  const demandStart = source.indexOf('async function executeDemandLaneQuery');
   const demandEnd = source.indexOf('async function loadReviewedWorkbookAnalyticsRows');
   const demandSource = source.slice(demandStart, demandEnd);
   assert.ok(demandStart >= 0 && demandEnd > demandStart);
   assert.match(demandSource, /in\('listing_type', \['WTB', 'NTQ'\]\)/);
-  assert.match(demandSource, /eq\('has_complete_identity', true\)/);
+  assert.match(demandSource, /eq\('has_exact_source_image', hasImage\)/);
+  assert.match(demandSource, /order\('id', \{ ascending: false \}\)/);
   assert.doesNotMatch(demandSource, /has_verified_usd_price/);
 });
 

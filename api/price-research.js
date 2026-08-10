@@ -231,7 +231,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     demand_count: eligible.length,
     demand_cohorts: demandCohorts,
     demand_rows: demandRowsSerialized,
-    demand_sample_capped: (data || []).length >= 5000,
+    demand_sample_capped: preloadedRows?.sampleCapped === true || (data || []).length >= 5000,
     demand_repost_count: repostRows.length,
     demand_suppressed_duplicate_count: suppressedIds.size,
   };
@@ -320,7 +320,7 @@ module.exports = async function handler(req, res) {
     loadReviewedWorkbookDemandRows(client, {
       brand,
       referenceKeys: preloadReferenceKeys,
-      limit: 5000,
+      limit: 100,
     }),
   ]);
   const preloadedReviewedWorkbookRows = preloadResults[0].status === 'fulfilled'
