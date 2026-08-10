@@ -27,7 +27,8 @@ PGPASSWORD = os.environ.get("PGPASSWORD")
 PGDATABASE = os.environ.get("PGDATABASE", "postgres")
 
 IS_SQLITE = False
-REQUIRE_POSTGRES = os.environ.get("REQUIRE_POSTGRES", "0").lower() in ("1", "true", "yes")
+PIPELINE_MODE = os.environ.get("PIPELINE_MODE", "postgres").strip().lower()
+REQUIRE_POSTGRES = PIPELINE_MODE != "sqlite"
 SQLITE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scratch", "pipeline_fallback.db")
 
 def get_db_connection():
@@ -54,7 +55,7 @@ def get_db_connection():
                 raise RuntimeError(f"PostgreSQL connection required via PG environment, but failed: {e}")
 
     if REQUIRE_POSTGRES:
-        raise RuntimeError("PostgreSQL connection required (--require-postgres or REQUIRE_POSTGRES=1), but no PostgreSQL credentials connected.")
+        raise RuntimeError("PostgreSQL connection required. Set DATABASE_URL/PGPASSWORD; SQLite is allowed only with PIPELINE_MODE=sqlite.")
 
     os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
     conn = sqlite3.connect(SQLITE_PATH)
@@ -301,7 +302,7 @@ def run_pipeline_step(limit=50):
             "from_name": job["from_name"],
             "from_number": job["from_number"],
             "region": job["region"],
-            "dealer_rating": 5.0
+            "dealer_rating": None
         }
 
         try:

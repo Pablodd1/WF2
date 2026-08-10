@@ -84,8 +84,12 @@ test('MariaDB source wrapper preserves immutable evidence and stable lineage', (
     type: 'sale',
     status: 'open',
     is_bundle: 0,
-    title: 'Rolex 126500LN USD 31,000',
-    description: null,
+    title: 'Structured title must remain available',
+    description: '  Rolex 126500LN USD 31,000\nUntouched seller line  ',
+    comments: 'original comment',
+    from_name: ' Dealer Name ',
+    from_number: '+1 555 0100',
+    phone_code: '1',
     brand: 'Rolex',
     reference: '126500LN',
     normalized_reference: '126500LN',
@@ -95,8 +99,13 @@ test('MariaDB source wrapper preserves immutable evidence and stable lineage', (
   };
   const wrapped = sourceRecord(row, '2026-08-02T00:15:00.000Z');
   assert.equal(wrapped.source_record_id, `mysql_auctions_${row.id}`);
-  assert.equal(wrapped.raw_message, row.title);
+  assert.equal(wrapped.raw_message, row.description);
+  assert.equal(wrapped.raw_message_source, 'description');
   assert.equal(wrapped.raw_data.title, row.title);
+  assert.equal(wrapped.raw_data.description, row.description);
+  assert.equal(wrapped.raw_data.comments, row.comments);
+  assert.equal(wrapped.raw_data.from_name, row.from_name);
+  assert.equal(wrapped.raw_data.from_number, row.from_number);
   assert.equal(wrapped.raw_data.price, row.price);
   assert.match(wrapped.raw_sha256, /^[a-f0-9]{64}$/);
 });

@@ -5,6 +5,7 @@ const path = require('node:path');
 const mysql = require('mysql2/promise');
 const {
   CONTRACT,
+  SOURCE_COLUMNS,
   assertReadOnlyGrants,
   atomicJson,
   boundedInteger,
@@ -12,13 +13,23 @@ const {
   sourceRecord,
 } = require('./lib.cjs');
 
-const SELECT_COLUMNS = [
-  'id', 'open_unique_key', 'created_on', 'updated_on', 'origin', 'type', 'status',
-  'is_bundle', 'category_id', 'company_id', 'from_number', 'from_name', 'region',
-  'title', 'description', 'brand', 'model', 'reference', 'normalized_reference',
-  'dial_color', 'condition_id', 'box', 'papers', 'price', 'reserve_price',
-  'front_image',
-].join(',');
+const SELECT_COLUMNS = SOURCE_COLUMNS.join(',');
+
+async function sourceSelectList(db) {
+  const [rows] = await db.execute(
+    `SELECT COLUMN_NAME column_name
+       FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = ?`,
+    ['auctions'],
+  );
+  const available = new Set(rows.map(row => String(row.column_name)));
+  for (const required of ['id', 'created_on']) {
+    if (!available.has(required)) throw new Error(`Required source column is missing: auctions.${required}`);
+  }
+  return SOURCE_COLUMNS
+    .map(column => available.has(column) ? `\`${column}\`` : `NULL AS \`${column}\``)
+    .join(',');
+}
 
 function config(env = process.env) {
   const required = ['MARIADB_HOST', 'MARIADB_USER', 'MARIADB_PASSWORD'];
@@ -99,11 +110,12 @@ async function run() {
     const [grantRows] = await db.query('SHOW GRANTS FOR CURRENT_USER()');
     assertReadOnlyGrants(grantRows.map(row => Object.values(row)[0]));
     await db.query('SET SESSION TRANSACTION READ ONLY');
+    const selectColumns = await sourceSelectList(db);
 
     while (state.input_rows < runConfig.maxRows) {
       const limit = Math.min(runConfig.batchSize, runConfig.maxRows - state.input_rows);
       const [rows] = await db.execute(
-        `SELECT ${SELECT_COLUMNS} FROM auctions
+        `SELECT ${selectColumns} FROM auctions
          WHERE created_on > ? OR (created_on = ? AND id > ?)
          ORDER BY created_on ASC, id ASC LIMIT ${limit}`,
         [state.last_created_on, state.last_created_on, state.last_id],
@@ -183,4 +195,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { SELECT_COLUMNS, config, prepareOutput, run };
+module.exports = { SELECT_COLUMNS, config, prepareOutput, run, sourceSelectList };

@@ -49,10 +49,9 @@ WATCH_INTENT_KEYWORDS = {
     "TRADE": ["trade", "swap", "exchange", "wtt"],
 }
 
-FX_TO_USD = {
-    "USD": 1.0, "USDT": 1.0, "HKD": 0.128, "SGD": 0.74,
-    "EUR": 1.09, "GBP": 1.27, "CHF": 1.12, "AED": 0.272,
-    "CAD": 0.74, "AUD": 0.65, "JPY": 0.0067, "CNY": 0.138,
+SUPPORTED_CURRENCIES = {
+    "USD", "USDT", "HKD", "SGD", "EUR", "GBP", "CHF", "AED",
+    "CAD", "AUD", "JPY", "CNY",
 }
 
 EMOJI_DIGITS = {
@@ -150,11 +149,12 @@ class WatchFactsPipelineProcessor:
         text_clean = re.sub(r'(\d),(\d)', r'\1\2', text_clean)
 
         lower = text_clean.lower()
-        default_curr = "USD"
+        default_curr = None
         if "hkd" in lower: default_curr = "HKD"
         elif "eur" in lower: default_curr = "EUR"
         elif "gbp" in lower: default_curr = "GBP"
         elif "usdt" in lower: default_curr = "USDT"
+        elif re.search(r"\busd\b", lower): default_curr = "USD"
         elif "sgd" in lower: default_curr = "SGD"
         elif "aed" in lower: default_curr = "AED"
         elif "chf" in lower: default_curr = "CHF"
@@ -165,7 +165,7 @@ class WatchFactsPipelineProcessor:
             unit = m.group(2).lower()
             val *= 1000 if unit == 'k' else 1_000_000
             curr_match = m.group(3)
-            curr = curr_match.upper().replace("$", "USD") if curr_match else default_curr
+            curr = curr_match.upper() if curr_match and curr_match != "$" else default_curr
             return (val, curr)
 
         m = re.search(r'(?:yours for|price|\$|usd|usdt|hkd|eur|gbp|chf|aed|sgd)\s*:?\s*(\d+(?:\.\d+)?)\s*(usd|usdt|hkd|eur|gbp|chf|aed|sgd|\$)?\b', text_clean, re.I)
@@ -173,14 +173,14 @@ class WatchFactsPipelineProcessor:
             val = float(m.group(1))
             if not (1950 <= val <= 2030 and len(str(int(val))) == 4):
                 curr_match = m.group(2)
-                curr = curr_match.upper().replace("$", "USD") if curr_match else default_curr
+                curr = curr_match.upper() if curr_match and curr_match != "$" else default_curr
                 return (val, curr)
 
         m = re.search(r'\b(\d+(?:\.\d+)?)\s*(usd|usdt|hkd|eur|gbp|chf|aed|sgd|\$)\b', text_clean, re.I)
         if m:
             val = float(m.group(1))
             if not (1950 <= val <= 2030 and len(str(int(val))) == 4):
-                curr = m.group(2).upper().replace("$", "USD")
+                curr = None if m.group(2) == "$" else m.group(2).upper()
                 return (val, curr)
 
         ref_val = self.extract_reference(text)
@@ -193,15 +193,27 @@ class WatchFactsPipelineProcessor:
             elif not (1950 <= val <= 2030 and len(str(int(val))) == 4):
                 return (val, default_curr)
 
-        return (0.0, "USD")
+        return (0.0, None)
 
-    def convert_to_usd(self, price, currency):
-        rate = FX_TO_USD.get(str(currency).upper(), None)
-        if rate is None:
-            return (0.0, None)
+    def convert_to_usd(self, price, currency, verified_rate=None):
+        if not price or price <= 0 or not currency:
+            return (None, None)
+        normalized_currency = str(currency).upper()
+        if normalized_currency == "USD":
+            return (round(price, 2), 1.0)
+        if verified_rate is None:
+            return (None, None)
+        try:
+            rate = float(verified_rate)
+        except (TypeError, ValueError):
+            return (None, None)
+        if rate <= 0:
+            return (None, None)
         return (round(price * rate, 2), rate)
 
     def check_price_plausibility(self, brand, price_usd):
+        if price_usd is None:
+            return (True, "USD_PRICE_UNAVAILABLE")
         if price_usd <= 0:
             return (False, "NO_PRICE")
         if price_usd < 50.0:
@@ -275,7 +287,8 @@ class WatchFactsPipelineProcessor:
         has_price = parsed["price"] > 0
         has_brand = bool(parsed["brand"])
         has_ref = bool(parsed["reference"])
-        known_currency = str(parsed["currency"]).upper() in FX_TO_USD
+        known_currency = parsed["currency"] is not None and str(parsed["currency"]).upper() in SUPPORTED_CURRENCIES
+        has_verified_usd = parsed.get("price_usd") is not None and parsed.get("price_usd") > 0
         is_watch = category == "WATCH"
 
         price_plausible, plausibility_reason = self.check_price_plausibility(parsed["brand"], parsed.get("price_usd", parsed["price"]))
@@ -300,7 +313,7 @@ class WatchFactsPipelineProcessor:
             price_research_status = "ineligible_bundle"
         elif not has_price:
             price_research_status = "ineligible_no_price"
-        elif not known_currency:
+        elif not known_currency or not has_verified_usd:
             price_research_status = "ineligible_currency"
         elif not has_brand or not has_ref:
             price_research_status = "ineligible_identity"
@@ -341,9 +354,11 @@ class WatchFactsPipelineProcessor:
 
         if price == 0.0 and job_data.get("price_src", 0):
             price    = float(job_data.get("price_src", 0))
-            currency = job_data.get("currency_src", "USD") or "USD"
+            currency = job_data.get("currency_src") or None
 
-        price_usd, conversion_rate = self.convert_to_usd(price, currency)
+        price_usd, conversion_rate = self.convert_to_usd(
+            price, currency, job_data.get("verified_conversion_rate")
+        )
         has_box    = bool(re.search(r'\bbox\b', message_text, re.I))
         has_papers = bool(re.search(r'\b(papers|card|cert)\b', message_text, re.I))
         catalog_confirmed = bool(job_data.get("catalog_confirmed"))
@@ -380,7 +395,11 @@ class WatchFactsPipelineProcessor:
         img_url = ""
         front_image = job_data.get("front_image")
         if front_image and str(front_image) not in ("0", "None", ""):
-            img_url = DO_LISTINGS_BASE + str(front_image)
+            image_value = str(front_image).strip()
+            if re.match(r"^https?://", image_value, re.I):
+                img_url = image_value
+            else:
+                img_url = DO_LISTINGS_BASE.rstrip("/") + "/" + image_value.lstrip("/")
 
         if is_bundle:
             listing_type = "MULTI_LISTING"
