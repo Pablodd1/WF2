@@ -360,72 +360,76 @@ module.exports = async function handler(req, res) {
       // equivalent stored spellings so the market query aggregates them.
       const equivalentReferences = listEquivalentReferences(rawRef, brand);
       referenceVariants = equivalentReferences;
-      // ponytail: do NOT filter on verdict/confidence during reference
-      // resolution. All records in the current dataset are "Human Review"/30;
-      // applying APPROVED/90+ gates at discovery time makes every reference
-      // invisible, returns 0 rows, and produces the "non-display dataset"
-      // reported by the user.
-      const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
-        .from(sourceTable)
-        .select('reference')
-        .eq('brand', brand)
-        .ilike('reference', reference)
-        .limit(50)));
-      const exactRefError = exactRefResults.every(result => result.error)
-        ? exactRefResults.find(result => result.error)?.error || null
-        : null;
-      const exactRefs = exactRefResults
-        .filter(result => !result.error)
-        .flatMap(result => result.data || []);
-
-      let refs = exactRefs;
-      let refError = exactRefError;
-      if (!exactRefError && (!exactRefs || exactRefs.length === 0)) {
-        // ponytail: prefix ilike with .limit(50) is fast and indexed when the
-        // leading characters are specific. Fall back to catalog-based expansion
-        // if the DB query returns nothing.
-        const prefixResult = await client
+      if (exactReviewedWorkbookRelease) {
+        // The indexed reviewed-workbook preload already proves the exact
+        // normalized reference. Re-querying the legacy release view here made
+        // every successful request pay for an unrelated multi-million-row
+        // lookup before returning the workbook evidence.
+        const equivalentKeys = new Set(equivalentReferences.map(normRef));
+        const exactVariants = [...new Set(preloadedReviewedWorkbookRows
+          .map(row => row.reference)
+          .filter(reference => equivalentKeys.has(normRef(reference))))];
+        const exact = exactVariants[0] || rawRef;
+        const catalogHit = lookupCatalog(rawRef, brand || null);
+        targetRef = catalogHit?.found && catalogHit.matchType !== 'partial' && catalogHit.reference
+          ? catalogHit.reference
+          : exact;
+        referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
+      } else {
+        const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
           .from(sourceTable)
           .select('reference')
           .eq('brand', brand)
-          .ilike('reference', `${rawRef}%`)
-          .limit(50);
-        refs = prefixResult.data;
-        refError = prefixResult.error;
-        // ponytail: also try the catalog for prefix-matched references.
-        // listCatalogReferences contains every known reference per brand
-        // and is already loaded in memory. For "126500" this returns
-        // ["126500LN", "126500LNA", ...] without a DB query.
-        if ((!refs || refs.length === 0) && !refError) {
-          try {
-            const catalogRefs = listCatalogReferences(brand)
-              .filter(e => e.reference && e.reference.toUpperCase().startsWith(rawRef.toUpperCase()))
-              .map(e => e.reference);
-            refs = [...new Set(catalogRefs)].map(r => ({ reference: r }));
-          } catch { /* catalog unavailable, keep refs as-is */ }
-        }
-      }
+          .ilike('reference', reference)
+          .limit(50)));
+        const exactRefError = exactRefResults.every(result => result.error)
+          ? exactRefResults.find(result => result.error)?.error || null
+          : null;
+        const exactRefs = exactRefResults
+          .filter(result => !result.error)
+          .flatMap(result => result.data || []);
 
-      if (!refError && refs && refs.length > 0) {
-        const foundRefs = [...new Set(refs.map(r => r.reference))];
-        const equivalentKeys = new Set(equivalentReferences.map(normRef));
-        const exactVariants = foundRefs.filter(r => equivalentKeys.has(normRef(r)));
-        const exact = exactVariants[0];
-        if (exact) {
-          const catalogHit = lookupCatalog(rawRef, brand || null);
-          targetRef = catalogHit?.found && catalogHit.matchType !== 'partial' && catalogHit.reference
-            ? catalogHit.reference
-            : exact;
-          referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
+        let refs = exactRefs;
+        let refError = exactRefError;
+        if (!exactRefError && (!exactRefs || exactRefs.length === 0)) {
+          // Prefix matches remain suggestions only. The catalog fallback may
+          // decorate those suggestions, but it never auto-selects one.
+          const prefixResult = await client
+            .from(sourceTable)
+            .select('reference')
+            .eq('brand', brand)
+            .ilike('reference', `${rawRef}%`)
+            .limit(50);
+          refs = prefixResult.data;
+          refError = prefixResult.error;
+          if ((!refs || refs.length === 0) && !refError) {
+            try {
+              const catalogRefs = listCatalogReferences(brand)
+                .filter(e => e.reference && e.reference.toUpperCase().startsWith(rawRef.toUpperCase()))
+                .map(e => e.reference);
+              refs = [...new Set(catalogRefs)].map(r => ({ reference: r }));
+            } catch { /* catalog unavailable, keep refs as-is */ }
+          }
         }
-        else {
-          // Prefix matches are suggestions only and must never silently become
-          // a specific watch. The client can present foundRefs for selection,
-          // then repeat the request with the chosen exact reference.
-          return res.status(400).json({
-            error: 'Enter an exact reference. Prefix matches require an explicit selection.',
-            suggestions: foundRefs.slice(0, 20),
-          });
+
+        if (!refError && refs && refs.length > 0) {
+          const foundRefs = [...new Set(refs.map(r => r.reference))];
+          const equivalentKeys = new Set(equivalentReferences.map(normRef));
+          const exactVariants = foundRefs.filter(r => equivalentKeys.has(normRef(r)));
+          const exact = exactVariants[0];
+          if (exact) {
+            const catalogHit = lookupCatalog(rawRef, brand || null);
+            targetRef = catalogHit?.found && catalogHit.matchType !== 'partial' && catalogHit.reference
+              ? catalogHit.reference
+              : exact;
+            referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
+          }
+          else {
+            return res.status(400).json({
+              error: 'Enter an exact reference. Prefix matches require an explicit selection.',
+              suggestions: foundRefs.slice(0, 20),
+            });
+          }
         }
       }
     }
@@ -472,6 +476,10 @@ module.exports = async function handler(req, res) {
         .eq('listing_type', 'WTS');
       if (error) throw error;
       rows = data || [];
+    } else if (preloadedReviewedWorkbookRows.length) {
+      // Do not query the legacy view for rows that the strict workbook preload
+      // has already returned. The same immutable rows are used downstream.
+      rows = preloadedReviewedWorkbookRows;
     } else {
       let result = await buildRowsQuery(sourceTable);
       if (result.error || !(result.data || []).length) {
