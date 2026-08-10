@@ -418,6 +418,39 @@ function parseCursorPage(value) {
   }
 }
 
+function parseInventoryCursor(value, pageSize) {
+  const cursor = cleanExactText(value, 240);
+  if (!cursor) return { lane: 'images', offset: 0, page: 1 };
+  const legacyPage = parseCursorPage(cursor);
+  if (legacyPage !== null) {
+    return {
+      lane: 'images',
+      offset: (legacyPage - 1) * pageSize,
+      page: legacyPage,
+    };
+  }
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    const lane = decoded?.l === 'i' ? 'images' : decoded?.l === 'n' ? 'no-images' : null;
+    const offset = Number(decoded?.o);
+    const page = Number(decoded?.p);
+    if (!lane || !Number.isSafeInteger(offset) || offset < 0
+      || !Number.isSafeInteger(page) || page < 1) return null;
+    return { lane, offset, page };
+  } catch {
+    return null;
+  }
+}
+
+function encodeInventoryCursor({ lane, offset, page }) {
+  return Buffer.from(JSON.stringify({
+    v: 1,
+    l: lane === 'images' ? 'i' : 'n',
+    o: offset,
+    p: page,
+  })).toString('base64url');
+}
+
 function publicationBrandsFromSummary(summary) {
   return (summary.brands || [])
     .filter(brand => Number(brand.canonical_listings || 0) > 0)
@@ -446,7 +479,8 @@ function isLegacyReviewedInventoryRecord(record) {
 
 function buildLegacyMarketQueryParams({
   pageSize,
-  pageWindow,
+  offset = 0,
+  imageLane = 'images',
   brand,
   requestedReference,
   exactDialVariants,
@@ -466,14 +500,14 @@ function buildLegacyMarketQueryParams({
   ].join(',');
   const params = new URLSearchParams({
     select: legacyColumns,
-    // The production legacy view has no matching image-first expression index.
-    // Its proven ID index keeps the floor available until the forward image
-    // index/view migration is applied. Returned records are still sorted image
-    // first in the application; global image-first ordering is a DB gate.
+    // Page each side of the image boundary independently. The production
+    // expression index uses has_exact_source_image as its leading key, so an
+    // equality lane plus descending ID stays indexed without an 8.5M-row sort.
     order: 'id.desc',
     limit: String(pageSize + 1),
   });
-  if (pageWindow.start > 0) params.set('offset', String(pageWindow.start));
+  params.set('has_exact_source_image', imageLane === 'images' ? 'eq.true' : 'eq.false');
+  if (offset > 0) params.set('offset', String(offset));
   if (brand) params.set('brand_scope', `eq.${brand}`);
   if (requestedReference) {
     const exactVariants = listEquivalentReferences(requestedReference, brand || null);
@@ -481,7 +515,7 @@ function buildLegacyMarketQueryParams({
   }
   if (exactDialVariants.length) params.set('dial_color', `in.(${exactDialVariants.join(',')})`);
   if (listingType) params.set('listing_type', `eq.${listingType}`);
-  if (imagesOnly) params.set('user_image_url', 'not.is.null');
+  if (imagesOnly) params.set('has_exact_source_image', 'eq.true');
   if (pricedOnly) params.set('has_supplied_price', 'eq.true');
   const genericSearch = safeSearchTerm(search);
   if (genericSearch && !requestedReference && !exactDialVariants.length) {
@@ -519,13 +553,15 @@ module.exports = async function handler(req, res) {
       : DEFAULT_PAGE_SIZE;
     const pagination = cleanExactText(req.query?.pagination, 20).toLowerCase();
     const cursorProvided = req.query?.cursor != null && String(req.query.cursor).trim() !== '';
-    const cursorPage = parseCursorPage(req.query?.cursor);
-    if (cursorProvided && cursorPage === null) {
+    const inventoryCursor = pagination === 'cursor'
+      ? parseInventoryCursor(req.query?.cursor, pageSize)
+      : null;
+    if (cursorProvided && inventoryCursor === null) {
       return res.status(400).json({ status: 'error', error: 'Invalid pagination cursor' });
     }
     const requestedPage = Number.parseInt(String(req.query?.page || '1'), 10);
-    const page = pagination === 'cursor' && cursorPage !== null
-      ? cursorPage
+    const page = pagination === 'cursor' && inventoryCursor !== null
+      ? inventoryCursor.page
       : (Number.isInteger(requestedPage) ? Math.max(1, requestedPage) : 1);
     const search = cleanExactText(req.query?.q, 120);
     const parsedSearch = parseTradingSearch(search);
@@ -633,9 +669,14 @@ module.exports = async function handler(req, res) {
     }
     if (!itemCategory) return res.status(400).json({ status: 'error', error: 'Invalid item category' });
     // ponytail: simplified query — ORDER BY with offset times out on large views
-    queryParams.set('order', 'has_exact_source_image.desc.nullslast,id.desc');
+    const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || 'images');
+    const requestedOffset = pagination === 'cursor'
+      ? (inventoryCursor?.offset || 0)
+      : pageWindow.start;
+    queryParams.set('has_exact_source_image', requestedLane === 'images' ? 'eq.true' : 'eq.false');
+    queryParams.set('order', 'id.desc');
     queryParams.set('limit', String(pageSize + 1));
-    if (pageWindow.start > 0) queryParams.set('offset', String(pageWindow.start));
+    if (requestedOffset > 0) queryParams.set('offset', String(requestedOffset));
     
     const headers = {
       'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
@@ -643,7 +684,8 @@ module.exports = async function handler(req, res) {
     };
     let activeQueryParams = legacyMarketViewContractDetected
       ? buildLegacyMarketQueryParams({
-          pageSize, pageWindow, brand, requestedReference, exactDialVariants,
+          pageSize, offset: requestedOffset, imageLane: requestedLane,
+          brand, requestedReference, exactDialVariants,
           listingType, imagesOnly, pricedOnly, search,
         })
       : queryParams;
@@ -661,7 +703,8 @@ module.exports = async function handler(req, res) {
       legacyMarketViewContractDetected = true;
       usedLegacyViewContract = true;
       activeQueryParams = buildLegacyMarketQueryParams({
-        pageSize, pageWindow, brand, requestedReference, exactDialVariants,
+        pageSize, offset: requestedOffset, imageLane: requestedLane,
+        brand, requestedReference, exactDialVariants,
         listingType, imagesOnly, pricedOnly, search,
       });
       restUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${activeQueryParams.toString()}`;
@@ -672,10 +715,50 @@ module.exports = async function handler(req, res) {
       throw new Error(`REST query failed: ${restRes.status} ${errText.slice(0, 200)}`);
     }
     const data = await restRes.json();
+    let rawRows = (data || []).slice(0, pageSize);
+    let hasMore = (data || []).length > pageSize;
+    let nextLane = requestedLane;
+    let nextOffset = requestedOffset + rawRows.length;
+
+    // Fill the final image page from the no-image lane. The two equality lanes
+    // preserve one global boundary without a full-view boolean sort or count.
+    if (!imagesOnly && requestedLane === 'images' && !hasMore) {
+      const remaining = pageSize - rawRows.length;
+      nextLane = 'no-images';
+      nextOffset = 0;
+      if (remaining > 0) {
+        const noImageParams = usedLegacyViewContract
+          ? buildLegacyMarketQueryParams({
+              pageSize: remaining, offset: 0, imageLane: 'no-images',
+              brand, requestedReference, exactDialVariants,
+              listingType, imagesOnly: false, pricedOnly, search,
+            })
+          : new URLSearchParams(queryParams);
+        if (!usedLegacyViewContract) {
+          noImageParams.set('has_exact_source_image', 'eq.false');
+          noImageParams.set('order', 'id.desc');
+          noImageParams.set('limit', String(remaining + 1));
+          noImageParams.set('offset', '0');
+        }
+        const noImageUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${noImageParams.toString()}`;
+        const noImageRes = await fetch(noImageUrl, { headers });
+        const noImageError = noImageRes.ok ? '' : await noImageRes.text();
+        if (!noImageRes.ok) {
+          throw new Error(`REST no-image query failed: ${noImageRes.status} ${noImageError.slice(0, 200)}`);
+        }
+        const noImageData = await noImageRes.json();
+        const noImageRows = (noImageData || []).slice(0, remaining);
+        rawRows = [...rawRows, ...noImageRows];
+        hasMore = (noImageData || []).length > remaining;
+        nextOffset = noImageRows.length;
+      } else {
+        hasMore = true;
+      }
+    }
     // ponytail: count removed to avoid timeout. Use summary total instead.
     const total = summaryTotal;
-    const rows = pageWindow.reverse ? [...(data || [])].reverse() : (data || []);
-    const pageResult = boundedPage(rows, pageSize, scopedFilter);
+    const rows = pageWindow.reverse ? [...rawRows].reverse() : rawRows;
+    const pageResult = boundedPage(rows, pageSize, false);
     const publicationGate = usedLegacyViewContract
       ? isLegacyReviewedInventoryRecord
       : isApprovedInventoryRecord;
@@ -703,9 +786,9 @@ module.exports = async function handler(req, res) {
           .slice(0, pageSize);
       }
     }
-    const hasMore = scopedFilter
-      ? pageResult.hasLookahead
-      : pageWindow.requestedStart + records.length < total;
+    const nextCursor = hasMore
+      ? encodeInventoryCursor({ lane: nextLane, offset: nextOffset, page: page + 1 })
+      : null;
 
     return res.status(200).json({
       status: 'ok',
@@ -715,7 +798,7 @@ module.exports = async function handler(req, res) {
       pageSize,
       totalIsEstimate: scopedFilter && !preciseCount,
       hasMore,
-      nextCursor: hasMore ? String(page + 1) : null,
+      nextCursor,
       records,
       summary,
       publicationBrands,
@@ -750,6 +833,8 @@ module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;
 module.exports.isMultiListing = isMultiListing;
 module.exports.safeSearchTerm = safeSearchTerm;
 module.exports.parseCursorPage = parseCursorPage;
+module.exports.parseInventoryCursor = parseInventoryCursor;
+module.exports.encodeInventoryCursor = encodeInventoryCursor;
 module.exports.publicationBrandsFromSummary = publicationBrandsFromSummary;
 module.exports.boundedPage = boundedPage;
 module.exports.buildLegacyMarketQueryParams = buildLegacyMarketQueryParams;

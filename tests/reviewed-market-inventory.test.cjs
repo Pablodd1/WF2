@@ -315,6 +315,15 @@ test('supports numeric and base64url page cursors', () => {
   assert.equal(api.parseCursorPage('bad-token'), null);
 });
 
+test('inventory cursors preserve the global image boundary without a full-view sort', () => {
+  assert.deepEqual(api.parseInventoryCursor('', 24), { lane: 'images', offset: 0, page: 1 });
+  const token = api.encodeInventoryCursor({ lane: 'no-images', offset: 17, page: 8 });
+  assert.deepEqual(api.parseInventoryCursor(token, 24), {
+    lane: 'no-images', offset: 17, page: 8,
+  });
+  assert.equal(api.parseInventoryCursor('not-a-cursor', 24), null);
+});
+
 test('scoped pages use one lookahead row instead of trusting estimated totals', () => {
   const rows = Array.from({ length: 25 }, (_, index) => ({ id: `workbook_${index}` }));
   const page = api.boundedPage(rows, 24, true);
@@ -325,7 +334,7 @@ test('scoped pages use one lookahead row instead of trusting estimated totals', 
     hasLookahead: false,
   });
   assert.match(source, /queryParams\.set\('limit', String\(pageSize \+ 1\)\)/);
-  assert.match(source, /scopedFilter[\s\S]*\? pageResult\.hasLookahead/);
+  assert.match(source, /const nextCursor = hasMore[\s\S]*encodeInventoryCursor/);
 });
 
 test('publication brands are derived from populated reviewed checkpoints', () => {
@@ -354,7 +363,9 @@ test('endpoint is read-only and globally ranks verified source images before pag
   // ponytail: images-first ORDER BY was reverted — it causes a Postgres
   // statement timeout on the unindexed view. Assert the proven indexed order:
   // price evidence primary, images as tiebreaker, newest last.
-  assert.match(source, /queryParams\.set\('order', 'has_exact_source_image\.desc\.nullslast,id\.desc'\)/);
+  assert.match(source, /queryParams\.set\('has_exact_source_image', requestedLane === 'images' \? 'eq\.true' : 'eq\.false'\)/);
+  assert.match(source, /queryParams\.set\('order', 'id\.desc'\)/);
+  assert.match(source, /Fill the final image page from the no-image lane/);
   assert.match(source, /const publicationGate = usedLegacyViewContract[\s\S]*isLegacyReviewedInventoryRecord[\s\S]*isApprovedInventoryRecord/);
   assert.match(source, /filter\(record => publicationGate\(record\) && !record\.multi_listing\)/);
   assert.doesNotMatch(source, /order\('workbook_price_usd'/);
@@ -369,7 +380,8 @@ test('endpoint is read-only and globally ranks verified source images before pag
 test('legacy production view fallback preserves exact reference families and bounded indexed reads', () => {
   const params = api.buildLegacyMarketQueryParams({
     pageSize: 24,
-    pageWindow: { start: 0 },
+    offset: 0,
+    imageLane: 'images',
     brand: 'Patek Philippe',
     requestedReference: '5712/1A-001',
     exactDialVariants: [],
@@ -381,7 +393,7 @@ test('legacy production view fallback preserves exact reference families and bou
   assert.equal(params.get('brand_scope'), 'eq.Patek Philippe');
   assert.match(params.get('normalized_reference'), /5712\/1A-001/);
   assert.match(params.get('normalized_reference'), /5712\/1A/);
-  assert.equal(params.get('user_image_url'), 'not.is.null');
+  assert.equal(params.get('has_exact_source_image'), 'eq.true');
   assert.equal(params.get('order'), 'id.desc');
   assert.equal(params.get('limit'), '25');
 });
