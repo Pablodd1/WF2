@@ -274,6 +274,10 @@ function directSubmissionMatches(record, filters) {
   return true;
 }
 
+function directSubmissionMatchesImageLane(record, lane) {
+  return lane === 'images' ? record.has_images === true : record.has_images === false;
+}
+
 function mapReviewedRecord(row) {
   // Publish only user_image_url, the exact source upload retained by the view.
   const candidateImageUrl = row.user_image_url || null;
@@ -285,8 +289,12 @@ function mapReviewedRecord(row) {
     && row.verified_price_usd > 0;
   const verifiedPriceUsd = hasVerifiedUsdPrice ? row.verified_price_usd : null;
 
+  // The production workbook index and view already enforce an exact supplied
+  // HTTP(S) token with no whitespace. Preserve that source token verbatim;
+  // URL() is unnecessarily stricter for legacy object names and can move a
+  // database-qualified source image into the wrong pagination lane.
   const exactImageUrl = hasExactSourceImage
-    ? exactHttpUrl(candidateImageUrl)
+    ? String(candidateImageUrl).trim()
     : null;
   // Source participants have agreed that supplied identity and contact fields
   // are public marketplace data. Preserve the source flag separately upstream,
@@ -766,7 +774,9 @@ module.exports = async function handler(req, res) {
       .map(mapReviewedRecord)
       .filter(record => publicationGate(record) && !record.multi_listing)
       .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
-    if (page === 1) {
+    const firstPageOfLane = requestedOffset === 0
+      && (requestedLane === 'images' ? page === 1 : true);
+    if (firstPageOfLane) {
       let directQuery = client.from('dealer_listing_submissions')
         .select('id,intent,category,raw_message,claimed_fields,image_urls,poster_image_url,review_status,publication_status,created_at')
         .eq('publication_status', 'PUBLISHED')
@@ -778,6 +788,7 @@ module.exports = async function handler(req, res) {
       if (!directError) {
         const directRecords = (directRows || [])
           .map(mapDealerSubmission)
+          .filter(record => directSubmissionMatchesImageLane(record, requestedLane))
           .filter(record => !record.multi_listing && directSubmissionMatches(record, {
             imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search, itemCategory, region,
           }));
@@ -825,6 +836,7 @@ module.exports.referenceIsPriceToken = referenceIsPriceToken;
 module.exports.recordEvidenceCoverage = recordEvidenceCoverage;
 module.exports.mapDealerSubmission = mapDealerSubmission;
 module.exports.directSubmissionMatches = directSubmissionMatches;
+module.exports.directSubmissionMatchesImageLane = directSubmissionMatchesImageLane;
 module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;
 module.exports.isLegacyReviewedInventoryRecord = isLegacyReviewedInventoryRecord;
