@@ -1,0 +1,163 @@
+name: Supabase verified reference index gate
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-verified-reference-index-gate
+  cancel-in-progress: false
+
+jobs:
+  apply-index:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      MIGRATION_COMMIT: 4874361aa1a501d29c21a253dd971e64f6ba40bb
+      MIGRATION_FILE: supabase/migrations/20260810045000_reviewed_workbook_verified_reference_analytics.sql
+      MIGRATION_SHA256: 80c17271693eaba0647595059eeda29c0c8e5aa7f1d9c85ea21134daea637dc7
+    steps:
+      - name: Check out the reviewed migration commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.MIGRATION_COMMIT }}
+
+      - name: Validate required secrets and exact migration scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+          test -f "$MIGRATION_FILE"
+          test "$(sha256sum "$MIGRATION_FILE" | awk '{print $1}')" = "$MIGRATION_SHA256"
+          test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$MIGRATION_FILE")" = "1"
+          ! grep -Eiq '(DROP|TRUNCATE|DELETE|UPDATE|INSERT|ALTER[[:space:]]+TABLE|CREATE[[:space:]]+TABLE|CREATE[[:space:]]+(OR[[:space:]]+REPLACE[[:space:]]+)?VIEW|staging\.listings)' "$MIGRATION_FILE"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve the production session pooler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/config/database/pooler" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -o "$RUNNER_TEMP/pooler.json"
+
+          jq -e 'type == "array" and length > 0' "$RUNNER_TEMP/pooler.json" >/dev/null
+          jq -c '[.[] | select(.database_type == "PRIMARY" and .pool_mode == "session")][0] // [.[] | select(.database_type == "PRIMARY")][0]' \
+            "$RUNNER_TEMP/pooler.json" > "$RUNNER_TEMP/primary-pooler.json"
+          jq -e '.db_host and .db_port and .db_user and .db_name' "$RUNNER_TEMP/primary-pooler.json" >/dev/null
+
+          echo "PGHOST=$(jq -r '.db_host' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGPORT=$(jq -r '.db_port' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGUSER=$(jq -r '.db_user' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGDATABASE=$(jq -r '.db_name' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+
+      - name: Preflight reviewed-workbook architecture and index state
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          architecture="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT
+              (to_regclass('public.reviewed_workbook_inventory') IS NOT NULL)::int || '|' ||
+              (COUNT(*) FILTER (WHERE column_name IN (
+                'id', 'brand_scope', 'normalized_reference', 'posting_date',
+                'listing_type', 'price_evidence_status', 'workbook_price_usd'
+              )))::text
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'reviewed_workbook_inventory';
+          ")"
+          test "$architecture" = "1|7"
+
+          invalid_index="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_reviewed_workbook_verified_reference_wts'
+              AND (NOT i.indisvalid OR NOT i.indisready);
+          ")"
+          test "$invalid_index" = "0"
+
+      - name: Apply the exact forward index migration
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          existing_valid="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_reviewed_workbook_verified_reference_wts'
+              AND i.indisvalid
+              AND i.indisready;
+          ")"
+          if [ "$existing_valid" = "1" ]; then
+            echo "Verified reference index already exists and is valid; skipping migration replay."
+          else
+            psql -X -v ON_ERROR_STOP=1 -f "$MIGRATION_FILE"
+          fi
+
+      - name: Verify index validity and exact-reference query plans
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          validity="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT i.indisvalid::int || '|' || i.indisready::int
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_reviewed_workbook_verified_reference_wts';
+          ")"
+          test "$validity" = "1|1"
+
+          for target in 'Patek Philippe|5712' 'Rolex|116500LN' 'Rolex|126500LN'; do
+            brand="${target%%|*}"
+            reference="${target#*|}"
+            safe_name="$(printf '%s_%s' "$brand" "$reference" | tr -cd '[:alnum:]_')"
+            psql -X -v ON_ERROR_STOP=1 -v brand="$brand" -v reference="$reference" <<'SQL' | tee "$RUNNER_TEMP/${safe_name}.plan.txt"
+              EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+              SELECT id, workbook_price_usd, posting_date
+              FROM public.reviewed_workbook_inventory
+              WHERE brand_scope = :'brand'
+                AND regexp_replace(
+                  upper(COALESCE(normalized_reference, '')),
+                  '[^A-Z0-9]',
+                  '',
+                  'g'
+                ) = :'reference'
+                AND listing_type = 'WTS'
+                AND COALESCE(
+                  price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH'
+                    AND workbook_price_usd > 0,
+                  false
+                )
+              ORDER BY posting_date DESC NULLS LAST, id
+              LIMIT 200;
+          SQL
+            grep -q 'idx_reviewed_workbook_verified_reference_wts' "$RUNNER_TEMP/${safe_name}.plan.txt"
+          done

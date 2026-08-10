@@ -18,7 +18,8 @@ test('authenticated form supports item photos, a posting-user photo, and three c
   assert.match(source, /Add similar/);
   assert.match(source, /deferred bundle lane/);
   assert.match(source, /MAX_ITEMS = 20/);
-  assert.match(source, /Normalize and publish/);
+  assert.match(source, /Submit \$\{items\.length === 1 \? 'item'/);
+  assert.match(source, /for review/);
   assert.match(source, /Complete dealer onboarding/);
   assert.match(source, /Batch \{item\.bulk_submission_id/);
 });

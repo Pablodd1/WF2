@@ -5,52 +5,41 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { buildSourceLinks, snapshotDirectory } = require('../api/dealers.js');
+const { publicDealer } = require('../api/dealers.js');
 
-test('public directory does not require a dealer session', () => {
+test('public directory is database-only and does not require a dealer session', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealers.js'), 'utf8');
   assert.doesNotMatch(source, /authorizeDealer/);
   assert.match(source, /getClient/);
+  assert.match(source, /\.eq\('status', 'VERIFIED'\)/);
+  assert.doesNotMatch(source, /fullDirectoryCrawl|snapshotDirectory|watchfacts_top_rated|directory_url|source_links/i);
 });
 
-test('top-rated snapshot preserves all 25 source cards and their workflow links', () => {
-  const result = snapshotDirectory('', 1, 25);
-  assert.equal(result.total, 25);
-  assert.equal(result.dealers.length, 25);
-  const federico = result.dealers[0];
-  assert.equal(federico.display_name, 'Federico Maman');
-  assert.equal(federico.review_count, 22);
-  assert.equal(federico.stats.wts_posts, 3);
-  assert.equal(federico.stats.wtb_posts, 1);
-  assert.equal(federico.source_links.reviews, 'https://watchfacts.com/user/916/profile#dealer-feedback-div');
-  assert.equal(federico.source_links.wts, 'https://watchfacts.com/profile-listings?profileId=916&for=sale');
-  assert.equal(federico.source_links.wtb, 'https://watchfacts.com/profile-listings?profileId=916&for=search');
-  assert.equal(federico.source_links.whatsapp, 'https://wa.me/13059888263');
-  assert.equal(federico.whatsapp_group_count, 25);
-  assert.equal(federico.source_metrics.profile_listing_total, 162);
-  assert.equal(federico.source_metrics.feedback_received, 22);
+test('top rated is derived only from verified database ratings', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealers.js'), 'utf8');
+  assert.match(source, /mode === 'top-rated'/);
+  assert.match(source, /query = query\.not\('rating', 'is', null\)/);
+  assert.doesNotMatch(source, /snapshotDirectory|watchfacts_top_rated_snapshot|watchfacts_top_rated_crawl/i);
 });
 
-test('Reference Check snapshot supports case-insensitive name and phone search', () => {
-  assert.equal(snapshotDirectory('JAZTIME', 1, 24).dealers[0].display_name, 'Jaztime Watches');
-  assert.equal(snapshotDirectory('7869569201', 1, 24).total, 0);
-  assert.equal(snapshotDirectory('3059888263', 1, 24).dealers[0].display_name, 'Federico Maman');
+test('verified phone is published only when the dealer consent flag is true', () => {
+  const base = {
+    id: 'dealer-1', display_name: 'Verified Dealer', contact_consent: false,
+  };
+  const privateResult = publicDealer(base, { wts_posts: 2 }, '+1 305 555 0101', 1);
+  assert.equal(privateResult.verified_phone, null);
+  assert.equal('contact_consent' in privateResult, false);
+
+  const publicResult = publicDealer({ ...base, contact_consent: true }, null, '+1 305 555 0101', 1);
+  assert.equal(publicResult.verified_phone, '+1 305 555 0101');
 });
 
-test('crawled top-rated profiles route through the internal dealer profile workflow', () => {
-  const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
-  assert.match(page, /to=\{`\/dealers\/\$\{dealer\.slug \|\| dealer\.id\}`\}/);
-  assert.match(page, /Full profile/);
-  assert.match(page, /Source profile:/);
-});
-
-test('source links follow the original profile, feedback, WTS, WTB and WhatsApp routes', () => {
-  const links = buildSourceLinks({ directory_url: 'https://watchfacts.com/user/3435/profile', directory_source_id: '3435' }, '+1 (714) 734-0511');
-  assert.deepEqual(links, {
-    profile: 'https://watchfacts.com/user/3435/profile',
-    reviews: 'https://watchfacts.com/user/3435/profile#dealer-feedback-div',
-    wts: 'https://watchfacts.com/profile-listings?profileId=3435&for=sale',
-    wtb: 'https://watchfacts.com/profile-listings?profileId=3435&for=search',
-    whatsapp: 'https://wa.me/17147340511',
-  });
+test('customer directory and profile pages contain no legacy source navigation', () => {
+  const directory = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
+  const profile = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerProfile.tsx'), 'utf8');
+  for (const source of [directory, profile]) {
+    assert.doesNotMatch(source, /source_links|source_workflow|source_metrics|Source profile|WTS route|WTB route/);
+  }
+  assert.match(directory, /Full profile/);
+  assert.match(profile, /Verified dealer/);
 });

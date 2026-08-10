@@ -4,106 +4,6 @@ const { getClient } = require('./_lib/supabase');
 const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
-const fullDirectoryCrawl = require('../data/dealer-directory/full-crawl-2026-08-09.json');
-
-function sourceProfileId(identity) {
-  return String(identity || '').match(/^watchfacts-source-(\d+)$/i)?.[1] || null;
-}
-
-function sourcePrice(displayPrice) {
-  const value = Number(String(displayPrice || '').replace(/[^0-9.]/g, ''));
-  return Number.isFinite(value) && value > 0 ? value : null;
-}
-
-function sourceDate(value) {
-  if (!value) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-}
-
-function sourceProfilePayload(identity) {
-  const id = sourceProfileId(identity);
-  if (!id) return null;
-  const profile = fullDirectoryCrawl.profiles.find(row => String(row.id) === id);
-  if (!profile) return null;
-  const listings = fullDirectoryCrawl.listings
-    .filter(row => String(row.dealer_id) === id)
-    .sort((left, right) => String(right.posted_on || '').localeCompare(String(left.posted_on || '')))
-    .map(row => ({
-      id: `watchfacts-${row.id}`,
-      brand: null,
-      reference: null,
-      dial_color: null,
-      condition: null,
-      title: row.title || null,
-      price_usd: sourcePrice(row.display_price),
-      currency: sourcePrice(row.display_price) == null ? null : 'USD',
-      raw_message: row.title || null,
-      listing_type: row.intent,
-      listing_date: sourceDate(row.posted_on),
-      created_at: sourceDate(row.posted_on),
-      image_url: row.source_images?.[0] || row.image_url || null,
-      source_url: row.detail_url || null,
-      source_display_price: row.display_price || null,
-      box: row.box || null,
-      papers: row.papers || null,
-      seller_name: row.seller_name || profile.name,
-      seller_review_count: row.seller_review_count ?? null,
-      seller_wts_count: row.seller_wts_count ?? null,
-      seller_wtb_count: row.seller_wtb_count ?? null,
-      availability_url: row.availability_url || null,
-    }));
-  const dates = listings.map(row => row.listing_date).filter(Boolean).sort();
-  const phone = String(profile.whatsapp_url || '').replace(/[^0-9]/g, '') || null;
-  return {
-    success: true,
-    source: 'watchfacts_directory_crawl',
-    source_crawled_at: fullDirectoryCrawl.crawled_at,
-    dealer: {
-      id: `watchfacts-source-${id}`,
-      slug: null,
-      display_name: profile.name,
-      company_name: null,
-      country_code: profile.country || profile.region || null,
-      city: null,
-      rating: null,
-      review_count: Number(profile.profile_rating_count ?? profile.reviews ?? 0),
-      whatsapp_group_count: Number(profile.common_groups || 0),
-      avatar_url: null,
-      profile_summary: profile.trust_status || null,
-      verified_at: profile.member_since?.replace('Member since ', '') || null,
-      status: 'SOURCE_PUBLISHED',
-      contact_consent: true,
-    },
-    stats: {
-      wts_count: Number(profile.wts || 0),
-      wtb_count: Number(profile.wtb || 0),
-      group_count: Number(profile.common_groups || 0),
-      first_post: dates[0] || null,
-      latest_post: dates.at(-1) || null,
-      verified_contact_info: phone ? { phone, verification_status: 'SOURCE_PUBLISHED' } : null,
-    },
-    source_metrics: {
-      profile_listing_total: profile.listing_total ?? null,
-      feedback_received: profile.feedback_received ?? null,
-      rendered_feedback_rows: Array.isArray(profile.reviews) ? profile.reviews.length : 0,
-      feedback_given: profile.feedback_given ?? null,
-      feedback_requested: profile.feedback_requested ?? null,
-      own_account_view: Boolean(profile.own_account_view),
-    },
-    source_workflow: {
-      profile: profile.profile_url || null,
-      reviews: profile.profile_url ? `${profile.profile_url}#dealer-feedback-div` : null,
-      wts: profile.wts_url || null,
-      wtb: profile.wtb_url || null,
-      whatsapp: profile.whatsapp_url || null,
-      request_feedback: profile.request_feedback_url || null,
-    },
-    reviews: profile.reviews || [],
-    listings,
-    raw_message_access: true,
-  };
-}
 
 function buildDealerStats(listings, dealer, verifiedPhone, aggregate = null) {
   const dates = listings
@@ -131,9 +31,6 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   const identity = String(req.query?.id || '').trim().slice(0, 160);
   if (!identity) return res.status(400).json({ error: 'Dealer id or slug required' });
-
-  const crawledProfile = sourceProfilePayload(identity);
-  if (crawledProfile) return res.status(200).json(crawledProfile);
 
   try {
     const client = getClient();
@@ -232,4 +129,3 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.buildDealerStats = buildDealerStats;
-module.exports.sourceProfilePayload = sourceProfilePayload;

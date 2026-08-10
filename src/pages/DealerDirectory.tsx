@@ -1,4 +1,4 @@
-import { BadgeCheck, Building2, CalendarDays, ExternalLink, MessageCircle, Search, Star, Trophy, Users } from 'lucide-react';
+import { BadgeCheck, Building2, CalendarDays, Search, Star, Trophy, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Footer } from '@/components/Footer';
@@ -31,19 +31,6 @@ interface DealerSummary {
   source_rank?: number;
   source_system?: string;
   verified_phone?: string | null;
-  source_metrics?: {
-    profile_listing_total: number | null;
-    feedback_received: number | null;
-    rendered_feedback_rows: number | null;
-    source_crawled_at: string;
-  };
-  source_links?: {
-    profile: string | null;
-    reviews: string | null;
-    wts: string | null;
-    wtb: string | null;
-    whatsapp: string | null;
-  };
 }
 
 type DirectoryView = 'reference' | 'top-rated';
@@ -142,16 +129,8 @@ export default function DealerDirectory() {
                   <Metric label="Looking for" value={stats?.wtb_posts || 0} />
                   <Metric label="Groups" value={dealer.whatsapp_group_count || 0} />
                 </div>
-                {dealer.source_metrics && <p className="mt-4 text-[11px] leading-5 text-white/38">
-                  Source profile: {dealer.source_metrics.profile_listing_total == null ? 'listing total unavailable' : `${dealer.source_metrics.profile_listing_total.toLocaleString()} historical listings`} · {dealer.source_metrics.feedback_received ?? dealer.review_count} feedback received. Counts remain separate from currently active WTS/WTB.
-                </p>}
-                <div className="mt-5 flex flex-wrap gap-x-4 gap-y-3 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
+                <div className="mt-5 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
                   <Link to={`/dealers/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
-                  {dealer.source_links?.profile && <a href={dealer.source_links.profile} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-white/55 hover:text-[#d4b87a]"><ExternalLink size={12} /> Source</a>}
-                  {dealer.source_links?.reviews && <a href={dealer.source_links.reviews} target="_blank" rel="noreferrer" className="text-white/55 hover:text-[#d4b87a]">Reviews</a>}
-                  {dealer.source_links?.wts && <a href={dealer.source_links.wts} target="_blank" rel="noreferrer" className="text-white/55 hover:text-[#d4b87a]">WTS</a>}
-                  {dealer.source_links?.wtb && <a href={dealer.source_links.wtb} target="_blank" rel="noreferrer" className="text-white/55 hover:text-[#d4b87a]">WTB</a>}
-                  {dealer.source_links?.whatsapp && <a href={dealer.source_links.whatsapp} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><MessageCircle size={12} /> WhatsApp</a>}
                 </div>
               </article>
             );
