@@ -18,13 +18,15 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      MIGRATION_COMMIT: 6270c98511bf50528e3ea783111e8d26964c477e
+      MIGRATION_COMMIT: e55ca461c845f48cdb40deeb3e36af18435c8fc7
       MIGRATION_FILE: supabase/migrations/20260810045000_reviewed_workbook_verified_reference_analytics.sql
       MIGRATION_SHA256: 80c17271693eaba0647595059eeda29c0c8e5aa7f1d9c85ea21134daea637dc7
       DEMAND_MIGRATION_FILE: supabase/migrations/20260810054000_watch_records_wtb_reference_lookup.sql
       DEMAND_MIGRATION_SHA256: 3069c35ce5797b5ffcde04a4c63aec793333bd453b30456394d7aa7580864283
       IDENTITY_MIGRATION_FILE: supabase/migrations/20260810060000_listing_identity_wtb_reference_lookup.sql
       IDENTITY_MIGRATION_SHA256: 439cbe5c6a5ee4a5a45033f0f9b3b7e0f37093b47e5579f03dfd84e42d6db3d1
+      IDENTITY_RECOVERY_MIGRATION_FILE: supabase/migrations/20260810062000_listing_identity_wtb_reference_lookup_recovery.sql
+      IDENTITY_RECOVERY_MIGRATION_SHA256: 245fbc401e3e7d538ffa19abc0b15091cb81e6e8caef9286453a99f2b9a8ebd3
     steps:
       - name: Check out the reviewed migration commit
         uses: actions/checkout@v4
@@ -41,13 +43,16 @@ jobs:
           test -f "$MIGRATION_FILE"
           test -f "$DEMAND_MIGRATION_FILE"
           test -f "$IDENTITY_MIGRATION_FILE"
+          test -f "$IDENTITY_RECOVERY_MIGRATION_FILE"
           test "$(sha256sum "$MIGRATION_FILE" | awk '{print $1}')" = "$MIGRATION_SHA256"
           test "$(sha256sum "$DEMAND_MIGRATION_FILE" | awk '{print $1}')" = "$DEMAND_MIGRATION_SHA256"
           test "$(sha256sum "$IDENTITY_MIGRATION_FILE" | awk '{print $1}')" = "$IDENTITY_MIGRATION_SHA256"
+          test "$(sha256sum "$IDENTITY_RECOVERY_MIGRATION_FILE" | awk '{print $1}')" = "$IDENTITY_RECOVERY_MIGRATION_SHA256"
           test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$MIGRATION_FILE")" = "1"
           test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$DEMAND_MIGRATION_FILE")" = "1"
           test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$IDENTITY_MIGRATION_FILE")" = "1"
-          ! grep -Eiq '(DROP|TRUNCATE|DELETE|UPDATE|INSERT|ALTER[[:space:]]+TABLE|CREATE[[:space:]]+TABLE|CREATE[[:space:]]+(OR[[:space:]]+REPLACE[[:space:]]+)?VIEW|staging\.listings)' "$MIGRATION_FILE" "$DEMAND_MIGRATION_FILE" "$IDENTITY_MIGRATION_FILE"
+          test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$IDENTITY_RECOVERY_MIGRATION_FILE")" = "1"
+          ! grep -Eiq '(DROP|TRUNCATE|DELETE|UPDATE|INSERT|ALTER[[:space:]]+TABLE|CREATE[[:space:]]+TABLE|CREATE[[:space:]]+(OR[[:space:]]+REPLACE[[:space:]]+)?VIEW|staging\.listings)' "$MIGRATION_FILE" "$DEMAND_MIGRATION_FILE" "$IDENTITY_MIGRATION_FILE" "$IDENTITY_RECOVERY_MIGRATION_FILE"
 
       - name: Install PostgreSQL client
         shell: bash
@@ -119,7 +124,7 @@ jobs:
           ")"
           test "$identity_architecture" = "1|6"
 
-          invalid_index="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+          invalid_protected_index="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
             SELECT COUNT(*)
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -127,12 +132,69 @@ jobs:
             WHERE n.nspname = 'public'
               AND c.relname IN (
                 'idx_reviewed_workbook_verified_reference_wts',
-                'idx_watch_records_wtb_reference_lookup',
-                'idx_listing_identity_wtb_reference_lookup'
+                'idx_watch_records_wtb_reference_lookup'
               )
               AND (NOT i.indisvalid OR NOT i.indisready);
           ")"
-          test "$invalid_index" = "0"
+          test "$invalid_protected_index" = "0"
+
+          identity_index_target="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_listing_identity_wtb_reference_lookup'
+              AND i.indrelid = 'public.listing_identity_reviews'::regclass;
+          ")"
+          identity_index_named="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_listing_identity_wtb_reference_lookup';
+          ")"
+          test "$identity_index_target" = "$identity_index_named"
+
+      - name: Remove only the failed identity index stub
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          identity_state="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COALESCE(
+              (
+                SELECT i.indisvalid::int || '|' || i.indisready::int
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_index i ON i.indexrelid = c.oid
+                WHERE n.nspname = 'public'
+                  AND c.relname = 'idx_listing_identity_wtb_reference_lookup'
+                  AND i.indrelid = 'public.listing_identity_reviews'::regclass
+              ),
+              'missing'
+            );
+          ")"
+
+          case "$identity_state" in
+            '1|1')
+              echo "WTB identity index is already valid; no recovery cleanup required."
+              ;;
+            '0|0'|'0|1'|'1|0')
+              echo "Removing only the invalid WTB identity index stub before forward recovery."
+              psql -X -v ON_ERROR_STOP=1 -c \
+                'DROP INDEX CONCURRENTLY public.idx_listing_identity_wtb_reference_lookup;'
+              ;;
+            'missing')
+              echo "WTB identity index is absent; forward recovery will create it."
+              ;;
+            *)
+              echo "Refusing unexpected WTB identity index state: $identity_state" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Apply the exact forward index migration
         shell: bash
@@ -186,7 +248,7 @@ jobs:
           if [ "$identity_existing_valid" = "1" ]; then
             echo "WTB identity index already exists and is valid; skipping migration replay."
           else
-            psql -X -v ON_ERROR_STOP=1 -f "$IDENTITY_MIGRATION_FILE"
+            psql -X -v ON_ERROR_STOP=1 -f "$IDENTITY_RECOVERY_MIGRATION_FILE"
           fi
 
       - name: Verify index validity and exact-reference query plans
