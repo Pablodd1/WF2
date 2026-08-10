@@ -18,7 +18,7 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      MIGRATION_FILE: supabase/migrations/20260810032500_reviewed_workbook_type_image_order.sql
+      MIGRATION_FILE: supabase/migrations/20260810033500_recover_reviewed_workbook_type_image_order.sql
     steps:
       - uses: actions/checkout@v4
 
@@ -79,7 +79,27 @@ jobs:
           PGSSLMODE: require
         run: |
           set -euo pipefail
-          psql -X -v ON_ERROR_STOP=1 -f "$MIGRATION_FILE"
+          index_state="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT CASE
+              WHEN indexrelid IS NULL THEN 'missing'
+              WHEN indisvalid AND indisready AND indislive THEN 'valid'
+              ELSE 'invalid'
+            END
+            FROM (SELECT to_regclass(
+              'public.idx_reviewed_workbook_inventory_type_exact_image_id_desc'
+            ) AS indexrelid) target
+            LEFT JOIN pg_index ON pg_index.indexrelid = target.indexrelid;
+          ")"
+          echo "Current intent/image index state: ${index_state}"
+          if [ "$index_state" = "invalid" ]; then
+            psql -X -v ON_ERROR_STOP=1 -c "
+              DROP INDEX CONCURRENTLY IF EXISTS
+                public.idx_reviewed_workbook_inventory_type_exact_image_id_desc;
+            "
+          fi
+          if [ "$index_state" != "valid" ]; then
+            psql -X -v ON_ERROR_STOP=1 -f "$MIGRATION_FILE"
+          fi
 
       - name: Verify WTB and WTS image-lane query plans
         shell: bash
