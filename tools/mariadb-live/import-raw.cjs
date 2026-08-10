@@ -46,6 +46,40 @@ function inputFingerprint(files) {
     .digest('hex');
 }
 
+function containsPostgresNul(value) {
+  if (typeof value === 'string') return value.includes('\u0000');
+  if (Array.isArray(value)) return value.some(containsPostgresNul);
+  if (value && typeof value === 'object') return Object.values(value).some(containsPostgresNul);
+  return false;
+}
+
+function replacePostgresNul(value) {
+  if (typeof value === 'string') return value.replaceAll('\u0000', '\\u0000');
+  if (Array.isArray(value)) return value.map(replacePostgresNul);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, replacePostgresNul(child)]));
+  }
+  return value;
+}
+
+function postgresSafeRecord(record, originalJsonLine) {
+  if (!containsPostgresNul(record)) return record;
+  if (Object.hasOwn(record, 'wf_transport_evidence')) {
+    throw new Error(`Source record ${record.source_record_id || 'unknown'} collides with wf_transport_evidence`);
+  }
+  const original = String(originalJsonLine);
+  return {
+    ...replacePostgresNul(record),
+    wf_transport_evidence: {
+      version: 1,
+      reason: 'POSTGRES_TEXT_NUL',
+      original_json_encoding: 'base64-json-utf8',
+      original_json_sha256: crypto.createHash('sha256').update(original, 'utf8').digest('hex'),
+      original_json_utf8_base64: Buffer.from(original, 'utf8').toString('base64'),
+    },
+  };
+}
+
 function prepareOutput(runConfig, files) {
   fs.mkdirSync(runConfig.output, { recursive: true });
   const paths = {
@@ -65,6 +99,7 @@ function prepareOutput(runConfig, files) {
     envelope_rows_inserted: 0,
     version_rows_inserted: 0,
     version_rows_existing: 0,
+    transport_encoded_rows: 0,
     error_rows: 0,
     last_created_on: '1970-01-01 00:00:00',
     last_source_id: '',
@@ -192,16 +227,19 @@ async function run(options = {}) {
   const files = discoverInputFiles(runConfig.input);
   const prepared = prepareOutput(runConfig, files);
   const state = { ...prepared.checkpoint };
+  state.transport_encoded_rows = Number(state.transport_encoded_rows || 0);
   let records = [];
 
   async function flush(nextFileIndex, nextLineIndex) {
     if (!records.length) return;
+    const transportEncodedRows = records.filter(record => record.wf_transport_evidence).length;
     const result = await submitBatch(runConfig, state, records, fetchImpl);
     state.batch_sequence += 1;
     state.input_rows += Number(result.input_rows);
     state.envelope_rows_inserted += Number(result.envelope_rows_inserted || 0);
     state.version_rows_inserted += Number(result.version_rows_inserted || 0);
     state.version_rows_existing += Number(result.version_rows_existing || 0);
+    state.transport_encoded_rows += transportEncodedRows;
     state.error_rows += Number(result.error_rows || 0);
     state.last_created_on = result.last_created_on;
     state.last_source_id = result.last_source_id;
@@ -220,7 +258,7 @@ async function run(options = {}) {
       lineIndex += 1;
       if (fileIndex === state.file_index && lineIndex <= state.line_index) continue;
       if (!line.trim()) continue;
-      records.push(JSON.parse(line));
+      records.push(postgresSafeRecord(JSON.parse(line), line));
       if (records.length >= runConfig.batchSize) await flush(fileIndex, lineIndex);
     }
     await flush(fileIndex + 1, 0);
@@ -270,6 +308,7 @@ module.exports = {
   discoverInputFiles,
   inputFingerprint,
   isTransientStatus,
+  postgresSafeRecord,
   prepareOutput,
   rpc,
   run,
