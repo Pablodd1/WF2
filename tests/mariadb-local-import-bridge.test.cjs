@@ -17,6 +17,9 @@ test('local import workflow is manual, production-scoped, and uniquely self-host
   assert.match(workflow, /EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.match(workflow, /SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.doesNotMatch(workflow, /SUPABASE_PROJECT_REF:\s*\$\{\{\s*secrets\./);
+  assert.match(workflow, /api-keys\?reveal=true/);
+  assert.match(workflow, /::add-mask::\$env:SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(workflow, /SUPABASE_DB_PASSWORD|PGPASSWORD/);
   assert.doesNotMatch(workflow, /pull_request:|push:/);
 });
 
