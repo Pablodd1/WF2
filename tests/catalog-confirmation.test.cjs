@@ -158,7 +158,7 @@ test('price research normalizes every resolved reference variant', () => {
   assert.doesNotMatch(source, /normalizeMarketRow\(row,\s*\[rawRef,\s*targetRef\]\)/);
   assert.match(source, /referenceVariants\s*=\s*equivalentReferences/);
   assert.match(source, /referenceVariants\s*=\s*\[\.\.\.new Set\(\[\.\.\.equivalentReferences,\s*\.\.\.exactVariants\]\)\]/);
-  assert.match(source, /baseSampleCount\s*>=\s*sampleLimit\s*&&\s*observedDialCounts\.get/);
+  assert.match(source, /sourceSampleCapped\s*&&\s*observedDialCounts\.get/);
   assert.match(source, /\.order\('created_at', \{ ascending: false \}\)\s*\.order\('id', \{ ascending: false \}\)/);
 });
 

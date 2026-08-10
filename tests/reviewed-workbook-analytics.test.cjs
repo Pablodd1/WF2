@@ -99,6 +99,26 @@ test('reviewed workbook loader requires complete identity and explicit verified 
   assert.match(source, /posted_by,phone_number/);
 });
 
+test('verified exact-reference WTS lookup has a matching forward-only index', () => {
+  const migration = fs.readFileSync(
+    path.join(
+      __dirname,
+      '..',
+      'supabase',
+      'migrations',
+      '20260810045000_reviewed_workbook_verified_reference_analytics.sql',
+    ),
+    'utf8',
+  );
+  assert.match(migration, /CREATE INDEX CONCURRENTLY IF NOT EXISTS/);
+  assert.match(migration, /brand_scope[\s\S]*regexp_replace[\s\S]*normalized_reference/);
+  assert.match(migration, /posting_date DESC NULLS LAST[\s\S]*id/);
+  assert.match(migration, /WHERE listing_type = 'WTS'/);
+  assert.match(migration, /price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH'/);
+  assert.match(migration, /workbook_price_usd > 0/);
+  assert.doesNotMatch(migration, /UPDATE|DELETE|TRUNCATE|DROP TABLE/i);
+});
+
 test('legacy column fallback is narrow and recognizes Postgres missing-column errors', () => {
   assert.match(LEGACY_WORKBOOK_COLUMNS, /posted_by,phone_number/);
   assert.doesNotMatch(LEGACY_WORKBOOK_COLUMNS, /seller_name|seller_phone|,verdict|listing_status/);

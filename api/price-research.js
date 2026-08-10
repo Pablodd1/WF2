@@ -23,6 +23,7 @@ const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
 const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
+const { loadVerifiedDemandIdentityRows } = require('./_lib/verified-demand-identity.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -35,8 +36,11 @@ const {
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
   isReviewedPaneraiReleaseRecord,
+  isReviewedReleaseReference,
   isReviewedZenithIdentityCorrectionRecord,
 } = require('./_lib/publication-references.cjs');
+
+const DEMAND_SAMPLE_LIMIT = 2500;
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -89,71 +93,43 @@ async function lookupLiquidity(client, reference, listingCount, demand, selectio
   return { source: 'live_fallback', listing_count: listingCount, ...demand };
 }
 
-async function retainVerifiedIdentityRows(client, rows) {
-  const ids = [...new Set((rows || []).map(row => String(row.id || '')).filter(Boolean))];
-  if (!ids.length) return [];
-  const batches = [];
-  for (let index = 0; index < ids.length; index += 200) {
-    batches.push(ids.slice(index, index + 200));
-  }
-  const results = await Promise.all(batches.map(batch => client
-    .from('listing_identity_reviews')
-    .select('record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status')
-    .in('record_id', batch)
-    .in('status', ['CATALOG_CONFIRMED', 'HUMAN_APPROVED'])));
-  const error = results.find(result => result.error)?.error;
-  if (error) throw error;
-  const reviews = new Map(results
-    .flatMap(result => result.data || [])
-    .map(review => [String(review.record_id), review]));
-  return (rows || []).flatMap(row => {
-    const review = reviews.get(String(row.id));
-    if (!review) return [];
-    return [{
-      ...row,
-      brand: review.canonical_brand || row.brand,
-      model: review.canonical_model || row.model,
-      reference: review.canonical_reference || row.reference,
-      dial_color: review.canonical_dial_color || row.dial_color,
-    }];
-  });
-}
-
 function isOwnerReviewedWorkbookRow(row) {
-  return isReviewedPaneraiReleaseRecord(row) || (
+  return row?.owner_reviewed_identity === true
+    || isReviewedPaneraiReleaseRecord(row) || (
     String(row?.brand || '').trim().toLowerCase() === 'zenith'
       && String(row?.source || '') === REVIEWED_ZENITH_SOURCE
   ) || isReviewedZenithIdentityCorrectionRecord(row);
 }
 
-async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = []) {
+async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null) {
   // ponytail: admit all demand-side records. classifyDemandEligibility
   // handles per-row quality downstream.
   let data;
-  if (Array.isArray(preloadedRows) && preloadedRows.length > 0) {
+  let demandSampleCapped = false;
+  if (Array.isArray(preloadedRows)) {
     data = preloadedRows.filter(row => ['WTB', 'NTQ'].includes(String(row.listing_type || '').toUpperCase()));
+    demandSampleCapped = preloadedRows.sampleCapped === true;
   } else {
-    const columns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,phone_number,posted_by,image_url,thumbnail_url,display_image_url,image_urls,price_raw,price_usd,currency,created_at,listing_date';
-    const { data: dbData, error } = await client
-      .from(sourceTable)
-      .select(columns)
-      .eq('brand', brand)
-      .in('reference', referenceVariants)
-      .in('listing_type', ['WTB', 'NTQ'])
-      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
-      .limit(5000);
-    if (error) return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
-    data = dbData || [];
+    // Select only physical watch_records columns. phone_number, posted_by,
+    // image_url, and display_image_url are view aliases and make PostgREST
+    // reject the entire base-table request when selected here.
+    const columns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at,listing_date,listing_status';
+    try {
+      const verifiedDemand = await loadVerifiedDemandIdentityRows(client, {
+        brand,
+        referenceVariants,
+        limit: DEMAND_SAMPLE_LIMIT,
+        watchColumns: columns,
+      });
+      data = verifiedDemand.rows;
+      demandSampleCapped = verifiedDemand.sampleCapped;
+    } catch (error) {
+      console.warn('[price-research] verified WTB demand unavailable:', error?.message || error);
+      return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
+    }
   }
 
-  let demandRows;
-  try {
-    demandRows = (data || []).some(isOwnerReviewedWorkbookRow)
-      ? (data || []).filter(isOwnerReviewedWorkbookRow)
-      : await retainVerifiedIdentityRows(client, data || []);
-  } catch {
-    return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
-  }
+  let demandRows = (data || []).filter(isOwnerReviewedWorkbookRow);
   const equivalentKeys = new Set(referenceVariants.map(normRef));
   demandRows = demandRows.filter(row =>
     isReleaseListingEligible(row)
@@ -227,7 +203,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     demand_count: eligible.length,
     demand_cohorts: demandCohorts,
     demand_rows: demandRowsSerialized,
-    demand_sample_capped: (data || []).length >= 5000,
+    demand_sample_capped: demandSampleCapped,
     demand_repost_count: repostRows.length,
     demand_suppressed_duplicate_count: suppressedIds.size,
   };
@@ -305,11 +281,13 @@ module.exports = async function handler(req, res) {
   // A reviewed workbook cohort is already constrained to complete identity and
   // source-explicit USD evidence. It may authorize its exact brand/reference
   // even when an older deployment allowlist has not yet been expanded.
+  const client = getClient();
+  const preloadReferenceKeys = listEquivalentReferences(rawRef, brand).map(normRef);
   let preloadedReviewedWorkbookRows = [];
   try {
-    preloadedReviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(getClient(), {
+    preloadedReviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
       brand,
-      referenceKeys: listEquivalentReferences(rawRef, brand).map(normRef),
+      referenceKeys: preloadReferenceKeys,
       limit: 10000,
     });
   } catch {
@@ -325,11 +303,26 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const client = getClient();
     const controlledPaneraiRelease = brand.toLowerCase() === 'panerai';
-    const sourceTable = controlledPaneraiRelease
-      ? 'price_research_verified_source'
-      : 'watch_records';
+    const requestedCatalogHit = lookupCatalog(rawRef, brand || null);
+    const exactCatalogReference = Boolean(
+      requestedCatalogHit?.found
+      && requestedCatalogHit.matchType !== 'partial'
+      && requestedCatalogHit.reference
+    );
+    const exactReviewedReleaseReference = isReviewedReleaseReference(brand, rawRef);
+    const exactKnownReference = exactCatalogReference || exactReviewedReleaseReference;
+    const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet']
+      .includes(brand.toLowerCase());
+    // Reviewed workbooks remain first. When an exact catalog reference has no
+    // workbook cohort, query the bounded approved watch-record lane directly;
+    // the legacy release view is not needed to rediscover an identity already
+    // proven by the catalog. Partial references never enter this path.
+    let sourceTable = !exactReviewedWorkbookRelease
+      && exactKnownReference
+      && directWatchRecordBrand
+      ? 'watch_records'
+      : 'price_research_verified_source';
 
     // Resolve exact stored spellings only. Prefix matches are suggestions for
     // an explicit customer choice; they must never silently become a specific
@@ -349,78 +342,89 @@ module.exports = async function handler(req, res) {
       // equivalent stored spellings so the market query aggregates them.
       const equivalentReferences = listEquivalentReferences(rawRef, brand);
       referenceVariants = equivalentReferences;
-      // ponytail: do NOT filter on verdict/confidence during reference
-      // resolution. All records in the current dataset are "Human Review"/30;
-      // applying APPROVED/90+ gates at discovery time makes every reference
-      // invisible, returns 0 rows, and produces the "non-display dataset"
-      // reported by the user.
-      const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
-        .from(sourceTable)
-        .select('reference')
-        .eq('brand', brand)
-        .ilike('reference', reference)
-        .limit(50)));
-      const exactRefError = exactRefResults.every(result => result.error)
-        ? exactRefResults.find(result => result.error)?.error || null
-        : null;
-      const exactRefs = exactRefResults
-        .filter(result => !result.error)
-        .flatMap(result => result.data || []);
-
-      let refs = exactRefs;
-      let refError = exactRefError;
-      if (!exactRefError && (!exactRefs || exactRefs.length === 0)) {
-        // ponytail: prefix ilike with .limit(50) is fast and indexed when the
-        // leading characters are specific. Fall back to catalog-based expansion
-        // if the DB query returns nothing.
-        const prefixResult = await client
+      if (exactReviewedWorkbookRelease) {
+        // The indexed reviewed-workbook preload already proves the exact
+        // normalized reference. Re-querying the legacy release view here made
+        // every successful request pay for an unrelated multi-million-row
+        // lookup before returning the workbook evidence.
+        const equivalentKeys = new Set(equivalentReferences.map(normRef));
+        const exactVariants = [...new Set(preloadedReviewedWorkbookRows
+          .map(row => row.reference)
+          .filter(reference => equivalentKeys.has(normRef(reference))))];
+        const exact = exactVariants[0] || rawRef;
+        const catalogHit = lookupCatalog(rawRef, brand || null);
+        targetRef = catalogHit?.found && catalogHit.matchType !== 'partial' && catalogHit.reference
+          ? catalogHit.reference
+          : exact;
+        referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
+      } else if (exactKnownReference) {
+        targetRef = exactCatalogReference ? requestedCatalogHit.reference : rawRef;
+        referenceVariants = [...new Set([
+          ...equivalentReferences,
+          targetRef,
+        ])];
+      } else {
+        const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
           .from(sourceTable)
           .select('reference')
           .eq('brand', brand)
-          .ilike('reference', `${rawRef}%`)
-          .limit(50);
-        refs = prefixResult.data;
-        refError = prefixResult.error;
-        // ponytail: also try the catalog for prefix-matched references.
-        // listCatalogReferences contains every known reference per brand
-        // and is already loaded in memory. For "126500" this returns
-        // ["126500LN", "126500LNA", ...] without a DB query.
-        if ((!refs || refs.length === 0) && !refError) {
-          try {
-            const catalogRefs = listCatalogReferences(brand)
-              .filter(e => e.reference && e.reference.toUpperCase().startsWith(rawRef.toUpperCase()))
-              .map(e => e.reference);
-            refs = [...new Set(catalogRefs)].map(r => ({ reference: r }));
-          } catch { /* catalog unavailable, keep refs as-is */ }
-        }
-      }
+          .ilike('reference', reference)
+          .limit(50)));
+        const exactRefError = exactRefResults.every(result => result.error)
+          ? exactRefResults.find(result => result.error)?.error || null
+          : null;
+        const exactRefs = exactRefResults
+          .filter(result => !result.error)
+          .flatMap(result => result.data || []);
 
-      if (!refError && refs && refs.length > 0) {
-        const foundRefs = [...new Set(refs.map(r => r.reference))];
-        const equivalentKeys = new Set(equivalentReferences.map(normRef));
-        const exactVariants = foundRefs.filter(r => equivalentKeys.has(normRef(r)));
-        const exact = exactVariants[0];
-        if (exact) {
-          const catalogHit = lookupCatalog(rawRef, brand || null);
-          targetRef = catalogHit?.found && catalogHit.matchType !== 'partial' && catalogHit.reference
-            ? catalogHit.reference
-            : exact;
-          referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
+        let refs = exactRefs;
+        let refError = exactRefError;
+        if (!exactRefError && (!exactRefs || exactRefs.length === 0)) {
+          // Prefix matches remain suggestions only. The catalog fallback may
+          // decorate those suggestions, but it never auto-selects one.
+          const prefixResult = await client
+            .from(sourceTable)
+            .select('reference')
+            .eq('brand', brand)
+            .ilike('reference', `${rawRef}%`)
+            .limit(50);
+          refs = prefixResult.data;
+          refError = prefixResult.error;
+          if ((!refs || refs.length === 0) && !refError) {
+            try {
+              const catalogRefs = listCatalogReferences(brand)
+                .filter(e => e.reference && e.reference.toUpperCase().startsWith(rawRef.toUpperCase()))
+                .map(e => e.reference);
+              refs = [...new Set(catalogRefs)].map(r => ({ reference: r }));
+            } catch { /* catalog unavailable, keep refs as-is */ }
+          }
         }
-        else {
-          // Prefix matches are suggestions only and must never silently become
-          // a specific watch. The client can present foundRefs for selection,
-          // then repeat the request with the chosen exact reference.
-          return res.status(400).json({
-            error: 'Enter an exact reference. Prefix matches require an explicit selection.',
-            suggestions: foundRefs.slice(0, 20),
-          });
+
+        if (!refError && refs && refs.length > 0) {
+          const foundRefs = [...new Set(refs.map(r => r.reference))];
+          const equivalentKeys = new Set(equivalentReferences.map(normRef));
+          const exactVariants = foundRefs.filter(r => equivalentKeys.has(normRef(r)));
+          const exact = exactVariants[0];
+          if (exact) {
+            const catalogHit = lookupCatalog(rawRef, brand || null);
+            targetRef = catalogHit?.found && catalogHit.matchType !== 'partial' && catalogHit.reference
+              ? catalogHit.reference
+              : exact;
+            referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
+          }
+          else {
+            return res.status(400).json({
+              error: 'Enter an exact reference. Prefix matches require an explicit selection.',
+              suggestions: foundRefs.slice(0, 20),
+            });
+          }
         }
       }
     }
 
-    // PostgREST caps each response at 1,000 rows. Page explicitly so a busy
-    // reference does not produce a chart made only from its newest day.
+    // PostgREST caps each response at 1,000 rows. Keep the customer request to
+    // one bounded, indexed page. Ten concurrent offset pages overloaded the
+    // multi-million-row legacy table for high-volume Rolex references.
     const pageSize = 1000;
     const sampleLimit = 10000;
     const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict,listing_status,thumbnail_url,image_urls,has_images';
@@ -433,8 +437,8 @@ module.exports = async function handler(req, res) {
     // ponytail: keep query simple — .in('reference') + .eq('brand') is
     // indexed; avoid .or() on unindexed listing_status + double-order that
     // forces full scans on the multi-million-row table.
-    const buildRowsQuery = (from, to) => client
-      .from(sourceTable)
+    const buildRowsQuery = table => client
+      .from(table)
       .select(columns)
       .eq('brand', brand)
       .in('reference', referenceVariants)
@@ -442,10 +446,10 @@ module.exports = async function handler(req, res) {
       .eq('listing_type', 'WTS')
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
-      .range(from, to);
+      .limit(pageSize);
 
-    // Avoid a filtered COUNT over the multi-million-row table. Fetch bounded,
-    // deterministic pages in parallel and report whether the sample hit its cap.
+    // Avoid a filtered COUNT and high-offset scans over the multi-million-row
+    // table. Report the bounded sample honestly when it reaches its source cap.
     let rows;
     if (controlledPaneraiRelease) {
       const { data, error } = await client
@@ -460,16 +464,18 @@ module.exports = async function handler(req, res) {
         .eq('listing_type', 'WTS');
       if (error) throw error;
       rows = data || [];
+    } else if (preloadedReviewedWorkbookRows.length) {
+      // Do not query the legacy view for rows that the strict workbook preload
+      // has already returned. The same immutable rows are used downstream.
+      rows = preloadedReviewedWorkbookRows;
     } else {
-      const sampledPages = await Promise.all(
-        Array.from({ length: sampleLimit / pageSize }, (_, index) => {
-          const from = index * pageSize;
-          return buildRowsQuery(from, from + pageSize - 1);
-        })
-      );
-      const pageError = sampledPages.find(page => page.error)?.error;
-      if (pageError) throw pageError;
-      rows = sampledPages.flatMap(page => page.data || []);
+      let result = await buildRowsQuery(sourceTable);
+      if (result.error || !(result.data || []).length) {
+        sourceTable = 'watch_records';
+        result = await buildRowsQuery(sourceTable);
+      }
+      if (result.error) throw result.error;
+      rows = result.data || [];
     }
     // Reviewed workbooks are the customer-visible canonical inventory. When an
     // exact reference has source-explicit USD evidence there, use that same
@@ -504,6 +510,9 @@ module.exports = async function handler(req, res) {
       rows = reviewedWorkbookRows;
     }
     const baseSampleCount = rows.length;
+    const sourceSampleCapped = usingReviewedWorkbook
+      ? baseSampleCount >= sampleLimit
+      : baseSampleCount >= pageSize;
 
     if (!rows || rows.length === 0) {
       const emptyReconciliation = {
@@ -569,7 +578,7 @@ module.exports = async function handler(req, res) {
       .map(value => normalizeDialValue(value))
       .filter(dial => dial.known && (
         !observedDialCounts.has(dial.value.toLowerCase())
-        || (baseSampleCount >= sampleLimit && observedDialCounts.get(dial.value.toLowerCase()) < 1000)
+        || (sourceSampleCapped && observedDialCounts.get(dial.value.toLowerCase()) < 1000)
       ))
       .map(dial => dial.value);
     if (!controlledPaneraiRelease && !usingReviewedWorkbook && supplementalCatalogDials.length) {
@@ -793,12 +802,12 @@ module.exports = async function handler(req, res) {
         || null;
     const demand = await lookupDemand(
       client,
-      sourceTable,
+      'watch_records',
       brand,
       referenceVariants,
       catalogHit,
       selection,
-      preloadedReviewedWorkbookRows,
+      null,
     );
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
@@ -812,18 +821,20 @@ module.exports = async function handler(req, res) {
       retainedOffset + evidencePageSize,
     );
 
-    const totalTrackedListings = rows.length;
     const wtsEligibleAnalyticsCount = includedRows.length;
     const outliersCount = statisticalOutlierRows.length;
     const unsplitBundlesCount = bundleParentExcludedCount;
-    const wtbInRows = rows.filter(r => ['WTB', 'NTQ'].includes(String(r.listing_type || '').toUpperCase())).length;
     const rawWtbDemand = demand?.demand_count;
-    const maxWtbCapacity = Math.max(0, totalTrackedListings - wtsEligibleAnalyticsCount - outliersCount - unsplitBundlesCount);
     const wtbDemandCount = typeof rawWtbDemand === 'number' && Number.isFinite(rawWtbDemand) && rawWtbDemand >= 0
-      ? Math.min(rawWtbDemand, maxWtbCapacity)
-      : Math.min(wtbInRows, maxWtbCapacity);
-    const unpricedCount = Math.max(0, totalTrackedListings - wtsEligibleAnalyticsCount - wtbDemandCount - outliersCount - unsplitBundlesCount);
+      ? rawWtbDemand
+      : 0;
+    // WTS evidence and verified WTB demand are loaded through independent
+    // lanes. Count both populations explicitly; capping demand to the number
+    // of WTS rows made valid buyer signals disappear from reconciliation.
+    const wtsTrackedListings = rows.length;
+    const unpricedCount = Math.max(0, wtsTrackedListings - wtsEligibleAnalyticsCount - outliersCount - unsplitBundlesCount);
     const excludedTotalCount = unpricedCount + outliersCount + unsplitBundlesCount;
+    const totalTrackedListings = wtsTrackedListings + wtbDemandCount;
 
     const reconciliation = {
       total_tracked_listings: totalTrackedListings,
@@ -900,7 +911,7 @@ module.exports = async function handler(req, res) {
       analytics_excluded_count: analyticsRows.length - marketRows.length,
       repost_count: repostRows.filter(row => matchesSelection(row, selection)).length,
       sampledListings: rows.length,
-      sampleCapped: baseSampleCount >= sampleLimit,
+      sampleCapped: sourceSampleCapped,
       count: prices.length,
       rawCount: validPriceRows.length,
       outliersRemoved: statisticalOutlierRows.length,
