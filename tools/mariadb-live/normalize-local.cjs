@@ -63,6 +63,7 @@ async function run(options = {}) {
   const input = path.resolve(env.MARIADB_NORMALIZE_INPUT || 'audit-output/mariadb-live/canary/raw-records.jsonl');
   const output = path.resolve(env.MARIADB_NORMALIZE_OUTPUT || path.dirname(input));
   const maxRows = boundedInteger(env.MARIADB_NORMALIZE_MAX_ROWS, 100_000, 1, 10_000_000, 'MARIADB_NORMALIZE_MAX_ROWS');
+  const startRow = boundedInteger(env.MARIADB_NORMALIZE_START_ROW, 0, 0, 10_000_000, 'MARIADB_NORMALIZE_START_ROW');
   const flushRows = boundedInteger(env.MARIADB_NORMALIZE_FLUSH_ROWS, 500, 1, 5000, 'MARIADB_NORMALIZE_FLUSH_ROWS');
   const resume = env.MARIADB_NORMALIZE_RESUME === '1';
   if (!fs.existsSync(input)) throw new Error(`Input does not exist: ${input}`);
@@ -112,7 +113,7 @@ async function run(options = {}) {
   for await (const line of lines) {
     if (!line.trim()) continue;
     sourceInputRows += 1;
-    if (sourceInputRows <= resumedRows) continue;
+    if (sourceInputRows <= startRow + resumedRows) continue;
     if (inputRows >= maxRows) break;
     inputRows += 1;
     let sourceId = null;
@@ -138,6 +139,8 @@ async function run(options = {}) {
     contract: 'wf-mariadb-local-normalization-v1',
     generated_at: new Date().toISOString(),
     normalization_version: 'v4.2-line-condition',
+    source_start_row: startRow + 1,
+    source_end_row: startRow + inputRows,
     resumed_rows: resumedRows,
     input_rows: inputRows,
     output_rows: outputRows,
