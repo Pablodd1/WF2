@@ -97,19 +97,56 @@ function compareCursor(previous, record) {
   return { createdOn, sourceId };
 }
 
-async function rpc(runConfig, functionName, body, fetchImpl = fetch) {
-  const response = await fetchImpl(`${runConfig.baseUrl}/rest/v1/rpc/${functionName}`, {
-    method: 'POST',
-    headers: {
-      apikey: runConfig.key,
-      Authorization: `Bearer ${runConfig.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`${functionName} failed (${response.status}): ${text.slice(0, 500)}`);
-  return text ? JSON.parse(text) : null;
+function wait(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function isTransientStatus(status) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+async function rpc(runConfig, functionName, body, fetchImpl = fetch, retryOptions = {}) {
+  const maxAttempts = boundedInteger(retryOptions.maxAttempts, 6, 1, 10, 'RPC_MAX_ATTEMPTS');
+  const baseDelayMs = boundedInteger(retryOptions.baseDelayMs, 500, 0, 30000, 'RPC_BASE_DELAY_MS');
+  const sleep = retryOptions.sleep || wait;
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(`${runConfig.baseUrl}/rest/v1/rpc/${functionName}`, {
+        method: 'POST',
+        headers: {
+          apikey: runConfig.key,
+          Authorization: `Bearer ${runConfig.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(120000),
+      });
+      const text = await response.text();
+      if (response.ok) return text ? JSON.parse(text) : null;
+
+      const error = new Error(`${functionName} failed (${response.status}): ${text.slice(0, 500)}`);
+      if (!isTransientStatus(response.status) || attempt === maxAttempts) throw error;
+      lastError = error;
+    } catch (error) {
+      if (error.message?.startsWith(`${functionName} failed (`) || attempt === maxAttempts) throw error;
+      lastError = error;
+    }
+
+    const delay = Math.min(baseDelayMs * (2 ** (attempt - 1)), 15000);
+    process.stderr.write(`${JSON.stringify({
+      event: 'mariadb_raw_import_retry',
+      function_name: functionName,
+      attempt,
+      next_attempt: attempt + 1,
+      delay_ms: delay,
+      error_name: lastError?.name || 'Error',
+      error_message: lastError?.message || String(lastError),
+    })}\n`);
+    await sleep(delay);
+  }
+  throw lastError;
 }
 
 async function submitBatch(runConfig, checkpoint, records, fetchImpl = fetch) {
@@ -232,6 +269,7 @@ module.exports = {
   config,
   discoverInputFiles,
   inputFingerprint,
+  isTransientStatus,
   prepareOutput,
   rpc,
   run,
