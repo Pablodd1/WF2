@@ -14,7 +14,7 @@ class TestPipelineEndToEnd(unittest.TestCase):
 
     def test_e2e_single_listing_flow(self):
         """Test full pipeline flow for a single watch listing."""
-        msg_text = "Rolex 116508 John Mayer 2020 Good Condition Watch and card $68,000"
+        msg_text = "Rolex 116508 John Mayer 2020 Good Condition Watch and card USD 68,000"
         payload_checksum = hashlib.sha256(msg_text.encode('utf-8')).hexdigest()
         raw_payload_id = str(uuid.uuid4())
         job_id = str(uuid.uuid4())
@@ -104,7 +104,7 @@ class TestPipelineEndToEnd(unittest.TestCase):
 
     def test_e2e_wtb_watch_classification(self):
         """Test WTB watch classification."""
-        msg_text = "Looking for Rolex 126333 White Index Oyster BNIB $12000"
+        msg_text = "Looking for Rolex 126333 White Index Oyster BNIB USD 12000"
         job_id = str(uuid.uuid4())
         job_data = {
             "id": job_id,
@@ -137,6 +137,27 @@ class TestPipelineEndToEnd(unittest.TestCase):
         res3 = self.processor.extract_price("Patek 5980 4.5m HKD")
         self.assertEqual(res3[0], 4500000.0)
         self.assertEqual(res3[1], "HKD")
+
+    def test_bare_dollar_and_missing_currency_never_default_to_usd(self):
+        bare_dollar = self.processor.process_job({
+            "id": str(uuid.uuid4()),
+            "message_text": "WTS Rolex 116500LN $31500",
+            "type": "sale",
+        })
+        self.assertEqual(bare_dollar["price_normalized"], 31500.0)
+        self.assertIsNone(bare_dollar["currency_normalized"])
+        self.assertIsNone(bare_dollar["price_usd"])
+        self.assertEqual(bare_dollar["price_research_status"], "ineligible_currency")
+
+        no_price = self.processor.process_job({
+            "id": str(uuid.uuid4()),
+            "message_text": "WTS Rolex 116500LN DM for price",
+            "type": "sale",
+        })
+        self.assertEqual(no_price["price_normalized"], 0.0)
+        self.assertIsNone(no_price["currency_normalized"])
+        self.assertIsNone(no_price["price_usd"])
+        self.assertEqual(no_price["price_research_status"], "ineligible_no_price")
 
     def test_seller_information_public(self):
         """Test that seller information is publicly preserved and unmasked."""

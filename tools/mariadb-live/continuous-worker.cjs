@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const mysql = require('mysql2/promise');
-const { SELECT_COLUMNS } = require('./collect.cjs');
+const { sourceSelectList } = require('./collect.cjs');
 const {
   CONTRACT,
   assertReadOnlyGrants,
@@ -224,9 +224,10 @@ async function run() {
     const [grantRows] = await db.query('SHOW GRANTS FOR CURRENT_USER()');
     assertReadOnlyGrants(grantRows.map(row => Object.values(row)[0]));
     await db.query('SET SESSION TRANSACTION READ ONLY');
+    const selectColumns = await sourceSelectList(db);
     for (;;) {
       const [rows] = await db.execute(
-        `SELECT ${SELECT_COLUMNS} FROM auctions
+        `SELECT ${selectColumns} FROM auctions
          WHERE created_on > ? OR (created_on = ? AND id > ?)
          ORDER BY created_on ASC, id ASC LIMIT ${batchSize}`,
         [state.last_created_on, state.last_created_on, state.last_id],
