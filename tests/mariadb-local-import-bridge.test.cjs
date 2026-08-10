@@ -15,6 +15,8 @@ test('local import workflow is manual, production-scoped, and uniquely self-host
   assert.match(workflow, /runs-on: \[self-hosted, Windows, X64, watchfacts-raw-import\]/);
   assert.match(workflow, /environment: production/);
   assert.match(workflow, /EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh/);
+  assert.match(workflow, /SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh/);
+  assert.doesNotMatch(workflow, /SUPABASE_PROJECT_REF:\s*\$\{\{\s*secrets\./);
   assert.doesNotMatch(workflow, /pull_request:|push:/);
 });
 
