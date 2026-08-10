@@ -80,7 +80,7 @@ export function MarketHeader({ compact = false, className = '', landing = false,
               </Link>
             );
           })}
-          {!landing && <LanguageToggle compact />}
+          <LanguageToggle compact />
         </nav>
       </div>
     </header>
