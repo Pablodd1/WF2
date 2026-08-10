@@ -29,8 +29,9 @@ test('verified workbook preload short-circuits redundant legacy lookups', () => 
 
 test('exact catalog references bypass legacy discovery without admitting prefixes', () => {
   assert.match(source, /requestedCatalogHit\.matchType !== 'partial'/);
-  assert.match(source, /!exactReviewedWorkbookRelease[\s\S]*exactCatalogReference[\s\S]*directWatchRecordBrand[\s\S]*\? 'watch_records'/);
-  assert.match(source, /else if \(exactCatalogReference\) \{[\s\S]*targetRef = requestedCatalogHit\.reference/);
+  assert.match(source, /exactReviewedReleaseReference = isReviewedReleaseReference\(brand, rawRef\)/);
+  assert.match(source, /!exactReviewedWorkbookRelease[\s\S]*exactKnownReference[\s\S]*directWatchRecordBrand[\s\S]*\? 'watch_records'/);
+  assert.match(source, /else if \(exactKnownReference\) \{[\s\S]*targetRef = exactCatalogReference \? requestedCatalogHit\.reference : rawRef/);
 });
 
 test('legacy fallback remains bounded and WTB demand avoids the unindexed workbook lane', () => {

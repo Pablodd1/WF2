@@ -101,6 +101,16 @@ function parsedReferences(value) {
 
 const REVIEWED_RELEASE_REFERENCES = parsedReferences(THREE_WATCH_RELEASE_REFERENCES);
 
+function isReviewedReleaseReference(brand, reference) {
+  const normalizedBrand = String(brand || '').trim().toLowerCase();
+  const exactReference = String(reference || '').trim().toUpperCase();
+  if (!normalizedBrand || !exactReference) return false;
+  return REVIEWED_RELEASE_REFERENCES.some(entry => (
+    entry.brand.toLowerCase() === normalizedBrand
+    && entry.reference.toUpperCase() === exactReference
+  ));
+}
+
 function isReviewedPaneraiReference(brand, reference) {
   return String(brand || '').trim().toLowerCase() === 'panerai'
     && REVIEWED_PANERAI_REFERENCE_SET.has(String(reference || '').trim().toUpperCase());
@@ -252,6 +262,7 @@ module.exports = {
   isFullReviewedBrandRelease,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
+  isReviewedReleaseReference,
   isReviewedPaneraiReference,
   isReviewedPaneraiReleaseRecord,
   isReviewedZenithIdentityCorrectionRecord,

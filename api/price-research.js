@@ -35,6 +35,7 @@ const {
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
   isReviewedPaneraiReleaseRecord,
+  isReviewedReleaseReference,
   isReviewedZenithIdentityCorrectionRecord,
 } = require('./_lib/publication-references.cjs');
 
@@ -346,6 +347,8 @@ module.exports = async function handler(req, res) {
       && requestedCatalogHit.matchType !== 'partial'
       && requestedCatalogHit.reference
     );
+    const exactReviewedReleaseReference = isReviewedReleaseReference(brand, rawRef);
+    const exactKnownReference = exactCatalogReference || exactReviewedReleaseReference;
     const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet']
       .includes(brand.toLowerCase());
     // Reviewed workbooks remain first. When an exact catalog reference has no
@@ -353,7 +356,7 @@ module.exports = async function handler(req, res) {
     // the legacy release view is not needed to rediscover an identity already
     // proven by the catalog. Partial references never enter this path.
     let sourceTable = !exactReviewedWorkbookRelease
-      && exactCatalogReference
+      && exactKnownReference
       && directWatchRecordBrand
       ? 'watch_records'
       : 'price_research_verified_source';
@@ -391,11 +394,11 @@ module.exports = async function handler(req, res) {
           ? catalogHit.reference
           : exact;
         referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
-      } else if (exactCatalogReference) {
-        targetRef = requestedCatalogHit.reference;
+      } else if (exactKnownReference) {
+        targetRef = exactCatalogReference ? requestedCatalogHit.reference : rawRef;
         referenceVariants = [...new Set([
           ...equivalentReferences,
-          requestedCatalogHit.reference,
+          targetRef,
         ])];
       } else {
         const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
