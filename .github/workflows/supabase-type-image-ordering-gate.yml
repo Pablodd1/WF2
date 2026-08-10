@@ -81,7 +81,7 @@ jobs:
           set -euo pipefail
           index_state="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
             SELECT CASE
-              WHEN indexrelid IS NULL THEN 'missing'
+              WHEN target.indexrelid IS NULL THEN 'missing'
               WHEN indisvalid AND indisready AND indislive THEN 'valid'
               ELSE 'invalid'
             END

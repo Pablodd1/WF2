@@ -25,6 +25,7 @@ test('intent ordering workflow verifies both WTB and WTS plans', () => {
 });
 
 test('recovery inspects validity and removes only a failed index shell', () => {
+  assert.match(workflow, /WHEN target\.indexrelid IS NULL THEN 'missing'/);
   assert.match(workflow, /indisvalid AND indisready AND indislive/);
   assert.match(workflow, /if \[ "\$index_state" = "invalid" \]/);
   assert.match(workflow, /DROP INDEX CONCURRENTLY IF EXISTS[\s\S]*idx_reviewed_workbook_inventory_type_exact_image_id_desc/);
