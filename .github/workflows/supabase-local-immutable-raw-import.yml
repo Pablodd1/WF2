@@ -61,8 +61,15 @@ jobs:
           }
 
           $managementHeaders = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          function Get-DatabaseBytes {
+            $sizeBody = @{ query = 'SELECT pg_database_size(current_database()) AS database_bytes'; read_only = $true } | ConvertTo-Json
+            $sizeResult = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $managementHeaders -ContentType 'application/json' -Body $sizeBody
+            return [long]$sizeResult[0].database_bytes
+          }
+          $databaseBytesAtStart = Get-DatabaseBytes
           $migrationPaths = @(
-            'supabase/migrations/20260810104500_self_contained_immutable_mariadb_raw_import.sql'
+            'supabase/migrations/20260810104500_self_contained_immutable_mariadb_raw_import.sql',
+            'supabase/migrations/20260810110000_compact_mariadb_raw_envelopes.sql'
           )
           foreach ($migrationPath in $migrationPaths) {
             if (-not (Test-Path -LiteralPath $migrationPath)) { throw "Required forward migration is missing: $migrationPath" }
@@ -72,6 +79,8 @@ jobs:
           }
           $reloadBody = @{ query = "NOTIFY pgrst, 'reload schema';"; read_only = $false } | ConvertTo-Json
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $managementHeaders -ContentType 'application/json' -Body $reloadBody | Out-Null
+          $databaseBytesAfterMigration = Get-DatabaseBytes
+          Write-Output "Database bytes before migration: $databaseBytesAtStart; after storage correction: $databaseBytesAfterMigration."
           Start-Sleep -Seconds 3
 
           $keys = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/api-keys?reveal=true" -Headers $managementHeaders
@@ -105,6 +114,7 @@ jobs:
 
           $after = Get-WatchRecordCount
           if ([long]$before -ne [long]$after) { throw 'watch_records changed during immutable raw import.' }
+          $databaseBytesAfterImport = Get-DatabaseBytes
           $reconciliationPath = Join-Path $env:IMPORT_OUTPUT 'reconciliation.json'
           $reconciliation = Get-Content -Raw -LiteralPath $reconciliationPath | ConvertFrom-Json
           if ($reconciliation.reconciled -ne $true -or
@@ -114,7 +124,7 @@ jobs:
               [long]$reconciliation.normalization_writes -ne 0) {
             throw 'Raw import reconciliation failed.'
           }
-          Write-Output "Immutable raw import reconciled $($reconciliation.input_rows) rows; watch_records unchanged at $after."
+          Write-Output "Immutable raw import reconciled $($reconciliation.input_rows) rows; watch_records unchanged at $after; database bytes after import: $databaseBytesAfterImport."
 
       - name: Upload reconciliation only
         if: always()

@@ -20,6 +20,8 @@ test('local import workflow is manual, production-scoped, and uniquely self-host
   assert.match(workflow, /api-keys\?reveal=true/);
   assert.match(workflow, /::add-mask::\$env:SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(workflow, /20260810104500_self_contained_immutable_mariadb_raw_import\.sql/);
+  assert.match(workflow, /20260810110000_compact_mariadb_raw_envelopes\.sql/);
+  assert.match(workflow, /pg_database_size\(current_database\(\)\)/);
   assert.doesNotMatch(workflow, /20260810100000_immutable_mariadb_raw_import\.sql/);
   assert.doesNotMatch(workflow, /20260810103000_complete_immutable_mariadb_raw_import\.sql/);
   assert.match(workflow, /database\/query/);
