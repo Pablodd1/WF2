@@ -15,6 +15,7 @@ function query(result) {
     or() { return chain; },
     order() { return chain; },
     limit() { return chain; },
+    range() { return chain; },
     then(resolve, reject) { return Promise.resolve(result).then(resolve, reject); },
   };
   return chain;
@@ -25,27 +26,37 @@ test('review-first WTB loader returns only signed exact-reference identities', a
   const client = {
     from(table) {
       calls.push(table);
-      if (table === 'listing_identity_reviews') {
+      if (table === 'watch_records') {
         return query({
-          data: [{
-            record_id: 'reviewed-1',
-            canonical_brand: 'Rolex',
-            canonical_model: 'Cosmograph Daytona',
-            canonical_reference: '116500LN',
-            canonical_dial_color: 'White',
-            status: 'HUMAN_APPROVED',
-          }],
+          data: [
+            {
+              id: 'reviewed-1',
+              brand: 'Rolex',
+              reference: '116500ln',
+              listing_type: 'WTB',
+              verdict: 'APPROVED',
+              confidence: 95,
+            },
+            {
+              id: 'unreviewed-1',
+              brand: 'Rolex',
+              reference: '116500LN',
+              listing_type: 'WTB',
+              verdict: 'APPROVED',
+              confidence: 95,
+            },
+          ],
           error: null,
         });
       }
       return query({
         data: [{
-          id: 'reviewed-1',
-          brand: 'Rolex',
-          reference: '116500ln',
-          listing_type: 'WTB',
-          verdict: 'APPROVED',
-          confidence: 95,
+          record_id: 'reviewed-1',
+          canonical_brand: 'Rolex',
+          canonical_model: 'Cosmograph Daytona',
+          canonical_reference: '116500LN',
+          canonical_dial_color: 'White',
+          status: 'HUMAN_APPROVED',
         }],
         error: null,
       });
@@ -59,7 +70,7 @@ test('review-first WTB loader returns only signed exact-reference identities', a
     watchColumns: 'id,brand,reference,listing_type,verdict,confidence',
   });
 
-  assert.deepEqual(calls, ['listing_identity_reviews', 'watch_records']);
+  assert.deepEqual(calls, ['watch_records', 'listing_identity_reviews']);
   assert.equal(result.sampleCapped, false);
   assert.equal(result.rows.length, 1);
   assert.equal(result.rows[0].owner_reviewed_identity, true);

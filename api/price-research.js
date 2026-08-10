@@ -40,7 +40,7 @@ const {
   isReviewedZenithIdentityCorrectionRecord,
 } = require('./_lib/publication-references.cjs');
 
-const DEMAND_SAMPLE_LIMIT = 500;
+const DEMAND_SAMPLE_LIMIT = 2500;
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live

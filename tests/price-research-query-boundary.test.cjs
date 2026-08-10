@@ -41,7 +41,7 @@ test('legacy fallback remains bounded and WTB demand avoids the unindexed workbo
   assert.match(source, /if \(Array\.isArray\(preloadedRows\)\)/);
   assert.doesNotMatch(source, /loadReviewedWorkbookDemandRows/);
   assert.doesNotMatch(source, /executeDemandLaneQuery/);
-  assert.match(source, /const DEMAND_SAMPLE_LIMIT = 500/);
+  assert.match(source, /const DEMAND_SAMPLE_LIMIT = 2500/);
   assert.match(source, /loadVerifiedDemandIdentityRows\(client/);
   assert.match(source, /limit: DEMAND_SAMPLE_LIMIT/);
   assert.match(source, /const columns = 'id,brand,model,reference,[^']*listing_status'/);

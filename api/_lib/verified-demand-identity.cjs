@@ -1,6 +1,7 @@
 'use strict';
 
 const WATCH_RECORD_BATCH_SIZE = 100;
+const WATCH_RECORD_PAGE_SIZE = 500;
 const MAX_BATCH_CONCURRENCY = 3;
 
 function clean(value) {
@@ -43,45 +44,57 @@ async function mapWithConcurrency(values, concurrency, task) {
 async function loadVerifiedDemandIdentityRows(client, {
   brand,
   referenceVariants,
-  limit = 500,
+  limit = 2500,
   watchColumns,
 }) {
   const normalizedBrand = clean(brand);
   const references = exactReferenceVariants(referenceVariants);
-  const boundedLimit = Math.min(1000, Math.max(1, Number(limit) || 500));
+  const boundedLimit = Math.min(5000, Math.max(1, Number(limit) || 2500));
   if (!normalizedBrand || !references.length) return { rows: [], sampleCapped: false };
 
-  const { data: reviewData, error: reviewError } = await client
-    .from('listing_identity_reviews')
-    .select('record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status')
-    .eq('canonical_brand', normalizedBrand)
-    .in('canonical_reference', references)
-    .in('status', ['CATALOG_CONFIRMED', 'HUMAN_APPROVED'])
-    .order('record_id', { ascending: false })
-    .limit(boundedLimit + 1);
-  if (reviewError) throw reviewError;
+  // Page the exact-reference WTB lane first. Sampling identity reviews first
+  // is biased toward WTS because both intents share the same canonical index.
+  // Fetch one row beyond the ceiling so the API can disclose truncation.
+  const candidateRows = [];
+  for (let offset = 0; offset <= boundedLimit; offset += WATCH_RECORD_PAGE_SIZE) {
+    const end = Math.min(offset + WATCH_RECORD_PAGE_SIZE - 1, boundedLimit);
+    const { data, error } = await client
+      .from('watch_records')
+      .select(watchColumns)
+      .eq('brand', normalizedBrand)
+      .in('reference', references)
+      .in('listing_type', ['WTB', 'NTQ'])
+      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
+      .order('id', { ascending: false })
+      .range(offset, end);
+    if (error) throw error;
+    const page = data || [];
+    candidateRows.push(...page);
+    if (page.length < (end - offset + 1)) break;
+  }
 
-  const sampleCapped = (reviewData || []).length > boundedLimit;
-  const reviews = (reviewData || []).slice(0, boundedLimit);
-  const recordIds = [...new Set(reviews.map(row => clean(row.record_id)).filter(Boolean))];
+  const sampleCapped = candidateRows.length > boundedLimit;
+  const records = candidateRows.slice(0, boundedLimit);
+  const recordIds = [...new Set(records.map(row => clean(row.id)).filter(Boolean))];
   if (!recordIds.length) return { rows: [], sampleCapped };
 
   const batches = chunks(recordIds, WATCH_RECORD_BATCH_SIZE);
-  const results = await mapWithConcurrency(batches, MAX_BATCH_CONCURRENCY, batch => client
-    .from('watch_records')
-    .select(watchColumns)
-    .in('id', batch)
-    .in('listing_type', ['WTB', 'NTQ'])
-    .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)'));
-  const recordError = results.find(result => result?.error)?.error;
-  if (recordError) throw recordError;
+  const reviewResults = await mapWithConcurrency(batches, MAX_BATCH_CONCURRENCY, batch => client
+    .from('listing_identity_reviews')
+    .select('record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status')
+    .in('record_id', batch)
+    .eq('canonical_brand', normalizedBrand)
+    .in('canonical_reference', references)
+    .in('status', ['CATALOG_CONFIRMED', 'HUMAN_APPROVED']));
+  const reviewError = reviewResults.find(result => result?.error)?.error;
+  if (reviewError) throw reviewError;
 
-  const recordsById = new Map(results
+  const reviewsById = new Map(reviewResults
     .flatMap(result => result?.data || [])
-    .map(row => [String(row.id), row]));
-  const rows = reviews.flatMap(review => {
-    const row = recordsById.get(String(review.record_id));
-    if (!row) return [];
+    .map(review => [String(review.record_id), review]));
+  const rows = records.flatMap(row => {
+    const review = reviewsById.get(String(row.id));
+    if (!review) return [];
     return [{
       ...row,
       brand: clean(review.canonical_brand) || row.brand,
@@ -99,6 +112,7 @@ async function loadVerifiedDemandIdentityRows(client, {
 module.exports = {
   MAX_BATCH_CONCURRENCY,
   WATCH_RECORD_BATCH_SIZE,
+  WATCH_RECORD_PAGE_SIZE,
   exactReferenceVariants,
   loadVerifiedDemandIdentityRows,
 };
