@@ -44,6 +44,8 @@ test('legacy fallback remains bounded and WTB demand avoids the unindexed workbo
   assert.match(source, /const DEMAND_SAMPLE_LIMIT = 500/);
   assert.match(source, /loadVerifiedDemandIdentityRows\(client/);
   assert.match(source, /limit: DEMAND_SAMPLE_LIMIT/);
+  assert.match(source, /const columns = 'id,brand,model,reference,[^']*listing_status'/);
+  assert.doesNotMatch(source, /const columns = '[^']*(?:,phone_number,|,posted_by,|,display_image_url,|,image_url,)[^']*'/);
   assert.doesNotMatch(source, /retainVerifiedIdentityRows/);
   assert.doesNotMatch(source, /\.limit\(5000\)/);
   assert.doesNotMatch(source, /maxWtbCapacity/);

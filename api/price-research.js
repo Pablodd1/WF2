@@ -110,7 +110,10 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     data = preloadedRows.filter(row => ['WTB', 'NTQ'].includes(String(row.listing_type || '').toUpperCase()));
     demandSampleCapped = preloadedRows.sampleCapped === true;
   } else {
-    const columns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,phone_number,posted_by,image_url,thumbnail_url,display_image_url,image_urls,price_raw,price_usd,currency,created_at,listing_date';
+    // Select only physical watch_records columns. phone_number, posted_by,
+    // image_url, and display_image_url are view aliases and make PostgREST
+    // reject the entire base-table request when selected here.
+    const columns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at,listing_date,listing_status';
     try {
       const verifiedDemand = await loadVerifiedDemandIdentityRows(client, {
         brand,
@@ -120,7 +123,8 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
       });
       data = verifiedDemand.rows;
       demandSampleCapped = verifiedDemand.sampleCapped;
-    } catch {
+    } catch (error) {
+      console.warn('[price-research] verified WTB demand unavailable:', error?.message || error);
       return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
     }
   }
