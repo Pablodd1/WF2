@@ -1,0 +1,131 @@
+name: Supabase local immutable raw import
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type IMPORT_IMMUTABLE_MARIADB_RAW
+        required: true
+        type: string
+      run_key:
+        description: Stable idempotent import run key
+        required: true
+        default: mariadb-full-archive-20260810-codex-v1
+        type: string
+
+concurrency:
+  group: supabase-local-immutable-raw-import
+  cancel-in-progress: false
+
+jobs:
+  import-raw:
+    if: ${{ inputs.confirmation == 'IMPORT_IMMUTABLE_MARIADB_RAW' }}
+    runs-on: [self-hosted, Windows, X64, watchfacts-raw-import]
+    environment: production
+    timeout-minutes: 720
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
+      RAW_INPUT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-archive-20260810-codex-v1
+      IMPORT_OUTPUT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-import-20260810-codex-v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install local bridge dependency
+        shell: powershell
+        run: python -m pip install --disable-pip-version-check psycopg2-binary
+
+      - name: Validate, import, and reconcile immutable raw evidence
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SUPABASE_PROJECT_REF -ne $env:EXPECTED_PROJECT_REF) {
+            throw 'Production Supabase project reference does not match the approved target.'
+          }
+          if ('${{ inputs.run_key }}' -notmatch '^[A-Za-z0-9._:-]{1,100}$') {
+            throw 'Invalid run key.'
+          }
+          $sourceCheckpointPath = Join-Path $env:RAW_INPUT 'checkpoint.json'
+          if (-not (Test-Path -LiteralPath $sourceCheckpointPath)) {
+            throw 'Collector checkpoint is missing.'
+          }
+          $sourceCheckpoint = Get-Content -Raw -LiteralPath $sourceCheckpointPath | ConvertFrom-Json
+          if ($sourceCheckpoint.complete -ne $true -or
+              [long]$sourceCheckpoint.input_rows -ne [long]$sourceCheckpoint.output_rows -or
+              [long]$sourceCheckpoint.error_rows -ne 0) {
+            throw 'Collector is incomplete or unreconciled.'
+          }
+
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $poolers = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/config/database/pooler" -Headers $headers
+          $pooler = $poolers | Where-Object { $_.database_type -eq 'PRIMARY' -and $_.pool_mode -eq 'session' } | Select-Object -First 1
+          if (-not $pooler) { $pooler = $poolers | Where-Object { $_.database_type -eq 'PRIMARY' } | Select-Object -First 1 }
+          if (-not $pooler) { throw 'Production database pooler was not found.' }
+          $env:PGHOST = $pooler.db_host
+          $env:PGPORT = [string]$pooler.db_port
+          $env:PGUSER = $pooler.db_user
+          $env:PGDATABASE = $pooler.db_name
+          $env:PGPASSWORD = $env:SUPABASE_DB_PASSWORD
+          $env:PGSSLMODE = 'require'
+
+          $before = (python tools/mariadb-live/postgres-rpc-proxy.py watch-record-count | ConvertFrom-Json).watch_records
+          $env:LOCAL_RPC_TOKEN = [guid]::NewGuid().ToString('N')
+          New-Item -ItemType Directory -Force -Path $env:IMPORT_OUTPUT | Out-Null
+          $proxyOut = Join-Path $env:IMPORT_OUTPUT 'local-rpc.stdout.log'
+          $proxyErr = Join-Path $env:IMPORT_OUTPUT 'local-rpc.stderr.log'
+          $proxy = Start-Process python -ArgumentList @('tools/mariadb-live/postgres-rpc-proxy.py', 'serve', '--port', '8765') -PassThru -WindowStyle Hidden -RedirectStandardOutput $proxyOut -RedirectStandardError $proxyErr
+          try {
+            $healthy = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt += 1) {
+              try {
+                $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8765/health' -TimeoutSec 2
+                if ($health.status -eq 'ok') { $healthy = $true; break }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+            if (-not $healthy) { throw 'Local RPC bridge did not become healthy.' }
+
+            $env:SUPABASE_URL = 'http://127.0.0.1:8765'
+            $env:SUPABASE_SERVICE_ROLE_KEY = $env:LOCAL_RPC_TOKEN
+            $env:MARIADB_RAW_IMPORT_INPUT = $env:RAW_INPUT
+            $env:MARIADB_RAW_IMPORT_OUTPUT = $env:IMPORT_OUTPUT
+            $env:MARIADB_RAW_IMPORT_RUN_KEY = '${{ inputs.run_key }}'
+            $env:MARIADB_RAW_IMPORT_BATCH_SIZE = '200'
+            node tools/mariadb-live/import-raw.cjs
+            if ($LASTEXITCODE -ne 0) { throw 'Immutable raw importer failed.' }
+          } finally {
+            if ($proxy -and -not $proxy.HasExited) { Stop-Process -Id $proxy.Id -Force }
+          }
+
+          $after = (python tools/mariadb-live/postgres-rpc-proxy.py watch-record-count | ConvertFrom-Json).watch_records
+          if ([long]$before -ne [long]$after) { throw 'watch_records changed during immutable raw import.' }
+          $reconciliationPath = Join-Path $env:IMPORT_OUTPUT 'reconciliation.json'
+          $reconciliation = Get-Content -Raw -LiteralPath $reconciliationPath | ConvertFrom-Json
+          if ($reconciliation.reconciled -ne $true -or
+              $reconciliation.complete -ne $true -or
+              [long]$reconciliation.error_rows -ne 0 -or
+              [long]$reconciliation.watch_records_writes -ne 0 -or
+              [long]$reconciliation.normalization_writes -ne 0) {
+            throw 'Raw import reconciliation failed.'
+          }
+          Write-Output "Immutable raw import reconciled $($reconciliation.input_rows) rows; watch_records unchanged at $after."
+
+      - name: Upload reconciliation only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mariadb-immutable-import-reconciliation-${{ github.run_id }}
+          path: |
+            C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-import-20260810-codex-v1\checkpoint.json
+            C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-import-20260810-codex-v1\reconciliation.json
+          if-no-files-found: warn
+          retention-days: 7
