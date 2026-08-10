@@ -3,7 +3,7 @@
 -- The original concurrent build can leave an invalid catalog stub when
 -- PostgreSQL cannot acquire its brief lock before lock_timeout. The guarded
 -- production workflow removes only that exact invalid stub before applying
--- this migration. This file never drops or mutates a valid index or source
+-- this migration. This file never removes or mutates a valid index or source
 -- data.
 
 SET lock_timeout = '120s';
