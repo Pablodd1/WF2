@@ -231,3 +231,23 @@ test('self-contained forward migration creates only the raw import contract', ()
   assert.doesNotMatch(sql, /CREATE TABLE IF NOT EXISTS public\.listing_prices/);
   assert.doesNotMatch(sql, /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?public\.watch_records/i);
 });
+
+test('raw envelope compaction preserves a proven immutable full version', () => {
+  const sql = fs.readFileSync(
+    path.join(
+      __dirname,
+      '..',
+      'supabase',
+      'migrations',
+      '20260810110000_compact_mariadb_raw_envelopes.sql',
+    ),
+    'utf8',
+  );
+  assert.match(sql, /CREATE TRIGGER trg_compact_mariadb_raw_envelope/);
+  assert.match(sql, /version\.raw_payload = envelope\.raw_payload/);
+  assert.match(sql, /RAISE EXCEPTION 'refusing to compact/);
+  assert.match(sql, /envelope\.source_platform = 'mariadb'/);
+  assert.match(sql, /envelope\.raw_payload \? 'raw_data'/);
+  assert.doesNotMatch(sql, /DELETE\s+FROM/i);
+  assert.doesNotMatch(sql, /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?public\.watch_records/i);
+});
