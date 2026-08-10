@@ -27,7 +27,8 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /label: 'HIRE FI'/);
   assert.match(header, /const LANDING_LINKS = \[[\s\S]*label: 'HIRE FI'[\s\S]*label: 'WORKSPACE', to: '\/dealer\/workspace'/);
   assert.doesNotMatch(header, /label: 'ADM PANEL'/);
-  assert.match(header, /!landing && <LanguageToggle compact/);
+  assert.match(header, /<LanguageToggle compact \/>/);
+  assert.doesNotMatch(header, /!landing && <LanguageToggle/);
   assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
   assert.match(footer, /\['POST IT', '\/dealer\/post'\]/);
   assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
