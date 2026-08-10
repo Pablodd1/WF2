@@ -6,6 +6,8 @@ const path = require('node:path');
 const test = require('node:test');
 
 const {
+  LEGACY_WORKBOOK_COLUMNS,
+  isMissingColumnError,
   mapWorkbookAnalyticsRow,
 } = require('../api/_lib/reviewed-workbook-analytics.cjs');
 
@@ -26,6 +28,7 @@ test('maps only supplied reviewed-workbook evidence into the analytics contract'
     source_price_amount: 120000,
     source_currency: 'USD',
     verified_price_usd: 120000,
+    has_verified_usd_price: true,
     has_exact_source_image: true,
     user_image_url: 'https://example.test/source.jpg',
   });
@@ -40,6 +43,37 @@ test('maps only supplied reviewed-workbook evidence into the analytics contract'
   assert.deepEqual(row.image_urls, ['https://example.test/source.jpg']);
 });
 
+test('never promotes an unverified workbook amount into USD analytics', () => {
+  const row = mapWorkbookAnalyticsRow({
+    id: 'row-unverified',
+    brand_scope: 'Patek Philippe',
+    model: 'Nautilus',
+    normalized_reference: '5712',
+    dial_color: 'Blue',
+    workbook_price_usd: 100000,
+    source_price_amount: 100000,
+    source_currency: null,
+    has_verified_usd_price: false,
+    verified_price_usd: null,
+    posted_by: 'Legacy Seller',
+    phone_number: '+15551234567',
+  });
+  assert.equal(row.price_usd, null);
+  assert.equal(row.analytics_currency_status, 'CURRENCY_UNVERIFIED');
+  assert.equal(row.seller_name, 'Legacy Seller');
+  assert.equal(row.seller_phone, '+15551234567');
+});
+
+test('requires the verified-price flag even when a USD value is populated', () => {
+  const row = mapWorkbookAnalyticsRow({
+    verified_price_usd: 120000,
+    has_verified_usd_price: false,
+  });
+  assert.equal(row.price_usd, null);
+  assert.equal(row.has_verified_usd_price, false);
+  assert.equal(row.analytics_currency_status, 'CURRENCY_UNVERIFIED');
+});
+
 test('Price Research prefers verified reviewed-workbook cohorts and keeps legacy fallback', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
   assert.match(source, /loadReviewedWorkbookAnalyticsRows/);
@@ -47,7 +81,7 @@ test('Price Research prefers verified reviewed-workbook cohorts and keeps legacy
   assert.match(source, /const exactReviewedWorkbookRelease = preloadedReviewedWorkbookRows\.length > 0/);
   assert.match(source, /!exactReviewedWorkbookRelease && !isPublicationBrandAllowed\(brand\)/);
   assert.match(source, /!exactReviewedWorkbookRelease && !isPublicationReferenceAllowed\(brand, rawRef\)/);
-  assert.match(source, /if \(usingReviewedWorkbook\) rows = reviewedWorkbookRows/);
+  assert.match(source, /else if \(usingReviewedWorkbook\) \{\s*rows = reviewedWorkbookRows/);
   assert.match(source, /reviewed workbook analytics unavailable; using legacy cohort/);
   assert.match(source, /analytics_source: usingReviewedWorkbook/);
 });
@@ -61,6 +95,16 @@ test('reviewed workbook loader requires complete identity and explicit verified 
   assert.match(source, /eq\('has_verified_usd_price', true\)/);
   assert.match(source, /eq\('listing_type', 'WTS'\)/);
   assert.doesNotMatch(source, /workbook_price_usd/);
+  assert.match(source, /LEGACY_WORKBOOK_COLUMNS/);
+  assert.match(source, /posted_by,phone_number/);
+});
+
+test('legacy column fallback is narrow and recognizes Postgres missing-column errors', () => {
+  assert.match(LEGACY_WORKBOOK_COLUMNS, /posted_by,phone_number/);
+  assert.doesNotMatch(LEGACY_WORKBOOK_COLUMNS, /seller_name|seller_phone|,verdict|listing_status/);
+  assert.equal(isMissingColumnError({ code: '42703', message: 'column unavailable' }), true);
+  assert.equal(isMissingColumnError({ code: 'PGRST204', message: 'column seller_name does not exist' }), true);
+  assert.equal(isMissingColumnError({ code: 'PGRST301', message: 'permission denied' }), false);
 });
 
 test('Price Research listing detail supports the same reviewed workbook evidence', () => {
