@@ -6,20 +6,59 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { publicDealer } = require('../api/dealers.js');
+const { topRatedProfiles, sourceProfilePayload } = require('../api/_lib/dealer-directory-source.cjs');
+const dealersHandler = require('../api/dealers.js');
+const dealerProfileHandler = require('../api/dealer-profile.js');
 
-test('public directory is database-only and does not require a dealer session', () => {
+async function invoke(handler, query) {
+  let statusCode = 200;
+  let payload;
+  const res = {
+    setHeader() {},
+    status(value) { statusCode = value; return this; },
+    json(value) { payload = value; return value; },
+  };
+  await handler({ method: 'GET', query }, res);
+  return { statusCode, payload };
+}
+
+test('public directory keeps Reference Check database-backed and does not require a dealer session', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealers.js'), 'utf8');
   assert.doesNotMatch(source, /authorizeDealer/);
   assert.match(source, /getClient/);
   assert.match(source, /\.eq\('status', 'VERIFIED'\)/);
-  assert.doesNotMatch(source, /fullDirectoryCrawl|snapshotDirectory|watchfacts_top_rated|directory_url|source_links/i);
 });
 
-test('top rated is derived only from verified database ratings', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealers.js'), 'utf8');
-  assert.match(source, /mode === 'top-rated'/);
-  assert.match(source, /query = query\.not\('rating', 'is', null\)/);
-  assert.doesNotMatch(source, /snapshotDirectory|watchfacts_top_rated_snapshot|watchfacts_top_rated_crawl/i);
+test('Top Rated preserves source rank and feedback without inventing a numeric rating', () => {
+  const profiles = topRatedProfiles();
+  assert.equal(profiles.length, 25);
+  assert.deepEqual(profiles.map(profile => profile.source_rank), Array.from({ length: 25 }, (_, index) => index + 1));
+  assert.ok(profiles.every(profile => profile.rating === null));
+  assert.ok(profiles.every(profile => profile.review_count >= 0));
+  assert.ok(profiles.every(profile => profile.verified_phone === null));
+  assert.ok(profiles.every(profile => profile.source_url?.startsWith('https://watchfacts.com/user/')));
+});
+
+test('Top Rated and source profile API handlers return the complete source-backed workflow', async () => {
+  const directory = await invoke(dealersHandler, { mode: 'top-rated', pageSize: '25' });
+  assert.equal(directory.statusCode, 200);
+  assert.equal(directory.payload.total, 25);
+  assert.equal(directory.payload.source, 'public-source-snapshot');
+
+  const profile = await invoke(dealerProfileHandler, { id: 'watchfacts-source-3435' });
+  assert.equal(profile.statusCode, 200);
+  assert.equal(profile.payload.dealer.display_name, 'Jaztime Watches');
+  assert.ok(profile.payload.listings.length > 0);
+  assert.ok(profile.payload.reviews.length > 0);
+  assert.ok(profile.payload.listings.every(row => row.price_usd === null));
+  assert.ok(profile.payload.listings.every(row => row.raw_message === null || typeof row.raw_message === 'string'));
+});
+
+test('source snapshot accounts for every crawled listing and review once', () => {
+  const profiles = topRatedProfiles();
+  const payloads = profiles.map(profile => sourceProfilePayload(profile.slug));
+  assert.equal(payloads.reduce((sum, payload) => sum + payload.listings.length, 0), 376);
+  assert.equal(payloads.reduce((sum, payload) => sum + payload.reviews.length, 0), 268);
 });
 
 test('verified phone is published only when the dealer consent flag is true', () => {
@@ -34,12 +73,19 @@ test('verified phone is published only when the dealer consent flag is true', ()
   assert.equal(publicResult.verified_phone, '+1 305 555 0101');
 });
 
-test('customer directory and profile pages contain no legacy source navigation', () => {
+test('source profile workflow is provenance-labeled and remains distinct from verified identity', () => {
+  const payload = sourceProfilePayload('watchfacts-source-3435');
+  assert.ok(payload);
+  assert.equal(payload.dealer.rating, null);
+  assert.equal(payload.stats.verified_contact_info, null);
+  assert.equal(payload.source_provenance.source_system, 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT');
+  assert.ok(payload.source_links.profile.startsWith('https://watchfacts.com/user/'));
+
   const directory = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
   const profile = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerProfile.tsx'), 'utf8');
-  for (const source of [directory, profile]) {
-    assert.doesNotMatch(source, /source_links|source_workflow|source_metrics|Source profile|WTS route|WTB route/);
-  }
+  assert.match(directory, /public-source leaderboard/);
+  assert.match(profile, /Public-source Top Rated profile/);
+  assert.match(profile, /Source facts remain distinct from internally verified seller lineage/);
   assert.match(directory, /Full profile/);
   assert.match(profile, /Verified dealer/);
 });

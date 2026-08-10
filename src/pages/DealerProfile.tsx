@@ -9,9 +9,13 @@ interface ProfilePayload {
   dealer: {
     id: string; display_name: string | null; company_name: string | null; country_code: string | null; city: string | null;
     rating: number | null; review_count: number; whatsapp_group_count: number; avatar_url: string | null; profile_summary: string | null;
+    source_system?: string; source_url?: string | null; source_rank?: number; member_since?: string | null; trust_status?: string | null;
   };
-  stats: { wts_count: number; wtb_count: number; group_count: number; first_post: string | null; latest_post: string | null; verified_contact_info: { phone: string; verification_status: 'VERIFIED' } | null } | null;
-  listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; listing_type: string; listing_date: string | null; created_at: string | null; raw_message?: string; image_url?: string | null }>;
+  stats: { wts_count: number; wtb_count: number; group_count: number; first_post: string | null; latest_post: string | null; verified_contact_info: { phone: string; verification_status: 'VERIFIED' } | null; source_contact_url?: string | null } | null;
+  listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; display_price?: string | null; listing_type: string; listing_date: string | null; created_at: string | null; raw_message?: string; image_url?: string | null; source_url?: string | null; availability_url?: string | null }>;
+  reviews?: Array<{ date: string | null; reviewer: string | null; sentiment: string | null }>;
+  source_links?: { profile?: string | null; for_sale?: string | null; want_to_buy?: string | null; all_listings?: string | null };
+  source_provenance?: { source_system: string; source_url: string | null; crawled_at: string | null };
   raw_message_access: boolean;
 }
 
@@ -32,6 +36,7 @@ export default function DealerProfile() {
   if (error) return <main className="min-h-screen bg-[#08080c] text-white"><MarketNav /><div className="mx-auto max-w-5xl px-5 py-16"><p className="text-amber-200">{error}</p></div></main>;
   if (!payload) return <main className="min-h-screen bg-[#08080c] text-white"><MarketNav /><div className="mx-auto max-w-5xl px-5 py-16 text-white/45">Loading dealer profile...</div></main>;
   const { dealer, stats, listings } = payload;
+  const isPublicSourceProfile = dealer.source_system === 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT';
   const name = dealer.display_name || dealer.company_name || 'Verified dealer';
   const count = (value: number | null | undefined) => value == null ? 'Not available' : Number(value).toLocaleString();
   const date = (value: string | null | undefined) => value ? value.slice(0, 10) : 'Original date unavailable';
@@ -58,7 +63,7 @@ export default function DealerProfile() {
                 {dealer.avatar_url ? <img src={dealer.avatar_url} alt="" className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}
               </div>
               <div>
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-[#c9a96e]"><BadgeCheck size={15} /> Verified dealer</div>
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-[#c9a96e]"><BadgeCheck size={15} /> {isPublicSourceProfile ? `Public-source Top Rated profile${dealer.source_rank ? ` #${dealer.source_rank}` : ''}` : 'Verified dealer'}</div>
                 <h1 className="mt-3 font-serif text-4xl sm:text-5xl">{name}</h1>
                 <p className="mt-2 text-sm text-white/45">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
               </div>
@@ -66,6 +71,7 @@ export default function DealerProfile() {
             <div className="flex flex-wrap gap-4 text-sm text-white/60">
               <span className="flex items-center gap-2"><Star size={15} className="text-[#c9a96e]" /> {dealer.rating == null ? 'Rating not published' : `${Number(dealer.rating).toFixed(2)} · ${dealer.review_count} reviews`}</span>
               <span className="flex items-center gap-2"><Users size={15} /> {dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} WhatsApp groups` : 'WhatsApp groups not published'}</span>
+              {dealer.member_since && <span className="flex items-center gap-2"><CalendarDays size={15} /> {dealer.member_since}</span>}
             </div>
           </div>
         </div>
@@ -83,6 +89,17 @@ export default function DealerProfile() {
             <MessageCircle size={15} /> Contact verified poster on WhatsApp
           </a>
         )}
+        {stats?.source_contact_url && (
+          <a className="mt-4 ml-4 inline-flex items-center gap-2 text-sm text-[#d4b87a] hover:text-white" href={stats.source_contact_url} target="_blank" rel="noreferrer">
+            <MessageCircle size={15} /> Contact through public source
+          </a>
+        )}
+        {payload.source_links && <div className="mt-5 flex flex-wrap gap-3 text-xs">
+          {payload.source_links.profile && <a href={payload.source_links.profile} target="_blank" rel="noreferrer" className="border border-white/15 px-3 py-2 text-white/60 hover:text-white">Source profile</a>}
+          {payload.source_links.for_sale && <a href={payload.source_links.for_sale} target="_blank" rel="noreferrer" className="border border-white/15 px-3 py-2 text-white/60 hover:text-white">Source WTS</a>}
+          {payload.source_links.want_to_buy && <a href={payload.source_links.want_to_buy} target="_blank" rel="noreferrer" className="border border-white/15 px-3 py-2 text-white/60 hover:text-white">Source WTB</a>}
+          {payload.source_links.all_listings && <a href={payload.source_links.all_listings} target="_blank" rel="noreferrer" className="border border-white/15 px-3 py-2 text-white/60 hover:text-white">All source listings</a>}
+        </div>}
         {dealer.profile_summary && <p className="mt-8 max-w-3xl text-sm leading-7 text-white/55">{dealer.profile_summary}</p>}
         <div className="mt-10 flex items-center justify-between border-b border-white/10 pb-4">
           <h2 className="text-xl font-semibold">Recent market activity</h2>
@@ -97,7 +114,7 @@ export default function DealerProfile() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-[#c9a96e]">{listing.listing_type}</span>
-                  <h3 className="font-semibold">{[listing.brand, listing.reference, listing.dial_color].filter(Boolean).join(' · ') || 'Luxury listing'}</h3>
+                  <h3 className="font-semibold">{[listing.brand, listing.reference, listing.dial_color].filter(Boolean).join(' · ') || listing.raw_message || 'Luxury listing'}</h3>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-4 text-xs text-white/42">
                   <span>{listing.condition || 'Condition unspecified'}</span>
@@ -106,12 +123,23 @@ export default function DealerProfile() {
                 {payload.raw_message_access && listing.raw_message && <details className="mt-4 border-l border-[#c9a96e]/35 pl-4"><summary className="cursor-pointer text-xs text-white/50">Raw source message</summary><pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-6 text-white/55">{listing.raw_message}</pre></details>}
               </div>
               <div className="md:text-right">
-                <div className="text-lg font-semibold text-[#d4b87a]">{listing.price_usd ? `$${Number(listing.price_usd).toLocaleString()}` : 'Price not stated'}</div>
-                <Link to={`/trading?q=${encodeURIComponent([listing.brand, listing.reference].filter(Boolean).join(' '))}`} className="mt-3 flex items-center gap-2 text-xs text-white/55 hover:text-white"><MessageCircle size={14} /> Find on Trading Floor</Link>
+                <div className="text-lg font-semibold text-[#d4b87a]">{listing.price_usd ? `$${Number(listing.price_usd).toLocaleString()}` : listing.display_price && listing.display_price !== '$0.00' ? listing.display_price : 'Price not stated'}</div>
+                {(listing.brand || listing.reference) && <Link to={`/trading?q=${encodeURIComponent([listing.brand, listing.reference].filter(Boolean).join(' '))}`} className="mt-3 flex items-center gap-2 text-xs text-white/55 hover:text-white"><MessageCircle size={14} /> Find on Trading Floor</Link>}
+                {listing.source_url && <a href={listing.source_url} target="_blank" rel="noreferrer" className="mt-3 block text-xs text-[#d4b87a] hover:text-white">Open source listing</a>}
               </div>
             </article>
           ))}
         </div>
+        {payload.reviews && payload.reviews.length > 0 && <section className="mt-12">
+          <div className="flex items-center justify-between border-b border-white/10 pb-4"><h2 className="text-xl font-semibold">Source feedback</h2><span className="text-xs text-white/35">{payload.reviews.length} published entries</span></div>
+          <div className="grid gap-px bg-white/10 md:grid-cols-2">
+            {payload.reviews.map((review, index) => <article key={`${review.reviewer || 'review'}-${review.date || index}`} className="bg-[#111118] p-5">
+              <div className="text-sm font-semibold">{review.reviewer || 'Source reviewer'}</div>
+              <div className="mt-2 flex gap-3 text-xs text-white/45"><span>{review.sentiment || 'Feedback'}</span><span>{review.date || 'Date unavailable'}</span></div>
+            </article>)}
+          </div>
+        </section>}
+        {payload.source_provenance && <p className="mt-8 border-t border-white/10 pt-5 text-xs leading-6 text-white/35">Public source snapshot: {payload.source_provenance.crawled_at || 'date unavailable'}. Source facts remain distinct from internally verified seller lineage and Price Research eligibility.</p>}
       </section>
       <Footer />
     </main>

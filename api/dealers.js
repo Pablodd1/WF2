@@ -1,6 +1,7 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
+const { topRatedProfiles } = require('./_lib/dealer-directory-source.cjs');
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value || ''), 10);
@@ -70,6 +71,17 @@ module.exports = async function handler(req, res) {
   const to = from + pageSize - 1;
 
   try {
+    if (mode === 'top-rated') {
+      const sourceProfiles = topRatedProfiles().slice(0, pageSize);
+      return res.status(200).json({
+        success: true,
+        page: 1,
+        pageSize,
+        total: sourceProfiles.length,
+        dealers: sourceProfiles,
+        source: 'public-source-snapshot',
+      });
+    }
     const client = getClient();
     const phoneIds = mode === 'top-rated' ? null : await phoneMatchedDealerIds(client, search);
     if (phoneIds !== null && !phoneIds.length) {
@@ -87,9 +99,7 @@ module.exports = async function handler(req, res) {
       .order('display_name', { ascending: true })
       .range(from, to);
 
-    if (mode === 'top-rated') {
-      query = query.not('rating', 'is', null);
-    } else if (phoneIds !== null) {
+    if (phoneIds !== null) {
       query = query.in('id', phoneIds).eq('contact_consent', true);
     } else if (search) {
       const escaped = search.replace(/[%_,()]/g, ' ').trim();
