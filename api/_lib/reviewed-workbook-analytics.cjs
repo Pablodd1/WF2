@@ -13,8 +13,7 @@ function mapWorkbookAnalyticsRow(row) {
   const exactImage = !isBundle && (row.has_exact_source_image === true || Boolean(imageCandidate)) ? imageCandidate : null;
   const contactApproved = row.contact_publication_approved === true;
   const verifiedUsd = row.verified_price_usd == null ? null : Number(row.verified_price_usd);
-  const workbookUsd = row.workbook_price_usd == null ? null : Number(row.workbook_price_usd);
-  const priceUsd = verifiedUsd ?? workbookUsd ?? (row.source_price_amount == null ? null : Number(row.source_price_amount));
+  const priceUsd = Number.isFinite(verifiedUsd) && verifiedUsd > 0 ? verifiedUsd : null;
   return {
     id: row.id,
     brand: clean(row.supplied_brand) || clean(row.canonical_brand) || clean(row.brand_scope),
@@ -26,7 +25,6 @@ function mapWorkbookAnalyticsRow(row) {
     price_raw: row.source_price_amount == null ? null : Number(row.source_price_amount),
     price_usd: priceUsd,
     verified_price_usd: verifiedUsd,
-    workbook_price_usd: workbookUsd,
     has_verified_usd_price: row.has_verified_usd_price === true,
     currency: clean(row.source_currency),
     raw_message: clean(row.raw_message),
@@ -39,7 +37,7 @@ function mapWorkbookAnalyticsRow(row) {
     listing_type: clean(row.listing_type) || 'WTS',
     dealer_id: null,
     owner_reviewed_identity: true,
-    analytics_currency_status: 'VERIFIED',
+    analytics_currency_status: priceUsd === null ? 'CURRENCY_UNVERIFIED' : 'VERIFIED',
     source_price_amount: row.source_price_amount == null ? null : Number(row.source_price_amount),
     source_currency: clean(row.source_currency),
     workbook_source_file: clean(row.source_file),
@@ -48,12 +46,12 @@ function mapWorkbookAnalyticsRow(row) {
     thumbnail_url: exactImage,
     image_urls: exactImage ? [exactImage] : [],
     has_images: Boolean(exactImage),
-    seller_name: clean(row.seller_name),
-    seller_phone: clean(row.seller_phone),
+    seller_name: clean(row.seller_name) || clean(row.posted_by),
+    seller_phone: clean(row.seller_phone) || clean(row.phone_number),
     contact_publication_approved: contactApproved,
-    verdict: clean(row.verdict) || 'APPROVED',
+    verdict: clean(row.verdict) || clean(row.verification_status) || 'APPROVED',
     confidence: row.confidence == null ? 100 : Number(row.confidence),
-    listing_status: clean(row.listing_status) || 'ACTIVE',
+    listing_status: clean(row.listing_status) || clean(row.verification_status) || 'ACTIVE',
     source_file: clean(row.source_file),
     source_row_number: row.source_row_number == null ? null : Number(row.source_row_number),
   };
@@ -64,43 +62,72 @@ const WORKBOOK_COLUMNS = [
   'brand_scope,supplied_brand,canonical_brand,model,catalog_model,raw_reference',
   'normalized_reference,catalog_reference,public_reference,dial_color,catalog_dial,condition',
   'source_price_amount,source_currency,price_evidence_status,confidence,verification_status',
-  'user_image_url,verified_price_usd,workbook_price_usd,imported_at,has_exact_source_image,has_verified_usd_price',
+  'user_image_url,verified_price_usd,imported_at,has_exact_source_image,has_verified_usd_price',
   'reference_search_key,has_complete_identity,seller_name,seller_phone,contact_publication_approved,verdict,listing_status',
 ].join(',');
 
-async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys, limit = 10000 }) {
-  const keys = [...new Set((referenceKeys || []).map(clean).filter(Boolean))];
-  if (!clean(brand) || !keys.length) return [];
+const LEGACY_WORKBOOK_COLUMNS = WORKBOOK_COLUMNS
+  .replace('seller_name,seller_phone,', 'posted_by,phone_number,')
+  .replace(',verdict,listing_status', '');
 
+function isMissingColumnError(error) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || error || '');
+  return /42703|does not exist/i.test(`${code} ${message}`);
+}
+
+async function executeAnalyticsQuery(client, columns, { brand, keys, limit }) {
   let query = client
     .from(MARKET_SOURCE_VIEW)
-    .select(WORKBOOK_COLUMNS)
+    .select(columns)
     .eq('brand_scope', clean(brand))
     .in('reference_search_key', keys)
     .neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT')
-    .eq('has_complete_identity', true);
+    .eq('has_complete_identity', true)
+    .eq('has_verified_usd_price', true)
+    .eq('listing_type', 'WTS');
 
   for (const value of ['multiple', 'multi', 'mixed']) {
     query = query.not('dial_color', 'ilike', value);
     query = query.not('model', 'ilike', value);
   }
 
-  const { data, error } = await query
+  return query
     .order('posting_date', { ascending: false, nullsFirst: false })
     .order('id', { ascending: true })
     .limit(Math.min(10000, Math.max(1, Number(limit) || 10000)));
+}
+
+async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys, limit = 10000 }) {
+  const keys = [...new Set((referenceKeys || []).map(clean).filter(Boolean))];
+  if (!clean(brand) || !keys.length) return [];
+
+  let { data, error } = await executeAnalyticsQuery(client, WORKBOOK_COLUMNS, {
+    brand, keys, limit,
+  });
+  if (error && isMissingColumnError(error)) {
+    ({ data, error } = await executeAnalyticsQuery(client, LEGACY_WORKBOOK_COLUMNS, {
+      brand, keys, limit,
+    }));
+  }
 
   if (error) throw error;
   return (data || []).map(mapWorkbookAnalyticsRow);
 }
 
 async function loadReviewedWorkbookListing(client, id) {
-  const { data, error } = await client
+  const executeListingQuery = columns => client
     .from(MARKET_SOURCE_VIEW)
-    .select(WORKBOOK_COLUMNS)
+    .select(columns)
     .eq('id', id)
     .eq('has_complete_identity', true)
+    .eq('has_verified_usd_price', true)
+    .eq('listing_type', 'WTS')
     .maybeSingle();
+  let { data, error } = await executeListingQuery(WORKBOOK_COLUMNS);
+  if (error && isMissingColumnError(error)) {
+    ({ data, error } = await executeListingQuery(LEGACY_WORKBOOK_COLUMNS));
+  }
   if (error) throw error;
   return data ? mapWorkbookAnalyticsRow(data) : null;
 }
@@ -108,6 +135,8 @@ async function loadReviewedWorkbookListing(client, id) {
 module.exports = {
   MARKET_SOURCE_VIEW,
   WORKBOOK_COLUMNS,
+  LEGACY_WORKBOOK_COLUMNS,
+  isMissingColumnError,
   loadReviewedWorkbookAnalyticsRows,
   loadReviewedWorkbookListing,
   mapWorkbookAnalyticsRow,
