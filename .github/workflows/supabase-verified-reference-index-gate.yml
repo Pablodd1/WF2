@@ -18,9 +18,11 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      MIGRATION_COMMIT: 4874361aa1a501d29c21a253dd971e64f6ba40bb
+      MIGRATION_COMMIT: a72ea3ad8571192c406037c02feb221b530b0d59
       MIGRATION_FILE: supabase/migrations/20260810045000_reviewed_workbook_verified_reference_analytics.sql
       MIGRATION_SHA256: 80c17271693eaba0647595059eeda29c0c8e5aa7f1d9c85ea21134daea637dc7
+      DEMAND_MIGRATION_FILE: supabase/migrations/20260810054000_watch_records_wtb_reference_lookup.sql
+      DEMAND_MIGRATION_SHA256: 3069c35ce5797b5ffcde04a4c63aec793333bd453b30456394d7aa7580864283
     steps:
       - name: Check out the reviewed migration commit
         uses: actions/checkout@v4
@@ -35,9 +37,12 @@ jobs:
           test -n "$SUPABASE_DB_PASSWORD"
           test -n "$SUPABASE_PROJECT_REF"
           test -f "$MIGRATION_FILE"
+          test -f "$DEMAND_MIGRATION_FILE"
           test "$(sha256sum "$MIGRATION_FILE" | awk '{print $1}')" = "$MIGRATION_SHA256"
+          test "$(sha256sum "$DEMAND_MIGRATION_FILE" | awk '{print $1}')" = "$DEMAND_MIGRATION_SHA256"
           test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$MIGRATION_FILE")" = "1"
-          ! grep -Eiq '(DROP|TRUNCATE|DELETE|UPDATE|INSERT|ALTER[[:space:]]+TABLE|CREATE[[:space:]]+TABLE|CREATE[[:space:]]+(OR[[:space:]]+REPLACE[[:space:]]+)?VIEW|staging\.listings)' "$MIGRATION_FILE"
+          test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$DEMAND_MIGRATION_FILE")" = "1"
+          ! grep -Eiq '(DROP|TRUNCATE|DELETE|UPDATE|INSERT|ALTER[[:space:]]+TABLE|CREATE[[:space:]]+TABLE|CREATE[[:space:]]+(OR[[:space:]]+REPLACE[[:space:]]+)?VIEW|staging\.listings)' "$MIGRATION_FILE" "$DEMAND_MIGRATION_FILE"
 
       - name: Install PostgreSQL client
         shell: bash
@@ -84,13 +89,28 @@ jobs:
           ")"
           test "$architecture" = "1|7"
 
+          demand_architecture="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT
+              (to_regclass('public.watch_records') IS NOT NULL)::int || '|' ||
+              (COUNT(*) FILTER (WHERE column_name IN (
+                'id', 'brand', 'reference', 'listing_type', 'listing_status'
+              )))::text
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'watch_records';
+          ")"
+          test "$demand_architecture" = "1|5"
+
           invalid_index="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
             SELECT COUNT(*)
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             JOIN pg_index i ON i.indexrelid = c.oid
             WHERE n.nspname = 'public'
-              AND c.relname = 'idx_reviewed_workbook_verified_reference_wts'
+              AND c.relname IN (
+                'idx_reviewed_workbook_verified_reference_wts',
+                'idx_watch_records_wtb_reference_lookup'
+              )
               AND (NOT i.indisvalid OR NOT i.indisready);
           ")"
           test "$invalid_index" = "0"
@@ -118,6 +138,22 @@ jobs:
             psql -X -v ON_ERROR_STOP=1 -f "$MIGRATION_FILE"
           fi
 
+          demand_existing_valid="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_watch_records_wtb_reference_lookup'
+              AND i.indisvalid
+              AND i.indisready;
+          ")"
+          if [ "$demand_existing_valid" = "1" ]; then
+            echo "WTB reference index already exists and is valid; skipping migration replay."
+          else
+            psql -X -v ON_ERROR_STOP=1 -f "$DEMAND_MIGRATION_FILE"
+          fi
+
       - name: Verify index validity and exact-reference query plans
         shell: bash
         env:
@@ -134,6 +170,16 @@ jobs:
               AND c.relname = 'idx_reviewed_workbook_verified_reference_wts';
           ")"
           test "$validity" = "1|1"
+
+          demand_validity="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT i.indisvalid::int || '|' || i.indisready::int
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_watch_records_wtb_reference_lookup';
+          ")"
+          test "$demand_validity" = "1|1"
 
           for target in 'Patek Philippe|5712' 'Rolex|116500LN' 'Rolex|126500LN'; do
             brand="${target%%|*}"
@@ -160,4 +206,29 @@ jobs:
               LIMIT 200;
           SQL
             grep -q 'idx_reviewed_workbook_verified_reference_wts' "$RUNNER_TEMP/${safe_name}.plan.txt"
+          done
+
+          for target in 'Patek Philippe|5712' 'Rolex|116500LN' 'Rolex|126500LN'; do
+            brand="${target%%|*}"
+            reference="${target#*|}"
+            lowercase_reference="$(printf '%s' "$reference" | tr '[:upper:]' '[:lower:]')"
+            safe_name="$(printf 'wtb_%s_%s' "$brand" "$reference" | tr -cd '[:alnum:]_')"
+            psql -X -v ON_ERROR_STOP=1 \
+              -v brand="$brand" \
+              -v reference="$reference" \
+              -v lowercase_reference="$lowercase_reference" <<'SQL' | tee "$RUNNER_TEMP/${safe_name}.plan.txt"
+              EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+              SELECT id
+              FROM public.watch_records
+              WHERE brand = :'brand'
+                AND reference IN (:'reference', :'lowercase_reference')
+                AND listing_type IN ('WTB', 'NTQ')
+                AND (
+                  listing_status IS NULL
+                  OR listing_status NOT IN ('HIDDEN', 'REJECTED', 'DELETED')
+                )
+              ORDER BY id DESC
+              LIMIT 501;
+          SQL
+            grep -q 'idx_watch_records_wtb_reference_lookup' "$RUNNER_TEMP/${safe_name}.plan.txt"
           done
