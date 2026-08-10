@@ -23,6 +23,7 @@ const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
 const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
+const { loadVerifiedDemandIdentityRows } = require('./_lib/verified-demand-identity.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -92,36 +93,6 @@ async function lookupLiquidity(client, reference, listingCount, demand, selectio
   return { source: 'live_fallback', listing_count: listingCount, ...demand };
 }
 
-async function retainVerifiedIdentityRows(client, rows) {
-  const ids = [...new Set((rows || []).map(row => String(row.id || '')).filter(Boolean))];
-  if (!ids.length) return [];
-  const batches = [];
-  for (let index = 0; index < ids.length; index += 200) {
-    batches.push(ids.slice(index, index + 200));
-  }
-  const results = await Promise.all(batches.map(batch => client
-    .from('listing_identity_reviews')
-    .select('record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status')
-    .in('record_id', batch)
-    .in('status', ['CATALOG_CONFIRMED', 'HUMAN_APPROVED'])));
-  const error = results.find(result => result.error)?.error;
-  if (error) throw error;
-  const reviews = new Map(results
-    .flatMap(result => result.data || [])
-    .map(review => [String(review.record_id), review]));
-  return (rows || []).flatMap(row => {
-    const review = reviews.get(String(row.id));
-    if (!review) return [];
-    return [{
-      ...row,
-      brand: review.canonical_brand || row.brand,
-      model: review.canonical_model || row.model,
-      reference: review.canonical_reference || row.reference,
-      dial_color: review.canonical_dial_color || row.dial_color,
-    }];
-  });
-}
-
 function isOwnerReviewedWorkbookRow(row) {
   return row?.owner_reviewed_identity === true
     || isReviewedPaneraiReleaseRecord(row) || (
@@ -140,33 +111,21 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     demandSampleCapped = preloadedRows.sampleCapped === true;
   } else {
     const columns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,phone_number,posted_by,image_url,thumbnail_url,display_image_url,image_urls,price_raw,price_usd,currency,created_at,listing_date';
-    const demandReferenceVariants = [...new Set(referenceVariants.flatMap(reference => [
-      String(reference),
-      String(reference).toUpperCase(),
-      String(reference).toLowerCase(),
-    ]))];
-    const { data: dbData, error } = await client
-      .from(sourceTable)
-      .select(columns)
-      .eq('brand', brand)
-      .in('reference', demandReferenceVariants)
-      .in('listing_type', ['WTB', 'NTQ'])
-      .or('listing_status.is.null,listing_status.not.in.(HIDDEN,REJECTED,DELETED)')
-      .order('id', { ascending: false })
-      .limit(DEMAND_SAMPLE_LIMIT + 1);
-    if (error) return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
-    demandSampleCapped = (dbData || []).length > DEMAND_SAMPLE_LIMIT;
-    data = (dbData || []).slice(0, DEMAND_SAMPLE_LIMIT);
+    try {
+      const verifiedDemand = await loadVerifiedDemandIdentityRows(client, {
+        brand,
+        referenceVariants,
+        limit: DEMAND_SAMPLE_LIMIT,
+        watchColumns: columns,
+      });
+      data = verifiedDemand.rows;
+      demandSampleCapped = verifiedDemand.sampleCapped;
+    } catch {
+      return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
+    }
   }
 
-  let demandRows;
-  try {
-    demandRows = (data || []).some(isOwnerReviewedWorkbookRow)
-      ? (data || []).filter(isOwnerReviewedWorkbookRow)
-      : await retainVerifiedIdentityRows(client, data || []);
-  } catch {
-    return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
-  }
+  let demandRows = (data || []).filter(isOwnerReviewedWorkbookRow);
   const equivalentKeys = new Set(referenceVariants.map(normRef));
   demandRows = demandRows.filter(row =>
     isReleaseListingEligible(row)
