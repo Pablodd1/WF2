@@ -4,6 +4,7 @@ const { getClient } = require('./_lib/supabase');
 const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
+const { sourceProfilePayload } = require('./_lib/dealer-directory-source.cjs');
 
 function buildDealerStats(listings, dealer, verifiedPhone, aggregate = null) {
   const dates = listings
@@ -31,6 +32,9 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   const identity = String(req.query?.id || '').trim().slice(0, 160);
   if (!identity) return res.status(400).json({ error: 'Dealer id or slug required' });
+
+  const sourceProfile = sourceProfilePayload(identity);
+  if (sourceProfile) return res.status(200).json(sourceProfile);
 
   try {
     const client = getClient();

@@ -155,20 +155,22 @@ test('footer provides the complete social media watch dealer glossary in an acce
   }
 });
 
-test('dealer directory includes Reference Check and Top Rated views backed by verified profiles', () => {
+test('dealer directory separates verified Reference Check from provenance-backed Top Rated profiles', () => {
   const directory = read('src/pages/DealerDirectory.tsx');
 
   assert.match(directory, /Reference Check/);
   assert.match(directory, /Top Rated Dealers/);
   assert.match(directory, /feedback reviews/);
-  assert.match(directory, /Member since/);
+  assert.match(directory, /member_since/);
   assert.match(directory, /label="For sale"/);
   assert.match(directory, /label="Looking for"/);
   assert.match(directory, /Full profile/);
-  assert.doesNotMatch(directory, /source_links|Source profile:/);
+  assert.match(directory, /Source profile/);
+  assert.match(directory, /public-source leaderboard/);
   const profile = read('src/pages/DealerProfile.tsx');
   assert.match(profile, /Raw source message/);
   assert.match(profile, /Verified dealer/);
+  assert.match(profile, /Public-source Top Rated profile/);
   assert.match(profile, /Find on Trading Floor/);
   assert.doesNotMatch(profile, /Actual listing|Dealer feedback|Source workflow/);
 });

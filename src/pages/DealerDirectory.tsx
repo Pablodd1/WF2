@@ -31,6 +31,10 @@ interface DealerSummary {
   source_rank?: number;
   source_system?: string;
   verified_phone?: string | null;
+  member_since?: string | null;
+  trust_status?: string | null;
+  source_url?: string | null;
+  source_crawled_at?: string | null;
 }
 
 type DirectoryView = 'reference' | 'top-rated';
@@ -76,11 +80,11 @@ export default function DealerDirectory() {
       <MarketNav />
       <section className="border-b border-white/10 px-5 py-10 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">WatchFacts verified network</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{view === 'top-rated' ? 'WatchFacts public-source leaderboard' : 'WatchFacts verified network'}</p>
           <div className="mt-3 grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
             <div>
               <h1 className="font-serif text-4xl sm:text-5xl">Dealer directory</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">Reference Check and Top Rated Dealers use the same verified profiles, reputation, WTS activity, WTB demand, location, and group data shown beside listings and Price Research evidence.</p>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{view === 'top-rated' ? 'Top Rated Dealers preserves the public source rank, feedback count, WTS activity, WTB demand, location, groups, and source profile workflow without inventing a numeric star rating.' : 'Reference Check searches internally verified dealer identities and approved seller lineage used beside listings and Price Research evidence.'}</p>
             </div>
             {view === 'reference' && <label className="relative block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={17} />
@@ -96,11 +100,11 @@ export default function DealerDirectory() {
 
       <section className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:px-12">
         <div className="mb-5 flex items-center justify-between text-sm text-white/45">
-          <span>{loading ? 'Loading verified profiles...' : view === 'top-rated' ? `Top ${Math.min(25, dealers.length)} verified dealers by rating` : `${total.toLocaleString()} verified dealers`}</span>
+          <span>{loading ? (view === 'top-rated' ? 'Loading public-source profiles...' : 'Loading verified profiles...') : view === 'top-rated' ? `Top ${Math.min(25, dealers.length)} source-ranked dealers` : `${total.toLocaleString()} verified dealers`}</span>
           <span>Page {page} of {pages}</span>
         </div>
         {error && <div role="alert" className="border border-amber-300/25 bg-amber-300/[0.07] px-4 py-3 text-sm text-amber-100/75">{error}</div>}
-        {!error && !loading && dealers.length === 0 && <div className="border border-white/10 px-5 py-12 text-center text-sm text-white/45">No verified profiles match this search.</div>}
+        {!error && !loading && dealers.length === 0 && <div className="border border-white/10 px-5 py-12 text-center text-sm text-white/45">{view === 'top-rated' ? 'No source-ranked profiles are available.' : 'No verified profiles match this search.'}</div>}
         <div className="grid gap-px bg-white/10 md:grid-cols-2 xl:grid-cols-3">
           {dealers.map(dealer => {
             const stats = dealer.stats;
@@ -122,7 +126,7 @@ export default function DealerDirectory() {
                   <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? 'Top rated' : Number(dealer.rating).toFixed(2)}</span>
                   <span>{dealer.review_count.toLocaleString()} feedback reviews</span>
                   <span className="flex items-center gap-1"><Users size={13} /> {dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} groups` : 'Groups not published'}</span>
-                  <span className="flex items-center gap-1"><CalendarDays size={13} /> {dealer.verified_at ? `Member since ${new Date(dealer.verified_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : 'Member date unavailable'}</span>
+                  <span className="flex items-center gap-1"><CalendarDays size={13} /> {dealer.member_since || (dealer.verified_at ? `Verified ${new Date(dealer.verified_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : 'Member date unavailable')}</span>
                 </div>
                 <div className="mt-7 grid grid-cols-3 border-t border-white/10 pt-5 text-center">
                   <Metric label="For sale" value={stats?.wts_posts || 0} />
@@ -131,6 +135,7 @@ export default function DealerDirectory() {
                 </div>
                 <div className="mt-5 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
                   <Link to={`/dealers/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
+                  {dealer.source_url && <a href={dealer.source_url} target="_blank" rel="noreferrer" className="ml-5 inline-flex items-center gap-1 text-white/45 hover:text-white">Source profile</a>}
                 </div>
               </article>
             );

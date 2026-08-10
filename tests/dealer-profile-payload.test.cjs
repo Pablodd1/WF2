@@ -37,9 +37,9 @@ test('dealer profile keeps raw messages, currency, and normalized prices in its 
   assert.doesNotMatch(source, /price_usd:\s*null/);
 });
 
-test('dealer profile rejects crawl-derived identities and loads verified database dealers only', () => {
+test('dealer profile separates public-source profiles from verified database dealers', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealer-profile.js'), 'utf8');
-  assert.doesNotMatch(source, /fullDirectoryCrawl|sourceProfilePayload|watchfacts_directory_crawl|SOURCE_PUBLISHED/);
+  assert.match(source, /sourceProfilePayload/);
   assert.match(source, /dealer\.status !== 'VERIFIED'/);
   assert.match(source, /listing_identity_reviews/);
   assert.match(source, /seller_listing_lineage_staging/);
