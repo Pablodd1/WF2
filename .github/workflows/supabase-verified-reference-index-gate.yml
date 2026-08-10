@@ -232,3 +232,71 @@ jobs:
           SQL
             grep -q 'idx_watch_records_wtb_reference_lookup' "$RUNNER_TEMP/${safe_name}.plan.txt"
           done
+
+      - name: Audit priority-reference WTB release gates
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          for target in 'Patek Philippe|5712' 'Rolex|116500LN' 'Rolex|126500LN'; do
+            brand="${target%%|*}"
+            reference="${target#*|}"
+            lowercase_reference="$(printf '%s' "$reference" | tr '[:upper:]' '[:lower:]')"
+            psql -X -A -t -v ON_ERROR_STOP=1 \
+              -v brand="$brand" \
+              -v reference="$reference" \
+              -v lowercase_reference="$lowercase_reference" <<'SQL'
+              WITH candidates AS (
+                SELECT
+                  w.id,
+                  w.verdict,
+                  CASE
+                    WHEN w.confidence BETWEEN 0 AND 1 THEN w.confidence * 100
+                    ELSE w.confidence
+                  END AS confidence_percent,
+                  w.listing_status,
+                  w.model,
+                  w.dial_color
+                FROM public.watch_records w
+                WHERE w.brand = :'brand'
+                  AND w.reference IN (:'reference', :'lowercase_reference')
+                  AND w.listing_type IN ('WTB', 'NTQ')
+                  AND (
+                    w.listing_status IS NULL
+                    OR w.listing_status NOT IN ('HIDDEN', 'REJECTED', 'DELETED')
+                  )
+              ), reviewed AS (
+                SELECT
+                  c.*,
+                  r.status AS identity_review_status,
+                  COALESCE(NULLIF(trim(r.canonical_model), ''), NULLIF(trim(c.model), '')) AS released_model,
+                  COALESCE(NULLIF(trim(r.canonical_dial_color), ''), NULLIF(trim(c.dial_color), '')) AS released_dial
+                FROM candidates c
+                LEFT JOIN public.listing_identity_reviews r
+                  ON r.record_id = c.id
+                 AND r.status IN ('CATALOG_CONFIRMED', 'HUMAN_APPROVED')
+              )
+              SELECT json_build_object(
+                'brand', :'brand',
+                'reference', :'reference',
+                'candidate_count', COUNT(*),
+                'identity_reviewed_count', COUNT(*) FILTER (
+                  WHERE identity_review_status IS NOT NULL
+                ),
+                'approved_high_confidence_count', COUNT(*) FILTER (
+                  WHERE upper(trim(COALESCE(verdict, ''))) = 'APPROVED'
+                    AND confidence_percent >= 90
+                ),
+                'current_api_release_count', COUNT(*) FILTER (
+                  WHERE identity_review_status IS NOT NULL
+                    AND upper(trim(COALESCE(verdict, ''))) = 'APPROVED'
+                    AND confidence_percent >= 90
+                    AND released_model IS NOT NULL
+                    AND released_dial IS NOT NULL
+                )
+              )
+              FROM reviewed;
+          SQL
+          done
