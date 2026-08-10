@@ -115,6 +115,19 @@ interface TradingFloorResponse {
   publicationBrands?: string[];
 }
 
+interface CatalogSuggestion {
+  brand: string;
+  model: string | null;
+  reference: string;
+  dial_colors: string[];
+  match_type: 'exact_reference' | 'reference_prefix' | 'reference_contains' | 'catalog_text_prefix' | 'catalog_text_contains' | 'reference_typo_candidate';
+}
+
+interface CatalogSuggestionsResponse {
+  success: boolean;
+  suggestions?: CatalogSuggestion[];
+}
+
 interface ListingContact {
   contact_available: boolean;
   dealer_name?: string;
@@ -192,6 +205,11 @@ export default function TradingFloor() {
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
+  const [catalogSuggestions, setCatalogSuggestions] = useState<CatalogSuggestion[]>([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const [selectedCatalogReference, setSelectedCatalogReference] = useState<CatalogSuggestion | null>(null);
   const [listings, setListings] = useState<ListingRecord[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
   const [total, setTotal] = useState<number | null>(null);
@@ -206,6 +224,7 @@ export default function TradingFloor() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 50);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
+  const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
   const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
@@ -297,6 +316,56 @@ export default function TradingFloor() {
   useEffect(() => {
     setSearchInput(search);
   }, [search]);
+
+  useEffect(() => {
+    const query = searchInput.trim();
+    if (query.length < 2 || selectedCatalogReference) {
+      setCatalogSuggestions([]);
+      setSuggestionsLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSuggestionsLoading(true);
+      try {
+        const params = new URLSearchParams({ q: query, limit: '10' });
+        if (brandFilter) params.set('brand', brandFilter);
+        const response = await fetch(`/api/catalog-suggestions?${params.toString()}`, { signal: controller.signal });
+        if (!response.ok) throw new Error('Catalog suggestions unavailable');
+        const payload = await response.json() as CatalogSuggestionsResponse;
+        const nextSuggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+        setCatalogSuggestions(nextSuggestions);
+        setActiveSuggestionIndex(nextSuggestions.length ? 0 : -1);
+        setSuggestionsOpen(nextSuggestions.length > 0);
+      } catch (caught) {
+        if ((caught as Error).name !== 'AbortError') setCatalogSuggestions([]);
+      } finally {
+        if (!controller.signal.aborted) setSuggestionsLoading(false);
+      }
+    }, 180);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [brandFilter, searchInput, selectedCatalogReference]);
+
+  useEffect(() => {
+    const closeSuggestions = (event: MouseEvent) => {
+      if (!searchBoxRef.current?.contains(event.target as Node)) setSuggestionsOpen(false);
+    };
+    document.addEventListener('mousedown', closeSuggestions);
+    return () => document.removeEventListener('mousedown', closeSuggestions);
+  }, []);
+
+  const selectCatalogSuggestion = useCallback((suggestion: CatalogSuggestion) => {
+    const selectedSearch = `${suggestion.brand} ${suggestion.reference}`;
+    setSelectedCatalogReference(suggestion);
+    setSearchInput(selectedSearch);
+    setSuggestionsOpen(false);
+    setCatalogSuggestions([]);
+    resetResults();
+    updateViewParams({ q: selectedSearch, brand: suggestion.brand });
+  }, [resetResults, updateViewParams]);
 
   useEffect(() => {
     if (previousViewKeyRef.current === viewKey) return;
@@ -398,17 +467,97 @@ export default function TradingFloor() {
           </div>
 
           <div className="sticky top-0 z-20 -mx-4 flex gap-2 border-y px-4 py-3 md:static md:mx-0 md:border-0 md:p-0" style={{ borderColor: BORDER, background: SURFACE }}>
-            <label className="relative block min-w-0 flex-1 md:max-w-[460px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
+            <div ref={searchBoxRef} className="relative min-w-0 flex-1 md:max-w-[560px]">
+              <label htmlFor="trading-floor-search" className="sr-only">Search Trading Floor inventory</label>
+              <Search className="pointer-events-none absolute left-3 top-[22px] -translate-y-1/2" size={16} style={{ color: MUTED }} />
               <input
+                id="trading-floor-search"
                 type="search"
                 value={searchInput}
-                onChange={event => setSearchInput(event.target.value)}
+                onChange={event => {
+                  setSelectedCatalogReference(null);
+                  setSearchInput(event.target.value);
+                  setSuggestionsOpen(true);
+                }}
+                onFocus={() => setSuggestionsOpen(catalogSuggestions.length > 0)}
+                onKeyDown={event => {
+                  if (event.key === 'Escape') {
+                    setSuggestionsOpen(false);
+                    return;
+                  }
+                  if (!suggestionsOpen || catalogSuggestions.length === 0) return;
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    setActiveSuggestionIndex(index => (index + 1) % catalogSuggestions.length);
+                  } else if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    setActiveSuggestionIndex(index => (index <= 0 ? catalogSuggestions.length - 1 : index - 1));
+                  } else if (event.key === 'Enter' && activeSuggestionIndex >= 0) {
+                    event.preventDefault();
+                    selectCatalogSuggestion(catalogSuggestions[activeSuggestionIndex]);
+                  }
+                }}
                 placeholder="Search item, model, reference, message, or seller"
                 className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="trading-reference-suggestions"
+                aria-expanded={suggestionsOpen}
+                aria-activedescendant={activeSuggestionIndex >= 0 ? `trading-reference-option-${activeSuggestionIndex}` : undefined}
               />
-            </label>
+              {suggestionsOpen && (
+                <div
+                  id="trading-reference-suggestions"
+                  role="listbox"
+                  aria-label="Catalog reference suggestions"
+                  className="absolute inset-x-0 top-12 z-40 max-h-[360px] overflow-y-auto rounded-md border bg-white p-1 shadow-2xl"
+                  style={{ borderColor: BORDER }}
+                >
+                  {catalogSuggestions.map((suggestion, index) => (
+                    <button
+                      id={`trading-reference-option-${index}`}
+                      key={`${suggestion.brand}-${suggestion.reference}`}
+                      type="button"
+                      role="option"
+                      aria-selected={index === activeSuggestionIndex}
+                      onMouseEnter={() => setActiveSuggestionIndex(index)}
+                      onMouseDown={event => event.preventDefault()}
+                      onClick={() => selectCatalogSuggestion(suggestion)}
+                      className="flex min-h-14 w-full items-center justify-between gap-3 rounded px-3 py-2 text-left"
+                      style={{ background: index === activeSuggestionIndex ? PANEL : SURFACE, color: INK }}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold">{suggestion.brand} {suggestion.reference}</span>
+                        <span className="mt-0.5 block truncate text-xs" style={{ color: MUTED }}>
+                          {suggestion.model || 'Catalog reference'}
+                          {suggestion.dial_colors.length ? ` · ${suggestion.dial_colors.join(', ')} dial` : ''}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
+                        {suggestion.match_type === 'reference_typo_candidate' ? 'Did you mean?' : 'Select'}
+                      </span>
+                    </button>
+                  ))}
+                  {suggestionsLoading && <div className="px-3 py-2 text-xs" style={{ color: MUTED }}>Checking catalog…</div>}
+                  <div className="border-t px-3 py-2 text-[11px] leading-4" style={{ borderColor: BORDER, color: MUTED }}>
+                    Catalog suggestions never replace your search until you select one.
+                  </div>
+                </div>
+              )}
+              {selectedCatalogReference && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
+                  <span>Selected catalog reference: <strong style={{ color: INK }}>{selectedCatalogReference.brand} {selectedCatalogReference.reference}</strong></span>
+                  <a
+                    href={`/price-research?brand=${encodeURIComponent(selectedCatalogReference.brand)}&reference=${encodeURIComponent(selectedCatalogReference.reference)}`}
+                    className="font-semibold underline underline-offset-4"
+                    style={{ color: GOLD_BRIGHT }}
+                  >
+                    Open Price Research
+                  </a>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setFiltersOpen(true)}

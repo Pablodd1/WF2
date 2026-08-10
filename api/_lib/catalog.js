@@ -441,6 +441,117 @@ function listCatalogBrands() {
     .sort((a, b) => b.reference_count - a.reference_count || a.brand.localeCompare(b.brand));
 }
 
+function levenshteinDistance(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let diagonal = previous[0];
+    previous[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const above = previous[j];
+      previous[j] = Math.min(
+        previous[j] + 1,
+        previous[j - 1] + 1,
+        diagonal + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return previous[b.length];
+}
+
+/**
+ * Return bounded, catalog-backed reference suggestions for marketplace search.
+ * Suggestions are presentation candidates only: callers must not treat a
+ * prefix or typo match as a confirmed listing identity until the user selects
+ * the exact reference.
+ */
+function listCatalogSuggestions(query, { brand = null, limit = 10 } = {}) {
+  loadCatalogs();
+  const rawQuery = String(query || '').trim();
+  const queryKey = collapseRef(rawQuery);
+  const queryText = rawQuery.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  if (queryKey.length < 2 && queryText.length < 2) return [];
+
+  const expectedBrand = normalizeBrand(brand);
+  const candidates = [];
+  for (const entry of _sourceByBrandReference.values()) candidates.push(entry);
+  for (const [reference, entry] of _catalog) candidates.push({ ...entry, reference });
+  for (const [reference, entry] of _enriched) candidates.push({ ...entry, reference });
+
+  const unique = new Map();
+  for (const entry of candidates) {
+    const reference = normalizeRef(entry.reference);
+    const referenceKey = collapseRef(reference);
+    const entryBrand = canonicalBrand(entry.brand) || entry.brand || '';
+    const brandKey = normalizeBrand(entryBrand);
+    if (!reference || !entryBrand || (expectedBrand && brandKey !== expectedBrand)) continue;
+
+    const model = String(entry.model || '').trim();
+    const searchableText = `${entryBrand} ${model} ${reference}`.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+    let score = Number.POSITIVE_INFINITY;
+    let matchType = null;
+    if (referenceKey === queryKey) {
+      score = 0;
+      matchType = 'exact_reference';
+    } else if (referenceKey.startsWith(queryKey)) {
+      score = 10 + Math.min(referenceKey.length - queryKey.length, 9);
+      matchType = 'reference_prefix';
+    } else if (queryKey.length >= 3 && referenceKey.includes(queryKey)) {
+      score = 25 + referenceKey.indexOf(queryKey);
+      matchType = 'reference_contains';
+    } else if (queryText && searchableText.startsWith(queryText)) {
+      score = 35;
+      matchType = 'catalog_text_prefix';
+    } else if (queryText.length >= 3 && searchableText.includes(queryText)) {
+      score = 45 + searchableText.indexOf(queryText) / 100;
+      matchType = 'catalog_text_contains';
+    } else if (/\d/.test(queryKey) && queryKey.length >= 5) {
+      const tolerance = queryKey.length >= 9 ? 2 : 1;
+      const distance = Math.abs(referenceKey.length - queryKey.length) <= tolerance
+        ? levenshteinDistance(referenceKey, queryKey)
+        : tolerance + 1;
+      if (distance <= tolerance) {
+        score = 60 + distance + Math.abs(referenceKey.length - queryKey.length) / 10;
+        matchType = 'reference_typo_candidate';
+      }
+    }
+    if (!matchType) continue;
+
+    const curated = applyCuration(entry, reference);
+    const variantImage = Array.isArray(curated.variants)
+      ? curated.variants.find(variant => /^https?:\/\//i.test(String(variant?.image_url || '')))?.image_url
+      : null;
+    const key = `${brandKey}|${referenceKey}`;
+    const suggestion = {
+      brand: entryBrand,
+      model: curated.model || model || null,
+      reference,
+      dial_colors: curated.dialColors || [],
+      image_url: variantImage || null,
+      match_type: matchType,
+      score,
+      source: curated.source || entry.source || 'catalog',
+    };
+    const existing = unique.get(key);
+    const sourcePriority = suggestion.source === 'catalog_curation' || suggestion.source === 'local_catalog_v1' ? 0 : 1;
+    const existingPriority = existing?.source === 'catalog_curation' || existing?.source === 'local_catalog_v1' ? 0 : 1;
+    if (!existing || score < existing.score || (score === existing.score && sourcePriority < existingPriority)) {
+      unique.set(key, suggestion);
+    }
+  }
+
+  return [...unique.values()]
+    .sort((left, right) => left.score - right.score
+      || left.brand.localeCompare(right.brand)
+      || left.reference.localeCompare(right.reference))
+    .slice(0, Math.min(Math.max(Number(limit) || 10, 1), 20));
+}
+
 module.exports = {
   lookupCatalog,
   listEquivalentReferences,
@@ -450,4 +561,5 @@ module.exports = {
   catalogStats,
   listCatalogReferences,
   listCatalogBrands,
+  listCatalogSuggestions,
 };
