@@ -13,7 +13,7 @@ export const APP_LANGUAGES: { code: AppLanguage; label: string; shortLabel: stri
 const translations: Record<Exclude<AppLanguage, 'en'>, Record<string, string>> = {
   es: {
     'Language': 'Idioma',
-    'TRADING FLOOR': 'MERCADO', 'PRICE RESEARCH': 'ANÁLISIS DE PRECIOS', 'DEALER DIRECTORY': 'DIRECTORIO', 'WORKSPACE': 'ESPACIO DE TRABAJO', 'POST ITEM': 'PUBLICAR', 'ACCOUNT': 'CUENTA', 'HIRE FI': 'CONTRATAR A FI', 'HOME': 'INICIO',
+    'TRADING FLOOR': 'MERCADO', 'PRICE RESEARCH': 'ANÁLISIS DE PRECIOS', 'DEALER DIRECTORY': 'DIRECTORIO', 'WORKSPACE': 'ESPACIO DE TRABAJO', 'POST IT': 'PUBLICAR', 'ACCOUNT': 'CUENTA', 'HIRE FI': 'CONTRATAR A FI', 'HOME': 'INICIO',
     'A considered marketplace for collectors, dealers, and wholesalers': 'Un mercado cuidadosamente seleccionado para coleccionistas, distribuidores y mayoristas',
     'Discover more': 'Descubrir más', 'One connected market': 'Un mercado conectado', 'Built for every side of the trade.': 'Creado para todos los participantes del mercado.',
     'Curated Luxury brings exceptional objects, professional inventory, and market intelligence into one disciplined environment without flattening the different needs of buyers and sellers.': 'Curated Luxury reúne objetos excepcionales, inventario profesional e inteligencia de mercado en un entorno organizado que respeta las distintas necesidades de compradores y vendedores.',
@@ -64,7 +64,7 @@ const translations: Record<Exclude<AppLanguage, 'en'>, Record<string, string>> =
   },
   pt: {
     'Language': 'Idioma',
-    'TRADING FLOOR': 'MERCADO', 'PRICE RESEARCH': 'PESQUISA DE PREÇOS', 'DEALER DIRECTORY': 'DIRETÓRIO', 'WORKSPACE': 'ÁREA DE TRABALHO', 'POST ITEM': 'PUBLICAR', 'ACCOUNT': 'CONTA', 'HIRE FI': 'CONTRATAR FI', 'HOME': 'INÍCIO',
+    'TRADING FLOOR': 'MERCADO', 'PRICE RESEARCH': 'PESQUISA DE PREÇOS', 'DEALER DIRECTORY': 'DIRETÓRIO', 'WORKSPACE': 'ÁREA DE TRABALHO', 'POST IT': 'PUBLICAR', 'ACCOUNT': 'CONTA', 'HIRE FI': 'CONTRATAR FI', 'HOME': 'INÍCIO',
     'A considered marketplace for collectors, dealers, and wholesalers': 'Um mercado cuidadosamente selecionado para colecionadores, revendedores e atacadistas', 'Discover more': 'Descobrir mais',
     'One connected market': 'Um mercado conectado', 'Built for every side of the trade.': 'Criado para todos os lados do mercado.',
     'Curated Luxury brings exceptional objects, professional inventory, and market intelligence into one disciplined environment without flattening the different needs of buyers and sellers.': 'A Curated Luxury reúne objetos excepcionais, estoque profissional e inteligência de mercado em um ambiente organizado que respeita as diferentes necessidades de compradores e vendedores.',
@@ -110,7 +110,7 @@ const translations: Record<Exclude<AppLanguage, 'en'>, Record<string, string>> =
   },
   zh: {
     'Language': '语言',
-    'TRADING FLOOR': '交易大厅', 'PRICE RESEARCH': '价格研究', 'DEALER DIRECTORY': '经销商目录', 'WORKSPACE': '工作区', 'POST ITEM': '发布商品', 'ACCOUNT': '账户', 'HIRE FI': '聘用 FI', 'HOME': '首页',
+    'TRADING FLOOR': '交易大厅', 'PRICE RESEARCH': '价格研究', 'DEALER DIRECTORY': '经销商目录', 'WORKSPACE': '工作区', 'POST IT': '发布商品', 'ACCOUNT': '账户', 'HIRE FI': '聘用 FI', 'HOME': '首页',
     'A considered marketplace for collectors, dealers, and wholesalers': '面向收藏家、经销商和批发商的精选市场', 'Discover more': '探索更多', 'One connected market': '互联市场', 'Built for every side of the trade.': '服务交易市场的每一方。',
     'Curated Luxury brings exceptional objects, professional inventory, and market intelligence into one disciplined environment without flattening the different needs of buyers and sellers.': 'Curated Luxury 将非凡藏品、专业库存和市场情报汇集于一个有序环境，同时尊重买卖双方的不同需求。',
     'Collectors': '收藏家', 'Dealers': '经销商', 'Wholesalers': '批发商',

@@ -8,7 +8,7 @@ const LUXFI_URL = 'https://luxfi.ai/#add-fi';
 const HEADER_LINKS = [
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
-  { label: 'POST ITEM', to: '/dealer/post' },
+  { label: 'POST IT', to: '/dealer/post' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
   { label: 'DEALER DIRECTORY', to: '/dealers' },
   { label: 'DEALER ACCOUNT', to: '/dealer/account/profile' },

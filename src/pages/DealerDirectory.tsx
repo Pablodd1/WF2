@@ -31,6 +31,12 @@ interface DealerSummary {
   source_rank?: number;
   source_system?: string;
   verified_phone?: string | null;
+  source_metrics?: {
+    profile_listing_total: number | null;
+    feedback_received: number | null;
+    rendered_feedback_rows: number | null;
+    source_crawled_at: string;
+  };
   source_links?: {
     profile: string | null;
     reviews: string | null;
@@ -61,6 +67,7 @@ export default function DealerDirectory() {
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    params.set('mode', view);
     if (search) params.set('q', search);
     fetch(`/api/dealers?${params}`, { credentials: 'include', signal: controller.signal })
       .then(async response => {
@@ -73,7 +80,7 @@ export default function DealerDirectory() {
       .catch(caught => { if (caught?.name !== 'AbortError') setError(caught.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [page, pageSize, search]);
+  }, [page, pageSize, search, view]);
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -121,9 +128,7 @@ export default function DealerDirectory() {
                   {view !== 'top-rated' && <BadgeCheck size={19} className="text-[#c9a96e]" aria-label="Verified dealer" />}
                 </div>
                 <h2 className="mt-7 pr-12 text-xl font-semibold">
-                  {dealer.source_system === 'WATCHFACTS_TOP_RATED_2026_08_08' && dealer.source_links?.profile
-                    ? <a href={dealer.source_links.profile} target="_blank" rel="noreferrer" className="hover:text-[#d4b87a]">{name}</a>
-                    : <Link to={`/dealers/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>}
+                  <Link to={`/dealers/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>
                 </h2>
                 <p className="mt-1 text-xs text-white/42">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
                 <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/60">
@@ -137,8 +142,12 @@ export default function DealerDirectory() {
                   <Metric label="Looking for" value={stats?.wtb_posts || 0} />
                   <Metric label="Groups" value={dealer.whatsapp_group_count || 0} />
                 </div>
+                {dealer.source_metrics && <p className="mt-4 text-[11px] leading-5 text-white/38">
+                  Source profile: {dealer.source_metrics.profile_listing_total == null ? 'listing total unavailable' : `${dealer.source_metrics.profile_listing_total.toLocaleString()} historical listings`} · {dealer.source_metrics.feedback_received ?? dealer.review_count} feedback received. Counts remain separate from currently active WTS/WTB.
+                </p>}
                 <div className="mt-5 flex flex-wrap gap-x-4 gap-y-3 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
-                  {dealer.source_links?.profile && <a href={dealer.source_links.profile} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-white/55 hover:text-[#d4b87a]"><ExternalLink size={12} /> Profile</a>}
+                  <Link to={`/dealers/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
+                  {dealer.source_links?.profile && <a href={dealer.source_links.profile} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-white/55 hover:text-[#d4b87a]"><ExternalLink size={12} /> Source</a>}
                   {dealer.source_links?.reviews && <a href={dealer.source_links.reviews} target="_blank" rel="noreferrer" className="text-white/55 hover:text-[#d4b87a]">Reviews</a>}
                   {dealer.source_links?.wts && <a href={dealer.source_links.wts} target="_blank" rel="noreferrer" className="text-white/55 hover:text-[#d4b87a]">WTS</a>}
                   {dealer.source_links?.wtb && <a href={dealer.source_links.wtb} target="_blank" rel="noreferrer" className="text-white/55 hover:text-[#d4b87a]">WTB</a>}

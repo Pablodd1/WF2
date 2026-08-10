@@ -14,12 +14,12 @@ test('primary navigation exposes the complete Workspace customer flow and clean 
 
   assert.match(header, /label: 'WORKSPACE', to: '\/dealer\/workspace'/);
   assert.doesNotMatch(header, /label: 'DEALER LOGIN'/);
-  assert.match(header, /label: 'POST ITEM', to: '\/dealer\/post'/);
+  assert.match(header, /label: 'POST IT', to: '\/dealer\/post'/);
   assert.match(header, /label: 'DEALER ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
   assert.ok(header.indexOf("label: 'TRADING FLOOR'") < header.indexOf("label: 'PRICE RESEARCH'"));
-  assert.ok(header.indexOf("label: 'PRICE RESEARCH'") < header.indexOf("label: 'POST ITEM'"));
-  assert.ok(header.indexOf("label: 'POST ITEM'") < header.indexOf("label: 'HIRE FI'"));
+  assert.ok(header.indexOf("label: 'PRICE RESEARCH'") < header.indexOf("label: 'POST IT'"));
+  assert.ok(header.indexOf("label: 'POST IT'") < header.indexOf("label: 'HIRE FI'"));
   assert.ok(header.indexOf("label: 'HIRE FI'") < header.indexOf("label: 'DEALER DIRECTORY'"));
   assert.match(rail, /Let Fi search the world/);
   assert.match(rail, /sm:text-base/);
@@ -61,7 +61,7 @@ test('customer Workspace routes are visible without a route-level authentication
   assert.match(app, /path="\/dealer\/account\/:section" element=\{<DealerAccount \/>\}/);
   assert.match(app, /path="\/dealers" element=\{<DealerDirectory \/>\}/);
   assert.doesNotMatch(app, /path="\/dealer\/(?:workspace|post|account\/)[^\n]*<DealerGate>/);
-  for (const title of ['Trading Floor', 'Price Research', 'Post Item', 'Hire FI', 'Dealer Directory', 'Dealer Account']) {
+  for (const title of ['Trading Floor', 'Price Research', 'POST IT', 'Hire FI', 'Dealer Directory', 'Dealer Account']) {
     assert.match(portal, new RegExp(`title: '${title}'`));
   }
 });
@@ -133,7 +133,9 @@ test('footer provides direct contact, community groups, marketplace opportunitie
   assert.match(footer, /DPhtxCrrxES5kyHeO7SmCb/);
   assert.match(footer, /t\.me\/watchfactsUS/);
   assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
-  assert.match(footer, /Email destination pending/);
+  assert.match(footer, /Aduenas@watchfacts\.com/);
+  assert.match(footer, /type="submit"/);
+  assert.match(footer, /mailto:\$\{CONTACT_EMAIL\}/);
 });
 
 test('footer provides the complete social media watch dealer glossary in an accessible modal', () => {
@@ -162,6 +164,13 @@ test('dealer directory includes Reference Check and Top Rated views backed by ve
   assert.match(directory, /Member since/);
   assert.match(directory, /label="For sale"/);
   assert.match(directory, /label="Looking for"/);
+  assert.match(directory, /Full profile/);
+  assert.match(directory, /Source profile:/);
+  const profile = read('src/pages/DealerProfile.tsx');
+  assert.match(profile, /Actual listing/);
+  assert.match(profile, /Raw source message/);
+  assert.match(profile, /Dealer feedback/);
+  assert.match(profile, /Source workflow/);
 });
 
 test('home and Post an Item share a persistent multilingual interface without changing raw source text', () => {
