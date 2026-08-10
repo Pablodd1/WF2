@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const mysql = require('mysql2/promise');
 const {
@@ -10,6 +11,7 @@ const {
   atomicJson,
   boundedInteger,
   csv,
+  jsonLine,
   sourceRecord,
 } = require('./lib.cjs');
 
@@ -90,8 +92,63 @@ function prepareOutput(runConfig) {
   return { paths, checkpoint };
 }
 
-async function run() {
-  const runConfig = config();
+function processIsAlive(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+function acquireOutputLock(output) {
+  fs.mkdirSync(output, { recursive: true });
+  const lockPath = path.join(output, '.collector.lock');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const descriptor = fs.openSync(lockPath, 'wx');
+      fs.writeFileSync(descriptor, JSON.stringify({
+        pid: process.pid,
+        hostname: os.hostname(),
+        started_at: new Date().toISOString(),
+      }));
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        fs.closeSync(descriptor);
+        try {
+          fs.unlinkSync(lockPath);
+        } catch (error) {
+          if (error?.code !== 'ENOENT') throw error;
+        }
+      };
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+      let owner = null;
+      try {
+        owner = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+      } catch {
+        // An unreadable lock cannot prove a live owner and is treated as stale.
+      }
+      if (owner?.hostname && owner.hostname !== os.hostname()) {
+        throw new Error(`Collector output is locked by another host: ${owner.hostname}`);
+      }
+      if (processIsAlive(Number(owner?.pid))) {
+        throw new Error(`Collector output is already active under process ${owner.pid}`);
+      }
+      try {
+        fs.unlinkSync(lockPath);
+      } catch (unlinkError) {
+        if (unlinkError?.code !== 'ENOENT') throw unlinkError;
+      }
+    }
+  }
+  throw new Error('Unable to acquire the collector output lock');
+}
+
+async function runLocked(runConfig) {
   const { paths, checkpoint } = prepareOutput(runConfig);
   let db;
   let state = { ...checkpoint };
@@ -131,7 +188,7 @@ async function run() {
         state.last_created_on = row.created_on;
         state.last_id = String(row.id);
         try {
-          recordLines.push(`${JSON.stringify(sourceRecord(row))}\n`);
+          recordLines.push(jsonLine(sourceRecord(row)));
           state.output_rows += 1;
         } catch (error) {
           errorLines.push(`${csv(row.id)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`);
@@ -188,6 +245,16 @@ async function run() {
   process.stdout.write(`${JSON.stringify({ event: 'mariadb_collection_complete', ...reconciliation, caught_up: caughtUp })}\n`);
 }
 
+async function run() {
+  const runConfig = config();
+  const releaseLock = acquireOutputLock(runConfig.output);
+  try {
+    return await runLocked(runConfig);
+  } finally {
+    releaseLock();
+  }
+}
+
 if (require.main === module) {
   run().catch(error => {
     process.stderr.write(`${JSON.stringify({ event: 'mariadb_collection_error', error_name: error.name || 'Error', error_message: error.message || String(error) })}\n`);
@@ -195,4 +262,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { SELECT_COLUMNS, config, prepareOutput, run, sourceSelectList };
+module.exports = { SELECT_COLUMNS, acquireOutputLock, config, prepareOutput, run, runLocked, sourceSelectList };

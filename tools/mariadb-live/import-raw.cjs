@@ -3,9 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const readline = require('node:readline');
-const zlib = require('node:zlib');
-const { CONTRACT, atomicJson, boundedInteger, stableJson } = require('./lib.cjs');
+const { CONTRACT, atomicJson, boundedInteger, readJsonLines, stableJson } = require('./lib.cjs');
 
 const IMPORT_CONTRACT = 'wf-mariadb-raw-import-v1';
 
@@ -86,12 +84,6 @@ function prepareOutput(runConfig, files) {
     atomicJson(paths.checkpoint, checkpoint);
   }
   return { paths, checkpoint };
-}
-
-function openLines(file) {
-  const source = fs.createReadStream(file);
-  const input = file.toLowerCase().endsWith('.gz') ? source.pipe(zlib.createGunzip()) : source;
-  return readline.createInterface({ input, crlfDelay: Infinity });
 }
 
 function compareCursor(previous, record) {
@@ -185,7 +177,7 @@ async function run(options = {}) {
   }
 
   for (let fileIndex = state.file_index; fileIndex < files.length; fileIndex += 1) {
-    const lines = openLines(files[fileIndex]);
+    const lines = readJsonLines(files[fileIndex]);
     let lineIndex = 0;
     for await (const line of lines) {
       lineIndex += 1;

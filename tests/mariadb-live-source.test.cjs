@@ -7,9 +7,12 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   assertReadOnlyGrants,
+  jsonLine,
   normalizationInput,
+  readJsonLines,
   sourceRecord,
 } = require('../tools/mariadb-live/lib.cjs');
+const { acquireOutputLock } = require('../tools/mariadb-live/collect.cjs');
 const {
   atomicGzip,
   publishAccountability,
@@ -130,6 +133,39 @@ test('collector refuses a MariaDB account with write privileges', () => {
   assert.throws(() => assertReadOnlyGrants([
     "GRANT SELECT, INSERT ON `thecollective_inventory`.* TO 'writer'@'%'",
   ]), /beyond read-only/);
+});
+
+test('JSONL transport preserves Unicode line separators as source evidence', async () => {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-mariadb-jsonl-'));
+  try {
+    const safeFile = path.join(output, 'safe.jsonl');
+    const legacyFile = path.join(output, 'legacy.jsonl');
+    const value = { raw_message: `First line\u2028Second line` };
+    fs.writeFileSync(safeFile, jsonLine(value));
+    fs.writeFileSync(legacyFile, `${JSON.stringify(value)}\n`);
+    assert.doesNotMatch(fs.readFileSync(safeFile, 'utf8'), /\u2028/);
+    assert.match(fs.readFileSync(safeFile, 'utf8'), /\\u2028/);
+    for (const file of [safeFile, legacyFile]) {
+      const rows = [];
+      for await (const line of readJsonLines(file)) rows.push(JSON.parse(line));
+      assert.deepEqual(rows, [value]);
+    }
+  } finally {
+    fs.rmSync(output, { recursive: true, force: true });
+  }
+});
+
+test('collector output lock blocks concurrent writers and releases cleanly', () => {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-mariadb-lock-'));
+  try {
+    const release = acquireOutputLock(output);
+    assert.throws(() => acquireOutputLock(output), /already active/);
+    release();
+    const releaseAgain = acquireOutputLock(output);
+    releaseAgain();
+  } finally {
+    fs.rmSync(output, { recursive: true, force: true });
+  }
 });
 
 test('continuous worker checkpoints local shadow files and reconciles both stages', () => {
