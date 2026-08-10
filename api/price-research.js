@@ -327,9 +327,7 @@ module.exports = async function handler(req, res) {
   try {
     const client = getClient();
     const controlledPaneraiRelease = brand.toLowerCase() === 'panerai';
-    const sourceTable = controlledPaneraiRelease
-      ? 'price_research_verified_source'
-      : 'watch_records';
+    let sourceTable = 'price_research_verified_source';
 
     // Resolve exact stored spellings only. Prefix matches are suggestions for
     // an explicit customer choice; they must never silently become a specific
@@ -419,8 +417,9 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // PostgREST caps each response at 1,000 rows. Page explicitly so a busy
-    // reference does not produce a chart made only from its newest day.
+    // PostgREST caps each response at 1,000 rows. Keep the customer request to
+    // one bounded, indexed page. Ten concurrent offset pages overloaded the
+    // multi-million-row legacy table for high-volume Rolex references.
     const pageSize = 1000;
     const sampleLimit = 10000;
     const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict,listing_status,thumbnail_url,image_urls,has_images';
@@ -433,8 +432,8 @@ module.exports = async function handler(req, res) {
     // ponytail: keep query simple — .in('reference') + .eq('brand') is
     // indexed; avoid .or() on unindexed listing_status + double-order that
     // forces full scans on the multi-million-row table.
-    const buildRowsQuery = (from, to) => client
-      .from(sourceTable)
+    const buildRowsQuery = table => client
+      .from(table)
       .select(columns)
       .eq('brand', brand)
       .in('reference', referenceVariants)
@@ -442,10 +441,10 @@ module.exports = async function handler(req, res) {
       .eq('listing_type', 'WTS')
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
-      .range(from, to);
+      .limit(pageSize);
 
-    // Avoid a filtered COUNT over the multi-million-row table. Fetch bounded,
-    // deterministic pages in parallel and report whether the sample hit its cap.
+    // Avoid a filtered COUNT and high-offset scans over the multi-million-row
+    // table. Report the bounded sample honestly when it reaches its source cap.
     let rows;
     if (controlledPaneraiRelease) {
       const { data, error } = await client
@@ -461,15 +460,13 @@ module.exports = async function handler(req, res) {
       if (error) throw error;
       rows = data || [];
     } else {
-      const sampledPages = await Promise.all(
-        Array.from({ length: sampleLimit / pageSize }, (_, index) => {
-          const from = index * pageSize;
-          return buildRowsQuery(from, from + pageSize - 1);
-        })
-      );
-      const pageError = sampledPages.find(page => page.error)?.error;
-      if (pageError) throw pageError;
-      rows = sampledPages.flatMap(page => page.data || []);
+      let result = await buildRowsQuery(sourceTable);
+      if (result.error || !(result.data || []).length) {
+        sourceTable = 'watch_records';
+        result = await buildRowsQuery(sourceTable);
+      }
+      if (result.error) throw result.error;
+      rows = result.data || [];
     }
     // Reviewed workbooks are the customer-visible canonical inventory. When an
     // exact reference has source-explicit USD evidence there, use that same
@@ -504,6 +501,9 @@ module.exports = async function handler(req, res) {
       rows = reviewedWorkbookRows;
     }
     const baseSampleCount = rows.length;
+    const sourceSampleCapped = usingReviewedWorkbook
+      ? baseSampleCount >= sampleLimit
+      : baseSampleCount >= pageSize;
 
     if (!rows || rows.length === 0) {
       const emptyReconciliation = {
@@ -569,7 +569,7 @@ module.exports = async function handler(req, res) {
       .map(value => normalizeDialValue(value))
       .filter(dial => dial.known && (
         !observedDialCounts.has(dial.value.toLowerCase())
-        || (baseSampleCount >= sampleLimit && observedDialCounts.get(dial.value.toLowerCase()) < 1000)
+        || (sourceSampleCapped && observedDialCounts.get(dial.value.toLowerCase()) < 1000)
       ))
       .map(dial => dial.value);
     if (!controlledPaneraiRelease && !usingReviewedWorkbook && supplementalCatalogDials.length) {
@@ -793,12 +793,12 @@ module.exports = async function handler(req, res) {
         || null;
     const demand = await lookupDemand(
       client,
-      sourceTable,
+      'watch_records',
       brand,
       referenceVariants,
       catalogHit,
       selection,
-      preloadedReviewedWorkbookRows,
+      [],
     );
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
@@ -900,7 +900,7 @@ module.exports = async function handler(req, res) {
       analytics_excluded_count: analyticsRows.length - marketRows.length,
       repost_count: repostRows.filter(row => matchesSelection(row, selection)).length,
       sampledListings: rows.length,
-      sampleCapped: baseSampleCount >= sampleLimit,
+      sampleCapped: sourceSampleCapped,
       count: prices.length,
       rawCount: validPriceRows.length,
       outliersRemoved: statisticalOutlierRows.length,
