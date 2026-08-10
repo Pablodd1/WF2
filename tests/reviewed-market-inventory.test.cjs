@@ -355,11 +355,43 @@ test('endpoint is read-only and globally ranks verified source images before pag
   // statement timeout on the unindexed view. Assert the proven indexed order:
   // price evidence primary, images as tiebreaker, newest last.
   assert.match(source, /queryParams\.set\('order', 'has_exact_source_image\.desc\.nullslast,id\.desc'\)/);
-  assert.match(source, /filter\(record => isApprovedInventoryRecord\(record\) && !record\.multi_listing\)/);
+  assert.match(source, /const publicationGate = usedLegacyViewContract[\s\S]*isLegacyReviewedInventoryRecord[\s\S]*isApprovedInventoryRecord/);
+  assert.match(source, /filter\(record => publicationGate\(record\) && !record\.multi_listing\)/);
   assert.doesNotMatch(source, /order\('workbook_price_usd'/);
   assert.doesNotMatch(source, /order\('source_price_amount'/);
   assert.doesNotMatch(source, /order\('has_complete_identity'/);
   assert.doesNotMatch(source, /catalog_image_url|final_image_url|display_image_url/);
+  assert.match(source, /buildLegacyMarketQueryParams/);
+  assert.match(source, /legacyMarketViewContractDetected/);
+  assert.match(source, /42703\|does not exist/);
+});
+
+test('legacy production view fallback preserves exact reference families and bounded indexed reads', () => {
+  const params = api.buildLegacyMarketQueryParams({
+    pageSize: 24,
+    pageWindow: { start: 0 },
+    brand: 'Patek Philippe',
+    requestedReference: '5712/1A-001',
+    exactDialVariants: [],
+    listingType: 'WTS',
+    imagesOnly: true,
+    pricedOnly: false,
+    search: 'Patek Philippe 5712/1A-001',
+  });
+  assert.equal(params.get('brand_scope'), 'eq.Patek Philippe');
+  assert.match(params.get('normalized_reference'), /5712\/1A-001/);
+  assert.match(params.get('normalized_reference'), /5712\/1A/);
+  assert.equal(params.get('user_image_url'), 'not.is.null');
+  assert.equal(params.get('order'), 'id.desc');
+  assert.equal(params.get('limit'), '25');
+});
+
+test('legacy reviewed evidence accepts explicit confirmed review labels but rejects quarantine states', () => {
+  assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 0.95, listing_status: 'CATALOG_AND_RAW_REFERENCE_CONFIRMED' }), true);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 95, listing_status: 'IMAGE_CONFIRMED_MODEL' }), true);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 89, listing_status: 'IMAGE_CONFIRMED_MODEL' }), false);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 100, listing_status: 'bundle_child_pending_review' }), false);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 100, listing_status: 'REJECTED' }), false);
 });
 
 test('price-first indexes cover global, intent, brand, and brand-intent floor orders', () => {

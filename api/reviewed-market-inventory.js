@@ -2,6 +2,7 @@
 
 const { getClient } = require('./_lib/supabase');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
+const { listEquivalentReferences } = require('./_lib/catalog');
 const {
   cleanExactText,
   loadSummary,
@@ -15,6 +16,7 @@ const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
 const MULTIPLE_LISTING_IDENTITY_VALUES = ['multiple', 'multi', 'mixed'];
 const MIN_PUBLIC_WORKBOOK_PRICE_USD = 1_000;
 const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
+let legacyMarketViewContractDetected = false;
 
 const EVIDENCE_CONTRACT = Object.freeze({
   scope: 'returned_page',
@@ -431,6 +433,76 @@ function boundedPage(rows, pageSize, hasLookaheadQuery) {
   };
 }
 
+function isLegacyReviewedInventoryRecord(record) {
+  const storedConfidence = Number(record?.confidence);
+  const confidence = storedConfidence >= 0 && storedConfidence <= 1
+    ? storedConfidence * 100
+    : storedConfidence;
+  const status = String(record?.listing_status || record?.verdict || '').trim().toUpperCase();
+  return Number.isFinite(confidence)
+    && confidence >= 90
+    && !/(?:BUNDLE_CHILD_PENDING_REVIEW|BUNDLE_PENDING_SEPARATION|SUPPRESSED_EXACT_DUPLICATE|REJECTED|HIDDEN|DELETED|ARCHIVED)/.test(status);
+}
+
+function buildLegacyMarketQueryParams({
+  pageSize,
+  pageWindow,
+  brand,
+  requestedReference,
+  exactDialVariants,
+  listingType,
+  imagesOnly,
+  pricedOnly,
+  search,
+}) {
+  const legacyColumns = [
+    'id,source_file,source_row_number,source_record_id,posting_date,posted_by',
+    'phone_number,contact_publication_approved,raw_message,listing_type,brand_scope',
+    'supplied_brand,canonical_brand,model,catalog_model,raw_reference',
+    'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
+    'workbook_price_usd,source_price_amount,source_price_text,source_currency',
+    'price_evidence_status,confidence,verification_status,user_image_url,imported_at',
+    'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity',
+  ].join(',');
+  const params = new URLSearchParams({
+    select: legacyColumns,
+    // The production legacy view has no matching image-first expression index.
+    // Its proven ID index keeps the floor available until the forward image
+    // index/view migration is applied. Returned records are still sorted image
+    // first in the application; global image-first ordering is a DB gate.
+    order: 'id.desc',
+    limit: String(pageSize + 1),
+  });
+  if (pageWindow.start > 0) params.set('offset', String(pageWindow.start));
+  if (brand) params.set('brand_scope', `eq.${brand}`);
+  if (requestedReference) {
+    const exactVariants = listEquivalentReferences(requestedReference, brand || null);
+    params.set('normalized_reference', `in.(${exactVariants.join(',')})`);
+  }
+  if (exactDialVariants.length) params.set('dial_color', `in.(${exactDialVariants.join(',')})`);
+  if (listingType) params.set('listing_type', `eq.${listingType}`);
+  if (imagesOnly) params.set('user_image_url', 'not.is.null');
+  if (pricedOnly) params.set('has_supplied_price', 'eq.true');
+  const genericSearch = safeSearchTerm(search);
+  if (genericSearch && !requestedReference && !exactDialVariants.length) {
+    const pattern = `*${genericSearch}*`;
+    params.set('or', [
+      `supplied_brand.ilike.${pattern}`,
+      `canonical_brand.ilike.${pattern}`,
+      `brand_scope.ilike.${pattern}`,
+      `model.ilike.${pattern}`,
+      `catalog_model.ilike.${pattern}`,
+      `raw_reference.ilike.${pattern}`,
+      `normalized_reference.ilike.${pattern}`,
+      `catalog_reference.ilike.${pattern}`,
+      `posted_by.ilike.${pattern}`,
+      `phone_number.ilike.${pattern}`,
+      `raw_message.ilike.${pattern}`,
+    ].join(','));
+  }
+  return params;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
@@ -565,15 +637,38 @@ module.exports = async function handler(req, res) {
     queryParams.set('limit', String(pageSize + 1));
     if (pageWindow.start > 0) queryParams.set('offset', String(pageWindow.start));
     
-    const restUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${queryParams.toString()}`;
-    const restRes = await fetch(restUrl, {
-      headers: {
-        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY}`,
-      },
+    const headers = {
+      'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
+      'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY}`,
+    };
+    let activeQueryParams = legacyMarketViewContractDetected
+      ? buildLegacyMarketQueryParams({
+          pageSize, pageWindow, brand, requestedReference, exactDialVariants,
+          listingType, imagesOnly, pricedOnly, search,
+        })
+      : queryParams;
+    let usedLegacyViewContract = legacyMarketViewContractDetected;
+    let restUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${activeQueryParams.toString()}`;
+    let restRes = await fetch(restUrl, {
+      headers,
     });
+    let errText = restRes.ok ? '' : await restRes.text();
+    if (!restRes.ok && restRes.status === 400 && /42703|does not exist/i.test(errText)) {
+      // Production may temporarily lag the forward view migration. Fall back
+      // to the last proven public contract instead of returning an empty 200 or
+      // taking the entire Trading Floor offline. Publication gates remain
+      // enforced again after row mapping below.
+      legacyMarketViewContractDetected = true;
+      usedLegacyViewContract = true;
+      activeQueryParams = buildLegacyMarketQueryParams({
+        pageSize, pageWindow, brand, requestedReference, exactDialVariants,
+        listingType, imagesOnly, pricedOnly, search,
+      });
+      restUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${activeQueryParams.toString()}`;
+      restRes = await fetch(restUrl, { headers });
+      errText = restRes.ok ? '' : await restRes.text();
+    }
     if (!restRes.ok) {
-      const errText = await restRes.text();
       throw new Error(`REST query failed: ${restRes.status} ${errText.slice(0, 200)}`);
     }
     const data = await restRes.json();
@@ -581,9 +676,12 @@ module.exports = async function handler(req, res) {
     const total = summaryTotal;
     const rows = pageWindow.reverse ? [...(data || [])].reverse() : (data || []);
     const pageResult = boundedPage(rows, pageSize, scopedFilter);
+    const publicationGate = usedLegacyViewContract
+      ? isLegacyReviewedInventoryRecord
+      : isApprovedInventoryRecord;
     let records = pageResult.records
       .map(mapReviewedRecord)
-      .filter(record => isApprovedInventoryRecord(record) && !record.multi_listing)
+      .filter(record => publicationGate(record) && !record.multi_listing)
       .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
     if (page === 1) {
       let directQuery = client.from('dealer_listing_submissions')
@@ -623,6 +721,7 @@ module.exports = async function handler(req, res) {
       publicationBrands,
       evidenceContract: EVIDENCE_CONTRACT,
       coverage: summarizeCoverage(records),
+      viewContract: usedLegacyViewContract ? 'legacy-compatible' : 'strict',
     });
   } catch (error) {
     console.error('[reviewed-market-inventory] error:', error.message);
@@ -645,6 +744,7 @@ module.exports.mapDealerSubmission = mapDealerSubmission;
 module.exports.directSubmissionMatches = directSubmissionMatches;
 module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;
+module.exports.isLegacyReviewedInventoryRecord = isLegacyReviewedInventoryRecord;
 module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;
 module.exports.isMultiListing = isMultiListing;
@@ -652,3 +752,4 @@ module.exports.safeSearchTerm = safeSearchTerm;
 module.exports.parseCursorPage = parseCursorPage;
 module.exports.publicationBrandsFromSummary = publicationBrandsFromSummary;
 module.exports.boundedPage = boundedPage;
+module.exports.buildLegacyMarketQueryParams = buildLegacyMarketQueryParams;
