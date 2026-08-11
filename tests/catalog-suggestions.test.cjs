@@ -19,10 +19,13 @@ function response() {
 
 test('suggests every catalog-backed Patek 5712 family without silently selecting one', () => {
   const suggestions = listCatalogSuggestions('5712', { brand: 'Patek Philippe', limit: 20 });
-  assert.ok(suggestions.length > 1);
-  assert.ok(suggestions.some(item => item.reference === '5712/1A-001'));
-  assert.ok(suggestions.some(item => item.reference === '5712/1R-001'));
+  assert.deepEqual(
+    suggestions.map(item => item.reference).sort(),
+    ['5712/1A-001', '5712/1R-001', '5712G-001', '5712R-001'].sort(),
+  );
   assert.ok(suggestions.every(item => item.brand === 'Patek Philippe'));
+  assert.ok(suggestions.every(item => ['catalog_curation', 'local_catalog_v1'].includes(item.source)));
+  assert.ok(suggestions.every(item => !/(?:NEW|ONLY|20\d{2})$/i.test(item.reference)));
 });
 
 test('suggests curated Rolex 116500LN and its approved dial labels', () => {
