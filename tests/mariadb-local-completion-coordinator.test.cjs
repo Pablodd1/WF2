@@ -37,3 +37,19 @@ test('completion coordinator fails closed on stderr evidence', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('completion coordinator detects stderr evidence from restarted worker logs', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-completion-restart-error-'));
+  try {
+    const directory = path.join(root, 'shard-01');
+    fs.mkdirSync(directory);
+    fs.writeFileSync(path.join(directory, 'stderr.log'), '');
+    fs.writeFileSync(path.join(directory, 'stderr-cache.log'), 'restarted normalizer failed');
+    const [state] = shardState(root);
+    assert.deepEqual(state.error_files.sort(), ['stderr-cache.log', 'stderr.log']);
+    assert.equal(state.error_bytes, Buffer.byteLength('restarted normalizer failed'));
+    await assert.rejects(() => waitForShards(root, 1, 1), /emitted stderr/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
