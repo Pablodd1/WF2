@@ -28,9 +28,12 @@ test('production variables and reviewed two-brand gates are updated', () => {
   for (const name of [
     'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL',
     'VITE_SUPABASE_ANON_KEY', 'PUBLICATION_BRANDS', 'PUBLICATION_REFERENCES',
+    'TRADING_FLOOR_SOURCE_VIEW', 'PRICE_RESEARCH_SOURCE_VIEW',
   ]) assert.match(workflow, new RegExp(`Set-VercelEnv '${name}'`));
   assert.match(workflow, /Rolex\|Patek Philippe/);
   assert.match(workflow, /ALL_REVIEWED/);
+  assert.match(workflow, /qnsa_rolex_patek_trading_floor_source/);
+  assert.match(workflow, /qnsa_rolex_patek_price_research_source/);
 });
 
 test('cutover snapshots and restores old production values on failure', () => {
