@@ -1,0 +1,48 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const workflow = fs.readFileSync(path.join(
+  __dirname,
+  '..',
+  '.github',
+  'workflows',
+  'qnsa-rolex-patek-reviewed-release.yml',
+), 'utf8');
+
+test('workflow is pinned to QNSA and exact reconciled staging totals', () => {
+  assert.match(workflow, /SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh/);
+  assert.match(workflow, /EXPECTED_SOURCE_ROWS: '1394269'/);
+  assert.match(workflow, /EXPECTED_STAGED_ROWS: '603678'/);
+  assert.match(workflow, /EXPECTED_DEFERRED_ROWS: '790591'/);
+  assert.match(workflow, /NORMALIZATION_STAGED/);
+});
+
+test('audit and enable require different exact confirmation phrases', () => {
+  assert.match(workflow, /AUDIT_QNSA_ROLEX_PATEK/);
+  assert.match(workflow, /ENABLE_QNSA_ROLEX_PATEK/);
+  assert.match(workflow, /inputs\.mode == 'enable'/);
+});
+
+test('workflow applies only the reviewed release migrations', () => {
+  assert.match(workflow, /20260811190000_qnsa_rolex_patek_reviewed_release\.sql/);
+  assert.match(workflow, /20260811220000_qnsa_source_backed_public_fields\.sql/);
+  assert.match(workflow, /legacy watch_records write/);
+});
+
+test('audit proves release stays dark before enablement', () => {
+  assert.match(workflow, /public_trading_rows_while_disabled/);
+  assert.match(workflow, /public_price_rows_while_disabled/);
+  assert.match(workflow, /public_wtb_rows_while_disabled/);
+  assert.match(workflow, /Reviewed-release candidate audit failed/);
+});
+
+test('enabled verification requires both brands in trading and price views', () => {
+  assert.match(workflow, /Both Rolex and Patek must be present in Trading Floor and Price Research/);
+  assert.match(workflow, /qnsa_rolex_patek_trading_floor_source/);
+  assert.match(workflow, /qnsa_rolex_patek_price_research_source/);
+  assert.match(workflow, /qnsa_rolex_patek_wtb_demand_source/);
+});
