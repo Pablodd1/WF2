@@ -61,7 +61,7 @@ test('free-text search is case-insensitive and matches all terms without requiri
     exactDialVariants: [],
     search: 'pAtEk 5712',
   });
-  assert.match(legacyParams.get('or'), /^\(.*brand_scope\.ilike\.\*pAtEk\*.*\)$/);
+  assert.equal(legacyParams.get('or'), null);
   assert.equal(legacyParams.get('normalized_reference'), 'in.(5712)');
 });
 
@@ -114,7 +114,8 @@ test('parses a combined exact-reference and dial search into indexed filters', (
   assert.match(source, /parseTradingSearch\(search\)/);
   assert.match(source, /req\.query\?\.reference \|\| parsedSearch\.reference/);
   assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand, 80\)/);
-  assert.match(source, /requestedReference \|\| requestedDial \? parsedSearch\.brand : search/);
+  assert.match(source, /genericSearch && !requestedReference && !requestedDial/);
+  assert.match(source, /filter\(record => !search \|\| searchTermsMatch\(record, search\)\)/);
   assert.match(source, /queryParams\.set\('dial_color'/);
 });
 

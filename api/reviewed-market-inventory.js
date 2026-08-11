@@ -592,11 +592,8 @@ function buildLegacyMarketQueryParams({
   if (listingType) params.set('listing_type', `eq.${listingType}`);
   if (imagesOnly) params.set('has_exact_source_image', 'eq.true');
   if (pricedOnly) params.set('has_supplied_price', 'eq.true');
-  const parsedSearch = parseTradingSearch(search);
-  const genericSearch = safeSearchTerm(
-    requestedReference || exactDialVariants.length ? parsedSearch.brand : search,
-  );
-  if (genericSearch) {
+  const genericSearch = safeSearchTerm(search);
+  if (genericSearch && !requestedReference && !exactDialVariants.length) {
     const pattern = `*${genericSearch}*`;
     params.set('or', `(${[
       `supplied_brand.ilike.${pattern}`,
@@ -741,10 +738,8 @@ module.exports = async function handler(req, res) {
     if (pricedOnly) queryParams.set('source_price_amount', 'gt.0');
     const regionPattern = locationSearchPattern(region);
     if (regionPattern) queryParams.set('location', `ilike.${regionPattern}`);
-    const genericSearch = safeSearchTerm(
-      requestedReference || requestedDial ? parsedSearch.brand : search,
-    );
-    if (genericSearch) {
+    const genericSearch = safeSearchTerm(search);
+    if (genericSearch && !requestedReference && !requestedDial) {
       const pattern = `*${genericSearch}*`;
       queryParams.set('or', `(${[
         `supplied_brand.ilike.${pattern}`,
@@ -870,6 +865,7 @@ module.exports = async function handler(req, res) {
     let records = eligibleRows
       .map(mapReviewedRecord)
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
+      .filter(record => !search || searchTermsMatch(record, search))
       .filter(record => !region || locationMatches(record.location, region))
       .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
     if (firstPageOfLane) {
