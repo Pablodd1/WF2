@@ -73,8 +73,12 @@ jobs:
             SELECT jsonb_build_object(
               'distinct_jobs', count(DISTINCT job_id),
               'rows_per_distinct_job', round(count(*)::numeric / NULLIF(count(DISTINCT job_id), 0), 3),
-              'direct_submission_rows', count(*) FILTER (WHERE source_submission_id IS NOT NULL),
-              'dealer_linked_rows', count(*) FILTER (WHERE dealer_id IS NOT NULL),
+              'direct_submission_rows', count(*) FILTER (
+                WHERE NULLIF(to_jsonb(listing)->>'source_submission_id', '') IS NOT NULL
+              ),
+              'dealer_linked_rows', count(*) FILTER (
+                WHERE NULLIF(to_jsonb(listing)->>'dealer_id', '') IS NOT NULL
+              ),
               'published_child_rows', count(*) FILTER (
                 WHERE parent_id IS NOT NULL AND trading_floor_status IN ('published', 'published_pending_verification')
               ),
@@ -91,7 +95,7 @@ jobs:
                 WHERE price_research_status = 'eligible' AND COALESCE(price_usd, 0) <= 0
               )
             ) AS evidence
-            FROM staging.listings
+            FROM staging.listings AS listing
           ), raw_platforms AS (
             SELECT source_platform, count(*) AS row_count
             FROM raw.payloads
