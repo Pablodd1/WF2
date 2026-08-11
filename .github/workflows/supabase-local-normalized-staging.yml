@@ -75,15 +75,20 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $migrationPath = 'supabase/migrations/20260811120000_mariadb_normalized_staging_import.sql'
-          if (-not (Test-Path -LiteralPath $migrationPath)) { throw 'Normalized-staging migration is missing.' }
-          $migrationSql = [string](Get-Content -Raw -LiteralPath $migrationPath)
-          if ($migrationSql -match '(?i)INSERT\s+INTO\s+public\.watch_records') {
-            throw 'Normalized-staging migration attempts a public watch-record write.'
-          }
+          $migrationPaths = @(
+            'supabase/migrations/20260811120000_mariadb_normalized_staging_import.sql',
+            'supabase/migrations/20260811193000_widen_normalized_source_fields.sql'
+          )
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $body = @{ query = $migrationSql; read_only = $false } | ConvertTo-Json -Depth 3
-          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          foreach ($migrationPath in $migrationPaths) {
+            if (-not (Test-Path -LiteralPath $migrationPath)) { throw "Normalized-staging migration is missing: $migrationPath" }
+            $migrationSql = [string](Get-Content -Raw -LiteralPath $migrationPath)
+            if ($migrationSql -match '(?i)INSERT\s+INTO\s+public\.watch_records') {
+              throw "Normalized-staging migration attempts a public watch-record write: $migrationPath"
+            }
+            $body = @{ query = $migrationSql; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          }
           $reload = @{ query = "NOTIFY pgrst, 'reload schema';"; read_only = $false } | ConvertTo-Json
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $reload | Out-Null
           Start-Sleep -Seconds 3
