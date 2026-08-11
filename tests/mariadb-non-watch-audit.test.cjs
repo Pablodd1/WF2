@@ -20,7 +20,12 @@ test('non-watch audit uses explicit source evidence and defers ambiguous bracele
   assert.equal(classify(source('5', 'Rolex watch with extra bracelet')).category, 'WATCH');
   assert.equal(classify(source('6', 'Gold bracelet')).category, 'AMBIGUOUS');
   assert.equal(classify(source('7', 'Luxury item available')).category, 'UNCLASSIFIED');
-  assert.equal(classify(source('8', 'Jacob & Co Casino Diamonds full set')).category, 'WATCH');
+  assert.equal(classify(source('8', 'Jacob & Co Casino watch Diamonds full set')).category, 'WATCH');
+  assert.equal(classify(source('9', 'Two luxury purses available')).category, 'HANDBAG');
+  assert.equal(classify(source('10', 'Pair of diamond brooches')).category, 'JEWELRY');
+  assert.equal(classify(source('11', 'Leather card holders')).category, 'ACCESSORY');
+  assert.equal(classify(source('12', 'Cartier diamond necklace')).category, 'JEWELRY');
+  assert.equal(classify(source('13', 'Chopard engagement ring')).category, 'JEWELRY');
 });
 
 test('non-watch audit reconciles every immutable source row and writes no publication data', async () => {

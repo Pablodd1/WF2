@@ -115,7 +115,10 @@ function nonWatchCandidate(source, category) {
   const candidate = {
     raw_line: source.raw_message || null,
     brand: text(raw.brand),
-    model: text(raw.model),
+    // Non-watch source rows do not have a watch model/reference contract. Keep
+    // the source title as the customer-facing item identity when no structured
+    // model was supplied; the immutable raw message remains the audit source.
+    model: text(raw.model) || text(raw.title),
     reference: text(raw.reference || raw.normalized_reference),
     dial_color: null,
     condition: null,
@@ -165,11 +168,31 @@ function buildPublicationReview(source, proposal) {
   const categoryResult = classify(source);
   const category = categoryResult.category;
   const candidates = proposal.normalization?.proposed_candidates || [];
-  const candidate = candidates.length === 1
-    ? { ...candidates[0], category, price: normalizedPrice(candidates[0]) }
-    : (category !== 'WATCH' && PUBLIC_CATEGORIES.has(category) ? nonWatchCandidate(source, category) : null);
+  // Never reuse watch-parser attributes for an explicitly classified
+  // non-watch item. Numeric style/SKU tokens frequently resemble watch
+  // references; the non-watch record is built only from its source fields.
+  const candidate = category === 'WATCH'
+    ? (candidates.length === 1
+      ? { ...candidates[0], category, price: normalizedPrice(candidates[0]) }
+      : null)
+    : (PUBLIC_CATEGORIES.has(category) ? nonWatchCandidate(source, category) : null);
   const media = mediaEvidence(source);
-  const bundleStatus = proposal.bundle_status;
+  const sourceDeclaresBundle = source.raw_data?.is_bundle === true
+    || source.raw_data?.is_bundle === 1
+    || String(source.raw_data?.is_bundle || '') === '1';
+  const proposalBundleStatus = proposal.bundle_status;
+  // The watch parser correctly produces NO_CANDIDATE for a handbag, jewelry
+  // item, or accessory. Once explicit category evidence creates exactly one
+  // non-watch candidate, promote only the *shape* to SINGLE_CANDIDATE so the
+  // existing staging RPC can materialize it. Source-declared bundles always
+  // remain deferred and retain their parent media.
+  const bundleStatus = sourceDeclaresBundle
+    ? 'BUNDLE_SPLIT_REQUIRED'
+    : (category !== 'WATCH'
+      && PUBLIC_CATEGORIES.has(category)
+      && proposalBundleStatus === 'NO_CANDIDATE'
+        ? 'SINGLE_CANDIDATE'
+        : proposalBundleStatus);
   const tradingStatus = tradingFloorStatus({
     category,
     bundleStatus,

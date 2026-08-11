@@ -31,6 +31,40 @@ test('allows a WTB watch request without an asking price', () => {
   assert.equal(valid.claimed.price_amount, null);
 });
 
+test('preserves the original raw message exactly, including surrounding whitespace and line breaks', () => {
+  const raw = '  WTS Rolex Daytona 116500LN\nUSD 30,000  \n';
+  const valid = validateSubmission({
+    image_urls, intent: 'WTS', category: 'WATCH', raw_message: raw,
+    brand: 'Rolex', model: 'Daytona', reference: '116500LN', dial_color: 'White',
+  });
+  assert.equal(valid.error, undefined);
+  assert.equal(valid.rawMessage, raw);
+});
+
+test('requires useful identity fields for handbags, jewelry, and other luxury items', () => {
+  const missingBrand = validateSubmission({
+    image_urls, intent: 'WTS', category: 'HANDBAG', raw_message: 'WTS Birkin 30', title: 'Birkin 30',
+  });
+  assert.match(missingBrand.error, /brand or maker/);
+
+  const valid = validateSubmission({
+    image_urls, intent: 'WTS', category: 'JEWELRY', raw_message: 'WTS Cartier Love bracelet yellow gold 2022',
+    brand: 'Cartier', title: 'Love bracelet', material: 'Yellow gold', size: '17', year: '2022',
+    completeness: 'Box and certificate', price_amount: '6900', currency: 'USD',
+  });
+  assert.equal(valid.error, undefined);
+  assert.equal(valid.claimed.material, 'Yellow gold');
+  assert.equal(valid.claimed.completeness, 'Box and certificate');
+});
+
+test('rejects malformed claimed years instead of silently repairing them', () => {
+  const invalid = validateSubmission({
+    image_urls, intent: 'WTS', category: 'ACCESSORY', raw_message: 'WTS Goyard wallet',
+    brand: 'Goyard', title: 'Saint Sulpice card wallet', year: '22',
+  });
+  assert.match(invalid.error, /four-digit year/);
+});
+
 test('validates bulk item data without accepting typed poster identity', () => {
   const item = {
     intent: 'WTB', category: 'WATCH', raw_message: 'WTB Patek 5712 blue',
@@ -102,11 +136,25 @@ test('legacy direct-publication migration is superseded by a forward review-pipe
   assert.match(correction, /REVOKE ALL ON FUNCTION[\s\S]*FROM PUBLIC, anon, authenticated/);
 });
 
+test('direct submissions gain immutable raw-version lineage before reviewed publication', () => {
+  const migration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260811210000_direct_submission_raw_version_lineage.sql'), 'utf8');
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS raw_message_version_id UUID/i);
+  assert.match(migration, /BEFORE INSERT ON public\.dealer_listing_submissions/i);
+  assert.match(migration, /INSERT INTO public\.raw_messages/i);
+  assert.match(migration, /INSERT INTO public\.raw_message_versions/i);
+  assert.match(migration, /NEW\.raw_message/i);
+  assert.match(migration, /BEFORE INSERT OR UPDATE OF source_submission_id ON staging\.listings/i);
+  assert.match(migration, /NEW\.raw_message_version_id/i);
+  assert.doesNotMatch(migration, /UPDATE\s+public\.watch_records/i);
+});
+
 test('every authenticated posting event receives a stable batch receipt', () => {
   const route = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealer-submissions.js'), 'utf8');
   assert.match(route, /const bulkSubmissionId = crypto\.randomUUID\(\)/);
   assert.match(route, /bulk_submission_id: bulkSubmissionId/);
   assert.match(route, /publication: 'QUEUED_FOR_REVIEW'/);
   assert.match(route, /enqueue_dealer_submission_batch/);
+  assert.match(route, /source_evidence_confirmed !== true/);
+  assert.match(route, /source_evidence_confirmed_at/);
   assert.doesNotMatch(route, /trading_floor_status: validated\.isBundle \? 'bundle_pending_separation' : 'published'/);
 });

@@ -131,6 +131,28 @@ test('routes strong non-watch inventory to Trading Floor only with explicit pric
   assert.equal(row.candidate.price.amount_usd, 12000);
 });
 
+test('non-watch identity never inherits watch-parser candidate attributes', () => {
+  const source = sourceRecord({
+    id: 'cartier-necklace-1', type: 'sale', created_on: '2026-08-10 10:00:00',
+    title: 'WTS Cartier diamond necklace style 116500 USD 12000', brand: 'Cartier',
+  });
+  const row = buildPublicationReview(source, proposal(source, {
+    candidate: {
+      raw_line: source.raw_message, brand: 'Rolex', reference: '116500',
+      listing_type: 'WTS', dial_color: 'White', prices: [],
+    },
+    catalog_confirmation: { confirmed: false },
+    review_disposition: 'HUMAN_REVIEW',
+    review_reasons: ['NON_WATCH_CATEGORY'],
+  }));
+  assert.equal(row.category, 'JEWELRY');
+  assert.equal(row.candidate.brand, 'Cartier');
+  assert.match(row.candidate.model, /Cartier diamond necklace/);
+  assert.equal(row.candidate.reference, null);
+  assert.equal(row.candidate.dial_color, null);
+  assert.equal(row.price_research_status, 'INELIGIBLE_NON_WATCH');
+});
+
 test('retains a bare-dollar non-watch amount for display without creating USD analytics', () => {
   const source = sourceRecord({
     id: 'handbag-bare-dollar', type: 'sale', created_on: '2026-08-10 10:00:00',

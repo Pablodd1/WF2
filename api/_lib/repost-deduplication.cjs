@@ -38,8 +38,11 @@ function repostSignature(row) {
 
   if (verifiedDealer) return `VERIFIED_DEALER:${verifiedDealer}|${identity}`;
   if (observedDealer) return `OBSERVED_PHONE:${observedDealer}|${identity}`;
-  // Identical text without a dealer identity is not enough to call two offers
-  // a repost: different dealers commonly forward the same inventory wording.
+  const message = normalizedMessage(row.raw_message);
+  // When seller identity is unavailable, exact repeated evidence must not gain
+  // statistical weight merely because it was imported more than once. Known
+  // different sellers remain distinct through the identity branches above.
+  if (message) return `UNATTRIBUTED_EXACT_EVIDENCE:${message}|${identity}`;
   return `RECORD:${row.id}`;
 }
 

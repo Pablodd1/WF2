@@ -61,9 +61,11 @@ test('customer Workspace routes are visible without a route-level authentication
   assert.match(app, /path="\/dealer\/account\/:section" element=\{<DealerAccount \/>\}/);
   assert.match(app, /path="\/dealers" element=\{<DealerDirectory \/>\}/);
   assert.doesNotMatch(app, /path="\/dealer\/(?:workspace|post|account\/)[^\n]*<DealerGate>/);
-  for (const title of ['Trading Floor', 'Price Research', 'POST IT', 'Hire FI', 'Dealer Directory', 'Dealer Account']) {
+  for (const title of ['POST IT', 'Hire FI', 'Dealer Directory', 'Dealer Account']) {
     assert.match(portal, new RegExp(`title: '${title}'`));
   }
+  assert.doesNotMatch(portal, /title: 'Trading Floor'/);
+  assert.doesNotMatch(portal, /title: 'Price Research'/);
 });
 
 test('Trading Floor preserves source text and orders price intelligence before poster details', () => {

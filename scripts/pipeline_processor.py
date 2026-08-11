@@ -34,12 +34,15 @@ BRANDS_CANONICAL = [
 ]
 
 NON_WATCH_KEYWORDS = {
-    "BAG": [r"\bbirkin\b", r"\bhermes\b", r"\bkelly\b", r"\bchanel bag\b", r"\blv bag\b", r"\blouis vuitton bag\b",
-            r"\bclutch\b", r"\btote\b", r"\bhandbag\b", r"\bshoulder bag\b", r"\bpochette\b"],
-    "JEWELRY": [r"\bnecklace\b", r"\bbracelet\b", r"\bring\b", r"\bearring\b", r"\bpendant\b", r"\bbangle\b",
-                r"\bdiamond ring\b", r"\bgold chain\b", r"\bpearl\b"],
-    "ACCESSORY": [r"\bwallet\b", r"\bbelt\b", r"\bsunglasses\b", r"\bcufflinks\b", r"\bpen\b", r"\blighter\b",
-                  r"\bperfume\b", r"\bscarf\b", r"\bsilk tie\b"],
+    "HANDBAG": [r"\bbirkins?\b", r"\bkelly\b", r"\bhandbags?\b", r"\bhand bags?\b", r"\bpurses?\b",
+                r"\bclutches?\b", r"\btotes?\b", r"\bshoulder bags?\b", r"\bcrossbod(?:y|ies)\b",
+                r"\bsatchels?\b", r"\bduffles?\b", r"\btravel bags?\b", r"\bpochettes?\b"],
+    "JEWELRY": [r"\bnecklaces?\b", r"\bearrings?\b", r"\bpendants?\b", r"\bbrooch(?:es)?\b",
+                r"\banklets?\b", r"\bdiamond rings?\b", r"\bengagement rings?\b", r"\bwedding bands?\b",
+                r"\bgold chains?\b", r"\bjewelry\b", r"\bjewellery\b"],
+    "ACCESSORY": [r"\bwallets?\b", r"\bcard holders?\b", r"\bbelts?\b", r"\bsunglasses\b",
+                  r"\bcufflinks?\b", r"\bfountain pens?\b", r"\blighters?\b", r"\bscarves?\b",
+                  r"\bsilk ties?\b", r"\bkey holders?\b"],
 }
 
 WATCH_INTENT_KEYWORDS = {

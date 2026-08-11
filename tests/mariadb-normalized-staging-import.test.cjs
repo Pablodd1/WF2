@@ -100,6 +100,7 @@ test('bundle parents and their children are deferred from materialization', () =
 test('strong non-watch item is staged for Trading Floor but not watch Price Research', () => {
   const source = sourceRecord({ id: 'bag-1', type: 'sale', title: 'WTS Hermes Birkin 30 bag USD 24000' });
   const row = stagingRecord(source, proposal(source, null, {
+    bundle_status: 'NO_CANDIDATE',
     catalog_confirmation: { confirmed: false },
     review_disposition: 'HUMAN_REVIEW',
     review_reasons: ['NON_WATCH_CATEGORY'],
@@ -107,6 +108,24 @@ test('strong non-watch item is staged for Trading Floor but not watch Price Rese
   assert.equal(row.materialization, 'SINGLE');
   assert.equal(row.category, 'HANDBAG');
   assert.equal(row.price_research_status, 'INELIGIBLE_NON_WATCH');
+  assert.match(row.candidate.model, /Birkin 30 bag/i);
+});
+
+test('source-declared non-watch bundles remain deferred with parent media isolated', () => {
+  const source = sourceRecord({
+    id: 'bag-bundle-1', type: 'sale', is_bundle: 1,
+    title: 'WTS two handbags: Birkin 30 and Kelly 28 USD 40000',
+    front_image: 'two-bags.jpg',
+  });
+  const row = stagingRecord(source, proposal(source, null, {
+    bundle_status: 'NO_CANDIDATE',
+    catalog_confirmation: { confirmed: false },
+    review_disposition: 'HUMAN_REVIEW',
+    review_reasons: ['NON_WATCH_CATEGORY'],
+  }));
+  assert.equal(row.materialization, 'DEFERRED');
+  assert.equal(row.bundle_status, 'BUNDLE_SPLIT_REQUIRED');
+  assert.equal(row.public_image_eligible, false);
 });
 
 test('batch transport is idempotently tokened and exactly reconciled', async () => {
