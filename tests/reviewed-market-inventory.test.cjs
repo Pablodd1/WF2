@@ -386,11 +386,13 @@ test('publication brands are derived from populated reviewed checkpoints', () =>
   ] }), ['Rolex', 'Patek Philippe']);
 });
 
-test('public brand filters preserve punctuation and exact references use exact counts', () => {
+test('public brand filters preserve punctuation and untrusted checkpoint totals stay withheld', () => {
   assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand \|\| parsedSearch\.brand, 80\)/);
   assert.match(source, /item\.brand\?\.toLocaleLowerCase\(\) === requestedBrand\.toLocaleLowerCase\(\)/);
-  assert.match(source, /const preciseCount = Boolean\(reference\)/);
-  assert.match(source, /const preciseCount = Boolean\(reference\)/);
+  assert.match(source, /const publicInventoryTotal = null/);
+  assert.match(source, /totalStatus: 'withheld_unreconciled_checkpoint_history'/);
+  assert.doesNotMatch(source, /const preciseCount = Boolean\(reference\)/);
+  assert.doesNotMatch(source, /const total = summaryTotal/);
 });
 
 test('endpoint is read-only and globally ranks verified source images before pagination', () => {
