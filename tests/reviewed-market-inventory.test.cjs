@@ -43,6 +43,28 @@ test('location filters are case-insensitive and preserve punctuation boundaries'
   assert.equal(api.locationMatches('Hong Kong', 'Miami'), false);
 });
 
+test('free-text search is case-insensitive and matches all terms without requiring adjacency', () => {
+  const record = {
+    brand: 'Patek Philippe',
+    model: 'Nautilus',
+    reference: '5712/1A-001',
+    seller_name: 'Pierre Duchateau',
+    raw_message: 'WTS Patek Philippe Nautilus blue dial 5712/1A-001',
+  };
+  assert.equal(api.searchTermsMatch(record, 'pAtEk 5712'), true);
+  assert.equal(api.searchTermsMatch(record, 'PIERRE nautilus'), true);
+  assert.equal(api.searchTermsMatch(record, 'patek rolex'), false);
+
+  const legacyParams = api.buildLegacyMarketQueryParams({
+    pageSize: 50,
+    requestedReference: '5712',
+    exactDialVariants: [],
+    search: 'pAtEk 5712',
+  });
+  assert.match(legacyParams.get('or'), /brand_scope\.ilike\.\*pAtEk\*/);
+  assert.equal(legacyParams.get('normalized_reference'), 'in.(5712)');
+});
+
 test('reviewed records expose only supplied location and suppress bundle child media', () => {
   const mapped = api.mapReviewedRecord(record({
     parent_id: 'bundle-parent',
@@ -91,6 +113,8 @@ const workflow = fs.readFileSync(
 test('parses a combined exact-reference and dial search into indexed filters', () => {
   assert.match(source, /parseTradingSearch\(search\)/);
   assert.match(source, /req\.query\?\.reference \|\| parsedSearch\.reference/);
+  assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand, 80\)/);
+  assert.match(source, /requestedReference \|\| requestedDial \? parsedSearch\.brand : search/);
   assert.match(source, /queryParams\.set\('dial_color'/);
 });
 
@@ -387,7 +411,7 @@ test('publication brands are derived from populated reviewed checkpoints', () =>
 });
 
 test('public brand filters preserve punctuation and untrusted checkpoint totals stay withheld', () => {
-  assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand \|\| parsedSearch\.brand, 80\)/);
+  assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand, 80\)/);
   assert.match(source, /item\.brand\?\.toLocaleLowerCase\(\) === requestedBrand\.toLocaleLowerCase\(\)/);
   assert.match(source, /const publicInventoryTotal = null/);
   assert.match(source, /totalStatus: 'withheld_unreconciled_checkpoint_history'/);

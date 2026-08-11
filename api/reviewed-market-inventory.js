@@ -146,6 +146,22 @@ function locationMatches(value, query) {
   return Boolean(normalizedQuery) && normalizedValue.includes(normalizedQuery);
 }
 
+function searchTermsMatch(record, query) {
+  const tokens = safeSearchTerm(query).toLowerCase().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return true;
+  const haystack = [
+    record.brand,
+    record.model,
+    record.reference,
+    record.dial_color,
+    record.seller_name,
+    record.seller_phone,
+    record.location,
+    record.raw_message,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return tokens.every(token => haystack.includes(token));
+}
+
 function recordEvidenceCoverage({
   brand,
   model,
@@ -321,9 +337,7 @@ function directSubmissionMatches(record, filters) {
     if (!locationMatches(record.location, filters.region)) return false;
   }
   if (filters.search) {
-    const haystack = [record.brand, record.model, record.reference, record.dial_color, record.seller_name, record.location, record.raw_message]
-      .filter(Boolean).join(' ').toLowerCase();
-    if (!haystack.includes(filters.search.toLowerCase())) return false;
+    if (!searchTermsMatch(record, filters.search)) return false;
   }
   return true;
 }
@@ -578,8 +592,11 @@ function buildLegacyMarketQueryParams({
   if (listingType) params.set('listing_type', `eq.${listingType}`);
   if (imagesOnly) params.set('has_exact_source_image', 'eq.true');
   if (pricedOnly) params.set('has_supplied_price', 'eq.true');
-  const genericSearch = safeSearchTerm(search);
-  if (genericSearch && !requestedReference && !exactDialVariants.length) {
+  const parsedSearch = parseTradingSearch(search);
+  const genericSearch = safeSearchTerm(
+    requestedReference || exactDialVariants.length ? parsedSearch.brand : search,
+  );
+  if (genericSearch) {
     const pattern = `*${genericSearch}*`;
     params.set('or', [
       `supplied_brand.ilike.${pattern}`,
@@ -626,7 +643,10 @@ module.exports = async function handler(req, res) {
       : (Number.isInteger(requestedPage) ? Math.max(1, requestedPage) : 1);
     const search = cleanExactText(req.query?.q, 120);
     const parsedSearch = parseTradingSearch(search);
-    const requestedBrand = cleanExactText(req.query?.brand || parsedSearch.brand, 80);
+    // Only an explicit brand filter is exact. Free-text brand/model/seller terms
+    // remain case-insensitive searches; parsing them as exact brand names made
+    // aliases such as "patek" incorrectly exclude "Patek Philippe".
+    const requestedBrand = cleanExactText(req.query?.brand, 80);
     const requestedReference = cleanExactText(req.query?.reference || parsedSearch.reference, 80);
     const reference = referenceComparisonKey(requestedReference);
     const requestedDial = cleanExactText(req.query?.dial || parsedSearch.dial, 40);
@@ -715,8 +735,10 @@ module.exports = async function handler(req, res) {
     if (pricedOnly) queryParams.set('source_price_amount', 'gt.0');
     const regionPattern = locationSearchPattern(region);
     if (regionPattern) queryParams.set('location', `ilike.${regionPattern}`);
-    const genericSearch = safeSearchTerm(search);
-    if (genericSearch && !requestedReference && !requestedDial) {
+    const genericSearch = safeSearchTerm(
+      requestedReference || requestedDial ? parsedSearch.brand : search,
+    );
+    if (genericSearch) {
       const pattern = `*${genericSearch}*`;
       queryParams.set('or', [
         `supplied_brand.ilike.${pattern}`,
@@ -906,6 +928,7 @@ module.exports.isMultiListing = isMultiListing;
 module.exports.safeSearchTerm = safeSearchTerm;
 module.exports.locationSearchPattern = locationSearchPattern;
 module.exports.locationMatches = locationMatches;
+module.exports.searchTermsMatch = searchTermsMatch;
 module.exports.parseCursorPage = parseCursorPage;
 module.exports.parseInventoryCursor = parseInventoryCursor;
 module.exports.encodeInventoryCursor = encodeInventoryCursor;
