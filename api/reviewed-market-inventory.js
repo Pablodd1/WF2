@@ -265,15 +265,53 @@ function summarizeCoverage(records) {
     identity_complete: 0,
     contact_available: 0,
     exact_source_image: 0,
+    supplied_price: 0,
+    price_not_supplied: 0,
     price_analytics_eligible: 0,
   };
   for (const record of records) {
     totals.identity_complete += Number(record.evidence_coverage.identity.complete);
     totals.contact_available += Number(record.evidence_coverage.contact.available);
     totals.exact_source_image += Number(record.evidence_coverage.image.available);
+    totals.supplied_price += Number(Boolean(hasUsableSourcePrice(record)));
+    totals.price_not_supplied += Number(!hasUsableSourcePrice(record));
     totals.price_analytics_eligible += Number(record.evidence_coverage.price.analytics_eligible);
   }
   return totals;
+}
+
+function hasUsableSourcePrice(record) {
+  return positiveNumber(record?.source_price_amount)
+    ?? positiveNumber(record?.price_raw)
+    ?? positiveNumber(record?.price_usd)
+    ?? null;
+}
+
+function inventoryIdentityKey(record) {
+  const brand = cleanExactText(record?.brand || record?.canonical_brand || record?.supplied_brand, 80)
+    .toUpperCase();
+  const reference = referenceComparisonKey(
+    record?.reference || record?.normalized_reference || record?.catalog_reference,
+  );
+  const model = cleanExactText(record?.model || record?.catalog_model, 120).toUpperCase();
+  return `${brand}\u001f${reference || model}`;
+}
+
+function compareInventoryForDisplay(left, right) {
+  if (inventoryIdentityKey(left) === inventoryIdentityKey(right)) {
+    const priceDifference = Number(Boolean(hasUsableSourcePrice(right)))
+      - Number(Boolean(hasUsableSourcePrice(left)));
+    if (priceDifference !== 0) return priceDifference;
+  }
+  const imageDifference = Number(right?.has_images === true) - Number(left?.has_images === true);
+  if (imageDifference !== 0) return imageDifference;
+  const priceDifference = Number(Boolean(hasUsableSourcePrice(right)))
+    - Number(Boolean(hasUsableSourcePrice(left)));
+  if (priceDifference !== 0) return priceDifference;
+  const rightDate = Date.parse(right?.listing_date || right?.created_at || '') || 0;
+  const leftDate = Date.parse(left?.listing_date || left?.created_at || '') || 0;
+  if (rightDate !== leftDate) return rightDate - leftDate;
+  return String(right?.id || '').localeCompare(String(left?.id || ''));
 }
 
 function isApprovedInventoryRecord(record) {
@@ -994,7 +1032,7 @@ module.exports = async function handler(req, res) {
             rating, postedAfter,
           }));
         records = [...directRecords, ...records]
-          .sort((left, right) => Number(right.has_images) - Number(left.has_images))
+          .sort(compareInventoryForDisplay)
           .slice(0, pageSize);
       }
     }
@@ -1019,6 +1057,12 @@ module.exports = async function handler(req, res) {
       publicationBrands,
       evidenceContract: EVIDENCE_CONTRACT,
       coverage: summarizeCoverage(records),
+      displayPolicy: {
+        unpriced_listings_visible: true,
+        unpriced_listings_count_toward_activity: true,
+        unpriced_listings_excluded_from_price_analytics: true,
+        within_reference_order: 'SUPPLIED_PRICE_FIRST_THEN_PRICE_NOT_SUPPLIED',
+      },
       viewContract: usedLegacyViewContract ? 'legacy-compatible' : 'strict',
     });
   } catch (error) {
@@ -1042,6 +1086,9 @@ module.exports.mapDealerSubmission = mapDealerSubmission;
 module.exports.directSubmissionMatches = directSubmissionMatches;
 module.exports.directSubmissionMatchesImageLane = directSubmissionMatchesImageLane;
 module.exports.summarizeCoverage = summarizeCoverage;
+module.exports.hasUsableSourcePrice = hasUsableSourcePrice;
+module.exports.inventoryIdentityKey = inventoryIdentityKey;
+module.exports.compareInventoryForDisplay = compareInventoryForDisplay;
 module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;
 module.exports.isTradingFloorSourceRow = isTradingFloorSourceRow;
 module.exports.normalizeItemCategory = normalizeItemCategory;

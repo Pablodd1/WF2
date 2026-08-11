@@ -7,6 +7,28 @@ const test = require('node:test');
 
 const api = require('../api/reviewed-market-inventory.js');
 
+test('same-reference Trading Floor listings place supplied prices before no-price activity', () => {
+  const priced = {
+    id: 'priced', brand: 'Patek Philippe', reference: '5712/1A-001',
+    source_price_amount: 92000, has_images: false, listing_date: '2026-01-01',
+  };
+  const unpriced = {
+    id: 'unpriced', brand: 'Patek Philippe', reference: '5712/1A-001',
+    source_price_amount: null, has_images: true, listing_date: '2026-08-01',
+  };
+  const records = [unpriced, priced].sort(api.compareInventoryForDisplay);
+  assert.deepEqual(records.map(record => record.id), ['priced', 'unpriced']);
+  assert.equal(api.hasUsableSourcePrice(priced), 92000);
+  assert.equal(api.hasUsableSourcePrice(unpriced), null);
+  assert.deepEqual(api.summarizeCoverage([
+    { ...priced, evidence_coverage: { identity: { complete: true }, contact: { available: false }, image: { available: false }, price: { analytics_eligible: true } } },
+    { ...unpriced, evidence_coverage: { identity: { complete: true }, contact: { available: true }, image: { available: true }, price: { analytics_eligible: false } } },
+  ]), {
+    scope: 'returned_page', record_count: 2, identity_complete: 2, contact_available: 1,
+    exact_source_image: 1, supplied_price: 1, price_not_supplied: 1, price_analytics_eligible: 1,
+  });
+});
+
 test('Trading Floor source view is allowlisted and defaults to the legacy source', () => {
   assert.equal(api.MARKET_SOURCE_VIEW, 'reviewed_workbook_market_source_v2');
   const sourceText = fs.readFileSync(
@@ -429,6 +451,8 @@ test('coverage summary is page-bounded and reconciles evidence flags', () => {
     identity_complete: 1,
     contact_available: 1,
     exact_source_image: 1,
+    supplied_price: 2,
+    price_not_supplied: 0,
     price_analytics_eligible: 1,
   });
 });

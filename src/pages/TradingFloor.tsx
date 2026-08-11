@@ -203,6 +203,33 @@ function hasListingImage(listing: ListingRecord) {
   return listingImageUrl(listing) !== null;
 }
 
+function hasListingPrice(listing: ListingRecord) {
+  return [listing.source_price_amount, listing.price_raw, listing.price_usd]
+    .some(value => Number.isFinite(Number(value)) && Number(value) > 0);
+}
+
+function listingIdentityKey(listing: ListingRecord) {
+  const brand = cleanValue(listing.brand).toLocaleUpperCase();
+  const reference = cleanValue(listing.reference)
+    .toLocaleUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  const model = cleanValue(listing.model).toLocaleUpperCase();
+  return `${brand}\u001f${reference || model}`;
+}
+
+function compareListingsForDisplay(left: ListingRecord, right: ListingRecord) {
+  if (listingIdentityKey(left) === listingIdentityKey(right)) {
+    const priceDifference = Number(hasListingPrice(right)) - Number(hasListingPrice(left));
+    if (priceDifference !== 0) return priceDifference;
+  }
+  const imageDifference = Number(hasListingImage(right)) - Number(hasListingImage(left));
+  if (imageDifference !== 0) return imageDifference;
+  const priceDifference = Number(hasListingPrice(right)) - Number(hasListingPrice(left));
+  if (priceDifference !== 0) return priceDifference;
+  return new Date(right.listing_date || right.created_at || 0).getTime()
+    - new Date(left.listing_date || left.created_at || 0).getTime();
+}
+
 function locationMatches(listingLocation: unknown, requestedLocation: unknown) {
   const normalize = (value: unknown) => cleanValue(
     typeof value === 'string' || typeof value === 'number' ? value : null,
@@ -303,7 +330,7 @@ export default function TradingFloor() {
       if (!locationMatches(location, locationFilter)) return false;
     }
     return true;
-  }), [imagesOnly, listings, locationFilter, pricedOnly]);
+  }).sort(compareListingsForDisplay), [imagesOnly, listings, locationFilter, pricedOnly]);
 
   const resetResults = useCallback(() => {
     setCursor(null);
@@ -484,7 +511,7 @@ export default function TradingFloor() {
         }
         const nextListings = (data.records || [])
           .filter(listing => !isBundleListing(listing))
-          .sort((left, right) => Number(hasListingImage(right)) - Number(hasListingImage(left)));
+          .sort(compareListingsForDisplay);
         setListings(nextListings);
         const parsedTotal = data.total == null ? null : Number(data.total);
         setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
