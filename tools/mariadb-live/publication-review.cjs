@@ -5,7 +5,8 @@ const { classify } = require('./audit-non-watch.cjs');
 
 const ACCEPTABLE_PRICE_EVIDENCE = new Set(['explicit_line_currency', 'section_context', 'message_context']);
 const PUBLIC_CATEGORIES = new Set(['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY']);
-const DO_LISTINGS_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/';
+const DO_ORIGIN = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/';
+const DO_LISTINGS_FULL_BASE = `${DO_ORIGIN}listings/full/`;
 
 function text(value) {
   const cleaned = value == null ? '' : String(value).trim();
@@ -16,6 +17,16 @@ function sourceIntent(source) {
   const explicit = explicitIntent(source.raw_message);
   if (explicit) return explicit;
   return String(source.raw_data?.type || '').toLowerCase() === 'search' ? 'WTB' : 'WTS';
+}
+
+function sourceMediaUrl(value) {
+  const supplied = text(value);
+  if (!supplied) return null;
+  if (/^https?:\/\//i.test(supplied)) return supplied;
+  const key = supplied.replace(/^\/+/, '');
+  if (/^listings\/full\//i.test(key)) return `${DO_ORIGIN}${key}`;
+  if (/^full\//i.test(key)) return `${DO_ORIGIN}listings/${key}`;
+  return `${DO_LISTINGS_FULL_BASE}${key}`;
 }
 
 function mediaEvidence(source) {
@@ -30,9 +41,7 @@ function mediaEvidence(source) {
       review_reason: 'NO_SOURCE_MEDIA',
     };
   }
-  const url = /^https?:\/\//i.test(supplied)
-    ? supplied
-    : `${DO_LISTINGS_BASE}${supplied.replace(/^\/+/, '')}`;
+  const url = sourceMediaUrl(supplied);
   return {
     source_media_key: supplied,
     source_media_url_candidate: url,
@@ -200,5 +209,6 @@ module.exports = {
   priceResearchStatus,
   sellerEvidence,
   sourceIntent,
+  sourceMediaUrl,
   tradingFloorStatus,
 };

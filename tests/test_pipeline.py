@@ -64,6 +64,19 @@ class TestWatchFactsPipeline(unittest.TestCase):
         self.assertEqual(res3["trading_floor_status"], "published")
         self.assertEqual(res3["price_research_status"], "ineligible_no_price")
 
+    def test_source_image_uses_verified_listings_full_path(self):
+        job = {
+            "id": "image-1",
+            "message_text": "WTS Rolex Daytona 116500LN 31500 USD",
+            "type": "sale",
+            "front_image": "677ec3e161c64_front_image.jpg",
+        }
+        result = self.processor.process_job(job)
+        self.assertEqual(
+            result["image_url"],
+            "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/677ec3e161c64_front_image.jpg",
+        )
+
     def test_bundle_splitting(self):
         from pipeline_bundle_splitter import split_bundle_listing
         

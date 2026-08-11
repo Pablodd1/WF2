@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { buildPublicationReview } = require('../tools/mariadb-live/publication-review.cjs');
+const { buildPublicationReview, sourceMediaUrl } = require('../tools/mariadb-live/publication-review.cjs');
 const { sourceRecord } = require('../tools/mariadb-live/lib.cjs');
 
 function proposal(source, overrides = {}) {
@@ -27,6 +27,21 @@ function proposal(source, overrides = {}) {
     },
   };
 }
+
+test('resolves MariaDB front-image keys to the verified listings/full object path', () => {
+  assert.equal(
+    sourceMediaUrl('677ec3e161c64_front_image.jpg'),
+    'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/677ec3e161c64_front_image.jpg',
+  );
+  assert.equal(
+    sourceMediaUrl('listings/full/677ec3e161c64_front_image.jpg'),
+    'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/677ec3e161c64_front_image.jpg',
+  );
+  assert.equal(
+    sourceMediaUrl('https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/existing.jpg'),
+    'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/existing.jpg',
+  );
+});
 
 test('keeps a catalog-confirmed no-price WTB on the Trading Floor demand lane', () => {
   const source = sourceRecord({
