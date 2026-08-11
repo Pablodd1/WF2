@@ -402,6 +402,14 @@ test('scoped pages use one lookahead row instead of trusting estimated totals', 
   assert.match(source, /const nextCursor = hasMore[\s\S]*encodeInventoryCursor/);
 });
 
+test('cursor inventory bounds sparse image pages and overlaps independent database reads', () => {
+  assert.match(source, /const pageSizeLimit = pagination === 'cursor' \? 12 : MAX_PAGE_SIZE/);
+  assert.match(source, /const summaryPromise = loadSummary\(client\)/);
+  assert.match(source, /directRowsPromise = Promise\.resolve\(directQuery\)/);
+  assert.match(source, /await directRowsPromise/);
+  assert.match(source, /const summary = await summaryPromise/);
+});
+
 test('publication brands are derived from populated reviewed checkpoints', () => {
   assert.deepEqual(api.publicationBrandsFromSummary({ brands: [
     { brand: 'Rolex', canonical_listings: 10 },
@@ -412,7 +420,7 @@ test('publication brands are derived from populated reviewed checkpoints', () =>
 
 test('public brand filters preserve punctuation and untrusted checkpoint totals stay withheld', () => {
   assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand, 80\)/);
-  assert.match(source, /item\.brand\?\.toLocaleLowerCase\(\) === requestedBrand\.toLocaleLowerCase\(\)/);
+  assert.match(source, /const brand = requestedBrand/);
   assert.match(source, /const publicInventoryTotal = null/);
   assert.match(source, /totalStatus: 'withheld_unreconciled_checkpoint_history'/);
   assert.doesNotMatch(source, /const preciseCount = Boolean\(reference\)/);

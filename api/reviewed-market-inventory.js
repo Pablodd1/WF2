@@ -622,14 +622,18 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
+    const pagination = cleanExactText(req.query?.pagination, 20).toLowerCase();
     const requestedPageSize = Number.parseInt(
       String(req.query?.pageSize || DEFAULT_PAGE_SIZE),
       10,
     );
+    // The verified-image lane is intentionally sparse. A large lookahead asks
+    // Postgres to scan millions of rows merely to prove that a 51st image does
+    // not exist. Cursor pages stay small and predictable instead.
+    const pageSizeLimit = pagination === 'cursor' ? 12 : MAX_PAGE_SIZE;
     const pageSize = Number.isInteger(requestedPageSize)
-      ? Math.min(Math.max(requestedPageSize, 12), MAX_PAGE_SIZE)
-      : DEFAULT_PAGE_SIZE;
-    const pagination = cleanExactText(req.query?.pagination, 20).toLowerCase();
+      ? Math.min(Math.max(requestedPageSize, 12), pageSizeLimit)
+      : Math.min(DEFAULT_PAGE_SIZE, pageSizeLimit);
     const cursorProvided = req.query?.cursor != null && String(req.query.cursor).trim() !== '';
     const inventoryCursor = pagination === 'cursor'
       ? parseInventoryCursor(req.query?.cursor, pageSize)
@@ -680,10 +684,11 @@ module.exports = async function handler(req, res) {
     }
 
     const client = getClient();
-    const summary = await loadSummary(client);
-    const matchedBrand = summary.brands.find(item =>
-      item.brand?.toLocaleLowerCase() === requestedBrand.toLocaleLowerCase());
-    const brand = matchedBrand?.brand || requestedBrand;
+    // Summary and authenticated direct-post reads are independent of the
+    // reviewed market REST request. Start them without serializing three
+    // remote database round trips on every page load.
+    const summaryPromise = loadSummary(client);
+    const brand = requestedBrand;
     // Cursor pages publish the current reviewed inventory, including incomplete
     // identities and no-price rows; analytics eligibility remains stricter.
     const scopedFilter = true;
@@ -699,9 +704,10 @@ module.exports = async function handler(req, res) {
       total: 0,
       canReverse,
     });
-    const publicationBrands = publicationBrandsFromSummary(summary);
 
     if (pageWindow.empty) {
+      const summary = await summaryPromise;
+      const publicationBrands = publicationBrandsFromSummary(summary);
       return res.status(200).json({
         status: 'ok', count: 0, total: publicInventoryTotal, page, pageSize,
         totalIsEstimate: false, totalStatus: 'withheld_unreconciled_checkpoint_history', hasMore: false, nextCursor: null,
@@ -761,6 +767,19 @@ module.exports = async function handler(req, res) {
     const requestedOffset = pagination === 'cursor'
       ? (inventoryCursor?.offset || 0)
       : pageWindow.start;
+    const firstPageOfLane = requestedOffset === 0
+      && (requestedLane === 'images' ? page === 1 : true);
+    let directRowsPromise = Promise.resolve({ data: [], error: null });
+    if (firstPageOfLane) {
+      let directQuery = client.from('dealer_listing_submissions')
+        .select('id,intent,category,raw_message,claimed_fields,image_urls,poster_image_url,review_status,publication_status,created_at')
+        .eq('publication_status', 'PUBLISHED')
+        .eq('review_status', 'APPROVED')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (itemCategory !== 'ALL') directQuery = directQuery.eq('category', itemCategory);
+      directRowsPromise = Promise.resolve(directQuery);
+    }
     queryParams.set('has_exact_source_image', requestedLane === 'images' ? 'eq.true' : 'eq.false');
     queryParams.set('order', 'id.desc');
     queryParams.set('limit', String(pageSize + 1));
@@ -853,17 +872,8 @@ module.exports = async function handler(req, res) {
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
       .filter(record => !region || locationMatches(record.location, region))
       .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
-    const firstPageOfLane = requestedOffset === 0
-      && (requestedLane === 'images' ? page === 1 : true);
     if (firstPageOfLane) {
-      let directQuery = client.from('dealer_listing_submissions')
-        .select('id,intent,category,raw_message,claimed_fields,image_urls,poster_image_url,review_status,publication_status,created_at')
-        .eq('publication_status', 'PUBLISHED')
-        .eq('review_status', 'APPROVED')
-        .order('created_at', { ascending: false })
-        .limit(100);
-      if (itemCategory !== 'ALL') directQuery = directQuery.eq('category', itemCategory);
-      const { data: directRows, error: directError } = await directQuery;
+      const { data: directRows, error: directError } = await directRowsPromise;
       if (!directError) {
         const directRecords = (directRows || [])
           .map(mapDealerSubmission)
@@ -879,6 +889,8 @@ module.exports = async function handler(req, res) {
     const nextCursor = hasMore
       ? encodeInventoryCursor({ lane: nextLane, offset: nextOffset, page: page + 1 })
       : null;
+    const summary = await summaryPromise;
+    const publicationBrands = publicationBrandsFromSummary(summary);
 
     return res.status(200).json({
       status: 'ok',
