@@ -20,16 +20,16 @@ export function MarketNav() {
   const links = role === 'admin' ? [{ to: '/admin', label: 'Admin Panel' }] : [];
 
   return (
-    <div className="bg-[#09090d] text-white">
+    <div className="bg-[#f3ecdf] text-[#211b15]">
       <MarketHeader compact />
-      <nav className="border-b border-white/10" aria-label="Dealer navigation">
+      <nav className="border-b border-[#3f3324]/15" aria-label="Dealer navigation">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 overflow-x-auto px-4 py-2 text-xs sm:gap-6 sm:px-6 lg:px-8">
           <div>
             {location.pathname !== '/' && (
               <button
                 type="button"
                 onClick={() => navigate(-1)}
-                className="flex items-center gap-1.5 rounded bg-white/10 px-3 py-1 text-xs font-medium text-[#d4b87a] hover:bg-white/20 hover:text-white transition-colors"
+                className="flex items-center gap-1.5 rounded border border-[#3f3324]/15 bg-white/30 px-3 py-1 text-xs font-medium text-[#735c32] transition-colors hover:bg-white/70 hover:text-[#211b15]"
                 aria-label="Go Back"
               >
                 <ArrowLeft size={14} /> Go Back
@@ -45,7 +45,7 @@ export function MarketNav() {
                   to={link.to}
                   aria-current={active ? 'page' : undefined}
                   className="shrink-0 border-b py-1.5 transition-colors"
-                  style={{ borderColor: active ? '#c9a96e' : 'transparent', color: active ? '#d4b87a' : '#a8a8b3' }}
+                  style={{ borderColor: active ? '#9a7127' : 'transparent', color: active ? '#735c32' : '#675b4d' }}
                 >
                   {link.label}
                 </Link>

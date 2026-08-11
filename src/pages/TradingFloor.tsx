@@ -16,15 +16,16 @@ import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
+import { MarketActivityTicker } from '../components/MarketActivityTicker';
 
 const GOLD = '#9A7127';
 const GOLD_BRIGHT = '#7B5719';
 const INK = '#171717';
 const MUTED = '#6B7280';
 const BORDER = '#DED8CD';
-const SURFACE = '#FFFFFF';
-const PANEL = '#F7F5F0';
-const PAGE = '#F4F1EB';
+const SURFACE = '#FBF7EF';
+const PANEL = '#F3ECDF';
+const PAGE = '#F3ECDF';
 const RED = '#B42318';
 
 const CATEGORY_OPTIONS = [
@@ -506,12 +507,14 @@ export default function TradingFloor() {
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <MarketActivityTicker />
       <MarketNav />
-      <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 10px 28px rgba(41,37,36,0.08)' }}>
+      <div style={{ background: PAGE, borderBottom: `1px solid ${BORDER}` }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: GOLD_BRIGHT }}>WatchFacts</p>
+              <h1 className="mt-1 font-serif text-[36px] font-normal tracking-[-0.025em]" style={{ color: INK }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
                 {total === null ? 'Watch inventory' : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings`}
               </p>
@@ -628,7 +631,7 @@ export default function TradingFloor() {
             </button>
           </div>
 
-          <div className="rounded-md bg-[#09090d] px-4 py-3">
+          <div className="rounded-md border bg-white/35 px-4 py-3" style={{ borderColor: BORDER }}>
             <PriorityReferenceShortcuts
               mode="trading"
               activeBrand={brandFilter}
@@ -1104,31 +1107,31 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
             </div>
           </details>
         )}
-        {(cleanValue(listing.seller_name) || listing['Posted By'] || listing.location || listing.seller_country) && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm" style={{ color: MUTED }}>
-            <div className="flex items-center gap-2">
-              {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="" className="h-8 w-8 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
-              <span>
-                Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer'}</span>
-                {isRatedDealer && <span className="ml-1 text-xs" style={{ color: GOLD_BRIGHT }}>{Number(listing.seller_rating).toFixed(1)} · {listing.seller_review_count} reviews</span>}
-              </span>
-            </div>
-            {(listing.location || listing.seller_country || listing['Location']) && (
-              <div className="flex items-center gap-1.5 rounded bg-stone-100 px-2 py-0.5 text-xs font-medium" style={{ color: GOLD_BRIGHT }}>
-                <Globe2 size={12} />
-                <span>{listing.location || listing.seller_country || listing['Location']}</span>
-              </div>
-            )}
-          </div>
+      </div>
+
+      <div className="mt-4 border-y py-3" style={{ borderColor: BORDER }}>
+        <div className="font-mono text-[18px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
+        {(listing.location || listing.seller_country || listing['Location']) && (
+          <span className="inline-flex items-center gap-1.5 rounded-full border bg-white/50 px-2.5 py-1" style={{ borderColor: BORDER, color: GOLD_BRIGHT }}>
+            <Globe2 size={12} /> {listing.location || listing.seller_country || listing['Location']}
+          </span>
         )}
-      </div>
-
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <div className="text-[16px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
         {meta.region && <RegionLabel region={meta.region} />}
+        {meta.postedDate && <span className="rounded-full border bg-white/50 px-2.5 py-1" style={{ borderColor: BORDER }}>Posted {meta.postedDate}</span>}
       </div>
 
-      {meta.postedDate && <div className="mt-3 text-[15px]" style={{ color: INK }}>Posted: {meta.postedDate}</div>}
+      {(cleanValue(listing.seller_name) || listing['Posted By']) && (
+        <div className="mt-3 flex items-center gap-2 border-t pt-3 text-sm" style={{ borderColor: BORDER, color: MUTED }}>
+          {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="" className="h-8 w-8 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
+          <span>
+            Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer'}</span>
+            {isRatedDealer && <span className="ml-1 text-xs" style={{ color: GOLD_BRIGHT }}>{Number(listing.seller_rating).toFixed(1)} · {listing.seller_review_count} reviews</span>}
+          </span>
+        </div>
+      )}
 
       <div className="mt-auto pt-4">
         <ActionButton
@@ -1589,6 +1592,7 @@ function listingKindLabel(listing: ListingRecord) {
   if (listing.item_category === 'JEWELRY') return 'Jewelry';
   if (listing.item_category === 'HANDBAG') return 'Handbag';
   if (listing.item_category === 'ACCESSORY') return 'Accessory';
+  if (listing.item_category === 'OTHER' && (cleanValue(listing.brand) || cleanValue(listing.reference))) return 'Watch';
   if (listing.item_category === 'OTHER') return 'Other luxury item';
   return 'Watch';
 }

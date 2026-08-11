@@ -38,8 +38,8 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(postItem, /<iframe[\s\S]*src=\{LUXURY_APP_URL\}[\s\S]*title="Luxury App posting experience"/);
   assert.match(postItem, /Open full page/);
   assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
-  assert.match(header, /src="\/images\/curated-luxury-logo-dark\.png"/);
-  assert.match(header, /alt="Curated Luxury"/);
+  assert.match(header, />WatchFacts<\/span>/);
+  assert.match(header, /bg-\[#f3ecdf\]\/95/);
   assert.doesNotMatch(header, />CL<\/span>/);
   assert.match(header, /overflow-x-auto/);
   assert.match(header, /h-11 shrink-0/);
