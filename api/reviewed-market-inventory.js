@@ -22,7 +22,7 @@ const EVIDENCE_CONTRACT = Object.freeze({
   scope: 'returned_page',
   identity_fields: ['brand', 'model', 'reference', 'dial_color'],
   identity: 'Available identity fields are published; complete valid identity is required only for price-research eligibility.',
-  contact: 'Exact supplied seller identity and contact are public marketplace fields.',
+  contact: 'Seller identity may be published when supplied; phone/contact details require source-backed publication consent.',
   image: 'Only an exact supplied HTTP(S) source URL is image-eligible.',
   price: 'Only an exact explicit-source USD match is analytics-eligible.',
 });
@@ -221,6 +221,37 @@ function isApprovedInventoryRecord(record) {
     && !['BUNDLE_CHILD_PENDING_REVIEW', 'BUNDLE_PENDING_SEPARATION', 'SUPPRESSED_EXACT_DUPLICATE', 'HIDDEN', 'REJECTED', 'DELETED'].includes(status);
 }
 
+function normalizeItemCategory(value) {
+  const category = cleanExactText(value, 30).toUpperCase();
+  return ['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY', 'OTHER'].includes(category)
+    ? category
+    : 'OTHER';
+}
+
+function isTradingFloorSourceRow(row) {
+  const itemCategory = normalizeItemCategory(row?.item_category || row?.category);
+  const listingType = cleanExactText(row?.listing_type, 30).toUpperCase();
+  const status = cleanExactText(row?.trading_floor_status || row?.listing_status, 60).toUpperCase();
+  if (!['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY'].includes(itemCategory)) return false;
+  if (!['WTS', 'WTB'].includes(listingType)) return false;
+  if (row?.parent_id || row?.is_bundle === true) return false;
+  if (['BUNDLE_CHILD_PENDING_REVIEW', 'BUNDLE_PENDING_SEPARATION', 'SUPPRESSED_EXACT_DUPLICATE', 'HIDDEN', 'REJECTED', 'DELETED', 'ARCHIVED'].includes(status)) {
+    return false;
+  }
+  if (isApprovedInventoryRecord({
+    verdict: row?.verdict || row?.verification_status,
+    confidence: row?.confidence,
+    listing_status: status,
+  })) {
+    return true;
+  }
+  return status === 'PUBLISHED_PENDING_VERIFICATION'
+    && row?.publication_lane === 'QNSA_NORMALIZED_STAGING_V1'
+    && row?.normalization_run_complete === true
+    && row?.raw_lineage_verified === true
+    && row?.publication_state === 'PENDING_VERIFICATION';
+}
+
 function mapDealerSubmission(row) {
   const claimed = row.claimed_fields || {};
   const multiListing = claimed.is_bundle === true;
@@ -319,10 +350,7 @@ function mapReviewedRecord(row) {
   const exactImageUrl = hasExactSourceImage
     ? String(candidateImageUrl).trim()
     : null;
-  // Source participants have agreed that supplied identity and contact fields
-  // are public marketplace data. Preserve the source flag separately upstream,
-  // but do not use it to hide otherwise available seller information here.
-  const contactApproved = true;
+  const contactApproved = row.contact_publication_approved === true;
   const sourceAmount = positiveNumber(row.source_price_amount);
   const workbookUsd = positiveNumber(row.workbook_price_usd);
   const workbookPriceReview = workbookPriceReviewReason(row.workbook_price_usd);
@@ -344,7 +372,7 @@ function mapReviewedRecord(row) {
   const sellerName = evidenceValuePresent(row.posted_by || row.seller_name || row.from_name)
     ? (row.posted_by || row.seller_name || row.from_name)
     : null;
-  const sellerPhone = evidenceValuePresent(row.phone_number || row.seller_phone || row.from_number)
+  const sellerPhone = contactApproved && evidenceValuePresent(row.phone_number || row.seller_phone || row.from_number)
     ? (row.phone_number || row.seller_phone || row.from_number)
     : null;
   const referenceSearchKey = row.reference_search_key
@@ -416,7 +444,8 @@ function mapReviewedRecord(row) {
     source_row_number: row.source_row_number,
     source_record_id: row.source_record_id || null,
     location: evidenceValuePresent(row.location || row.region) ? (row.location || row.region) : null,
-    item_category: 'WATCH',
+    item_category: normalizeItemCategory(row.item_category || row.category),
+    publication_state: row.publication_state || 'APPROVED',
     multi_listing: multiListing,
     is_unbundled_child: isUnbundledChild,
     has_images: publicImageUrl !== null,
@@ -668,18 +697,19 @@ module.exports = async function handler(req, res) {
       'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
       'workbook_price_usd,source_price_amount,source_currency',
       'price_evidence_status,confidence,verdict,verification_status,user_image_url,imported_at',
-      'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity,trading_floor_status,reference_search_key,location',
+      'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity,trading_floor_status,reference_search_key,location,item_category',
+      'publication_state,publication_lane,normalization_run_complete,raw_lineage_verified',
     ].join(',');
 
     // ponytail: use raw REST instead of Supabase client to avoid client-side issues
     const queryParams = new URLSearchParams();
     queryParams.set('select', columns);
-    queryParams.set('verdict', 'in.(APPROVED,approved)');
     queryParams.set('trading_floor_status', 'not.in.(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate)');
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) queryParams.set('reference_search_key', `eq.${reference}`);
     if (exactDialVariants.length) queryParams.set('dial_color', `in.(${exactDialVariants.join(',')})`);
     if (listingType) queryParams.set('listing_type', `eq.${listingType}`);
+    if (itemCategory !== 'ALL') queryParams.set('item_category', `eq.${itemCategory}`);
     if (imagesOnly) queryParams.set('has_exact_source_image', 'eq.true');
     if (pricedOnly) queryParams.set('source_price_amount', 'gt.0');
     const regionPattern = locationSearchPattern(region);
@@ -794,12 +824,12 @@ module.exports = async function handler(req, res) {
     const total = summaryTotal;
     const rows = pageWindow.reverse ? [...rawRows].reverse() : rawRows;
     const pageResult = boundedPage(rows, pageSize, false);
-    const publicationGate = usedLegacyViewContract
-      ? isLegacyReviewedInventoryRecord
-      : isApprovedInventoryRecord;
-    let records = pageResult.records
+    const eligibleRows = usedLegacyViewContract
+      ? pageResult.records
+      : pageResult.records.filter(isTradingFloorSourceRow);
+    let records = eligibleRows
       .map(mapReviewedRecord)
-      .filter(record => publicationGate(record) && !record.multi_listing)
+      .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
       .filter(record => !region || locationMatches(record.location, region))
       .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
     const firstPageOfLane = requestedOffset === 0
@@ -867,6 +897,8 @@ module.exports.directSubmissionMatches = directSubmissionMatches;
 module.exports.directSubmissionMatchesImageLane = directSubmissionMatchesImageLane;
 module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;
+module.exports.isTradingFloorSourceRow = isTradingFloorSourceRow;
+module.exports.normalizeItemCategory = normalizeItemCategory;
 module.exports.isLegacyReviewedInventoryRecord = isLegacyReviewedInventoryRecord;
 module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;

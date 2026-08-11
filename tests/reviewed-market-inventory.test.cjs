@@ -106,6 +106,7 @@ function record(overrides = {}) {
     contact_publication_approved: true,
     raw_message: 'Rolex 126500LN white USD 30,000',
     listing_type: 'WTS',
+    item_category: 'WATCH',
     brand_scope: 'Rolex',
     supplied_brand: 'Rolex',
     canonical_brand: 'Rolex',
@@ -341,10 +342,11 @@ test('coverage summary is page-bounded and reconciles evidence flags', () => {
   });
 });
 
-test('publishes supplied seller contact regardless of the legacy approval flag', () => {
+test('publishes seller identity but keeps contact consent-gated', () => {
   const mapped = api.mapReviewedRecord(record({ contact_publication_approved: false }));
   assert.equal(mapped.seller_name, 'Dealer One');
-  assert.equal(mapped.seller_phone, '+15550100');
+  assert.equal(mapped.seller_phone, null);
+  assert.equal(mapped.contact_publication_approved, false);
 });
 
 test('supports numeric and base64url page cursors', () => {
@@ -405,8 +407,8 @@ test('endpoint is read-only and globally ranks verified source images before pag
   assert.match(source, /queryParams\.set\('has_exact_source_image', requestedLane === 'images' \? 'eq\.true' : 'eq\.false'\)/);
   assert.match(source, /queryParams\.set\('order', 'id\.desc'\)/);
   assert.match(source, /Fill the final image page from the no-image lane/);
-  assert.match(source, /const publicationGate = usedLegacyViewContract[\s\S]*isLegacyReviewedInventoryRecord[\s\S]*isApprovedInventoryRecord/);
-  assert.match(source, /filter\(record => publicationGate\(record\) && !record\.multi_listing\)/);
+  assert.match(source, /pageResult\.records\.filter\(isTradingFloorSourceRow\)/);
+  assert.match(source, /usedLegacyViewContract \? isLegacyReviewedInventoryRecord\(record\) : true/);
   assert.doesNotMatch(source, /order\('workbook_price_usd'/);
   assert.doesNotMatch(source, /order\('source_price_amount'/);
   assert.doesNotMatch(source, /order\('has_complete_identity'/);
