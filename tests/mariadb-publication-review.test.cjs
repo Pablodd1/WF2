@@ -57,7 +57,7 @@ test('keeps a catalog-confirmed no-price WTB on the Trading Floor demand lane', 
   assert.equal(row.seller.private_source_evidence.phone, '+15551234567');
 });
 
-test('never admits a bare-dollar WTS price into Price Research', () => {
+test('preserves a bare-dollar WTS source amount without admitting it into Price Research', () => {
   const source = sourceRecord({
     id: 'wts-bare-dollar', type: 'sale', created_on: '2026-08-10 10:00:00',
     title: 'Rolex 116500LN white $28000', brand: 'Rolex', reference: '116500LN',
@@ -72,6 +72,26 @@ test('never admits a bare-dollar WTS price into Price Research', () => {
     review_reasons: ['CURRENCY_AMBIGUOUS'],
   }));
   assert.equal(row.trading_floor_status, 'PUBLISHED_PENDING_VERIFICATION');
+  assert.equal(row.price_research_status, 'INELIGIBLE_CURRENCY_OR_FX');
+  assert.equal(row.candidate.price.amount_original, 28000);
+  assert.equal(row.candidate.price.currency_original, null);
+  assert.equal(row.candidate.price.amount_usd, null);
+  assert.equal(row.candidate.price.raw_price_text, '$28000');
+  assert.equal(row.candidate.price.currency_evidence, 'bare_dollar_unconfirmed');
+  assert.equal(row.candidate.price.analytics_currency_evidence_eligible, false);
+});
+
+test('does not manufacture a display price from unlabelled references, years, or quantities', () => {
+  const source = sourceRecord({
+    id: 'wts-no-explicit-price', type: 'sale', created_on: '2026-08-10 10:00:00',
+    title: 'Rolex 116500LN white 2020 full set 108k', brand: 'Rolex', reference: '116500LN',
+  });
+  const candidate = {
+    raw_line: source.raw_message, brand: 'Rolex', reference: '116500LN', listing_type: 'WTS',
+    dial_color: 'White', prices: [],
+  };
+  const row = buildPublicationReview(source, proposal(source, { candidate }));
+  assert.equal(row.candidate.price, null);
   assert.equal(row.price_research_status, 'INELIGIBLE_NO_PRICE');
 });
 
@@ -109,6 +129,23 @@ test('routes strong non-watch inventory to Trading Floor only with explicit pric
   assert.equal(row.price_research_status, 'INELIGIBLE_NON_WATCH');
   assert.equal(row.candidate.price.currency_original, 'USD');
   assert.equal(row.candidate.price.amount_usd, 12000);
+});
+
+test('retains a bare-dollar non-watch amount for display without creating USD analytics', () => {
+  const source = sourceRecord({
+    id: 'handbag-bare-dollar', type: 'sale', created_on: '2026-08-10 10:00:00',
+    title: 'WTS Hermes Birkin 30 handbag $24,000', brand: 'Hermes', from_name: 'Seller',
+  });
+  const row = buildPublicationReview(source, proposal(source, {
+    candidates: [], bundle_status: 'NO_CANDIDATE', catalog_confirmation: { confirmed: false },
+    review_disposition: 'HUMAN_REVIEW', review_reasons: ['NON_WATCH_CATEGORY'],
+  }));
+  assert.equal(row.category, 'HANDBAG');
+  assert.equal(row.trading_floor_status, 'PUBLISHED_PENDING_VERIFICATION');
+  assert.equal(row.price_research_status, 'INELIGIBLE_NON_WATCH');
+  assert.equal(row.candidate.price.amount_original, 24000);
+  assert.equal(row.candidate.price.currency_original, null);
+  assert.equal(row.candidate.price.amount_usd, null);
 });
 
 test('keeps bundle parent media out of every proposed child', () => {

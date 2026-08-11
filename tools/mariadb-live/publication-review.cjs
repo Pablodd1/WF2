@@ -1,6 +1,6 @@
 'use strict';
 
-const { extractPriceObservations, explicitIntent } = require('../../api/_lib/normalization-v4.cjs');
+const { extractPriceObservations, explicitIntent, parseNumber } = require('../../api/_lib/normalization-v4.cjs');
 const { classify } = require('./audit-non-watch.cjs');
 
 const ACCEPTABLE_PRICE_EVIDENCE = new Set(['explicit_line_currency', 'section_context', 'message_context']);
@@ -75,9 +75,30 @@ function sellerEvidence(source) {
   };
 }
 
+function currencyUnconfirmedSourcePrice(candidate) {
+  const rawLine = text(candidate?.raw_line ?? candidate?.rawLine);
+  if (!rawLine) return null;
+
+  // A bare dollar sign is useful source evidence, but it is not proof of USD.
+  // Preserve the explicitly supplied amount for Trading Floor display while
+  // leaving both currency and USD conversion unresolved for Price Research.
+  const match = rawLine.match(/(?<![A-Za-z])\$\s*([\d][\d.,]*)(?:\s*(k|thousand|m|mn|mil|mill|million|b|bn|billion)(?![A-Za-z]))?/i);
+  if (!match) return null;
+  const amount = parseNumber(match[1], match[2]);
+  if (!amount) return null;
+  return {
+    amount_original: amount,
+    currency_original: null,
+    amount_usd: null,
+    raw_price_text: match[0].trim(),
+    currency_evidence: 'bare_dollar_unconfirmed',
+    analytics_currency_evidence_eligible: false,
+  };
+}
+
 function normalizedPrice(candidate) {
   const primary = candidate?.prices?.find(price => price.is_primary) || candidate?.prices?.[0] || null;
-  if (!primary?.amount_original || !primary.currency_original) return null;
+  if (!primary?.amount_original || !primary.currency_original) return currencyUnconfirmedSourcePrice(candidate);
   return {
     amount_original: primary.amount_original,
     currency_original: primary.currency_original,
@@ -91,8 +112,7 @@ function normalizedPrice(candidate) {
 function nonWatchCandidate(source, category) {
   const raw = source.raw_data || {};
   const prices = extractPriceObservations(source.raw_message || '', {});
-  const primary = prices.find(price => price.is_primary) || prices[0] || null;
-  return {
+  const candidate = {
     raw_line: source.raw_message || null,
     brand: text(raw.brand),
     model: text(raw.model),
@@ -102,8 +122,8 @@ function nonWatchCandidate(source, category) {
     listing_type: sourceIntent(source),
     category,
     prices,
-    price: primary ? normalizedPrice({ prices }) : null,
   };
+  return { ...candidate, price: normalizedPrice(candidate) };
 }
 
 function priceResearchStatus({ category, bundleStatus, candidate, catalogConfirmation, reviewDisposition }) {
@@ -204,6 +224,7 @@ function buildPublicationReview(source, proposal) {
 module.exports = {
   ACCEPTABLE_PRICE_EVIDENCE,
   buildPublicationReview,
+  currencyUnconfirmedSourcePrice,
   mediaEvidence,
   normalizedPrice,
   priceResearchStatus,
