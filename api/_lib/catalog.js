@@ -494,10 +494,12 @@ function listCatalogSuggestions(query, { brand = null, limit = 10 } = {}) {
   if (queryKey.length < 2 && queryText.length < 2) return [];
 
   const expectedBrand = normalizeBrand(brand);
-  const candidates = [];
-  for (const entry of _sourceByBrandReference.values()) candidates.push(entry);
-  for (const [reference, entry] of _catalog) candidates.push({ ...entry, reference });
-  for (const [reference, entry] of _enriched) candidates.push({ ...entry, reference });
+  // Autocomplete is a public identity surface, so it must use only the
+  // deterministic catalog-source cache. The legacy catalog/enrichment files
+  // contain observed listing strings (for example condition/year suffixes)
+  // that remain useful as private lookup evidence but are not canonical
+  // reference suggestions.
+  const candidates = [..._sourceByBrandReference.values()];
 
   const unique = new Map();
   for (const entry of candidates) {
