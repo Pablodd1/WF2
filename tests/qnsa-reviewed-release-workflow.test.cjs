@@ -50,4 +50,8 @@ test('enabled verification requires both brands in trading and price views', () 
   assert.match(workflow, /qnsa_rolex_patek_trading_floor_source/);
   assert.match(workflow, /qnsa_rolex_patek_price_research_source/);
   assert.match(workflow, /qnsa_rolex_patek_wtb_demand_source/);
+  assert.match(workflow, /WHERE p\.brand = brands\.brand/);
+  assert.match(workflow, /WHERE d\.brand = brands\.brand/);
+  assert.doesNotMatch(workflow, /p\.canonical_brand/);
+  assert.doesNotMatch(workflow, /d\.canonical_brand/);
 });
