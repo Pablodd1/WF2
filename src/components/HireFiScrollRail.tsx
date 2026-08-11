@@ -13,7 +13,7 @@ export function HireFiScrollRail() {
 
   return (
     <aside
-      className="pointer-events-none fixed right-0 top-1/2 z-[45] -translate-y-1/2"
+      className="pointer-events-none fixed right-0 top-1/2 z-[45] hidden -translate-y-1/2 md:block"
       aria-label="Hire Fi"
     >
       <motion.a
