@@ -22,6 +22,10 @@ const sourceWidthMigration = fs.readFileSync(
   path.join(root, 'supabase/migrations/20260811193000_widen_normalized_source_fields.sql'),
   'utf8',
 );
+const normalizedStagingMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/20260811120000_mariadb_normalized_staging_import.sql'),
+  'utf8',
+);
 
 test('schema readiness is read-only and pinned to the new pipeline project', () => {
   assert.match(readiness, /SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh/);
@@ -78,4 +82,8 @@ test('normalized staging preserves long source-supplied identity fields', () => 
   assert.match(sourceWidthMigration, /BEFORE INSERT OR UPDATE ON staging\.listings/);
   assert.doesNotMatch(sourceWidthMigration, /ALTER COLUMN/);
   assert.doesNotMatch(sourceWidthMigration, /INSERT\s+INTO\s+public\.watch_records/i);
+  assert.match(normalizedStagingMigration, /left\(v_candidate->>'model', 100\)/);
+  assert.match(normalizedStagingMigration, /left\(v_candidate->>'dial_color', 50\)/);
+  assert.match(normalizedStagingMigration, /left\(v_record#>>'\{seller_public,location\}', 100\)/);
+  assert.match(normalizedStagingMigration, /'source_field_overflow', jsonb_strip_nulls/);
 });

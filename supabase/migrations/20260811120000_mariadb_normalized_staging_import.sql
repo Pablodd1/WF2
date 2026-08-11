@@ -221,13 +221,16 @@ BEGIN
       gen_random_uuid(), p_run_key, v_record->>'source_record_id', v_version.id,
       v_record->>'source_hash', v_record->>'source_candidate_hash', COALESCE(v_version.raw_text, ''),
       v_record->>'category', v_candidate->>'listing_type', v_candidate->>'listing_type', false,
-      v_candidate->>'brand', v_candidate->>'brand', v_candidate->>'model', v_candidate->>'model',
-      v_candidate->>'reference', v_candidate->>'reference', v_candidate->>'dial_color', v_candidate->>'dial_color',
+      left(v_candidate->>'brand', 100), left(v_candidate->>'brand', 100),
+      left(v_candidate->>'model', 100), left(v_candidate->>'model', 100),
+      left(v_candidate->>'reference', 100), left(v_candidate->>'reference', 100),
+      left(v_candidate->>'dial_color', 50), left(v_candidate->>'dial_color', 50),
       v_price_original, v_price_original, v_price_usd, v_currency, v_currency,
-      v_candidate#>>'{price,currency_evidence}', v_candidate->>'condition', v_candidate->>'condition', NULL,
+      v_candidate#>>'{price,currency_evidence}',
+      left(v_candidate->>'condition', 50), left(v_candidate->>'condition', 50), NULL,
       v_record#>>'{media,source_media_key}', v_record#>>'{media,source_media_url_candidate}', false,
-      v_record#>>'{seller_public,name}', v_record#>>'{seller_public,name}',
-      v_record#>>'{seller_public,location}', NULL, NULL, false,
+      left(v_record#>>'{seller_public,name}', 150), left(v_record#>>'{seller_public,name}', 150),
+      left(v_record#>>'{seller_public,location}', 100), NULL, NULL, false,
       COALESCE((v_record->>'catalog_confirmed')::boolean, false),
       COALESCE((v_record->>'catalog_confirmed')::boolean, false), true,
       CASE WHEN v_record->>'category' = 'WATCH' THEN 'pending_verification' ELSE 'classified_non_watch' END,
@@ -248,7 +251,16 @@ BEGIN
         'bundle_status', v_record->>'bundle_status',
         'exact_raw_version_lineage', true,
         'contact_publication_approved', false,
-        'rating_publication_status', 'UNVERIFIED_SOURCE_FIELD'
+        'rating_publication_status', 'UNVERIFIED_SOURCE_FIELD',
+        'source_field_overflow', jsonb_strip_nulls(jsonb_build_object(
+          'brand', CASE WHEN length(v_candidate->>'brand') > 100 THEN v_candidate->>'brand' END,
+          'model', CASE WHEN length(v_candidate->>'model') > 100 THEN v_candidate->>'model' END,
+          'reference', CASE WHEN length(v_candidate->>'reference') > 100 THEN v_candidate->>'reference' END,
+          'dial_color', CASE WHEN length(v_candidate->>'dial_color') > 50 THEN v_candidate->>'dial_color' END,
+          'condition', CASE WHEN length(v_candidate->>'condition') > 50 THEN v_candidate->>'condition' END,
+          'seller_name', CASE WHEN length(v_record#>>'{seller_public,name}') > 150 THEN v_record#>>'{seller_public,name}' END,
+          'seller_location', CASE WHEN length(v_record#>>'{seller_public,location}') > 100 THEN v_record#>>'{seller_public,location}' END
+        ))
       )
     )
     ON CONFLICT (normalization_run_key, source_record_id)
