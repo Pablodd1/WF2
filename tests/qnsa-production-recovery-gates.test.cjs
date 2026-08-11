@@ -18,6 +18,10 @@ const importer = fs.readFileSync(
   path.join(root, 'tools/mariadb-live/import-normalized-staging.cjs'),
   'utf8',
 );
+const sourceWidthMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/20260811193000_widen_normalized_source_fields.sql'),
+  'utf8',
+);
 
 test('schema readiness is read-only and pinned to the new pipeline project', () => {
   assert.match(readiness, /SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh/);
@@ -48,4 +52,26 @@ test('normalized importer supports a resumable bounded canary', () => {
   assert.match(importer, /partial: true/);
   assert.match(importer, /publication_writes: 0/);
   assert.match(importer, /checkpoint is already beyond the requested canary boundary/);
+});
+
+test('normalized staging preserves long source-supplied identity fields', () => {
+  assert.match(staging, /20260811193000_widen_normalized_source_fields\.sql/);
+  for (const column of [
+    'brand_original',
+    'brand_normalized',
+    'model_original',
+    'model_normalized',
+    'reference_original',
+    'reference_normalized',
+    'dial_color_original',
+    'dial_color_normalized',
+    'condition_original',
+    'condition_normalized',
+    'user_name',
+    'from_name',
+    'location',
+  ]) {
+    assert.match(sourceWidthMigration, new RegExp(`ALTER COLUMN ${column} TYPE TEXT`));
+  }
+  assert.doesNotMatch(sourceWidthMigration, /INSERT\s+INTO\s+public\.watch_records/i);
 });
