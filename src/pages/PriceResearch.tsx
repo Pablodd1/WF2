@@ -1302,6 +1302,28 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
             {/* ── Stats Cards ──────────────────────────────────── */}
             <div className="grid grid-cols-1 gap-6 mb-8">
+              <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 20 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 6 }}>Reference activity</h3>
+                <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.55, marginBottom: 14 }}>
+                  Every source listing counts toward marketplace activity. Only qualified, positively priced WTS evidence is used in the price range and graphics.
+                </p>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Reference listing activity">
+                  {[
+                    ['All source listings', data.reconciliation?.total_tracked_listings ?? data.total_tracked_listings ?? data.totalListings ?? 0],
+                    ['Priced WTS used', data.reconciliation?.wts_eligible_analytics_count ?? data.wts_eligible_analytics_count ?? data.count ?? 0],
+                    ['Price not supplied', data.reconciliation?.excluded_breakdown?.unpriced ?? data.excluded_breakdown?.unpriced ?? 0],
+                    ['WTB demand', data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? 0],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} style={{ background: LIGHT_GRAY, borderRadius: 8, padding: '11px 12px' }}>
+                      <div style={{ color: NAVY, fontSize: 20, fontWeight: 800 }}>{Number(value).toLocaleString()}</div>
+                      <div style={{ color: MUTED, fontSize: 11, marginTop: 2 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ color: '#8a6500', fontSize: 11, marginTop: 10 }}>
+                  Price not supplied records remain visible after priced listings for the same model/reference and are excluded from Minimum, Average, Maximum, and chart calculations.
+                </div>
+              </div>
               {/* Pricing Summary */}
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing</h3>
