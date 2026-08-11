@@ -149,31 +149,73 @@ jobs:
           SET statement_timeout = '10min';
           WITH brand_counts AS (
             SELECT
-              brand_normalized AS brand,
+              l.brand_normalized AS brand,
               count(*) AS trading_candidates,
-              count(*) FILTER (WHERE listing_type = 'WTS') AS wts,
-              count(*) FILTER (WHERE listing_type = 'WTB') AS wtb,
-              count(*) FILTER (WHERE price_normalized IS NULL OR price_normalized <= 0) AS no_price,
-              count(*) FILTER (WHERE public_image_eligible) AS with_source_image
-            FROM public.qnsa_rolex_patek_reviewed_release_base
-            GROUP BY brand_normalized
+              count(*) FILTER (WHERE upper(COALESCE(l.listing_type, l.intent, '')) = 'WTS') AS wts,
+              count(*) FILTER (WHERE upper(COALESCE(l.listing_type, l.intent, '')) = 'WTB') AS wtb,
+              count(*) FILTER (WHERE l.price_normalized IS NULL OR l.price_normalized <= 0) AS no_price,
+              count(*) FILTER (
+                WHERE COALESCE(NULLIF(btrim(l.image_url), ''), NULLIF(btrim(l.source_media_url_candidate), ''))
+                  ~* '^https?://[^[:space:]]+$'
+              ) AS with_source_image,
+              count(*) FILTER (
+                WHERE upper(COALESCE(l.listing_type, l.intent, '')) = 'WTS'
+                  AND l.price_usd > 0
+                  AND NULLIF(btrim(l.reference_normalized), '') IS NOT NULL
+                  AND (
+                    l.currency_normalized IN ('USD', 'USDT')
+                    OR (l.conversion_rate > 0 AND l.conversion_timestamp IS NOT NULL)
+                  )
+              ) AS priced_wts_before_raw_reference_gate
+            FROM staging.listings AS l
+            JOIN staging.mariadb_normalization_import_checkpoints AS c
+              ON c.run_key = l.normalization_run_key
+            WHERE l.normalization_run_key = '$($env:NORMALIZED_RUN_KEY)'
+              AND l.brand_normalized IN ('Rolex', 'Patek Philippe')
+              AND upper(COALESCE(l.category, '')) = 'WATCH'
+              AND l.parent_id IS NULL
+              AND COALESCE(l.is_bundle, false) = false
+              AND upper(COALESCE(l.listing_type, l.intent, '')) IN ('WTS', 'WTB')
+              AND COALESCE(l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
+              AND c.status = 'NORMALIZATION_STAGED'
+              AND c.error_rows = 0
+              AND l.raw_message_version_id IS NOT NULL
+              AND COALESCE(l.source_record_id, '') <> ''
+              AND l.source_hash ~ '^[0-9a-f]{64}$'
+              AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
+              AND lower(COALESCE(l.trading_floor_status, '')) NOT IN (
+                'bundle_child_pending_review', 'bundle_pending_separation',
+                'suppressed_exact_duplicate', 'withdrawn', 'rejected',
+                'hidden', 'deleted', 'archived'
+              )
+              AND upper(COALESCE(l.verdict, '')) NOT IN (
+                'WITHDRAWN', 'REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED'
+              )
+              AND lower(COALESCE(l.price_research_status, '')) <> 'suppressed_exact_duplicate'
+            GROUP BY l.brand_normalized
           )
           SELECT jsonb_build_object(
             'brands', COALESCE((SELECT jsonb_agg(to_jsonb(brand_counts) ORDER BY brand) FROM brand_counts), '[]'::jsonb),
-            'public_trading_rows_while_disabled', (SELECT count(*) FROM public.qnsa_rolex_patek_trading_floor_source),
-            'public_price_rows_while_disabled', (SELECT count(*) FROM public.qnsa_rolex_patek_price_research_source),
-            'public_wtb_rows_while_disabled', (SELECT count(*) FROM public.qnsa_rolex_patek_wtb_demand_source)
+            'controls', (
+              SELECT jsonb_agg(to_jsonb(control) ORDER BY canonical_brand)
+              FROM public.qnsa_two_brand_release_control AS control
+              WHERE canonical_brand IN ('Rolex', 'Patek Philippe')
+            )
           ) AS audit;
           "@
           $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
           $audit = $result[0].audit
           $brands = @($audit.brands)
+          $controls = @($audit.controls)
           if ($brands.Count -ne 2 -or
               @($brands | Where-Object { [long]$_.trading_candidates -le 0 }).Count -ne 0 -or
-              [long]$audit.public_trading_rows_while_disabled -ne 0 -or
-              [long]$audit.public_price_rows_while_disabled -ne 0 -or
-              [long]$audit.public_wtb_rows_while_disabled -ne 0) {
+              $controls.Count -ne 2 -or
+              @($controls | Where-Object {
+                $_.trading_floor_enabled -eq $true -or
+                $_.price_research_enabled -eq $true -or
+                $_.enabled_run_key -ne $env:NORMALIZED_RUN_KEY
+              }).Count -ne 0) {
             $audit | ConvertTo-Json -Depth 8
             throw 'Reviewed-release candidate audit failed.'
           }
@@ -208,33 +250,34 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
           SET statement_timeout = '10min';
-          WITH trading AS (
-            SELECT canonical_brand AS brand, count(*) AS rows,
-              count(*) FILTER (WHERE intent = 'WTS') AS wts,
-              count(*) FILTER (WHERE intent = 'WTB') AS wtb,
-              count(*) FILTER (WHERE workbook_price_usd IS NULL) AS no_price,
-              count(*) FILTER (WHERE has_exact_source_image) AS with_image
-            FROM public.qnsa_rolex_patek_trading_floor_source
-            GROUP BY canonical_brand
-          ), price AS (
-            SELECT canonical_brand AS brand, count(*) AS rows
-            FROM public.qnsa_rolex_patek_price_research_source
-            GROUP BY canonical_brand
-          ), demand AS (
-            SELECT canonical_brand AS brand, count(*) AS rows
-            FROM public.qnsa_rolex_patek_wtb_demand_source
-            GROUP BY canonical_brand
+          WITH brands(brand) AS (VALUES ('Rolex'::text), ('Patek Philippe'::text)),
+          evidence AS (
+            SELECT brand,
+              EXISTS (
+                SELECT 1 FROM public.qnsa_rolex_patek_trading_floor_source t
+                WHERE t.canonical_brand = brands.brand LIMIT 1
+              ) AS has_trading,
+              EXISTS (
+                SELECT 1 FROM public.qnsa_rolex_patek_price_research_source p
+                WHERE p.canonical_brand = brands.brand LIMIT 1
+              ) AS has_price_research,
+              EXISTS (
+                SELECT 1 FROM public.qnsa_rolex_patek_wtb_demand_source d
+                WHERE d.canonical_brand = brands.brand LIMIT 1
+              ) AS has_wtb_demand
+            FROM brands
           )
           SELECT jsonb_build_object(
-            'trading', COALESCE((SELECT jsonb_agg(to_jsonb(trading) ORDER BY brand) FROM trading), '[]'::jsonb),
-            'price_research', COALESCE((SELECT jsonb_agg(to_jsonb(price) ORDER BY brand) FROM price), '[]'::jsonb),
-            'wtb_demand', COALESCE((SELECT jsonb_agg(to_jsonb(demand) ORDER BY brand) FROM demand), '[]'::jsonb)
+            'brands', COALESCE((SELECT jsonb_agg(to_jsonb(evidence) ORDER BY brand) FROM evidence), '[]'::jsonb)
           ) AS release;
           "@
           $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
           $release = $result[0].release
-          if (@($release.trading).Count -ne 2 -or @($release.price_research).Count -ne 2) {
+          $brands = @($release.brands)
+          if ($brands.Count -ne 2 -or @($brands | Where-Object {
+            $_.has_trading -ne $true -or $_.has_price_research -ne $true
+          }).Count -ne 0) {
             $release | ConvertTo-Json -Depth 8
             throw 'Both Rolex and Patek must be present in Trading Floor and Price Research.'
           }
