@@ -61,7 +61,7 @@ test('free-text search is case-insensitive and matches all terms without requiri
     exactDialVariants: [],
     search: 'pAtEk 5712',
   });
-  assert.match(legacyParams.get('or'), /brand_scope\.ilike\.\*pAtEk\*/);
+  assert.match(legacyParams.get('or'), /^\(.*brand_scope\.ilike\.\*pAtEk\*.*\)$/);
   assert.equal(legacyParams.get('normalized_reference'), 'in.(5712)');
 });
 
