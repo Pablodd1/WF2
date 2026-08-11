@@ -240,21 +240,29 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
           SET statement_timeout = '10min';
-          WITH brands(brand) AS (VALUES ('Rolex'::text), ('Patek Philippe'::text)),
+          WITH brands(brand, references) AS (
+            VALUES
+              ('Rolex'::text, ARRAY['116500LN', '116500']::text[]),
+              ('Patek Philippe'::text, ARRAY[
+                '5712', '5712/1A', '5712/1A-001', '5712G', '5712G-001',
+                '5712R', '5712R-001', '5712/1R', '5712/1R-001'
+              ]::text[])
+          ),
           evidence AS (
             SELECT brand,
               EXISTS (
                 SELECT 1 FROM public.qnsa_rolex_patek_trading_floor_source t
-                WHERE t.canonical_brand = brands.brand LIMIT 1
+                WHERE t.canonical_brand = brands.brand
+                  AND t.normalized_reference = ANY(brands.references)
+                LIMIT 1
               ) AS has_trading,
               EXISTS (
                 SELECT 1 FROM public.qnsa_rolex_patek_price_research_source p
-                WHERE p.brand = brands.brand LIMIT 1
+                WHERE p.brand = brands.brand
+                  AND p.reference = ANY(brands.references)
+                LIMIT 1
               ) AS has_price_research,
-              EXISTS (
-                SELECT 1 FROM public.qnsa_rolex_patek_wtb_demand_source d
-                WHERE d.brand = brands.brand LIMIT 1
-              ) AS has_wtb_demand
+              references AS verified_references
             FROM brands
           )
           SELECT jsonb_build_object(

@@ -49,9 +49,9 @@ test('enabled verification requires both brands in trading and price views', () 
   assert.match(workflow, /Both Rolex and Patek must be present in Trading Floor and Price Research/);
   assert.match(workflow, /qnsa_rolex_patek_trading_floor_source/);
   assert.match(workflow, /qnsa_rolex_patek_price_research_source/);
-  assert.match(workflow, /qnsa_rolex_patek_wtb_demand_source/);
-  assert.match(workflow, /WHERE p\.brand = brands\.brand/);
-  assert.match(workflow, /WHERE d\.brand = brands\.brand/);
+  assert.match(workflow, /ARRAY\['116500LN', '116500'\]/);
+  assert.match(workflow, /'5712\/1A-001'/);
+  assert.match(workflow, /p\.reference = ANY\(brands\.references\)/);
+  assert.match(workflow, /t\.normalized_reference = ANY\(brands\.references\)/);
   assert.doesNotMatch(workflow, /p\.canonical_brand/);
-  assert.doesNotMatch(workflow, /d\.canonical_brand/);
 });
