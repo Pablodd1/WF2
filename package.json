@@ -35,6 +35,7 @@
     "mariadb:normalize-local": "node tools/mariadb-live/normalize-local.cjs",
     "mariadb:reconcile-normalization": "node tools/mariadb-live/reconcile-normalization-segments.cjs",
     "mariadb:audit-publication-readiness": "node tools/mariadb-live/audit-publication-readiness.cjs",
+    "mariadb:audit-exact-media": "node tools/mariadb-live/audit-exact-source-media.cjs",
     "mariadb:complete-local-normalization": "node tools/mariadb-live/complete-local-normalization.cjs",
     "mariadb:stage-normalized": "node tools/mariadb-live/import-normalized-staging.cjs",
     "mariadb:monitor": "node tools/mariadb-live/monitor.cjs",
