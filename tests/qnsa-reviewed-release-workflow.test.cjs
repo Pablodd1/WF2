@@ -34,6 +34,7 @@ test('workflow applies only the reviewed release migrations', () => {
 });
 
 test('audit proves release stays dark before enablement', () => {
+  assert.match(workflow, /SET statement_timeout = '10min'/);
   assert.match(workflow, /public_trading_rows_while_disabled/);
   assert.match(workflow, /public_price_rows_while_disabled/);
   assert.match(workflow, /public_wtb_rows_while_disabled/);
