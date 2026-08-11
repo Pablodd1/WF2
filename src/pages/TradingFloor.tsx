@@ -1455,7 +1455,7 @@ function getListingMeta(listing: ListingRecord) {
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'
     : sourcePrice
-      ? 'Original source price · no verified USD conversion'
+      ? 'Original source price · no USD conversion'
       : reviewedWorkbookUsd !== null
         ? 'Workbook-reviewed USD - not in averages'
         : workbookPriceNeedsReview
@@ -1521,14 +1521,15 @@ function sourceTextIncludesCurrency(sourceText: string, currency: string) {
 function formatSourcePrice(listing: ListingRecord) {
   const currency = cleanValue(listing.source_currency) || cleanValue(listing.currency);
   const sourceText = cleanValue(listing.source_price_text);
+  const currencyUnconfirmed = cleanValue(listing.price_evidence_status).toUpperCase() === 'CURRENCY_UNCONFIRMED';
   if (sourceText && currency) {
     return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (sourceText) return `${sourceText} · currency not supplied`;
+  if (sourceText) return `${sourceText} · currency ${currencyUnconfirmed ? 'not confirmed' : 'not supplied'}`;
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
   if (!Number.isFinite(amount) || amount <= 0) return '';
-  if (!currency) return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)} · currency not supplied`;
+  if (!currency) return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)} · currency ${currencyUnconfirmed ? 'not confirmed' : 'not supplied'}`;
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 

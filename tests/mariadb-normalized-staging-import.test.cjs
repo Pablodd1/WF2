@@ -74,6 +74,20 @@ test('WTB with no supplied price remains a single Trading Floor demand candidate
   assert.equal(row.price_research_status, 'DEMAND_PENDING_HUMAN_APPROVAL');
 });
 
+test('bare-dollar evidence is transported as a source amount with no currency or USD conversion', () => {
+  const source = sourceRecord({ id: 'bare-dollar-1', type: 'sale', title: 'Rolex 116500LN white $23,995' });
+  const row = stagingRecord(source, proposal(source, {
+    brand: 'Rolex', reference: '116500LN', listing_type: 'WTS', dial_color: 'White', prices: [],
+    raw_line: source.raw_message,
+  }, { review_disposition: 'HUMAN_REVIEW', review_reasons: ['CURRENCY_AMBIGUOUS'] }));
+  assert.equal(row.materialization, 'SINGLE');
+  assert.equal(row.candidate.price.amount_original, 23995);
+  assert.equal(row.candidate.price.currency_original, null);
+  assert.equal(row.candidate.price.amount_usd, null);
+  assert.equal(row.candidate.price.currency_evidence, 'bare_dollar_unconfirmed');
+  assert.equal(row.price_research_status, 'INELIGIBLE_CURRENCY_OR_FX');
+});
+
 test('bundle parents and their children are deferred from materialization', () => {
   const source = sourceRecord({ id: 'bundle-1', type: 'sale', is_bundle: 1, title: 'Rolex 116500LN USD 28000 / Patek 5712 USD 90000' });
   const row = stagingRecord(source, proposal(source, {
