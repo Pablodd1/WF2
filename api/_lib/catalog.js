@@ -18,6 +18,8 @@ let _collapsedByBrandReference = null;
 let _collapsedByReference = null;
 let _curationOverrides = null;
 let _curationAliases = null;
+const LOOKUP_CACHE_MAX = 100_000;
+const _lookupCache = new Map();
 
 function normalizeRef(ref) {
   return String(ref || '').toUpperCase().replace(/[^A-Z0-9/\\-]/g, '');
@@ -290,7 +292,7 @@ function legacyMatch(map, reference, expectedBrand, matchType) {
   return null;
 }
 
-function lookupCatalog(reference, expectedBrand = null) {
+function lookupCatalogUncached(reference, expectedBrand = null) {
   loadCatalogs();
   const empty = {
     found: false,
@@ -352,6 +354,20 @@ function lookupCatalog(reference, expectedBrand = null) {
   // Prefer a modeled canonical-family candidate above, but retain that exact
   // evidence when no useful catalog candidate exists.
   return incompleteExact || empty;
+}
+
+function lookupCatalog(reference, expectedBrand = null) {
+  const cacheKey = `${normalizeBrand(expectedBrand)}|${normalizeRef(reference)}`;
+  const cached = _lookupCache.get(cacheKey);
+  if (cached) return cached;
+
+  const result = lookupCatalogUncached(reference, expectedBrand);
+  if (_lookupCache.size >= LOOKUP_CACHE_MAX) {
+    const oldest = _lookupCache.keys().next().value;
+    _lookupCache.delete(oldest);
+  }
+  _lookupCache.set(cacheKey, result);
+  return result;
 }
 
 function listEquivalentReferences(reference, expectedBrand = null) {
