@@ -52,7 +52,7 @@ function sellerEvidence(source) {
       phone: null,
       rating: null,
     },
-    private_verified_source: {
+    private_source_evidence: {
       phone: text(raw.from_number),
       phone_code: text(raw.phone_code),
       company_id: raw.company_id == null ? null : raw.company_id,

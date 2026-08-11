@@ -39,7 +39,7 @@ test('keeps a catalog-confirmed no-price WTB on the Trading Floor demand lane', 
   assert.equal(row.price_research_status, 'DEMAND_PENDING_HUMAN_APPROVAL');
   assert.equal(row.candidate.price, null);
   assert.equal(row.seller.public.phone, null);
-  assert.equal(row.seller.private_verified_source.phone, '+15551234567');
+  assert.equal(row.seller.private_source_evidence.phone, '+15551234567');
 });
 
 test('never admits a bare-dollar WTS price into Price Research', () => {

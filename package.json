@@ -34,6 +34,7 @@
     "mariadb:audit-non-watch": "node tools/mariadb-live/audit-non-watch.cjs",
     "mariadb:normalize-local": "node tools/mariadb-live/normalize-local.cjs",
     "mariadb:reconcile-normalization": "node tools/mariadb-live/reconcile-normalization-segments.cjs",
+    "mariadb:audit-publication-readiness": "node tools/mariadb-live/audit-publication-readiness.cjs",
     "mariadb:monitor": "node tools/mariadb-live/monitor.cjs",
     "mariadb:continuous-worker": "node tools/mariadb-live/continuous-worker.cjs",
     "inspect:price-research-cohort": "node tools/price-quality/inspect-live-price-cohort.cjs",

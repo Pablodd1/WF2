@@ -94,3 +94,19 @@ test('fails closed when a shard has not emitted completion evidence', async () =
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('reconciles a complete archive represented entirely by finished shards', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-normalization-shards-only-'));
+  try {
+    writeSegment(path.join(root, 'shards', 'shard-01'), 1, 3);
+    writeSegment(path.join(root, 'shards', 'shard-02'), 4, 6);
+    const shardOnlyEnv = env(root);
+    delete shardOnlyEnv.MARIADB_NORMALIZATION_PREFIX_DIR;
+    const manifest = await buildManifest({ env: shardOnlyEnv });
+    assert.equal(manifest.segment_count, 2);
+    assert.equal(manifest.totals.input_rows, 6);
+    assert.equal(manifest.source_coverage_reconciled, true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

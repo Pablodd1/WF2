@@ -117,25 +117,26 @@ async function buildManifest(options = {}) {
     10_000_000,
     'MARIADB_NORMALIZATION_SOURCE_ROWS',
   );
-  const prefixDirectory = path.resolve(env.MARIADB_NORMALIZATION_PREFIX_DIR || '');
   const shardsRoot = path.resolve(env.MARIADB_NORMALIZATION_SHARDS_ROOT || '');
   const output = path.resolve(env.MARIADB_NORMALIZATION_MANIFEST_OUTPUT || path.join(shardsRoot, 'full-normalization-manifest.json'));
-  if (!env.MARIADB_NORMALIZATION_PREFIX_DIR) throw new Error('MARIADB_NORMALIZATION_PREFIX_DIR is required');
   if (!env.MARIADB_NORMALIZATION_SHARDS_ROOT) throw new Error('MARIADB_NORMALIZATION_SHARDS_ROOT is required');
   if (!fs.existsSync(shardsRoot)) throw new Error(`Shard root does not exist: ${shardsRoot}`);
-
-  const prefixFiles = segmentFiles(prefixDirectory);
-  requiredFile(prefixFiles.proposals, 'prefix proposals');
-  requiredFile(prefixFiles.errors, 'prefix errors');
-  const prefixProgress = await readExistingProgress(prefixFiles);
-  if (prefixProgress.inputRows < 1) throw new Error('Prefix evidence is empty');
-  const segments = [await inspectSegment({
-    directory: prefixDirectory,
-    name: 'prefix',
-    sourceStartRow: 1,
-    sourceEndRow: prefixProgress.inputRows,
-    requireCompletion: false,
-  })];
+  const segments = [];
+  if (env.MARIADB_NORMALIZATION_PREFIX_DIR) {
+    const prefixDirectory = path.resolve(env.MARIADB_NORMALIZATION_PREFIX_DIR);
+    const prefixFiles = segmentFiles(prefixDirectory);
+    requiredFile(prefixFiles.proposals, 'prefix proposals');
+    requiredFile(prefixFiles.errors, 'prefix errors');
+    const prefixProgress = await readExistingProgress(prefixFiles);
+    if (prefixProgress.inputRows < 1) throw new Error('Prefix evidence is empty');
+    segments.push(await inspectSegment({
+      directory: prefixDirectory,
+      name: 'prefix',
+      sourceStartRow: 1,
+      sourceEndRow: prefixProgress.inputRows,
+      requireCompletion: false,
+    }));
+  }
 
   const shardDirectories = fs.readdirSync(shardsRoot, { withFileTypes: true })
     .filter(entry => entry.isDirectory())
