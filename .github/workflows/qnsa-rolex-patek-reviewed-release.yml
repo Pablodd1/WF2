@@ -249,11 +249,11 @@ jobs:
               ) AS has_trading,
               EXISTS (
                 SELECT 1 FROM public.qnsa_rolex_patek_price_research_source p
-                WHERE p.canonical_brand = brands.brand LIMIT 1
+                WHERE p.brand = brands.brand LIMIT 1
               ) AS has_price_research,
               EXISTS (
                 SELECT 1 FROM public.qnsa_rolex_patek_wtb_demand_source d
-                WHERE d.canonical_brand = brands.brand LIMIT 1
+                WHERE d.brand = brands.brand LIMIT 1
               ) AS has_wtb_demand
             FROM brands
           )
