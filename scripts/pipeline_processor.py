@@ -9,7 +9,7 @@ CONDITIONS_MAP = {
     4: 'Used - Fair', 5: 'Pre-owned', 6: 'Used'
 }
 
-DO_LISTINGS_BASE = "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/"
+DO_LISTINGS_BASE = "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/"
 
 BRAND_ALIASES = {
     "pp": "Patek Philippe", "patek": "Patek Philippe",
