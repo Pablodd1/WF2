@@ -147,6 +147,7 @@ test('analytics uses exact dial cohorts, minimum two observations and auditable 
   assert.match(analytics, /s\.q3 \+ \(3\.0 \* \(s\.q3 - s\.q1\)\)/);
   assert.match(analytics, /greatest\(1000::numeric, round\(s\.median::numeric \* 0\.25\)\)/);
   assert.match(analytics, /f\.source_observation_count >= 2/);
+  assert.doesNotMatch(analytics, /o\.\*,\s*o\.analytics_dial,/);
   assert.match(analytics, /'INSUFFICIENT_MARKET_DATA'/);
   assert.match(analytics, /'BELOW_MARKET_PLAUSIBILITY_FLOOR'/);
   assert.match(analytics, /'BELOW_IQR_FENCE'/);

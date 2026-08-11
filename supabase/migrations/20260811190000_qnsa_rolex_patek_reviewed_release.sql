@@ -584,7 +584,6 @@ WITH observations AS (
 )
 SELECT
   o.*,
-  o.analytics_dial,
   f.source_observation_count,
   f.q1,
   f.median,
