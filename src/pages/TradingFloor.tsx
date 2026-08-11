@@ -181,6 +181,19 @@ function hasListingImage(listing: ListingRecord) {
   return listingImageUrl(listing) !== null;
 }
 
+function locationMatches(listingLocation: unknown, requestedLocation: unknown) {
+  const normalize = (value: unknown) => cleanValue(
+    typeof value === 'string' || typeof value === 'number' ? value : null,
+  )
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const location = normalize(listingLocation);
+  const requested = normalize(requestedLocation);
+  return requested.length > 0 && location.includes(requested);
+}
+
 /** Detects bundle/multi-watch listings */
 function isBundleListing(listing: ListingRecord) {
   const listingType = cleanValue(listing.listing_type).toUpperCase();
@@ -255,7 +268,7 @@ export default function TradingFloor() {
     if (pricedOnly && getListingMeta(listing).priceLabel.includes('not supplied')) return false;
     if (locationFilter) {
       const location = cleanValue(listing.location || listing.seller_country || listing.region);
-      if (location.toLocaleLowerCase() !== locationFilter.toLocaleLowerCase()) return false;
+      if (!locationMatches(location, locationFilter)) return false;
     }
     return true;
   }), [imagesOnly, listings, locationFilter, pricedOnly]);

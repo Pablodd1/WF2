@@ -17,6 +17,8 @@ test('location is searchable on desktop and mobile and reaches the reviewed API'
   assert.match(ui, /id="location-filter"[\s\S]*type="search"/);
   assert.match(ui, /placeholder="City, region, or country"/);
   assert.match(ui, /params\.set\('region', locationFilter\)/);
+  assert.match(ui, /location\.includes\(requested\)/);
+  assert.match(ui, /if \(!locationMatches\(location, locationFilter\)\) return false/);
   assert.match(api, /queryParams\.set\('location', `ilike\.\$\{regionPattern\}`\)/);
   assert.match(api, /location\.ilike\.\$\{pattern\}/);
   assert.match(api, /locationMatches\(record\.location, region\)/);
