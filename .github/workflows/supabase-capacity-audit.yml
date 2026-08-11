@@ -11,7 +11,7 @@ on:
 jobs:
   audit-capacity:
     if: ${{ inputs.confirmation == 'AUDIT_SUPABASE_CAPACITY' }}
-    runs-on: [self-hosted, Windows, X64, watchfacts-raw-import]
+    runs-on: windows-latest
     environment: production
     timeout-minutes: 15
     permissions:

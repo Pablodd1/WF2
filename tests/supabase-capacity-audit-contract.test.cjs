@@ -9,6 +9,7 @@ const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflow
 
 test('capacity audit remains explicitly read-only and pinned to the production pipeline project', () => {
   assert.match(workflow, /SUPABASE_PROJECT_REF:\s*qnsafosakvonzgfcsphh/);
+  assert.match(workflow, /runs-on:\s*windows-latest/);
   assert.match(workflow, /read_only\s*=\s*\$true/);
   assert.doesNotMatch(workflow, /\b(?:DELETE|TRUNCATE|DROP|ALTER|UPDATE|INSERT)\b/i);
 });
