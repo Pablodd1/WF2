@@ -2,6 +2,7 @@ import { ArrowRight, Bot, Check, Search, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Footer } from '@/components/Footer';
 import { MarketHeader, LUXFI_URL } from '@/components/MarketHeader';
+import { MarketActivityTicker } from '@/components/MarketActivityTicker';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 const networkStats = [
@@ -40,14 +41,7 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-[#f3ecdf] text-[#211b15]">
-      <div className="overflow-hidden bg-[#211b15] py-2 text-[#d8b36b]" aria-label={t('Live market activity')}>
-        <div className="mx-auto flex max-w-7xl justify-center gap-10 overflow-hidden whitespace-nowrap px-4 font-mono text-[10px] uppercase tracking-[0.08em] sm:justify-between">
-          <span>Patek 5712/1A matched</span>
-          <span className="hidden md:inline">AP Royal Oak — verified dealer</span>
-          <span className="hidden lg:inline">Rolex 126610LN price confirmed</span>
-          <span className="hidden xl:inline">WTB posted · Miami network</span>
-        </div>
-      </div>
+      <MarketActivityTicker />
       <MarketHeader className="sticky top-0" landing />
 
       <section className="border-b border-[#3f3324]/15 px-5 py-20 text-center sm:px-8 sm:py-28 lg:px-12 lg:py-32">
