@@ -7,6 +7,7 @@ const test = require('node:test');
 
 const root = path.join(__dirname, '..');
 const ui = fs.readFileSync(path.join(root, 'src/pages/TradingFloor.tsx'), 'utf8');
+const hireFiRail = fs.readFileSync(path.join(root, 'src/components/HireFiScrollRail.tsx'), 'utf8');
 const api = fs.readFileSync(path.join(root, 'api/reviewed-market-inventory.js'), 'utf8');
 const migration = fs.readFileSync(
   path.join(root, 'supabase/migrations/20260811130000_trading_floor_location_and_media_contract.sql'),
@@ -22,6 +23,11 @@ test('location is searchable on desktop and mobile and reaches the reviewed API'
   assert.match(api, /queryParams\.set\('location', `ilike\.\$\{regionPattern\}`\)/);
   assert.match(api, /location\.ilike\.\$\{pattern\}/);
   assert.match(api, /locationMatches\(record\.location, region\)/);
+});
+
+test('the Hire Fi rail cannot intercept mobile search and filter controls', () => {
+  assert.match(hireFiRail, /className="[^"]*hidden[^"]*md:block[^"]*"/);
+  assert.match(ui, /onClick=\{\(\) => setFiltersOpen\(true\)\}/);
 });
 
 test('bundle media and missing URLs cannot create an image frame', () => {
