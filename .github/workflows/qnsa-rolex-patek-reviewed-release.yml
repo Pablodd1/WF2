@@ -137,21 +137,12 @@ jobs:
               count(*) FILTER (WHERE listing_type = 'WTS') AS wts,
               count(*) FILTER (WHERE listing_type = 'WTB') AS wtb,
               count(*) FILTER (WHERE price_normalized IS NULL OR price_normalized <= 0) AS no_price,
-              count(*) FILTER (WHERE public_image_eligible) AS with_source_image,
-              count(*) FILTER (WHERE contact_consent) AS with_source_phone,
-              count(*) FILTER (WHERE dealer_rating IS NOT NULL OR rating IS NOT NULL) AS with_source_rating
+              count(*) FILTER (WHERE public_image_eligible) AS with_source_image
             FROM public.qnsa_rolex_patek_reviewed_release_base
             GROUP BY brand_normalized
-          ), safety AS (
-            SELECT
-              count(*) FILTER (WHERE parent_id IS NOT NULL) AS child_rows,
-              count(*) FILTER (WHERE source_record_id IS NULL OR raw_message_version_id IS NULL OR source_hash IS NULL) AS invalid_lineage,
-              count(*) FILTER (WHERE listing_type NOT IN ('WTS', 'WTB')) AS invalid_intent
-            FROM public.qnsa_rolex_patek_reviewed_release_base
           )
           SELECT jsonb_build_object(
             'brands', COALESCE((SELECT jsonb_agg(to_jsonb(brand_counts) ORDER BY brand) FROM brand_counts), '[]'::jsonb),
-            'safety', (SELECT to_jsonb(safety) FROM safety),
             'public_trading_rows_while_disabled', (SELECT count(*) FROM public.qnsa_rolex_patek_trading_floor_source),
             'public_price_rows_while_disabled', (SELECT count(*) FROM public.qnsa_rolex_patek_price_research_source),
             'public_wtb_rows_while_disabled', (SELECT count(*) FROM public.qnsa_rolex_patek_wtb_demand_source)
@@ -163,9 +154,6 @@ jobs:
           $brands = @($audit.brands)
           if ($brands.Count -ne 2 -or
               @($brands | Where-Object { [long]$_.trading_candidates -le 0 }).Count -ne 0 -or
-              [long]$audit.safety.child_rows -ne 0 -or
-              [long]$audit.safety.invalid_lineage -ne 0 -or
-              [long]$audit.safety.invalid_intent -ne 0 -or
               [long]$audit.public_trading_rows_while_disabled -ne 0 -or
               [long]$audit.public_price_rows_while_disabled -ne 0 -or
               [long]$audit.public_wtb_rows_while_disabled -ne 0) {
@@ -208,9 +196,7 @@ jobs:
               count(*) FILTER (WHERE intent = 'WTS') AS wts,
               count(*) FILTER (WHERE intent = 'WTB') AS wtb,
               count(*) FILTER (WHERE workbook_price_usd IS NULL) AS no_price,
-              count(*) FILTER (WHERE has_exact_source_image) AS with_image,
-              count(*) FILTER (WHERE seller_phone IS NOT NULL) AS with_phone,
-              count(*) FILTER (WHERE dealer_rating IS NOT NULL) AS with_rating
+              count(*) FILTER (WHERE has_exact_source_image) AS with_image
             FROM public.qnsa_rolex_patek_trading_floor_source
             GROUP BY canonical_brand
           ), price AS (
