@@ -56,12 +56,12 @@ SELECT
     NULLIF(btrim(l.user_name), ''),
     NULLIF(btrim(l.from_name), ''),
     NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_name}'), '')
-  ) AS seller_name,
-  COALESCE(NULLIF(btrim(l.user_name), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_name}'), '')) AS user_name,
-  COALESCE(NULLIF(btrim(l.from_name), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_name}'), '')) AS from_name,
-  COALESCE(NULLIF(btrim(l.contact_number), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_number}'), '')) AS contact_number,
-  COALESCE(NULLIF(btrim(l.from_number), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_number}'), '')) AS from_number,
-  COALESCE(NULLIF(btrim(l.phone_code), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,phone_code}'), '')) AS phone_code,
+  )::varchar(150) AS seller_name,
+  COALESCE(NULLIF(btrim(l.user_name), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_name}'), ''))::varchar(150) AS user_name,
+  COALESCE(NULLIF(btrim(l.from_name), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_name}'), ''))::varchar(150) AS from_name,
+  COALESCE(NULLIF(btrim(l.contact_number), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_number}'), ''))::varchar(50) AS contact_number,
+  COALESCE(NULLIF(btrim(l.from_number), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_number}'), ''))::varchar(50) AS from_number,
+  COALESCE(NULLIF(btrim(l.phone_code), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,phone_code}'), ''))::varchar(10) AS phone_code,
   COALESCE(NULLIF(btrim(l.location), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,region}'), '')) AS location,
   l.rating,
   COALESCE(
@@ -71,7 +71,7 @@ SELECT
         THEN (rv.raw_payload#>>'{raw_data,dealer_rating}')::numeric
       ELSE NULL
     END
-  ) AS dealer_rating,
+  )::numeric(5,2) AS dealer_rating,
   COALESCE(
     l.company_id,
     CASE

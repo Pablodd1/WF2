@@ -21,6 +21,9 @@ test('public fields come from the exact immutable raw version lineage', () => {
   for (const field of ['from_name', 'from_number', 'phone_code', 'region', 'dealer_rating', 'company_id']) {
     assert.match(migration, new RegExp(`raw_data,${field}`));
   }
+  assert.match(migration, /::varchar\(150\) AS seller_name/);
+  assert.match(migration, /::varchar\(50\) AS contact_number/);
+  assert.match(migration, /::numeric\(5,2\) AS dealer_rating/);
 });
 
 test('source image is admitted only behind the existing single-listing gates', () => {
