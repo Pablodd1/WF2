@@ -6,6 +6,7 @@ const {
   isApprovedInventoryRecord,
   isTradingFloorSourceRow,
   normalizeItemCategory,
+  effectiveItemCategory,
 } = require('../api/reviewed-market-inventory.js');
 const {
   isReleaseListingEligible,
@@ -17,6 +18,27 @@ test('Trading Floor approval accepts both legacy percent and pipeline probabilit
   assert.equal(isApprovedInventoryRecord({ verdict: 'approved', confidence: 0.89 }), false);
 });
 
+test('legacy OTHER rows recover WATCH only from exclusive brand and reference evidence', () => {
+  assert.equal(effectiveItemCategory({ item_category: 'OTHER', brand_scope: 'Rolex', normalized_reference: '116500LN' }), 'WATCH');
+  assert.equal(effectiveItemCategory({ item_category: 'OTHER', brand_scope: 'Patek Philippe', raw_reference: '5712/1A' }), 'WATCH');
+  assert.equal(effectiveItemCategory({ item_category: 'OTHER', brand_scope: 'Cartier', raw_reference: 'LOVE' }), 'OTHER');
+  assert.equal(effectiveItemCategory({ item_category: 'OTHER', brand_scope: 'Rolex' }), 'OTHER');
+  assert.equal(effectiveItemCategory({ item_category: 'HANDBAG', brand_scope: 'Rolex', raw_reference: '116500LN' }), 'HANDBAG');
+});
+
+test('recovered legacy watches enter their evidence lane while uncategorized luxury stays withheld', () => {
+  const pending = {
+    item_category: 'OTHER', canonical_brand: 'Rolex', normalized_reference: '116500LN',
+    listing_type: 'WTS', trading_floor_status: 'published_pending_verification',
+    publication_lane: 'QNSA_NORMALIZED_STAGING_V1', normalization_run_complete: true,
+    raw_lineage_verified: true, publication_state: 'PENDING_VERIFICATION',
+  };
+  assert.equal(isTradingFloorSourceRow(pending), true);
+  assert.equal(isTradingFloorSourceRow({
+    ...pending, canonical_brand: 'Cartier', normalized_reference: 'LOVE',
+  }), false);
+});
+
 test('Trading Floor excludes quarantined bundles without requiring a supplied price', () => {
   assert.equal(isApprovedInventoryRecord({ verdict: 'approved', confidence: 0.95, price_usd: null }), true);
   assert.equal(isApprovedInventoryRecord({
@@ -26,7 +48,7 @@ test('Trading Floor excludes quarantined bundles without requiring a supplied pr
 
 test('Trading Floor admits completed QNSA pending singles without requiring a price', () => {
   const pending = {
-    item_category: 'WATCH', listing_type: 'WTS', verdict: 'pending', confidence: null,
+    item_category: 'WATCH', canonical_brand: 'Rolex', listing_type: 'WTS', verdict: 'pending', confidence: null,
     trading_floor_status: 'published_pending_verification',
     publication_lane: 'QNSA_NORMALIZED_STAGING_V1',
     normalization_run_complete: true, raw_lineage_verified: true,

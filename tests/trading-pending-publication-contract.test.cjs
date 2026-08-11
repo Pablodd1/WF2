@@ -29,7 +29,8 @@ test('Trading Floor queries category and does not restore an approved-only query
   assert.match(api, /queryParams\.set\('item_category', `eq\.\$\{itemCategory\}`\)/);
   assert.doesNotMatch(api, /queryParams\.set\('verdict', 'in\.\(APPROVED,approved\)'\)/);
   assert.match(api, /pageResult\.records\.filter\(isTradingFloorSourceRow\)/);
-  assert.match(api, /item_category: normalizeItemCategory\(row\.item_category \|\| row\.category\)/);
+  assert.match(api, /item_category: effectiveItemCategory\(row\)/);
+  assert.match(api, /queryParams\.set\('item_category', 'in\.\(WATCH,OTHER\)'\)/);
 });
 
 test('pending Trading Floor publication does not loosen Price Research', () => {

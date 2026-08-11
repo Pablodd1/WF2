@@ -295,8 +295,35 @@ function normalizeItemCategory(value) {
     : 'OTHER';
 }
 
+// Older reviewed rows predate item_category and were emitted as OTHER. Recover
+// WATCH only from a watch-exclusive brand plus a source-backed reference. Do
+// not infer cross-category houses (Cartier, Bulgari, Chanel, Hermes, Chopard),
+// because their brand/reference fields can describe jewelry or leather goods.
+const WATCH_EXCLUSIVE_BRANDS = new Set([
+  'ROLEX', 'PATEK PHILIPPE', 'PATEK', 'AUDEMARS PIGUET', 'RICHARD MILLE',
+  'HUBLOT', 'OMEGA', 'VACHERON CONSTANTIN', 'JAEGER-LECOULTRE', 'IWC',
+  'A. LANGE & SOHNE', 'A. LANGE & SÖHNE', 'BREGUET', 'BLANCPAIN', 'TUDOR',
+  'BREITLING', 'TAG HEUER', 'PANERAI', 'GRAND SEIKO', 'SEIKO', 'ORIS',
+  'ZENITH', 'ROGER DUBUIS', 'URWERK', 'MB&F', 'F.P. JOURNE',
+  'FP JOURNE', 'H. MOSER & CIE', 'GREUBEL FORSEY', 'JACOB & CO',
+]);
+
+function effectiveItemCategory(row) {
+  const explicit = normalizeItemCategory(row?.item_category || row?.category);
+  if (explicit !== 'OTHER') return explicit;
+  const brand = cleanExactText(
+    row?.canonical_brand || row?.supplied_brand || row?.brand_scope || row?.brand,
+    80,
+  ).toUpperCase();
+  const reference = cleanExactText(
+    row?.catalog_reference || row?.normalized_reference || row?.raw_reference || row?.reference,
+    80,
+  );
+  return WATCH_EXCLUSIVE_BRANDS.has(brand) && reference ? 'WATCH' : 'OTHER';
+}
+
 function isTradingFloorSourceRow(row) {
-  const itemCategory = normalizeItemCategory(row?.item_category || row?.category);
+  const itemCategory = effectiveItemCategory(row);
   const listingType = cleanExactText(row?.listing_type, 30).toUpperCase();
   const status = cleanExactText(row?.trading_floor_status || row?.listing_status, 60).toUpperCase();
   if (!['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY'].includes(itemCategory)) return false;
@@ -312,7 +339,10 @@ function isTradingFloorSourceRow(row) {
   })) {
     return true;
   }
-  return isPriorityHumanReviewBrand(row?.canonical_brand || row?.supplied_brand || row?.brand_scope)
+  const pendingCategoryEligible = itemCategory === 'WATCH'
+    ? isPriorityHumanReviewBrand(row?.canonical_brand || row?.supplied_brand || row?.brand_scope)
+    : true;
+  return pendingCategoryEligible
     && status === 'PUBLISHED_PENDING_VERIFICATION'
     && row?.publication_lane === 'QNSA_NORMALIZED_STAGING_V1'
     && row?.normalization_run_complete === true
@@ -520,7 +550,7 @@ function mapReviewedRecord(row) {
     source_row_number: row.source_row_number,
     source_record_id: row.source_record_id || null,
     location: evidenceValuePresent(row.location || row.region) ? (row.location || row.region) : null,
-    item_category: normalizeItemCategory(row.item_category || row.category),
+    item_category: effectiveItemCategory(row),
     publication_state: row.publication_state || 'APPROVED',
     verification_label: pendingVerification ? 'Human review' : 'Verified listing',
     data_quality_review_required: pendingVerification,
@@ -808,7 +838,14 @@ module.exports = async function handler(req, res) {
     if (reference) queryParams.set('reference_search_key', `eq.${reference}`);
     if (exactDialVariants.length) queryParams.set('dial_color', `in.(${exactDialVariants.join(',')})`);
     if (listingType) queryParams.set('listing_type', `eq.${listingType}`);
-    if (itemCategory !== 'ALL') queryParams.set('item_category', `eq.${itemCategory}`);
+    if (itemCategory === 'WATCH') {
+      // Include legacy OTHER rows only so the fail-closed brand/reference rule
+      // above can recover real watches. The mapped category filter removes
+      // every OTHER row that lacks that evidence.
+      queryParams.set('item_category', 'in.(WATCH,OTHER)');
+    } else if (itemCategory !== 'ALL') {
+      queryParams.set('item_category', `eq.${itemCategory}`);
+    }
     if (imagesOnly) queryParams.set('has_exact_source_image', 'eq.true');
     if (pricedOnly) queryParams.set('source_price_amount', 'gt.0');
     const regionPattern = locationSearchPattern(region);
@@ -1008,6 +1045,7 @@ module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;
 module.exports.isTradingFloorSourceRow = isTradingFloorSourceRow;
 module.exports.normalizeItemCategory = normalizeItemCategory;
+module.exports.effectiveItemCategory = effectiveItemCategory;
 module.exports.isLegacyReviewedInventoryRecord = isLegacyReviewedInventoryRecord;
 module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;

@@ -78,8 +78,10 @@ function validateSubmission(body = {}) {
   const isBundle = body.is_bundle === true;
   const intent = clean(body.intent, 3)?.toUpperCase();
   const category = clean(body.category, 20)?.toUpperCase();
-  const rawInput = String(body.raw_message || '').trim();
-  const rawMessage = rawInput || null;
+  const rawInput = typeof body.raw_message === 'string' ? body.raw_message : '';
+  // Validate with trimmed text but retain the submitted bytes exactly. Leading
+  // whitespace, trailing whitespace, and line breaks are source evidence.
+  const rawMessage = rawInput.trim() ? rawInput : null;
   if (!INTENTS.has(intent)) return { error: 'Choose For sale or Want to buy.' };
   if (!CATEGORIES.has(category)) return { error: 'Choose a valid category.' };
   if (isBundle && (intent !== 'WTS' || category !== 'WATCH')) return { error: 'A deferred bundle must be a For sale watch listing.' };
@@ -89,6 +91,8 @@ function validateSubmission(body = {}) {
   const claimed = {
     brand: clean(body.brand), model: clean(body.model), reference: clean(body.reference),
     dial_color: clean(body.dial_color), condition: clean(body.condition, 40),
+    material: clean(body.material, 120), size: clean(body.size, 80),
+    year: clean(body.year, 20), completeness: clean(body.completeness, 160),
     price_amount: body.price_amount == null || body.price_amount === '' ? null : Number(body.price_amount),
     currency: clean(body.currency, 8)?.toUpperCase() || null,
     title: clean(body.title, 240),
@@ -96,6 +100,12 @@ function validateSubmission(body = {}) {
   if (category === 'WATCH' && !isBundle) {
     const missing = ['brand', 'model', 'reference', 'dial_color'].filter(field => !claimed[field]);
     if (missing.length) return { error: `Required watch fields: ${missing.join(', ')}.` };
+  }
+  if (category !== 'WATCH' && !isBundle && (!claimed.brand || !claimed.title)) {
+    return { error: 'Required luxury-item fields: brand or maker, item name or style.' };
+  }
+  if (claimed.year && !/^(?:18|19|20)\d{2}$/.test(claimed.year)) {
+    return { error: 'Year must be a four-digit year between 1800 and 2099.' };
   }
   if (claimed.price_amount != null && (!Number.isFinite(claimed.price_amount) || claimed.price_amount <= 0 || claimed.price_amount > 1_000_000_000)) {
     return { error: 'Enter a valid positive price.' };
@@ -142,6 +152,9 @@ async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!sameOrigin(req)) return res.status(403).json({ error: 'Invalid request origin.' });
+  if (req.body?.source_evidence_confirmed !== true) {
+    return res.status(400).json({ error: 'Confirm that every raw message and photo belongs to the submitted item or request.' });
+  }
   const batch = validateBatch(req.body);
   if (batch.error) return res.status(400).json({ error: batch.error });
   const posterError = credentialError(poster);
@@ -171,6 +184,7 @@ async function handler(req, res) {
     group_count: poster.group_count, credential_status: poster.credential_status,
     account_type: poster.account_type, preferred_language: poster.preferred_language,
     telegram_username: poster.telegram_username,
+    source_evidence_confirmed: true, source_evidence_confirmed_at: new Date().toISOString(),
   };
   const submissionRows = batch.items.map(validated => ({
     id: crypto.randomUUID(),

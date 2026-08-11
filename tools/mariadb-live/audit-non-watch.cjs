@@ -5,12 +5,15 @@ const path = require('node:path');
 const { atomicJson, boundedInteger, readJsonLines } = require('./lib.cjs');
 const { discoverInputFiles } = require('./import-raw.cjs');
 
-const CONTRACT = 'wf-mariadb-non-watch-audit-v1';
-const WATCH_BRANDS = /\b(?:rolex|patek|audemars|richard mille|hublot|omega|cartier|vacheron|iwc|panerai|tudor|breitling|breguet|zenith|jacob\s*(?:&|and)\s*co|jaeger|lange|chopard|bulgari|bvlgari|seiko|tag heuer|watch|timepiece|chronograph)\b/i;
-const STRONG_BAG = /\b(?:birkin|kelly|handbag|hand bag|purse|tote|clutch|pochette|shoulder bag|crossbody|satchel|duffle|travel bag)\b/i;
-const STRONG_JEWELRY = /\b(?:necklace|earrings?|pendant|brooch|anklet|diamond ring|engagement ring|wedding band|gold chain|jewelry|jewellery)\b/i;
+const CONTRACT = 'wf-mariadb-non-watch-audit-v2';
+// Cross-category houses such as Cartier, Chopard, Bulgari, Chanel, Hermes and
+// Jacob & Co are intentionally absent. Their name alone cannot prove that an
+// explicitly described necklace, ring, handbag, or accessory is a watch.
+const WATCH_BRANDS = /\b(?:rolex|patek|audemars|richard mille|hublot|omega|vacheron|iwc|panerai|tudor|breitling|breguet|zenith|jaeger|lange|seiko|tag heuer|watch|timepiece|chronograph)\b/i;
+const STRONG_BAG = /\b(?:birkins?|kelly|handbags?|hand bags?|purses?|totes?|clutches?|pochettes?|shoulder bags?|crossbod(?:y|ies)|satchels?|duffles?|travel bags?)\b/i;
+const STRONG_JEWELRY = /\b(?:necklaces?|earrings?|pendants?|brooch(?:es)?|anklets?|diamond rings?|engagement rings?|wedding bands?|gold chains?|jewelry|jewellery)\b/i;
 const WEAK_JEWELRY = /\b(?:bracelet|bangle|ring|chain|diamond|emerald|ruby|sapphire|pearl)\b/i;
-const ACCESSORY = /\b(?:wallet|card holder|belt|sunglasses|cufflinks?|fountain pen|lighter|scarf|silk tie|key holder)\b/i;
+const ACCESSORY = /\b(?:wallets?|card holders?|belts?|sunglasses|cufflinks?|fountain pens?|lighters?|scarves?|silk ties?|key holders?)\b/i;
 
 function evidenceText(record) {
   const raw = record.raw_data || {};

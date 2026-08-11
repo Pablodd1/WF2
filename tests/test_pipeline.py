@@ -77,6 +77,27 @@ class TestWatchFactsPipeline(unittest.TestCase):
             "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/677ec3e161c64_front_image.jpg",
         )
 
+    def test_non_watch_categories_use_public_contract_names(self):
+        cases = [
+            ("WTS Hermes Birkin 30 handbag USD 24000", "HANDBAG"),
+            ("WTS Chanel purse USD 8000", "HANDBAG"),
+            ("WTS diamond necklace USD 12000", "JEWELRY"),
+            ("WTS Louis Vuitton card holder USD 900", "ACCESSORY"),
+        ]
+        for message, expected in cases:
+            with self.subTest(message=message):
+                result = self.processor.process_job({"id": message, "message_text": message, "type": "sale"})
+                self.assertEqual(result["category"], expected)
+                self.assertEqual(result["price_research_status"], "ineligible_non_watch")
+
+    def test_hermes_watch_is_not_classified_as_a_handbag(self):
+        result = self.processor.process_job({
+            "id": "hermes-watch",
+            "message_text": "WTS Hermes H08 watch USD 5000",
+            "type": "sale",
+        })
+        self.assertEqual(result["category"], "WATCH")
+
     def test_bundle_splitting(self):
         from pipeline_bundle_splitter import split_bundle_listing
         

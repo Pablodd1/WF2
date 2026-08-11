@@ -22,6 +22,11 @@ test('authenticated form supports item photos, a posting-user photo, and three c
   assert.match(source, /for review/);
   assert.match(source, /Complete dealer onboarding/);
   assert.match(source, /Batch \{item\.bulk_submission_id/);
+  assert.match(source, /Submission preview/);
+  assert.match(source, /Review before sending/);
+  assert.match(source, /Confirm source evidence/);
+  assert.match(source, /Make cover/);
+  assert.match(source, /source_evidence_confirmed: sourceEvidenceConfirmed/);
 });
 
 test('direct form keeps price optional and sends normalized items to the publication API', () => {
@@ -30,4 +35,8 @@ test('direct form keeps price optional and sends normalized items to the publica
   assert.match(source, /items: normalizedItems/);
   assert.match(source, /\/api\/dealer-media/);
   assert.match(source, /\/api\/dealer-submissions/);
+  assert.match(source, /Brand or maker/);
+  assert.match(source, /Item name or style/);
+  assert.match(source, /Material or color/);
+  assert.match(source, /Included accessories/);
 });
