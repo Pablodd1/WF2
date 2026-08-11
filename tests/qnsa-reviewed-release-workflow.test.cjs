@@ -28,6 +28,8 @@ test('audit and enable require different exact confirmation phrases', () => {
 });
 
 test('workflow applies only the reviewed release migrations', () => {
+  assert.match(workflow, /pg_get_viewdef\('public\.qnsa_rolex_patek_reviewed_release_base'/);
+  assert.match(workflow, /already installed/);
   assert.match(workflow, /20260811190000_qnsa_rolex_patek_reviewed_release\.sql/);
   assert.match(workflow, /20260811220000_qnsa_source_backed_public_fields\.sql/);
   assert.match(workflow, /legacy watch_records write/);

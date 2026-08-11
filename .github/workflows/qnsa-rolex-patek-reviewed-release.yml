@@ -69,6 +69,23 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $checkSql = @"
+          SELECT (
+            to_regclass('public.qnsa_two_brand_release_control') IS NOT NULL
+            AND to_regclass('public.qnsa_rolex_patek_trading_floor_source') IS NOT NULL
+            AND to_regclass('public.qnsa_rolex_patek_price_research_source') IS NOT NULL
+            AND position(
+              'raw_message_versions' IN
+              pg_get_viewdef('public.qnsa_rolex_patek_reviewed_release_base'::regclass, true)
+            ) > 0
+          ) AS installed;
+          "@
+          $checkBody = @{ query = [string]$checkSql; read_only = $true } | ConvertTo-Json -Depth 3
+          $check = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $checkBody
+          if ($check[0].installed -eq $true) {
+            Write-Output 'Reviewed release contract and source-backed correction are already installed.'
+            exit 0
+          }
           $paths = @(
             'supabase/migrations/20260811190000_qnsa_rolex_patek_reviewed_release.sql',
             'supabase/migrations/20260811220000_qnsa_source_backed_public_fields.sql'
