@@ -11,7 +11,7 @@ on:
 jobs:
   audit-capacity:
     if: ${{ inputs.confirmation == 'AUDIT_SUPABASE_CAPACITY' }}
-    runs-on: [self-hosted, Windows, X64, watchfacts-raw-import]
+    runs-on: windows-latest
     environment: production
     timeout-minutes: 15
     permissions:
@@ -39,6 +39,61 @@ jobs:
               AND relation.relkind IN ('r', 'm')
           ), largest AS (
             SELECT * FROM relation_sizes ORDER BY total_bytes DESC LIMIT 30
+          ), staging_statuses AS (
+            SELECT
+              COALESCE(trading_floor_status, '<NULL>') AS trading_floor_status,
+              COALESCE(price_research_status, '<NULL>') AS price_research_status,
+              count(*) AS row_count
+            FROM staging.listings
+            GROUP BY 1, 2
+            ORDER BY row_count DESC
+          ), staging_lineage AS (
+            SELECT jsonb_build_object(
+              'total_rows', count(*),
+              'parent_rows', count(*) FILTER (WHERE parent_id IS NULL),
+              'child_rows', count(*) FILTER (WHERE parent_id IS NOT NULL),
+              'bundle_parents', count(*) FILTER (WHERE is_bundle IS TRUE AND parent_id IS NULL),
+              'children_with_media', count(*) FILTER (
+                WHERE parent_id IS NOT NULL
+                  AND COALESCE(NULLIF(trim(image_url), ''), NULLIF(trim(front_image), ''), NULLIF(trim(storage_key), '')) IS NOT NULL
+              ),
+              'job_linked_rows', count(*) FILTER (WHERE job_id IS NOT NULL),
+              'job_orphan_rows', count(*) FILTER (WHERE job_id IS NULL),
+              'first_created_at', min(created_at),
+              'latest_created_at', max(created_at),
+              'rows_with_source_claimed_rating', count(*) FILTER (
+                WHERE dealer_rating IS NOT NULL OR rating IS NOT NULL
+              ),
+              'rows_claiming_exactly_five_rating', count(*) FILTER (
+                WHERE dealer_rating = 5 OR rating = 5
+              ),
+              'published_child_rows', count(*) FILTER (
+                WHERE parent_id IS NOT NULL AND trading_floor_status IN ('published', 'published_pending_verification')
+              ),
+              'eligible_child_rows', count(*) FILTER (
+                WHERE parent_id IS NOT NULL AND price_research_status = 'eligible'
+              ),
+              'eligible_bundle_rows', count(*) FILTER (
+                WHERE is_bundle IS TRUE AND price_research_status = 'eligible'
+              ),
+              'eligible_without_catalog_confirmation', count(*) FILTER (
+                WHERE price_research_status = 'eligible' AND catalog_confirmed IS NOT TRUE
+              ),
+              'eligible_without_positive_price', count(*) FILTER (
+                WHERE price_research_status = 'eligible' AND COALESCE(price_usd, 0) <= 0
+              )
+            ) AS evidence
+            FROM staging.listings
+          ), raw_platforms AS (
+            SELECT source_platform, count(*) AS row_count
+            FROM raw.payloads
+            GROUP BY source_platform
+            ORDER BY row_count DESC
+          ), job_statuses AS (
+            SELECT status::text AS status, count(*) AS row_count
+            FROM jobs.processing_jobs
+            GROUP BY status
+            ORDER BY row_count DESC
           )
           SELECT jsonb_build_object(
             'project_ref', 'qnsafosakvonzgfcsphh',
@@ -46,6 +101,22 @@ jobs:
             'database_gib', round(pg_database_size(current_database())::numeric / 1073741824, 3),
             'mariadb_envelopes', (SELECT count(*) FROM public.raw_messages WHERE source_platform = 'mariadb'),
             'mariadb_versions', (SELECT count(*) FROM public.raw_message_versions),
+            'raw_payloads', (SELECT count(*) FROM raw.payloads),
+            'raw_payload_versions', (SELECT count(*) FROM raw.payload_versions),
+            'processing_jobs', (SELECT count(*) FROM jobs.processing_jobs),
+            'watch_records', (SELECT count(*) FROM public.watch_records),
+            'staging_lineage', (SELECT evidence FROM staging_lineage),
+            'staging_statuses', (SELECT jsonb_agg(to_jsonb(staging_statuses)) FROM staging_statuses),
+            'raw_platforms', (SELECT jsonb_agg(to_jsonb(raw_platforms)) FROM raw_platforms),
+            'job_statuses', (SELECT jsonb_agg(to_jsonb(job_statuses)) FROM job_statuses),
+            'staging_source_submission_column_present', EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'staging' AND table_name = 'listings' AND column_name = 'source_submission_id'
+            ),
+            'staging_dealer_id_column_present', EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'staging' AND table_name = 'listings' AND column_name = 'dealer_id'
+            ),
             'checkpoint', (
               SELECT to_jsonb(checkpoint) - 'run_key'
               FROM public.mariadb_raw_import_checkpoints AS checkpoint

@@ -79,3 +79,29 @@ test('local normalization processes an exact non-overlapping source range', asyn
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('local normalization preserves source search intent without repeated WTB text', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-normalize-wtb-'));
+  const input = path.join(root, 'raw.jsonl');
+  const output = path.join(root, 'output');
+  try {
+    const wrapped = sourceRecord({
+      id: 'wtb-source',
+      created_on: '2026-08-10 10:00:00',
+      type: 'search',
+      title: 'Patek Philippe 5712/1A blue dial full set',
+      brand: 'Patek Philippe',
+      reference: '5712/1A',
+    });
+    fs.writeFileSync(input, jsonLine(wrapped));
+    await run({ env: {
+      MARIADB_NORMALIZE_INPUT: input,
+      MARIADB_NORMALIZE_OUTPUT: output,
+      MARIADB_NORMALIZE_MAX_ROWS: '1',
+    } });
+    const proposal = JSON.parse(fs.readFileSync(path.join(output, 'normalization-proposals.jsonl'), 'utf8').trim());
+    assert.equal(proposal.normalization.proposed_candidates[0].listing_type, 'WTB');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

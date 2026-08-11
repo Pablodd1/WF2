@@ -56,7 +56,13 @@ function sourceCurrencyTextObservation(candidate, record) {
 }
 
 function analyzeRecord(record) {
-  const candidates = segmentDealerMessage(record.raw_message || '');
+  const sourceIntent = ['WTB', 'WTS'].includes(String(record.listing_type || '').toUpperCase())
+    ? String(record.listing_type).toUpperCase()
+    : null;
+  const candidates = segmentDealerMessage(
+    record.raw_message || '',
+    sourceIntent ? { intent_context: sourceIntent } : {},
+  );
   const proposed = candidates.map(candidate => {
     const parsedPrices = candidate.prices || [];
     const sourceCurrencyPrice = parsedPrices.length ? null : sourceCurrencyTextObservation(candidate, record);
