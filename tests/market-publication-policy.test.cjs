@@ -4,6 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   isApprovedInventoryRecord,
+  isTradingFloorSourceRow,
+  normalizeItemCategory,
 } = require('../api/reviewed-market-inventory.js');
 const {
   isReleaseListingEligible,
@@ -20,6 +22,39 @@ test('Trading Floor excludes quarantined bundles without requiring a supplied pr
   assert.equal(isApprovedInventoryRecord({
     verdict: 'approved', confidence: 0.95, listing_status: 'bundle_child_pending_review',
   }), false);
+});
+
+test('Trading Floor admits completed QNSA pending singles without requiring a price', () => {
+  const pending = {
+    item_category: 'WATCH', listing_type: 'WTS', verdict: 'pending', confidence: null,
+    trading_floor_status: 'published_pending_verification',
+    publication_lane: 'QNSA_NORMALIZED_STAGING_V1',
+    normalization_run_complete: true, raw_lineage_verified: true,
+    publication_state: 'PENDING_VERIFICATION', price_usd: null,
+  };
+  assert.equal(isTradingFloorSourceRow(pending), true);
+  assert.equal(isTradingFloorSourceRow({ ...pending, listing_type: 'WTB' }), true);
+  assert.equal(isTradingFloorSourceRow({ ...pending, item_category: 'HANDBAG' }), true);
+  assert.equal(isTradingFloorSourceRow({ ...pending, item_category: 'JEWELRY' }), true);
+  assert.equal(isTradingFloorSourceRow({ ...pending, normalization_run_complete: false }), false);
+  assert.equal(isTradingFloorSourceRow({ ...pending, raw_lineage_verified: false }), false);
+  assert.equal(isTradingFloorSourceRow({ ...pending, publication_lane: 'REVIEWED_LEGACY' }), false);
+});
+
+test('Trading Floor pending lane rejects bundles and unsupported categories', () => {
+  const pending = {
+    item_category: 'ACCESSORY', listing_type: 'WTS', verdict: 'pending',
+    trading_floor_status: 'published_pending_verification',
+    publication_lane: 'QNSA_NORMALIZED_STAGING_V1',
+    normalization_run_complete: true, raw_lineage_verified: true,
+    publication_state: 'PENDING_VERIFICATION',
+  };
+  assert.equal(isTradingFloorSourceRow(pending), true);
+  assert.equal(isTradingFloorSourceRow({ ...pending, parent_id: 'parent-1' }), false);
+  assert.equal(isTradingFloorSourceRow({ ...pending, is_bundle: true }), false);
+  assert.equal(isTradingFloorSourceRow({ ...pending, item_category: 'OTHER' }), false);
+  assert.equal(normalizeItemCategory('jewelry'), 'JEWELRY');
+  assert.equal(normalizeItemCategory('unknown-category'), 'OTHER');
 });
 
 test('shared release gate normalizes pipeline confidence scale', () => {
