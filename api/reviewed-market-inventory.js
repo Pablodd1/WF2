@@ -598,7 +598,7 @@ function buildLegacyMarketQueryParams({
   );
   if (genericSearch) {
     const pattern = `*${genericSearch}*`;
-    params.set('or', [
+    params.set('or', `(${[
       `supplied_brand.ilike.${pattern}`,
       `canonical_brand.ilike.${pattern}`,
       `brand_scope.ilike.${pattern}`,
@@ -610,7 +610,7 @@ function buildLegacyMarketQueryParams({
       `posted_by.ilike.${pattern}`,
       `phone_number.ilike.${pattern}`,
       `raw_message.ilike.${pattern}`,
-    ].join(','));
+    ].join(',')})`);
   }
   return params;
 }
@@ -740,7 +740,7 @@ module.exports = async function handler(req, res) {
     );
     if (genericSearch) {
       const pattern = `*${genericSearch}*`;
-      queryParams.set('or', [
+      queryParams.set('or', `(${[
         `supplied_brand.ilike.${pattern}`,
         `canonical_brand.ilike.${pattern}`,
         `brand_scope.ilike.${pattern}`,
@@ -753,7 +753,7 @@ module.exports = async function handler(req, res) {
         `seller_phone.ilike.${pattern}`,
         `location.ilike.${pattern}`,
         `raw_message.ilike.${pattern}`,
-      ].join(','));
+      ].join(',')})`);
     }
     if (!itemCategory) return res.status(400).json({ status: 'error', error: 'Invalid item category' });
     // ponytail: simplified query — ORDER BY with offset times out on large views
