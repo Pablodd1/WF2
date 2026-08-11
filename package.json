@@ -36,6 +36,7 @@
     "mariadb:reconcile-normalization": "node tools/mariadb-live/reconcile-normalization-segments.cjs",
     "mariadb:audit-publication-readiness": "node tools/mariadb-live/audit-publication-readiness.cjs",
     "mariadb:complete-local-normalization": "node tools/mariadb-live/complete-local-normalization.cjs",
+    "mariadb:stage-normalized": "node tools/mariadb-live/import-normalized-staging.cjs",
     "mariadb:monitor": "node tools/mariadb-live/monitor.cjs",
     "mariadb:continuous-worker": "node tools/mariadb-live/continuous-worker.cjs",
     "inspect:price-research-cohort": "node tools/price-quality/inspect-live-price-cohort.cjs",
