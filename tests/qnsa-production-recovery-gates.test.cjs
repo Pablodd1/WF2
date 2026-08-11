@@ -71,7 +71,11 @@ test('normalized staging preserves long source-supplied identity fields', () => 
     'from_name',
     'location',
   ]) {
-    assert.match(sourceWidthMigration, new RegExp(`ALTER COLUMN ${column} TYPE TEXT`));
+    assert.match(sourceWidthMigration, new RegExp(`'${column}', CASE WHEN length\\(NEW\\.${column}\\)`));
+    assert.match(sourceWidthMigration, new RegExp(`NEW\\.${column} := left\\(NEW\\.${column},`));
   }
+  assert.match(sourceWidthMigration, /source_field_overflow/);
+  assert.match(sourceWidthMigration, /BEFORE INSERT OR UPDATE ON staging\.listings/);
+  assert.doesNotMatch(sourceWidthMigration, /ALTER COLUMN/);
   assert.doesNotMatch(sourceWidthMigration, /INSERT\s+INTO\s+public\.watch_records/i);
 });
