@@ -11,6 +11,7 @@ const {
   isTransientStatus,
   postgresSafeRecord,
   prepareOutput,
+  reconcileRemoteCheckpoint,
   rpc,
   run,
   submitBatch,
@@ -110,6 +111,112 @@ test('raw import discovers deterministic JSONL inputs and binds checkpoint to th
     assert.equal(prepared.checkpoint.file_index, 0);
     assert.equal(prepared.checkpoint.input_rows, 0);
     assert.equal(fs.existsSync(prepared.paths.checkpoint), true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('raw import repairs a remote-ahead crash window only after verifying the immutable cursor', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-raw-checkpoint-recovery-'));
+  try {
+    const input = path.join(root, 'raw-records.jsonl');
+    const rows = [
+      record('a', '2026-08-01 00:00:00'),
+      record('b', '2026-08-01 00:00:01'),
+      record('c', '2026-08-01 00:00:02', 'Rolex 116500LN\u0000USD 25000'),
+    ];
+    fs.writeFileSync(input, rows.map(value => `${JSON.stringify(value)}\n`).join(''));
+    const output = path.join(root, 'output');
+    const config = { baseUrl: 'https://example.test', key: 'secret', input, runKey: 'recovery', batchSize: 1, output };
+    const files = discoverInputFiles(input);
+    const prepared = prepareOutput(config, files);
+    prepared.checkpoint = {
+      ...prepared.checkpoint,
+      file_index: 0,
+      line_index: 2,
+      batch_sequence: 2,
+      input_rows: 2,
+      envelope_rows_inserted: 2,
+      version_rows_inserted: 2,
+      last_created_on: rows[1].source_created_on,
+      last_source_id: rows[1].source_id,
+    };
+    fs.writeFileSync(prepared.paths.checkpoint, `${JSON.stringify(prepared.checkpoint, null, 2)}\n`);
+
+    const result = await reconcileRemoteCheckpoint(config, files, prepared, async (url, options) => {
+      assert.match(url, /mariadb_raw_import_checkpoints/);
+      assert.equal(options.method, 'GET');
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{
+          run_key: 'recovery',
+          status: 'COPYING_RAW',
+          input_rows: 3,
+          envelope_rows_inserted: 3,
+          version_rows_inserted: 3,
+          version_rows_existing: 0,
+          error_rows: 0,
+          last_created_on: rows[2].source_created_on,
+          last_source_id: rows[2].source_id,
+          started_at: '2026-08-10T00:00:00Z',
+          updated_at: '2026-08-10T00:01:00Z',
+        }]),
+      };
+    });
+
+    assert.equal(result.reconciled, true);
+    assert.equal(prepared.checkpoint.input_rows, 3);
+    assert.equal(prepared.checkpoint.line_index, 3);
+    assert.equal(prepared.checkpoint.batch_sequence, 3);
+    assert.equal(prepared.checkpoint.transport_encoded_rows, 1);
+    assert.equal(prepared.checkpoint.last_source_id, 'c');
+    assert.equal(fs.existsSync(path.join(output, 'checkpoint.before-remote-reconcile-2.json')), true);
+    const evidence = JSON.parse(fs.readFileSync(path.join(output, 'remote-checkpoint-reconciliation.json'), 'utf8'));
+    assert.equal(evidence.source_cursor_verified, true);
+    assert.equal(evidence.production_writes, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('raw import refuses a remote-ahead checkpoint whose cursor does not match immutable input', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-raw-checkpoint-conflict-'));
+  try {
+    const input = path.join(root, 'raw-records.jsonl');
+    const rows = [record('a', '2026-08-01 00:00:00'), record('b', '2026-08-01 00:00:01')];
+    fs.writeFileSync(input, rows.map(value => `${JSON.stringify(value)}\n`).join(''));
+    const output = path.join(root, 'output');
+    const config = { baseUrl: 'https://example.test', key: 'secret', input, runKey: 'conflict', batchSize: 1, output };
+    const files = discoverInputFiles(input);
+    const prepared = prepareOutput(config, files);
+    prepared.checkpoint = {
+      ...prepared.checkpoint,
+      line_index: 1,
+      batch_sequence: 1,
+      input_rows: 1,
+      envelope_rows_inserted: 1,
+      version_rows_inserted: 1,
+      last_created_on: rows[0].source_created_on,
+      last_source_id: rows[0].source_id,
+    };
+    await assert.rejects(
+      reconcileRemoteCheckpoint(config, files, prepared, async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{
+          status: 'COPYING_RAW',
+          input_rows: 2,
+          envelope_rows_inserted: 2,
+          version_rows_inserted: 2,
+          version_rows_existing: 0,
+          error_rows: 0,
+          last_created_on: rows[1].source_created_on,
+          last_source_id: 'wrong-id',
+        }]),
+      })),
+      /does not match the immutable input row/,
+    );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

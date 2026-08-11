@@ -221,11 +221,138 @@ async function submitBatch(runConfig, checkpoint, records, fetchImpl = fetch) {
   return result;
 }
 
+async function loadRemoteCheckpoint(runConfig, fetchImpl = fetch) {
+  const params = new URLSearchParams({
+    run_key: `eq.${runConfig.runKey}`,
+    select: [
+      'run_key',
+      'status',
+      'input_rows',
+      'envelope_rows_inserted',
+      'version_rows_inserted',
+      'version_rows_existing',
+      'error_rows',
+      'last_created_on',
+      'last_source_id',
+      'started_at',
+      'updated_at',
+    ].join(','),
+    limit: '1',
+  });
+  const response = await fetchImpl(`${runConfig.baseUrl}/rest/v1/mariadb_raw_import_checkpoints?${params}`, {
+    method: 'GET',
+    headers: {
+      apikey: runConfig.key,
+      Authorization: `Bearer ${runConfig.key}`,
+    },
+    signal: AbortSignal.timeout(120000),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`Remote raw-import checkpoint query failed (${response.status}): ${text.slice(0, 500)}`);
+  const rows = text ? JSON.parse(text) : [];
+  return rows[0] || null;
+}
+
+async function locateRemoteCursor(files, localCheckpoint, remoteCheckpoint) {
+  const targetRows = Number(remoteCheckpoint.input_rows);
+  let inputRows = 0;
+  let target = null;
+  let recoveredTransportRows = 0;
+
+  outer: for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
+    let lineIndex = 0;
+    for await (const line of readJsonLines(files[fileIndex])) {
+      lineIndex += 1;
+      if (!line.trim()) continue;
+      inputRows += 1;
+      if (inputRows > Number(localCheckpoint.input_rows)) {
+        const record = JSON.parse(line);
+        if (postgresSafeRecord(record, line).wf_transport_evidence) recoveredTransportRows += 1;
+        if (inputRows === targetRows) {
+          target = { fileIndex, lineIndex, record };
+          break outer;
+        }
+      }
+    }
+  }
+  if (!target) throw new Error(`Immutable input ended before remote checkpoint row ${targetRows}`);
+  return { ...target, recoveredTransportRows };
+}
+
+async function reconcileRemoteCheckpoint(runConfig, files, prepared, fetchImpl = fetch) {
+  const local = prepared.checkpoint;
+  if (Number(local.input_rows) === 0 || local.complete) return { reconciled: false, reason: 'REMOTE_CHECK_NOT_REQUIRED' };
+  const remote = await loadRemoteCheckpoint(runConfig, fetchImpl);
+  if (!remote) throw new Error(`Remote checkpoint is missing for resumed run ${runConfig.runKey}`);
+
+  const localRows = Number(local.input_rows);
+  const remoteRows = Number(remote.input_rows);
+  if (!Number.isSafeInteger(remoteRows) || remoteRows < localRows) {
+    throw new Error(`Remote checkpoint row count ${remoteRows} is behind local checkpoint ${localRows}`);
+  }
+  if (Number(remote.error_rows || 0) !== 0
+    || Number(remote.version_rows_inserted || 0) + Number(remote.version_rows_existing || 0) !== remoteRows) {
+    throw new Error('Remote checkpoint does not reconcile cleanly');
+  }
+  if (remoteRows === localRows) {
+    if (String(remote.last_created_on) !== String(local.last_created_on)
+      || String(remote.last_source_id) !== String(local.last_source_id)) {
+      throw new Error('Equal local and remote checkpoint counts have conflicting cursors');
+    }
+    return { reconciled: false, reason: 'CHECKPOINTS_ALREADY_EQUAL' };
+  }
+
+  const recoveredRows = remoteRows - localRows;
+  if (recoveredRows % runConfig.batchSize !== 0) {
+    throw new Error(`Remote checkpoint lead ${recoveredRows} is not aligned to batch size ${runConfig.batchSize}`);
+  }
+  const located = await locateRemoteCursor(files, local, remote);
+  if (String(located.record.source_created_on) !== String(remote.last_created_on)
+    || String(located.record.source_id) !== String(remote.last_source_id)) {
+    throw new Error('Remote checkpoint cursor does not match the immutable input row');
+  }
+
+  const repaired = {
+    ...local,
+    file_index: located.fileIndex,
+    line_index: located.lineIndex,
+    batch_sequence: Number(local.batch_sequence) + (recoveredRows / runConfig.batchSize),
+    input_rows: remoteRows,
+    envelope_rows_inserted: Number(remote.envelope_rows_inserted || 0),
+    version_rows_inserted: Number(remote.version_rows_inserted || 0),
+    version_rows_existing: Number(remote.version_rows_existing || 0),
+    transport_encoded_rows: Number(local.transport_encoded_rows || 0) + located.recoveredTransportRows,
+    error_rows: Number(remote.error_rows || 0),
+    last_created_on: remote.last_created_on,
+    last_source_id: remote.last_source_id,
+    started_at: remote.started_at || local.started_at,
+    updated_at: remote.updated_at || new Date().toISOString(),
+  };
+  const backup = path.join(runConfig.output, `checkpoint.before-remote-reconcile-${localRows}.json`);
+  if (!fs.existsSync(backup)) atomicJson(backup, local);
+  atomicJson(path.join(runConfig.output, 'remote-checkpoint-reconciliation.json'), {
+    contract: 'wf-mariadb-raw-import-checkpoint-reconciliation-v1',
+    reconciled_at: new Date().toISOString(),
+    local_input_rows_before: localRows,
+    remote_input_rows: remoteRows,
+    recovered_rows: recoveredRows,
+    recovered_transport_encoded_rows: located.recoveredTransportRows,
+    verified_last_created_on: remote.last_created_on,
+    verified_last_source_id: remote.last_source_id,
+    source_cursor_verified: true,
+    production_writes: 0,
+  });
+  atomicJson(prepared.paths.checkpoint, repaired);
+  prepared.checkpoint = repaired;
+  return { reconciled: true, recoveredRows, repaired };
+}
+
 async function run(options = {}) {
   const runConfig = options.config || config();
   const fetchImpl = options.fetchImpl || fetch;
   const files = discoverInputFiles(runConfig.input);
   const prepared = prepareOutput(runConfig, files);
+  await reconcileRemoteCheckpoint(runConfig, files, prepared, fetchImpl);
   const state = { ...prepared.checkpoint };
   state.transport_encoded_rows = Number(state.transport_encoded_rows || 0);
   let records = [];
@@ -308,8 +435,11 @@ module.exports = {
   discoverInputFiles,
   inputFingerprint,
   isTransientStatus,
+  loadRemoteCheckpoint,
+  locateRemoteCursor,
   postgresSafeRecord,
   prepareOutput,
+  reconcileRemoteCheckpoint,
   rpc,
   run,
   submitBatch,
