@@ -69,6 +69,19 @@ interface MonthlyPoint {
   month: string; count: number; avg_price: number; min_price: number; max_price: number;
 }
 
+interface CatalogSuggestion {
+  brand: string;
+  model: string | null;
+  reference: string;
+  dial_colors: string[];
+  match_type: 'exact_reference' | 'reference_prefix' | 'reference_contains' | 'catalog_text_prefix' | 'catalog_text_contains' | 'reference_typo_candidate';
+}
+
+interface CatalogSuggestionsResponse {
+  success: boolean;
+  suggestions?: CatalogSuggestion[];
+}
+
 interface ForecastData {
   ready: boolean;
   reasons: string[];
@@ -489,6 +502,12 @@ export default function PriceResearch() {
   });
   const [showAllBrands, setShowAllBrands] = useState(false);
   const [analyticsNotice, setAnalyticsNotice] = useState('');
+  const [referenceSuggestions, setReferenceSuggestions] = useState<CatalogSuggestion[]>([]);
+  const [referenceSuggestionsOpen, setReferenceSuggestionsOpen] = useState(false);
+  const [referenceSuggestionsLoading, setReferenceSuggestionsLoading] = useState(false);
+  const [activeReferenceSuggestion, setActiveReferenceSuggestion] = useState(-1);
+  const [selectedCatalogReference, setSelectedCatalogReference] = useState<CatalogSuggestion | null>(null);
+  const referenceSearchBoxRef = useRef<HTMLDivElement | null>(null);
 
   // ── Drill-down picker state (brand → model → reference) ──
   const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
@@ -613,6 +632,58 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       ? 'Qualified price analytics are temporarily unavailable.'
       : 'Qualified price analytics could not resolve a brand. Select a brand to run the exact comparable analysis.'); }
     finally { setLoading(false); }
+  }, []);
+
+  const selectReferenceSuggestion = useCallback((suggestion: CatalogSuggestion) => {
+    setSelectedCatalogReference(suggestion);
+    setQuery(suggestion.reference);
+    setQueryBrand(suggestion.brand);
+    setPBrand(suggestion.brand);
+    setReferenceSuggestionsOpen(false);
+    setReferenceSuggestions([]);
+    void fetchData(suggestion.reference, '', suggestion.brand);
+  }, [fetchData]);
+
+  useEffect(() => {
+    const referenceQuery = query.trim();
+    if (referenceQuery.length < 2 || selectedCatalogReference) {
+      setReferenceSuggestions([]);
+      setReferenceSuggestionsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setReferenceSuggestionsLoading(true);
+      try {
+        const params = new URLSearchParams({ q: referenceQuery, limit: '10' });
+        if (queryBrand) params.set('brand', queryBrand);
+        const response = await fetch(`/api/catalog-suggestions?${params.toString()}`, { signal: controller.signal });
+        if (!response.ok) throw new Error('Catalog suggestions unavailable');
+        const payload = await response.json() as CatalogSuggestionsResponse;
+        const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+        setReferenceSuggestions(suggestions);
+        setActiveReferenceSuggestion(suggestions.length ? 0 : -1);
+        setReferenceSuggestionsOpen(suggestions.length > 0);
+      } catch (caught) {
+        if ((caught as Error).name !== 'AbortError') setReferenceSuggestions([]);
+      } finally {
+        if (!controller.signal.aborted) setReferenceSuggestionsLoading(false);
+      }
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, queryBrand, selectedCatalogReference]);
+
+  useEffect(() => {
+    const closeSuggestions = (event: MouseEvent) => {
+      if (!referenceSearchBoxRef.current?.contains(event.target as Node)) setReferenceSuggestionsOpen(false);
+    };
+    document.addEventListener('mousedown', closeSuggestions);
+    return () => document.removeEventListener('mousedown', closeSuggestions);
   }, []);
 
   useEffect(() => {
@@ -874,24 +945,92 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   {pBrands.map(item => <option key={item.brand} value={item.brand}>{item.brand}</option>)}
                 </select>
               </label>
-              <label className="relative block">
-                <span className="sr-only">Watch reference</span>
+              <div ref={referenceSearchBoxRef} className="relative block">
+                <label htmlFor="price-reference-input" className="sr-only">Watch reference</label>
                 <Search aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45" />
                 <input
+                  id="price-reference-input"
                   data-testid="price-reference-input"
                   aria-label="Watch reference"
-                  type="text"
-                  list="price-reference-suggestions"
+                  type="search"
                   value={query}
-                  onChange={event => setQuery(event.target.value)}
-                  onKeyDown={event => { if (event.key === 'Enter' && !loading) void fetchData(query, '', queryBrand); }}
+                  onChange={event => {
+                    setSelectedCatalogReference(null);
+                    setQuery(event.target.value);
+                    setReferenceSuggestionsOpen(true);
+                  }}
+                  onFocus={() => setReferenceSuggestionsOpen(referenceSuggestions.length > 0)}
+                  onKeyDown={event => {
+                    if (event.key === 'Escape') {
+                      setReferenceSuggestionsOpen(false);
+                      return;
+                    }
+                    if (referenceSuggestionsOpen && referenceSuggestions.length > 0) {
+                      if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        setActiveReferenceSuggestion(index => (index + 1) % referenceSuggestions.length);
+                        return;
+                      }
+                      if (event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        setActiveReferenceSuggestion(index => (index <= 0 ? referenceSuggestions.length - 1 : index - 1));
+                        return;
+                      }
+                      if (event.key === 'Enter' && activeReferenceSuggestion >= 0) {
+                        event.preventDefault();
+                        selectReferenceSuggestion(referenceSuggestions[activeReferenceSuggestion]);
+                        return;
+                      }
+                    }
+                    if (event.key === 'Enter' && !loading) void fetchData(query, '', queryBrand);
+                  }}
                   placeholder="Enter a watch reference"
                   className="h-11 w-full rounded-md border border-white/20 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#c9a03a]"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls="price-reference-suggestions"
+                  aria-expanded={referenceSuggestionsOpen}
+                  aria-activedescendant={activeReferenceSuggestion >= 0 ? `price-reference-option-${activeReferenceSuggestion}` : undefined}
                 />
-                <datalist id="price-reference-suggestions">
-                  {pRefs.map(item => <option key={item.reference} value={item.reference}>{pBrand} {pModel}</option>)}
-                </datalist>
-              </label>
+                {referenceSuggestionsOpen && (
+                  <div
+                    id="price-reference-suggestions"
+                    role="listbox"
+                    aria-label="Catalog reference suggestions"
+                    className="absolute inset-x-0 top-12 z-50 max-h-[360px] overflow-y-auto rounded-md border border-stone-200 bg-white p-1 text-left shadow-2xl"
+                  >
+                    {referenceSuggestions.map((suggestion, index) => (
+                      <button
+                        id={`price-reference-option-${index}`}
+                        key={`${suggestion.brand}-${suggestion.reference}`}
+                        type="button"
+                        role="option"
+                        aria-selected={index === activeReferenceSuggestion}
+                        onMouseEnter={() => setActiveReferenceSuggestion(index)}
+                        onMouseDown={event => event.preventDefault()}
+                        onClick={() => selectReferenceSuggestion(suggestion)}
+                        className="flex min-h-14 w-full items-center justify-between gap-3 rounded px-3 py-2 text-left"
+                        style={{ background: index === activeReferenceSuggestion ? '#f5f1e8' : WHITE, color: NAVY }}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold">{suggestion.brand} {suggestion.reference}</span>
+                          <span className="mt-0.5 block truncate text-xs" style={{ color: MUTED }}>
+                            {suggestion.model || 'Catalog reference'}
+                            {suggestion.dial_colors.length ? ` · ${suggestion.dial_colors.join(', ')} dial` : ''}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD }}>
+                          {suggestion.match_type === 'reference_typo_candidate' ? 'Did you mean?' : 'Select'}
+                        </span>
+                      </button>
+                    ))}
+                    {referenceSuggestionsLoading && <div className="px-3 py-2 text-xs" style={{ color: MUTED }}>Checking catalog…</div>}
+                    <div className="border-t px-3 py-2 text-[11px] leading-4" style={{ borderColor: BORDER, color: MUTED }}>
+                      Select an exact catalog reference to load its market analytics.
+                    </div>
+                  </div>
+                )}
+              </div>
               <button type="button" onClick={() => void fetchData(query, '', queryBrand)} disabled={loading} className="h-11 min-w-28 rounded-md bg-[#c9a03a] px-5 text-sm font-semibold text-[#09090d] disabled:cursor-wait disabled:opacity-70">
                 {loading ? 'Searching...' : 'Search'}
               </button>
