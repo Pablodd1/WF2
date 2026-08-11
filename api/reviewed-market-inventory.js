@@ -638,23 +638,24 @@ module.exports = async function handler(req, res) {
     // Cursor pages publish the current reviewed inventory, including incomplete
     // identities and no-price rows; analytics eligibility remains stricter.
     const scopedFilter = true;
-    const preciseCount = Boolean(reference);
     const canReverse = !scopedFilter;
-    const summaryTotal = brand
-      ? Number(summary.brands.find(item => item.brand === brand)?.canonical_listings || 0)
-      : Number(summary.canonical_listings || 0);
+    // Historical workbook checkpoints contain repeated import attempts and are
+    // not a trustworthy customer inventory count. Pagination is cursor-based,
+    // so withhold the total until the reconciled publication ledger supplies an
+    // exact count rather than presenting checkpoint rows as unique listings.
+    const publicInventoryTotal = null;
     const pageWindow = resolvePageWindow({
       page,
       pageSize,
-      total: scopedFilter ? 0 : summaryTotal,
+      total: 0,
       canReverse,
     });
     const publicationBrands = publicationBrandsFromSummary(summary);
 
     if (pageWindow.empty) {
       return res.status(200).json({
-        status: 'ok', count: 0, total: summaryTotal, page, pageSize,
-        totalIsEstimate: false, hasMore: false, nextCursor: null,
+        status: 'ok', count: 0, total: publicInventoryTotal, page, pageSize,
+        totalIsEstimate: false, totalStatus: 'withheld_unreconciled_checkpoint_history', hasMore: false, nextCursor: null,
         records: [], summary, publicationBrands,
         evidenceContract: EVIDENCE_CONTRACT,
         coverage: summarizeCoverage([]),
@@ -790,8 +791,6 @@ module.exports = async function handler(req, res) {
         hasMore = true;
       }
     }
-    // ponytail: count removed to avoid timeout. Use summary total instead.
-    const total = summaryTotal;
     const rows = pageWindow.reverse ? [...rawRows].reverse() : rawRows;
     const pageResult = boundedPage(rows, pageSize, false);
     const publicationGate = usedLegacyViewContract
@@ -832,10 +831,11 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       status: 'ok',
       count: records.length,
-      total,
+      total: publicInventoryTotal,
       page,
       pageSize,
-      totalIsEstimate: scopedFilter && !preciseCount,
+      totalIsEstimate: false,
+      totalStatus: 'withheld_unreconciled_checkpoint_history',
       hasMore,
       nextCursor,
       records,
