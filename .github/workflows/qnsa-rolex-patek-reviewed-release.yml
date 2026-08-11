@@ -129,6 +129,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
+          SET statement_timeout = '10min';
           WITH brand_counts AS (
             SELECT
               brand_normalized AS brand,
@@ -201,6 +202,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
+          SET statement_timeout = '10min';
           WITH trading AS (
             SELECT canonical_brand AS brand, count(*) AS rows,
               count(*) FILTER (WHERE intent = 'WTS') AS wts,
