@@ -38,6 +38,8 @@ test('workflow applies only the reviewed release migrations', () => {
 test('audit proves release stays dark before enablement', () => {
   assert.match(workflow, /SET statement_timeout = '10min'/);
   assert.match(workflow, /FROM staging\.listings AS l/);
+  assert.match(workflow, /has_trading_candidate/);
+  assert.match(workflow, /has_priced_wts_candidate/);
   assert.match(workflow, /trading_floor_enabled -eq \$true/);
   assert.match(workflow, /price_research_enabled -eq \$true/);
   assert.match(workflow, /Reviewed-release candidate audit failed/);

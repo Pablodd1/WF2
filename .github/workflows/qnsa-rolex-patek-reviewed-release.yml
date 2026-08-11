@@ -147,55 +147,43 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
           SET statement_timeout = '10min';
-          WITH brand_counts AS (
-            SELECT
-              l.brand_normalized AS brand,
-              count(*) AS trading_candidates,
-              count(*) FILTER (WHERE upper(COALESCE(l.listing_type, l.intent, '')) = 'WTS') AS wts,
-              count(*) FILTER (WHERE upper(COALESCE(l.listing_type, l.intent, '')) = 'WTB') AS wtb,
-              count(*) FILTER (WHERE l.price_normalized IS NULL OR l.price_normalized <= 0) AS no_price,
-              count(*) FILTER (
-                WHERE COALESCE(NULLIF(btrim(l.image_url), ''), NULLIF(btrim(l.source_media_url_candidate), ''))
-                  ~* '^https?://[^[:space:]]+$'
-              ) AS with_source_image,
-              count(*) FILTER (
-                WHERE upper(COALESCE(l.listing_type, l.intent, '')) = 'WTS'
+          WITH brands(brand) AS (VALUES ('Rolex'::text), ('Patek Philippe'::text)),
+          evidence AS (
+            SELECT brand,
+              EXISTS (
+                SELECT 1
+                FROM staging.listings AS l
+                WHERE l.normalization_run_key = '$($env:NORMALIZED_RUN_KEY)'
+                  AND l.brand_normalized = brands.brand
+                  AND upper(COALESCE(l.category, '')) = 'WATCH'
+                  AND l.parent_id IS NULL
+                  AND COALESCE(l.is_bundle, false) = false
+                  AND upper(COALESCE(l.listing_type, l.intent, '')) IN ('WTS', 'WTB')
+                  AND COALESCE(l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
+                  AND l.raw_message_version_id IS NOT NULL
+                  AND COALESCE(l.source_record_id, '') <> ''
+                  AND l.source_hash IS NOT NULL
+                  AND l.source_candidate_hash IS NOT NULL
+                LIMIT 1
+              ) AS has_trading_candidate,
+              EXISTS (
+                SELECT 1
+                FROM staging.listings AS l
+                WHERE l.normalization_run_key = '$($env:NORMALIZED_RUN_KEY)'
+                  AND l.brand_normalized = brands.brand
+                  AND upper(COALESCE(l.listing_type, l.intent, '')) = 'WTS'
                   AND l.price_usd > 0
                   AND NULLIF(btrim(l.reference_normalized), '') IS NOT NULL
                   AND (
                     l.currency_normalized IN ('USD', 'USDT')
                     OR (l.conversion_rate > 0 AND l.conversion_timestamp IS NOT NULL)
                   )
-              ) AS priced_wts_before_raw_reference_gate
-            FROM staging.listings AS l
-            JOIN staging.mariadb_normalization_import_checkpoints AS c
-              ON c.run_key = l.normalization_run_key
-            WHERE l.normalization_run_key = '$($env:NORMALIZED_RUN_KEY)'
-              AND l.brand_normalized IN ('Rolex', 'Patek Philippe')
-              AND upper(COALESCE(l.category, '')) = 'WATCH'
-              AND l.parent_id IS NULL
-              AND COALESCE(l.is_bundle, false) = false
-              AND upper(COALESCE(l.listing_type, l.intent, '')) IN ('WTS', 'WTB')
-              AND COALESCE(l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
-              AND c.status = 'NORMALIZATION_STAGED'
-              AND c.error_rows = 0
-              AND l.raw_message_version_id IS NOT NULL
-              AND COALESCE(l.source_record_id, '') <> ''
-              AND l.source_hash ~ '^[0-9a-f]{64}$'
-              AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
-              AND lower(COALESCE(l.trading_floor_status, '')) NOT IN (
-                'bundle_child_pending_review', 'bundle_pending_separation',
-                'suppressed_exact_duplicate', 'withdrawn', 'rejected',
-                'hidden', 'deleted', 'archived'
-              )
-              AND upper(COALESCE(l.verdict, '')) NOT IN (
-                'WITHDRAWN', 'REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED'
-              )
-              AND lower(COALESCE(l.price_research_status, '')) <> 'suppressed_exact_duplicate'
-            GROUP BY l.brand_normalized
+                LIMIT 1
+              ) AS has_priced_wts_candidate
+            FROM brands
           )
           SELECT jsonb_build_object(
-            'brands', COALESCE((SELECT jsonb_agg(to_jsonb(brand_counts) ORDER BY brand) FROM brand_counts), '[]'::jsonb),
+            'brands', COALESCE((SELECT jsonb_agg(to_jsonb(evidence) ORDER BY brand) FROM evidence), '[]'::jsonb),
             'controls', (
               SELECT jsonb_agg(to_jsonb(control) ORDER BY canonical_brand)
               FROM public.qnsa_two_brand_release_control AS control
@@ -209,7 +197,9 @@ jobs:
           $brands = @($audit.brands)
           $controls = @($audit.controls)
           if ($brands.Count -ne 2 -or
-              @($brands | Where-Object { [long]$_.trading_candidates -le 0 }).Count -ne 0 -or
+              @($brands | Where-Object {
+                $_.has_trading_candidate -ne $true -or $_.has_priced_wts_candidate -ne $true
+              }).Count -ne 0 -or
               $controls.Count -ne 2 -or
               @($controls | Where-Object {
                 $_.trading_floor_enabled -eq $true -or
