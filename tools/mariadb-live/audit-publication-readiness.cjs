@@ -20,10 +20,11 @@ async function* proposalsFromManifest(manifest) {
   }
 }
 
-function priorityFamily(reference) {
+function priorityFamily(reference, brand) {
   const key = String(reference || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (key.startsWith('5712')) return 'PATEK_5712_FAMILY';
-  if (key === '116500LN' || key === '116500') return 'ROLEX_116500_FAMILY';
+  const brandKey = String(brand || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (brandKey === 'PATEKPHILIPPE' && key.startsWith('5712')) return 'PATEK_5712_FAMILY';
+  if (brandKey === 'ROLEX' && (key === '116500LN' || key === '116500')) return 'ROLEX_116500_FAMILY';
   return null;
 }
 
@@ -84,7 +85,7 @@ async function run(options = {}) {
     increment(counts.media, review.media.public_image_eligible ? 'PUBLIC_IMAGE_ELIGIBLE' : 'PUBLIC_IMAGE_PENDING');
     increment(counts.seller, review.seller.public.name ? 'SOURCE_NAME_PRESENT' : 'SOURCE_NAME_MISSING');
     increment(counts.seller, review.seller.private_source_evidence.phone ? 'PRIVATE_PHONE_PRESENT' : 'PRIVATE_PHONE_MISSING');
-    const family = priorityFamily(review.candidate?.reference);
+    const family = priorityFamily(review.candidate?.reference, review.candidate?.brand);
     if (family) increment(counts.priority_reference, `${family}:${review.trading_floor_status}:${review.price_research_status}`);
 
     const sampleKey = `${review.category}:${review.trading_floor_status}:${review.price_research_status}`;
