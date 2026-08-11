@@ -51,7 +51,9 @@ test('enabled verification requires both brands in trading and price views', () 
   assert.match(workflow, /qnsa_rolex_patek_price_research_source/);
   assert.match(workflow, /ARRAY\['116500LN', '116500'\]/);
   assert.match(workflow, /'5712\/1A-001'/);
-  assert.match(workflow, /p\.reference = ANY\(brands\.references\)/);
-  assert.match(workflow, /t\.normalized_reference = ANY\(brands\.references\)/);
+  assert.match(workflow, /WITH brands\(brand, ref_set\)/);
+  assert.match(workflow, /p\.reference = ANY\(brands\.ref_set\)/);
+  assert.match(workflow, /t\.normalized_reference = ANY\(brands\.ref_set\)/);
+  assert.doesNotMatch(workflow, /WITH brands\(brand, references\)/);
   assert.doesNotMatch(workflow, /p\.canonical_brand/);
 });
