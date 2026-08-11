@@ -69,6 +69,46 @@ jobs:
               )
             ) AS evidence
             FROM staging.listings
+          ), staging_integrity AS (
+            SELECT jsonb_build_object(
+              'distinct_jobs', count(DISTINCT job_id),
+              'rows_per_distinct_job', round(count(*)::numeric / NULLIF(count(DISTINCT job_id), 0), 3),
+              'direct_submission_rows', count(*) FILTER (WHERE source_submission_id IS NOT NULL),
+              'dealer_linked_rows', count(*) FILTER (WHERE dealer_id IS NOT NULL),
+              'published_child_rows', count(*) FILTER (
+                WHERE parent_id IS NOT NULL AND trading_floor_status IN ('published', 'published_pending_verification')
+              ),
+              'eligible_child_rows', count(*) FILTER (
+                WHERE parent_id IS NOT NULL AND price_research_status = 'eligible'
+              ),
+              'eligible_bundle_rows', count(*) FILTER (
+                WHERE is_bundle IS TRUE AND price_research_status = 'eligible'
+              ),
+              'eligible_without_catalog_confirmation', count(*) FILTER (
+                WHERE price_research_status = 'eligible' AND catalog_confirmed IS NOT TRUE
+              ),
+              'eligible_without_positive_price', count(*) FILTER (
+                WHERE price_research_status = 'eligible' AND COALESCE(price_usd, 0) <= 0
+              )
+            ) AS evidence
+            FROM staging.listings
+          ), raw_platforms AS (
+            SELECT source_platform, count(*) AS row_count
+            FROM raw.payloads
+            GROUP BY source_platform
+            ORDER BY row_count DESC
+          ), job_statuses AS (
+            SELECT status::text AS status, count(*) AS row_count
+            FROM jobs.processing_jobs
+            GROUP BY status
+            ORDER BY row_count DESC
+          ), staging_platforms AS (
+            SELECT payload.source_platform, count(*) AS listing_rows, count(DISTINCT listing.job_id) AS distinct_jobs
+            FROM staging.listings AS listing
+            JOIN jobs.processing_jobs AS job ON job.id = listing.job_id
+            JOIN raw.payloads AS payload ON payload.id = job.raw_payload_id
+            GROUP BY payload.source_platform
+            ORDER BY listing_rows DESC
           )
           SELECT jsonb_build_object(
             'project_ref', 'qnsafosakvonzgfcsphh',
@@ -81,7 +121,11 @@ jobs:
             'processing_jobs', (SELECT count(*) FROM jobs.processing_jobs),
             'watch_records', (SELECT count(*) FROM public.watch_records),
             'staging_lineage', (SELECT evidence FROM staging_lineage),
+            'staging_integrity', (SELECT evidence FROM staging_integrity),
             'staging_statuses', (SELECT jsonb_agg(to_jsonb(staging_statuses)) FROM staging_statuses),
+            'raw_platforms', (SELECT jsonb_agg(to_jsonb(raw_platforms)) FROM raw_platforms),
+            'job_statuses', (SELECT jsonb_agg(to_jsonb(job_statuses)) FROM job_statuses),
+            'staging_platforms', (SELECT jsonb_agg(to_jsonb(staging_platforms)) FROM staging_platforms),
             'checkpoint', (
               SELECT to_jsonb(checkpoint) - 'run_key'
               FROM public.mariadb_raw_import_checkpoints AS checkpoint

@@ -20,4 +20,9 @@ test('capacity audit measures staging lineage, statuses, media leakage, and rati
   assert.match(workflow, /children_with_media/);
   assert.match(workflow, /rows_claiming_exactly_five_rating/);
   assert.match(workflow, /raw_payload_versions/);
+  assert.match(workflow, /direct_submission_rows/);
+  assert.match(workflow, /eligible_without_catalog_confirmation/);
+  assert.match(workflow, /eligible_child_rows/);
+  assert.match(workflow, /raw_platforms/);
+  assert.match(workflow, /staging_platforms/);
 });
