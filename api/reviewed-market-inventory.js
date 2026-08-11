@@ -526,7 +526,15 @@ function mapReviewedRecord(row) {
   const multiListing = isMultiListing(row);
   const isUnbundledChild = evidenceValuePresent(row.parent_id);
   const publicImageUrl = multiListing || isUnbundledChild ? null : exactImageUrl;
-  const pendingVerification = String(row.publication_state || '').toUpperCase() === 'PENDING_VERIFICATION'
+  const storedConfidence = Number(row.confidence);
+  const confidencePercent = storedConfidence >= 0 && storedConfidence <= 1
+    ? storedConfidence * 100
+    : storedConfidence;
+  const priorityHumanReview = isPriorityHumanReviewBrand(brand)
+    && (!Number.isFinite(confidencePercent) || confidencePercent < 90
+      || /(?:HUMAN|NEEDS_REVIEW|UNVERIFIED|CONFLICT)/i.test(String(row.verification_status || row.verdict || '')));
+  const pendingVerification = priorityHumanReview
+    || String(row.publication_state || '').toUpperCase() === 'PENDING_VERIFICATION'
     || String(row.trading_floor_status || '').toUpperCase() === 'PUBLISHED_PENDING_VERIFICATION';
   const evidenceCoverage = recordEvidenceCoverage({
     brand,
@@ -679,9 +687,12 @@ function isLegacyReviewedInventoryRecord(record) {
     ? storedConfidence * 100
     : storedConfidence;
   const status = String(record?.listing_status || record?.verdict || '').trim().toUpperCase();
-  return Number.isFinite(confidence)
-    && confidence >= 90
-    && !/(?:BUNDLE_CHILD_PENDING_REVIEW|BUNDLE_PENDING_SEPARATION|SUPPRESSED_EXACT_DUPLICATE|REJECTED|HIDDEN|DELETED|ARCHIVED)/.test(status);
+  const blocked = /(?:BUNDLE_CHILD_PENDING_REVIEW|BUNDLE_PENDING_SEPARATION|SUPPRESSED_EXACT_DUPLICATE|REJECTED|HIDDEN|DELETED|ARCHIVED)/.test(status);
+  if (blocked) return false;
+  if (Number.isFinite(confidence) && confidence >= 90) return true;
+  return isPriorityHumanReviewBrand(record?.brand)
+    && evidenceValuePresent(record?.reference)
+    && !isMultiListing(record);
 }
 
 function buildLegacyMarketQueryParams({
@@ -758,10 +769,9 @@ module.exports = async function handler(req, res) {
       String(req.query?.pageSize || DEFAULT_PAGE_SIZE),
       10,
     );
-    // The verified-image lane is intentionally sparse. A large lookahead asks
-    // Postgres to scan millions of rows merely to prove that a 51st image does
-    // not exist. Cursor pages stay small and predictable instead.
-    const pageSizeLimit = pagination === 'cursor' ? 12 : MAX_PAGE_SIZE;
+    // Honor the 50-card marketplace page. The old 12-row cap was applied
+    // before safety filtering and produced visibly sparse Rolex/Patek pages.
+    const pageSizeLimit = pagination === 'cursor' ? 50 : MAX_PAGE_SIZE;
     const pageSize = Number.isInteger(requestedPageSize)
       ? Math.min(Math.max(requestedPageSize, 12), pageSizeLimit)
       : Math.min(DEFAULT_PAGE_SIZE, pageSizeLimit);

@@ -493,8 +493,8 @@ test('scoped pages use one lookahead row instead of trusting estimated totals', 
   assert.match(source, /const nextCursor = hasMore[\s\S]*encodeInventoryCursor/);
 });
 
-test('cursor inventory bounds sparse image pages and overlaps independent database reads', () => {
-  assert.match(source, /const pageSizeLimit = pagination === 'cursor' \? 12 : MAX_PAGE_SIZE/);
+test('cursor inventory honors the 50-card marketplace page and overlaps independent database reads', () => {
+  assert.match(source, /const pageSizeLimit = pagination === 'cursor' \? 50 : MAX_PAGE_SIZE/);
   assert.match(source, /const summaryPromise = loadSummary\(client\)/);
   assert.match(source, /directRowsPromise = Promise\.resolve\(directQuery\)/);
   assert.match(source, /await directRowsPromise/);
@@ -568,6 +568,9 @@ test('legacy reviewed evidence accepts explicit confirmed review labels but reje
   assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 0.95, listing_status: 'CATALOG_AND_RAW_REFERENCE_CONFIRMED' }), true);
   assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 95, listing_status: 'IMAGE_CONFIRMED_MODEL' }), true);
   assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 89, listing_status: 'IMAGE_CONFIRMED_MODEL' }), false);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ brand: 'Rolex', reference: '116500LN', confidence: 72, listing_status: 'HUMAN_REVIEW' }), true);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ brand: 'Patek Philippe', reference: '5712/1A-001', confidence: null, listing_status: 'NEEDS_REVIEW' }), true);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ brand: 'Patek Philippe', reference: '5712/1A-001', confidence: 72, listing_status: 'BUNDLE_PENDING_SEPARATION' }), false);
   assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 100, listing_status: 'bundle_child_pending_review' }), false);
   assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 100, listing_status: 'REJECTED' }), false);
 });
