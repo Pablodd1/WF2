@@ -111,6 +111,8 @@ function isNormalizedWorkbookSummary(row) {
 }
 
 function isMultiListing(row) {
+  const listingType = cleanExactText(row.listing_type, 30).toUpperCase();
+  if (row.is_bundle === true || ['MULTI', 'MULTI_LISTING', 'BUNDLE'].includes(listingType)) return true;
   return [row.model, row.catalog_model, row.dial_color, row.catalog_dial]
     .some(value => MULTIPLE_LISTING_IDENTITY_VALUES.includes(cleanExactText(value, 40).toLowerCase()));
 }
@@ -120,6 +122,28 @@ function safeSearchTerm(value) {
     .replace(/[,%()*]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function locationSearchPattern(value) {
+  const tokens = cleanExactText(value, 100)
+    .split(/[,%()*\s]+/)
+    .map(token => token.trim())
+    .filter(Boolean);
+  return tokens.length ? `*${tokens.join('*')}*` : '';
+}
+
+function locationMatches(value, query) {
+  const normalizedValue = cleanExactText(value, 100)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const normalizedQuery = cleanExactText(query, 100)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return Boolean(normalizedQuery) && normalizedValue.includes(normalizedQuery);
 }
 
 function recordEvidenceCoverage({
@@ -263,11 +287,10 @@ function directSubmissionMatches(record, filters) {
   if (filters.dial && record.dial_color?.toLowerCase() !== filters.dial.toLowerCase()) return false;
   if (filters.condition && record.condition?.toLowerCase() !== filters.condition.toLowerCase()) return false;
   if (filters.region) {
-    const location = String(record.location || '').trim().toLowerCase();
-    if (location !== filters.region.toLowerCase()) return false;
+    if (!locationMatches(record.location, filters.region)) return false;
   }
   if (filters.search) {
-    const haystack = [record.brand, record.model, record.reference, record.dial_color, record.seller_name, record.raw_message]
+    const haystack = [record.brand, record.model, record.reference, record.dial_color, record.seller_name, record.location, record.raw_message]
       .filter(Boolean).join(' ').toLowerCase();
     if (!haystack.includes(filters.search.toLowerCase())) return false;
   }
@@ -392,6 +415,7 @@ function mapReviewedRecord(row) {
     source_file: row.source_file,
     source_row_number: row.source_row_number,
     source_record_id: row.source_record_id || null,
+    location: evidenceValuePresent(row.location || row.region) ? (row.location || row.region) : null,
     item_category: 'WATCH',
     multi_listing: multiListing,
     is_unbundled_child: isUnbundledChild,
@@ -614,23 +638,24 @@ module.exports = async function handler(req, res) {
     // Cursor pages publish the current reviewed inventory, including incomplete
     // identities and no-price rows; analytics eligibility remains stricter.
     const scopedFilter = true;
-    const preciseCount = Boolean(reference);
     const canReverse = !scopedFilter;
-    const summaryTotal = brand
-      ? Number(summary.brands.find(item => item.brand === brand)?.canonical_listings || 0)
-      : Number(summary.canonical_listings || 0);
+    // Historical workbook checkpoints contain repeated import attempts and are
+    // not a trustworthy customer inventory count. Pagination is cursor-based,
+    // so withhold the total until the reconciled publication ledger supplies an
+    // exact count rather than presenting checkpoint rows as unique listings.
+    const publicInventoryTotal = null;
     const pageWindow = resolvePageWindow({
       page,
       pageSize,
-      total: scopedFilter ? 0 : summaryTotal,
+      total: 0,
       canReverse,
     });
     const publicationBrands = publicationBrandsFromSummary(summary);
 
     if (pageWindow.empty) {
       return res.status(200).json({
-        status: 'ok', count: 0, total: summaryTotal, page, pageSize,
-        totalIsEstimate: false, hasMore: false, nextCursor: null,
+        status: 'ok', count: 0, total: publicInventoryTotal, page, pageSize,
+        totalIsEstimate: false, totalStatus: 'withheld_unreconciled_checkpoint_history', hasMore: false, nextCursor: null,
         records: [], summary, publicationBrands,
         evidenceContract: EVIDENCE_CONTRACT,
         coverage: summarizeCoverage([]),
@@ -644,7 +669,7 @@ module.exports = async function handler(req, res) {
       'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
       'workbook_price_usd,source_price_amount,source_currency',
       'price_evidence_status,confidence,verdict,verification_status,user_image_url,imported_at',
-      'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity,trading_floor_status,reference_search_key',
+      'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity,trading_floor_status,reference_search_key,location',
     ].join(',');
 
     // ponytail: use raw REST instead of Supabase client to avoid client-side issues
@@ -658,6 +683,8 @@ module.exports = async function handler(req, res) {
     if (listingType) queryParams.set('listing_type', `eq.${listingType}`);
     if (imagesOnly) queryParams.set('has_exact_source_image', 'eq.true');
     if (pricedOnly) queryParams.set('source_price_amount', 'gt.0');
+    const regionPattern = locationSearchPattern(region);
+    if (regionPattern) queryParams.set('location', `ilike.${regionPattern}`);
     const genericSearch = safeSearchTerm(search);
     if (genericSearch && !requestedReference && !requestedDial) {
       const pattern = `*${genericSearch}*`;
@@ -672,6 +699,7 @@ module.exports = async function handler(req, res) {
         `catalog_reference.ilike.${pattern}`,
         `seller_name.ilike.${pattern}`,
         `seller_phone.ilike.${pattern}`,
+        `location.ilike.${pattern}`,
         `raw_message.ilike.${pattern}`,
       ].join(','));
     }
@@ -763,8 +791,6 @@ module.exports = async function handler(req, res) {
         hasMore = true;
       }
     }
-    // ponytail: count removed to avoid timeout. Use summary total instead.
-    const total = summaryTotal;
     const rows = pageWindow.reverse ? [...rawRows].reverse() : rawRows;
     const pageResult = boundedPage(rows, pageSize, false);
     const publicationGate = usedLegacyViewContract
@@ -773,6 +799,7 @@ module.exports = async function handler(req, res) {
     let records = pageResult.records
       .map(mapReviewedRecord)
       .filter(record => publicationGate(record) && !record.multi_listing)
+      .filter(record => !region || locationMatches(record.location, region))
       .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
     const firstPageOfLane = requestedOffset === 0
       && (requestedLane === 'images' ? page === 1 : true);
@@ -804,10 +831,11 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       status: 'ok',
       count: records.length,
-      total,
+      total: publicInventoryTotal,
       page,
       pageSize,
-      totalIsEstimate: scopedFilter && !preciseCount,
+      totalIsEstimate: false,
+      totalStatus: 'withheld_unreconciled_checkpoint_history',
       hasMore,
       nextCursor,
       records,
@@ -844,6 +872,8 @@ module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;
 module.exports.isMultiListing = isMultiListing;
 module.exports.safeSearchTerm = safeSearchTerm;
+module.exports.locationSearchPattern = locationSearchPattern;
+module.exports.locationMatches = locationMatches;
 module.exports.parseCursorPage = parseCursorPage;
 module.exports.parseInventoryCursor = parseInventoryCursor;
 module.exports.encodeInventoryCursor = encodeInventoryCursor;
