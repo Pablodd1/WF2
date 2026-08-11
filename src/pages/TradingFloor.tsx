@@ -166,17 +166,28 @@ type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
+function isValidListingImageUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^https?:\/\/[^\s]+$/i.test(value.trim());
+}
+
+function listingImageUrl(listing: ListingRecord) {
+  if (isBundleListing(listing)) return null;
+  const candidates = [listing.thumbnail_url, ...(listing.image_urls || [])];
+  const imageUrl = candidates.find(isValidListingImageUrl);
+  return imageUrl ? imageUrl.trim() : null;
+}
+
 function hasListingImage(listing: ListingRecord) {
-  if (isBundleListing(listing) || listing.multi_listing) return false;
-  if (listing.thumbnail_url && listing.thumbnail_url.trim().length > 0) return true;
-  if (Array.isArray(listing.image_urls) && listing.image_urls.some(url => Boolean(url && String(url).trim().length > 0))) return true;
-  if (listing.has_images) return true;
-  return false;
+  return listingImageUrl(listing) !== null;
 }
 
 /** Detects bundle/multi-watch listings */
 function isBundleListing(listing: ListingRecord) {
-  if (listing.multi_listing) return true;
+  const listingType = cleanValue(listing.listing_type).toUpperCase();
+  const listingStatus = cleanValue(listing.listing_status).toUpperCase();
+  if (listing.multi_listing || listing.is_unbundled_child) return true;
+  if (['MULTI', 'MULTI_LISTING', 'BUNDLE'].includes(listingType)) return true;
+  if (/(?:BUNDLE_CHILD_PENDING_REVIEW|BUNDLE_PENDING_SEPARATION)/.test(listingStatus)) return true;
   if (listing.model && /multiple|multi|mixed/i.test(listing.model)) return true;
   if (listing.dial_color && /multiple|multi|mixed/i.test(listing.dial_color)) return true;
   return false;
@@ -805,10 +816,19 @@ function DesktopFilters({
 
       <fieldset>
         <label htmlFor="location-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Location</label>
-        <select id="location-filter" value={location} disabled={locations.length === 0} onChange={event => onChange({ location: event.target.value || null })} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-50" style={{ borderColor: BORDER, color: INK }}>
-          <option value="">{locations.length ? 'All supplied locations' : 'No supplied locations'}</option>
-          {locations.map(value => <option key={value} value={value}>{value}</option>)}
-        </select>
+        <input
+          id="location-filter"
+          type="search"
+          list="trading-floor-locations"
+          value={location}
+          placeholder="City, region, or country"
+          onChange={event => onChange({ location: event.target.value || null })}
+          className="h-11 w-full rounded border bg-white px-3 text-sm outline-none"
+          style={{ borderColor: BORDER, color: INK }}
+        />
+        <datalist id="trading-floor-locations">
+          {locations.map(value => <option key={value} value={value} />)}
+        </datalist>
         <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>Only locations explicitly supplied with a listing are shown.</p>
       </fieldset>
     </div>
@@ -886,10 +906,18 @@ function MobileFilterSheet({
             ))}
           </FilterGroup>
           <FilterGroup label="Location">
-            <select value={draftLocation} disabled={locations.length === 0} onChange={event => setDraftLocation(event.target.value)} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-50" style={{ borderColor: BORDER, color: INK }}>
-              <option value="">{locations.length ? 'All supplied locations' : 'No supplied locations'}</option>
-              {locations.map(value => <option key={value} value={value}>{value}</option>)}
-            </select>
+            <input
+              type="search"
+              list="mobile-trading-floor-locations"
+              value={draftLocation}
+              placeholder="City, region, or country"
+              onChange={event => setDraftLocation(event.target.value)}
+              className="h-11 w-full rounded border bg-white px-3 text-sm outline-none"
+              style={{ borderColor: BORDER, color: INK }}
+            />
+            <datalist id="mobile-trading-floor-locations">
+              {locations.map(value => <option key={value} value={value} />)}
+            </datalist>
           </FilterGroup>
           {!['all', 'watches'].includes(draftCategory) && (
             <p className="text-xs leading-5" style={{ color: MUTED }}>Category and WTS/WTB intent come from preserved source evidence and the reviewed posting workflow.</p>
@@ -1014,13 +1042,12 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const images = useMemo(() => {
-    if (!hasListingImage(listing)) return [];
-    const candidates = listing.image_urls?.length
-      ? listing.image_urls
-      : [listing.thumbnail_url];
+    const primaryImage = listingImageUrl(listing);
+    if (!primaryImage) return [];
+    const candidates = [primaryImage, ...(listing.image_urls || [])];
     return [...new Set(candidates
       .map(value => String(value || '').trim())
-      .filter(value => value && !failedImages.has(value)))];
+      .filter(value => isValidListingImageUrl(value) && !failedImages.has(value)))];
   }, [failedImages, listing]);
 
   const visibleImageIndex = activeImage < images.length ? activeImage : 0;
@@ -1343,16 +1370,7 @@ function sourcePosterContact(listing: ListingRecord): ListingContact | null {
 
 function ListingImage({ listing, className, onUnavailable }: { listing: ListingRecord; className: string; onUnavailable: () => void }) {
   const meta = getListingMeta(listing);
-  const imageUrl = listing.thumbnail_url || listing.image_urls?.find(Boolean);
-
-  // ponytail: multi-listing children show a badge, not the parent's multi-watch image
-  if (listing.multi_listing) {
-    return (
-      <div className={`${className} rounded-sm flex items-center justify-center bg-bg-elevated`}>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-gold-primary">Multi-Listing</span>
-      </div>
-    );
-  }
+  const imageUrl = listingImageUrl(listing);
 
   return imageUrl ? (
     <img

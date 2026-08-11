@@ -69,13 +69,18 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
 
   assert.match(floor, /media\.matches \? 24 : 50/);
   assert.match(floor, /function hasListingImage/);
-  assert.match(floor, /listing\.thumbnail_url[\s\S]*listing\.image_urls[\s\S]*listing\.has_images/);
+  assert.match(floor, /function isValidListingImageUrl/);
+  assert.match(floor, /function listingImageUrl/);
+  assert.match(floor, /\^https\?:\\\/\\\/\[\^\\s\]\+\$/);
+  assert.doesNotMatch(floor, /if \(listing\.has_images\) return true/);
   assert.match(floor, /const endpoint = '\/api\/reviewed-market-inventory'/);
   assert.doesNotMatch(floor, /fetch\(`\/api\/ingest\?/);
   assert.match(floor, /params\.set\('images', 'true'\)/);
   assert.match(floor, /Price requires review/);
   assert.match(floor, /Workbook price anomaly - held for review/);
   assert.match(floor, /filter\(listing => !isBundleListing\(listing\)\)/);
+  assert.match(floor, /listing\.multi_listing \|\| listing\.is_unbundled_child/);
+  assert.match(floor, /'MULTI', 'MULTI_LISTING', 'BUNDLE'/);
   assert.match(floor, /Number\(hasListingImage\(right\)\) - Number\(hasListingImage\(left\)\)/);
   assert.match(floor, /aria-label="Trading Floor pages"/);
   assert.match(floor, /Page \{cursorHistory\.length \+ 1\}/);

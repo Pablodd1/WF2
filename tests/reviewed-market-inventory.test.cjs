@@ -32,6 +32,29 @@ test('reviewed direct submissions support category, intent, image, price, and lo
   });
   assert.equal(api.directSubmissionMatches(record, { itemCategory: 'HANDBAG', listingType: 'WTS', imagesOnly: true, pricedOnly: true, region: 'Miami, US' }), true);
   assert.equal(api.directSubmissionMatches(record, { itemCategory: 'JEWELRY' }), false);
+  assert.equal(api.directSubmissionMatches(record, { search: 'MIAMI' }), true);
+  assert.equal(api.directSubmissionMatches(record, { region: 'miami' }), true);
+});
+
+test('location filters are case-insensitive and preserve punctuation boundaries', () => {
+  assert.equal(api.locationSearchPattern(' Miami, US '), '*Miami*US*');
+  assert.equal(api.locationMatches('Miami, US', 'miami'), true);
+  assert.equal(api.locationMatches('New York, United States', 'NEW YORK'), true);
+  assert.equal(api.locationMatches('Hong Kong', 'Miami'), false);
+});
+
+test('reviewed records expose only supplied location and suppress bundle child media', () => {
+  const mapped = api.mapReviewedRecord(record({
+    parent_id: 'bundle-parent',
+    location: 'Miami, US',
+    user_image_url: 'https://example.com/group.jpg',
+    has_exact_source_image: true,
+  }));
+  assert.equal(mapped.location, 'Miami, US');
+  assert.equal(mapped.is_unbundled_child, true);
+  assert.equal(mapped.has_images, false);
+  assert.equal(mapped.thumbnail_url, null);
+  assert.deepEqual(mapped.image_urls, []);
 });
 
 test('direct submissions cannot cross the global image boundary', () => {
