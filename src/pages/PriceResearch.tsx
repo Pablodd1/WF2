@@ -1137,88 +1137,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             )}
 
             {/* ── Stats Cards ──────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              {/* Current WTS and WTB activity — real source data only */}
-              <div className="order-2" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Featured listings for sale</h3>
-                  {data.liquidity && (
-                    <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, padding: '2px 8px', borderRadius: 10,
-                      backgroundColor: data.liquidity.source === 'indicators' ? '#e7f5ec' : '#fff4e5',
-                      color: data.liquidity.source === 'indicators' ? GREEN : '#b8860b' }}>
-                      {data.liquidity.source === 'indicators' ? 'Market Indicators' : 'Live Count'}
-                    </span>
-                  )}
-                </div>
-                {data.liquidity && (
-                  <>
-                    {data.liquidity.source === 'indicators' ? (
-                      <>
-                        {data.liquidity.liquidity_score != null && (
-                          <div className="flex items-center justify-between mb-2">
-                            <span style={{ fontSize: 13, color: MUTED }}>Liquidity Score</span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{data.liquidity.liquidity_score}</span>
-                          </div>
-                        )}
-                        {data.liquidity.sale_count != null && (
-                          <div className="flex items-center justify-between mb-2">
-                            <span style={{ fontSize: 13, color: MUTED }}>Sales (window)</span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: GREEN }}>{data.liquidity.sale_count}</span>
-                          </div>
-                        )}
-                        {data.liquidity.demand_score != null && (
-                          <div className="flex items-center justify-between mb-2">
-                            <span style={{ fontSize: 13, color: MUTED }}>Demand</span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: BLUE }}>{data.liquidity.demand_score}</span>
-                          </div>
-                        )}
-                        {data.liquidity.supply_score != null && (
-                          <div className="flex items-center justify-between mb-2">
-                            <span style={{ fontSize: 13, color: MUTED }}>Supply</span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: RED }}>{data.liquidity.supply_score}</span>
-                          </div>
-                        )}
-                        {data.liquidity.wtb_fs_ratio != null && (
-                          <div className="flex items-center justify-between">
-                            <span style={{ fontSize: 13, color: MUTED }}>WTB/FS Ratio</span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: data.liquidity.wtb_fs_ratio > 1 ? RED : GREEN }}>
-                              {Number(data.liquidity.wtb_fs_ratio).toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div>
-                        <div style={{ fontSize: 13, color: MUTED }}>Real listings for sale</div>
-                        <div style={{ fontSize: 36, fontWeight: 700, color: NAVY, marginTop: 4 }}>
-                          {data.liquidity.listing_count.toLocaleString()}
-                        </div>
-                        <div style={{ fontSize: 11, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
-                          No precomputed indicators for this reference — showing live count only.
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
-                      <div className="flex items-center justify-between">
-                        <span style={{ fontSize: 13, color: MUTED }}>Qualified WTB / looking-for demand</span>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: BLUE }}>{(data.liquidity.demand_count || 0).toLocaleString()}</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: MUTED, marginTop: 5 }}>
-                        All catalog-valid WTB/NTQ buyer demand cohorts are tracked.
-                      </div>
-                      {(data.liquidity.demand_cohorts || []).slice(0, 4).map(cohort => (
-                        <div key={cohort.dial_color} className="mt-2 flex items-center justify-between" style={{ fontSize: 12 }}>
-                          <span style={{ color: MUTED }}>{cohort.dial_color}</span>
-                          <span style={{ color: NAVY, fontWeight: 600 }}>{cohort.count.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-
+            <div className="grid grid-cols-1 gap-6 mb-8">
               {/* Pricing Summary */}
-              <div className="order-1" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
+              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing</h3>
                 {stats ? (
                   <>

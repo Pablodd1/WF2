@@ -8,12 +8,12 @@ const test = require('node:test');
 const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
 const pageRender = source.slice(source.indexOf('export default function PriceResearch'), source.indexOf('// â”€â”€ Sub-Components'));
 
-test('Price Research renders analytics before a compact comparable sample', () => {
+test('Price Research renders analytics before the compact featured-sale sample', () => {
   assert.match(source, /const COMPARABLE_LISTING_PREVIEW_LIMIT = 12/);
   assert.match(pageRender, /Analysis outcome and methodology/);
-  assert.match(pageRender, /Qualified comparable listings/);
+  assert.match(pageRender, /Featured listings for sale/);
   assert.ok(
-    pageRender.indexOf('Analysis outcome and methodology') < pageRender.indexOf('Qualified comparable listings'),
+    pageRender.indexOf('Analysis outcome and methodology') < pageRender.indexOf('Featured listings for sale'),
     'analysis must render before listing evidence',
   );
   assert.match(pageRender, /\.slice\(0, COMPARABLE_LISTING_PREVIEW_LIMIT\)/);
@@ -30,11 +30,12 @@ test('qualified comparable listings are ordered from lowest to highest verified 
   assert.match(pageRender, /Number\(left\.price_usd\) - Number\(right\.price_usd\)/);
 });
 
-test('customer listing rows contain included comparables only', () => {
-  assert.match(pageRender, /\(data\?\.rows \|\| \[\]\)[\s\S]*\.filter\(row => !row\.is_outlier\)/);
+test('featured-sale rows preserve source evidence while excluded rows never alter averages', () => {
+  assert.match(pageRender, /\.\.\.data\.rows, \.\.\.\(data\.retained_rows \|\| \[\]\), \.\.\.\(data\.outlier_rows \|\| \[\]\)/);
+  assert.match(pageRender, /eligibilityDifference/);
   assert.match(pageRender, /listings\.map\(row =>/);
-  assert.doesNotMatch(pageRender, /retainedListings\.map|data\.outlier_rows\.slice/);
-  assert.match(pageRender, /Outliers and other exclusions are summarized above and are not displayed as watch listings/);
+  assert.match(pageRender, /Additional real source listings remain visible here with their exclusion reason and never alter the averages/);
+  assert.match(pageRender, /exclusionLabel=\{outlierReason\(row\.outlier_reason\)\}/);
   assert.match(source, /function ComparableThumbnail/);
   assert.match(source, /row\.raw_message \?\? row\.raw_line/);
 });
