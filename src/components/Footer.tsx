@@ -6,6 +6,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 
 export const CONTACT_WHATSAPP_URL = 'https://api.whatsapp.com/send?phone=17869569201&text=Hello,%20I%20would%20like%20more%20information%20about%20your%20services.';
 export const CONTACT_EMAIL = 'Aduenas@watchfacts.com';
+export const APP_POST_SMART_URL = 'https://91933fc4.curatedlux.pages.dev';
 
 export const COMMUNITY_GROUPS = [
   { name: 'Curated Luxury | B2B Watch Trading Chat', network: 'WhatsApp', href: 'https://chat.whatsapp.com/JEaK91DatRkLZFKMaJZYIH?mode=gi_t' },
@@ -124,6 +125,7 @@ export function Footer() {
           <nav aria-label="Marketplace links" className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm text-white/55">
             {MARKET_LINKS.map(([label, to]) => <Link key={to} to={to} className="transition-colors hover:text-white">{t(label)}</Link>)}
             <a href={LUXFI_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 transition-colors hover:text-white">{t('HIRE FI')} <ExternalLink size={12} /></a>
+            <a href={APP_POST_SMART_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 transition-colors hover:text-white">APP POST SMART <ExternalLink size={12} /></a>
           </nav>
           <div className="flex flex-col items-start gap-3 text-sm">
             <Link to="/cl-login" className="text-[#c9a96e] transition-colors hover:text-white">CL Login</Link>

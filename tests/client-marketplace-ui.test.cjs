@@ -31,6 +31,8 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.doesNotMatch(header, /!landing && <LanguageToggle/);
   assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
   assert.match(footer, /\['POST IT', '\/dealer\/post'\]/);
+  assert.match(footer, /APP_POST_SMART_URL = 'https:\/\/91933fc4\.curatedlux\.pages\.dev'/);
+  assert.match(footer, /href=\{APP_POST_SMART_URL\}[\s\S]*APP POST SMART/);
   assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
   assert.match(postItem, /const LUXURY_APP_URL = 'https:\/\/luxuryapp-wf\.vercel\.app\/'/);
   assert.match(postItem, /Curated Luxury form/);
