@@ -1,0 +1,247 @@
+name: QNSA Rolex and Patek reviewed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_ROLEX_PATEK or ENABLE_QNSA_ROLEX_PATEK
+        required: true
+        type: string
+      mode:
+        description: Audit candidates without publication, or enable the reviewed release
+        required: true
+        default: audit
+        type: choice
+        options:
+          - audit
+          - enable
+      run_key:
+        description: Completed normalized staging run to release
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+
+concurrency:
+  group: qnsa-rolex-patek-reviewed-release
+  cancel-in-progress: false
+
+jobs:
+  reviewed-release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      NORMALIZED_RUN_KEY: ${{ inputs.run_key }}
+      EXPECTED_SOURCE_ROWS: '1394269'
+      EXPECTED_STAGED_ROWS: '603678'
+      EXPECTED_DEFERRED_ROWS: '790591'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate explicit release authorization
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $expected = if ('${{ inputs.mode }}' -eq 'enable') {
+            'ENABLE_QNSA_ROLEX_PATEK'
+          } else {
+            'AUDIT_QNSA_ROLEX_PATEK'
+          }
+          if ('${{ inputs.confirmation }}' -cne $expected) {
+            throw "Confirmation must exactly match $expected for mode ${{ inputs.mode }}."
+          }
+          if ($env:SUPABASE_PROJECT_REF -ne 'qnsafosakvonzgfcsphh') {
+            throw 'Release is pinned to the QNSA Supabase project.'
+          }
+          if ($env:NORMALIZED_RUN_KEY -notmatch '^[A-Za-z0-9._:-]{1,100}$') {
+            throw 'Invalid normalized run key.'
+          }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) {
+            throw 'SUPABASE_ACCESS_TOKEN is unavailable.'
+          }
+
+      - name: Apply reviewed release contract and source-backed correction
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $paths = @(
+            'supabase/migrations/20260811190000_qnsa_rolex_patek_reviewed_release.sql',
+            'supabase/migrations/20260811220000_qnsa_source_backed_public_fields.sql'
+          )
+          foreach ($path in $paths) {
+            $sql = Get-Content -Raw -LiteralPath $path
+            if ($sql -match '(?i)INSERT\s+INTO\s+public\.watch_records') {
+              throw "Release migration attempts a legacy watch_records write: $path"
+            }
+            $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          }
+
+      - name: Verify completed staging and arm the disabled release lane
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          WITH checkpoint AS (
+            SELECT status, input_rows, staged_rows, deferred_rows, error_rows
+            FROM staging.mariadb_normalization_import_checkpoints
+            WHERE run_key = '$($env:NORMALIZED_RUN_KEY)'
+          ), armed AS (
+            UPDATE public.qnsa_two_brand_release_control
+            SET trading_floor_enabled = false,
+                price_research_enabled = false,
+                enabled_run_key = '$($env:NORMALIZED_RUN_KEY)',
+                enabled_at = NULL,
+                change_reason = 'Reviewed release audit armed; public release remains disabled'
+            WHERE canonical_brand IN ('Rolex', 'Patek Philippe')
+            RETURNING canonical_brand
+          )
+          SELECT jsonb_build_object(
+            'checkpoint', (SELECT to_jsonb(checkpoint) FROM checkpoint),
+            'armed_brands', (SELECT count(*) FROM armed),
+            'legacy_watch_records', (SELECT count(*) FROM public.watch_records)
+          ) AS evidence;
+          "@
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $evidence = $result[0].evidence
+          $checkpoint = $evidence.checkpoint
+          if ($checkpoint.status -ne 'NORMALIZATION_STAGED' -or
+              [long]$checkpoint.input_rows -ne [long]$env:EXPECTED_SOURCE_ROWS -or
+              [long]$checkpoint.staged_rows -ne [long]$env:EXPECTED_STAGED_ROWS -or
+              [long]$checkpoint.deferred_rows -ne [long]$env:EXPECTED_DEFERRED_ROWS -or
+              [long]$checkpoint.error_rows -ne 0 -or
+              [long]$evidence.armed_brands -ne 2) {
+            $evidence | ConvertTo-Json -Depth 6
+            throw 'Completed normalized-staging evidence does not match the reconciled run.'
+          }
+          $evidence | ConvertTo-Json -Depth 6
+
+      - name: Audit exact reviewed-release candidates
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          WITH brand_counts AS (
+            SELECT
+              brand_normalized AS brand,
+              count(*) AS trading_candidates,
+              count(*) FILTER (WHERE listing_type = 'WTS') AS wts,
+              count(*) FILTER (WHERE listing_type = 'WTB') AS wtb,
+              count(*) FILTER (WHERE price_normalized IS NULL OR price_normalized <= 0) AS no_price,
+              count(*) FILTER (WHERE public_image_eligible) AS with_source_image,
+              count(*) FILTER (WHERE contact_consent) AS with_source_phone,
+              count(*) FILTER (WHERE dealer_rating IS NOT NULL OR rating IS NOT NULL) AS with_source_rating
+            FROM public.qnsa_rolex_patek_reviewed_release_base
+            GROUP BY brand_normalized
+          ), safety AS (
+            SELECT
+              count(*) FILTER (WHERE parent_id IS NOT NULL) AS child_rows,
+              count(*) FILTER (WHERE source_record_id IS NULL OR raw_message_version_id IS NULL OR source_hash IS NULL) AS invalid_lineage,
+              count(*) FILTER (WHERE listing_type NOT IN ('WTS', 'WTB')) AS invalid_intent
+            FROM public.qnsa_rolex_patek_reviewed_release_base
+          )
+          SELECT jsonb_build_object(
+            'brands', COALESCE((SELECT jsonb_agg(to_jsonb(brand_counts) ORDER BY brand) FROM brand_counts), '[]'::jsonb),
+            'safety', (SELECT to_jsonb(safety) FROM safety),
+            'public_trading_rows_while_disabled', (SELECT count(*) FROM public.qnsa_rolex_patek_trading_floor_source),
+            'public_price_rows_while_disabled', (SELECT count(*) FROM public.qnsa_rolex_patek_price_research_source),
+            'public_wtb_rows_while_disabled', (SELECT count(*) FROM public.qnsa_rolex_patek_wtb_demand_source)
+          ) AS audit;
+          "@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $audit = $result[0].audit
+          $brands = @($audit.brands)
+          if ($brands.Count -ne 2 -or
+              @($brands | Where-Object { [long]$_.trading_candidates -le 0 }).Count -ne 0 -or
+              [long]$audit.safety.child_rows -ne 0 -or
+              [long]$audit.safety.invalid_lineage -ne 0 -or
+              [long]$audit.safety.invalid_intent -ne 0 -or
+              [long]$audit.public_trading_rows_while_disabled -ne 0 -or
+              [long]$audit.public_price_rows_while_disabled -ne 0 -or
+              [long]$audit.public_wtb_rows_while_disabled -ne 0) {
+            $audit | ConvertTo-Json -Depth 8
+            throw 'Reviewed-release candidate audit failed.'
+          }
+          $audit | ConvertTo-Json -Depth 8 | Tee-Object -FilePath qnsa-rolex-patek-release-audit.json
+
+      - name: Enable reviewed Rolex and Patek release
+        if: ${{ inputs.mode == 'enable' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          UPDATE public.qnsa_two_brand_release_control
+          SET trading_floor_enabled = true,
+              price_research_enabled = true,
+              enabled_run_key = '$($env:NORMALIZED_RUN_KEY)',
+              enabled_at = now(),
+              disabled_at = NULL,
+              change_reason = 'Authorized reviewed Rolex and Patek production release'
+          WHERE canonical_brand IN ('Rolex', 'Patek Philippe');
+          NOTIFY pgrst, 'reload schema';
+          "@
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          Start-Sleep -Seconds 3
+
+      - name: Verify enabled customer and analytics views
+        if: ${{ inputs.mode == 'enable' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          WITH trading AS (
+            SELECT canonical_brand AS brand, count(*) AS rows,
+              count(*) FILTER (WHERE intent = 'WTS') AS wts,
+              count(*) FILTER (WHERE intent = 'WTB') AS wtb,
+              count(*) FILTER (WHERE workbook_price_usd IS NULL) AS no_price,
+              count(*) FILTER (WHERE has_exact_source_image) AS with_image,
+              count(*) FILTER (WHERE seller_phone IS NOT NULL) AS with_phone,
+              count(*) FILTER (WHERE dealer_rating IS NOT NULL) AS with_rating
+            FROM public.qnsa_rolex_patek_trading_floor_source
+            GROUP BY canonical_brand
+          ), price AS (
+            SELECT canonical_brand AS brand, count(*) AS rows
+            FROM public.qnsa_rolex_patek_price_research_source
+            GROUP BY canonical_brand
+          ), demand AS (
+            SELECT canonical_brand AS brand, count(*) AS rows
+            FROM public.qnsa_rolex_patek_wtb_demand_source
+            GROUP BY canonical_brand
+          )
+          SELECT jsonb_build_object(
+            'trading', COALESCE((SELECT jsonb_agg(to_jsonb(trading) ORDER BY brand) FROM trading), '[]'::jsonb),
+            'price_research', COALESCE((SELECT jsonb_agg(to_jsonb(price) ORDER BY brand) FROM price), '[]'::jsonb),
+            'wtb_demand', COALESCE((SELECT jsonb_agg(to_jsonb(demand) ORDER BY brand) FROM demand), '[]'::jsonb)
+          ) AS release;
+          "@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $release = $result[0].release
+          if (@($release.trading).Count -ne 2 -or @($release.price_research).Count -ne 2) {
+            $release | ConvertTo-Json -Depth 8
+            throw 'Both Rolex and Patek must be present in Trading Floor and Price Research.'
+          }
+          $release | ConvertTo-Json -Depth 8 | Tee-Object -FilePath qnsa-rolex-patek-release-enabled.json
+
+      - name: Upload release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-patek-reviewed-release-${{ inputs.mode }}-${{ github.run_id }}
+          path: |
+            qnsa-rolex-patek-release-audit.json
+            qnsa-rolex-patek-release-enabled.json
+          if-no-files-found: warn
+          retention-days: 30
