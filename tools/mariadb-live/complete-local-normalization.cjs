@@ -11,12 +11,15 @@ function shardState(root) {
     .filter(entry => entry.isDirectory())
     .map(entry => {
       const directory = path.join(root, entry.name);
-      const stderr = path.join(directory, 'stderr.log');
+      const stderrFiles = fs.readdirSync(directory)
+        .filter(name => /^stderr(?:[-.][^.]+)*\.log$/i.test(name))
+        .map(name => path.join(directory, name));
       const reconciliation = path.join(directory, 'normalization-reconciliation.json');
       return {
         name: entry.name,
         directory,
-        error_bytes: fs.existsSync(stderr) ? fs.statSync(stderr).size : 0,
+        error_files: stderrFiles.map(file => path.basename(file)),
+        error_bytes: stderrFiles.reduce((sum, file) => sum + fs.statSync(file).size, 0),
         completed: fs.existsSync(reconciliation),
       };
     })
