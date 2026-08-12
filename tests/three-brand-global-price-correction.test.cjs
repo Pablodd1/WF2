@@ -110,6 +110,7 @@ test('workflow separates read-only audit, one-page canary, and bounded resume', 
   assert.match(workflow, /staging_row_delta/);
   assert.match(workflow, /raw_version_row_delta/);
   assert.match(workflow, /unsupported_currency_rows/);
+  assert.match(workflow, /MAX_PENDING_JOBS: '0'/);
   assert.match(workflow, /scanned_rows -ne \(\[long\]\$r\.run\.corrected_rows\+\[long\]\$r\.run\.skipped_rows\)/);
 });
 

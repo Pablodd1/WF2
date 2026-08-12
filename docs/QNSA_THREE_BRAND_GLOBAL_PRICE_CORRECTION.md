@@ -14,7 +14,7 @@ The parser also recognizes AED, SAR, TWD, and VND. The ECB daily reference-rate 
 
 1. Target project is exactly `qnsafosakvonzgfcsphh`.
 2. The requested normalization checkpoint is `NORMALIZATION_STAGED`, has zero errors, and reconciles `input_rows = staged_rows + existing_rows + deferred_rows`.
-3. Database headroom and pending/failed job thresholds pass.
+3. Database headroom passes, live normalization writers are paused, and pending/failed processing jobs are zero. This prevents a legitimate concurrent insert from being mistaken for a correction-created row.
 4. Exact raw-version lineage exists for every selected row.
 5. Scope excludes parents, children, bundles, duplicates, rejected/hidden/deleted/archived records, non-watches, WTB, and missing references.
 6. Run `AUDIT` first. It performs no schema or data writes.

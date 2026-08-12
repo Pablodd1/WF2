@@ -65,7 +65,7 @@ jobs:
       CORRECTION_POLICY_VERSION: three-brand-global-dated-fx-v1
       DATABASE_LIMIT_GIB: ${{ inputs.database_limit_gib }}
       MINIMUM_HEADROOM_GIB: ${{ inputs.minimum_headroom_gib }}
-      MAX_PENDING_JOBS: '1000'
+      MAX_PENDING_JOBS: '0'
       MAX_FAILED_JOBS: '0'
       CORRECTION_PAGE_SIZE: '100'
       CORRECTION_MAX_BATCHES: ${{ inputs.mode == 'CANARY' && '1' || inputs.max_batches }}
@@ -120,6 +120,12 @@ jobs:
                 AND brand_normalized IN ('Rolex','Patek Philippe','Audemars Piguet')
                 AND upper(COALESCE(category,'')) = 'WATCH' AND parent_id IS NULL AND COALESCE(is_bundle,false) = false
                 AND upper(COALESCE(listing_type,intent,'')) = 'WTS' AND NULLIF(btrim(reference_normalized),'') IS NOT NULL
+                AND COALESCE(provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
+                AND source_hash ~ '^[0-9a-f]{64}$'
+                AND lower(COALESCE(trading_floor_status,'')) NOT IN (
+                  'bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate',
+                  'withdrawn','rejected','hidden','deleted','archived')
+                AND upper(COALESCE(verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
                 AND EXISTS (SELECT 1 FROM public.raw_message_versions v WHERE v.id=l.raw_message_version_id
                   AND v.source_record_id=l.source_record_id AND v.source_hash=l.source_hash)
                 AND (COALESCE(price_usd,0)<=0 OR (upper(COALESCE(currency_normalized,'')) NOT IN ('USD','USDT')
