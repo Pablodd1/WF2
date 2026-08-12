@@ -80,7 +80,7 @@ async function loadQnsaVerifiedTradingPrices(client, {
 }) {
   const { data: rpcRows, error: rpcError } = await client.rpc('qnsa_bounded_price_research_rows', {
     p_brand: brand,
-    p_references: referenceVariants,
+    p_references: familyPrefix ? [`${familyPrefix}%`] : referenceVariants,
     p_listing_type: 'WTS',
     p_limit: limit,
   });
@@ -149,7 +149,7 @@ async function loadQnsaTradingDemand(client, {
 }) {
   const { data: rpcRows, error: rpcError } = await client.rpc('qnsa_bounded_price_research_rows', {
     p_brand: brand,
-    p_references: referenceVariants,
+    p_references: familyPrefix ? [`${familyPrefix}%`] : referenceVariants,
     p_listing_type: 'WTB',
     p_limit: limit,
   });
