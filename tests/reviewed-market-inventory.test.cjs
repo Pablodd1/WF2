@@ -31,7 +31,8 @@ test('QNSA pages use indexed brand/reference predicates and no-image lane', () =
 
 test('broad QNSA page RPC bounds IDs before joining immutable evidence', () => {
   const migration = fs.readFileSync(path.join(__dirname, '../supabase/migrations/20260812012000_qnsa_trading_floor_page_rows.sql'), 'utf8');
-  assert.match(migration, /WITH eligible_ids AS MATERIALIZED/);
+  assert.match(migration, /WITH candidate_ids AS MATERIALIZED/);
+  assert.match(migration, /eligible_ids AS MATERIALIZED/);
   assert.match(migration, /JOIN staging\.listings AS l ON l\.id = eligible\.id/);
   assert.match(migration, /p_brand IS NULL OR l\.brand_normalized = p_brand/);
   assert.match(source, /body: JSON\.stringify\(\{ p_brand: brand \|\| null/);
