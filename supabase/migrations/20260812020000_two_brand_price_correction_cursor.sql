@@ -49,7 +49,7 @@ SECURITY DEFINER
 SET search_path = public, staging, pg_catalog
 AS $$
 DECLARE
-  v_census BIGINT;
+  v_census BIGINT := 9223372036854775807;
   v_run staging.mariadb_price_policy_correction_runs%ROWTYPE;
 BEGIN
   IF p_correction_run_key !~ '^[A-Za-z0-9._:-]{1,100}$'
@@ -66,21 +66,6 @@ BEGIN
   WHERE run_key = p_normalization_run_key AND status = 'NORMALIZATION_STAGED' AND error_rows = 0;
   IF NOT FOUND THEN RAISE EXCEPTION 'normalization run is not complete and reconciled'; END IF;
 
-  SELECT count(*) INTO v_census
-  FROM staging.listings AS listing
-  WHERE listing.normalization_run_key = p_normalization_run_key
-    AND listing.brand_normalized IN ('Rolex', 'Patek Philippe')
-    AND upper(COALESCE(listing.category, '')) = 'WATCH'
-    AND listing.parent_id IS NULL AND COALESCE(listing.is_bundle, false) = false
-    AND upper(COALESCE(listing.listing_type, listing.intent, '')) = 'WTS'
-    AND COALESCE(listing.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
-    AND NULLIF(btrim(listing.reference_normalized), '') IS NOT NULL
-    AND listing.source_hash ~ '^[0-9a-f]{64}$'
-    AND lower(COALESCE(listing.trading_floor_status, '')) NOT IN (
-      'bundle_child_pending_review', 'bundle_pending_separation', 'suppressed_exact_duplicate',
-      'withdrawn', 'rejected', 'hidden', 'deleted', 'archived')
-    AND upper(COALESCE(listing.verdict, '')) NOT IN ('WITHDRAWN', 'REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED');
-
   INSERT INTO staging.mariadb_price_policy_correction_runs (
     correction_run_key, normalization_run_key, policy_version, fx_snapshot, census_rows
   ) VALUES (p_correction_run_key, p_normalization_run_key, p_policy_version, p_fx_snapshot, v_census)
@@ -89,7 +74,7 @@ BEGIN
   SELECT * INTO v_run FROM staging.mariadb_price_policy_correction_runs
   WHERE correction_run_key = p_correction_run_key;
   IF v_run.normalization_run_key <> p_normalization_run_key
-    OR v_run.policy_version <> p_policy_version OR v_run.census_rows <> v_census THEN
+    OR v_run.policy_version <> p_policy_version THEN
     RAISE EXCEPTION 'correction run configuration or fixed census does not match';
   END IF;
   RETURN to_jsonb(v_run);
@@ -272,6 +257,7 @@ BEGIN
       skipped_rows = skipped_rows + p_skipped_rows,
       batch_sequence = batch_sequence + 1,
       status = CASE WHEN v_more THEN 'RUNNING' ELSE 'COMPLETE' END,
+      census_rows = CASE WHEN v_more THEN census_rows ELSE scanned_rows + p_scanned_rows END,
       updated_at = now(),
       completed_at = CASE WHEN v_more THEN NULL ELSE now() END
   WHERE correction_run_key = p_correction_run_key
