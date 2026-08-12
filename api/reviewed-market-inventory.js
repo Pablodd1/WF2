@@ -800,7 +800,10 @@ function buildLegacyMarketQueryParams({
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
+  // Do not let an edge cache preserve an empty/transient response while the
+  // underlying release database is healthy. Successful calls may be cached
+  // briefly; failures are explicitly changed to no-store below.
+  res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=30');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -1229,6 +1232,7 @@ module.exports = async function handler(req, res) {
     });
   } catch (error) {
     console.error('[reviewed-market-inventory] error:', error.message);
+    res.setHeader('Cache-Control', 'private, no-store, max-age=0');
     return res.status(503).json({
       status: 'error',
       error: 'Reviewed market inventory is temporarily unavailable',

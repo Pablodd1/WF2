@@ -97,6 +97,14 @@ test('Trading Floor preserves source text and orders price intelligence before p
   assert.ok(cardSource.indexOf('Original raw message') < cardSource.indexOf('Posted by'));
 });
 
+test('Trading Floor recovers once from transient inventory timeouts without caching emptiness', () => {
+  const floor = read('src/pages/TradingFloor.tsx');
+  const api = read('api/reviewed-market-inventory.js');
+  assert.match(floor, /response\.status === 502 \|\| response\.status === 503 \|\| response\.status === 504/);
+  assert.match(floor, /cache: 'no-store'/);
+  assert.match(api, /private, no-store, max-age=0/);
+});
+
 test('Price Research uses dial colors, closed methodology, images, and complete fallback evidence', () => {
   const research = read('src/pages/PriceResearch.tsx');
 

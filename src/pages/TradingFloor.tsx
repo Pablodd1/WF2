@@ -498,7 +498,16 @@ export default function TradingFloor() {
         if (categoryFilter !== 'all') params.set('item', categoryFilter);
         if (!['all', 'watches'].includes(categoryFilter)) params.delete('brand');
         const endpoint = '/api/reviewed-market-inventory';
-        const response = await fetch(`${endpoint}?${params.toString()}`, { signal: controller.signal });
+        const requestUrl = `${endpoint}?${params.toString()}`;
+        let response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
+        // A cold hosted query can occasionally cross the database statement
+        // timeout. Retry once after a short pause so a transient 503 does not
+        // leave the customer staring at an empty Trading Floor.
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          await new Promise(resolve => window.setTimeout(resolve, 450));
+          if (controller.signal.aborted) return;
+          response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
+        }
         let data: TradingFloorResponse;
         try {
           data = await response.json() as TradingFloorResponse;
