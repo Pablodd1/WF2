@@ -100,9 +100,7 @@ async function loadQnsaVerifiedTradingPrices(client, {
   query = familyPrefix
     ? query.like('normalized_reference', `${familyPrefix}%`)
     : query.in('normalized_reference', referenceVariants);
-  const { data, error } = await query
-    .order('posting_date', { ascending: false })
-    .limit(limit);
+  const { data, error } = await query.limit(limit);
   if (error) throw error;
   return (data || [])
     .filter(row => row.has_verified_usd_price === true && Number(row.verified_price_usd) > 0)
@@ -155,9 +153,11 @@ async function loadQnsaTradingDemand(client, {
   query = familyPrefix
     ? query.like('normalized_reference', `${familyPrefix}%`)
     : query.in('normalized_reference', referenceVariants);
-  const { data, error } = await query
-    .order('posting_date', { ascending: false })
-    .limit(limit);
+  // The view already has a selective exact-reference boundary. Sorting the
+  // layered projection in Postgres forced a large temporary sort and crossed
+  // the production statement timeout for 5164A. Dates remain on every row and
+  // repost selection is deterministic downstream.
+  const { data, error } = await query.limit(limit);
   if (error) throw error;
   return (data || []).map(row => ({
     id: row.id,
