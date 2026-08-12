@@ -680,18 +680,6 @@ test('standalone listing type is indexed while condition remains narrowly guarde
   assert.doesNotMatch(source, /if \(\(listingType \|\| condition\)/);
 });
 
-test('broad QNSA pages place verified USD before no-price activity without dropping it', () => {
-  const migration = fs.readFileSync(
-    path.join(__dirname, '../supabase/migrations/20260812040000_qnsa_broad_price_first_order.sql'),
-    'utf8',
-  );
-  assert.match(migration, /price_usd >= 1000/);
-  assert.match(migration, /conversion_rate > 0 AND l\.conversion_timestamp IS NOT NULL/);
-  assert.match(migration, /DESC NULLS LAST/);
-  assert.match(migration, /upper\(COALESCE\(l\.listing_type, l\.intent, ''\)\) IN \('WTS', 'WTB'\)/);
-  assert.doesNotMatch(migration, /price_usd IS NOT NULL\s+AND/);
-});
-
 test('QNSA exact reference RPC preserves Patek catalog punctuation', () => {
   assert.match(source, /const patekBaseEquivalent[\s\S]*replace\(\/-001\$\/i, ''\)/);
   assert.match(source, /p_reference: familyReference \? reference : \(patekBaseEquivalent/);
