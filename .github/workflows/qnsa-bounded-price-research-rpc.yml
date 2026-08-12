@@ -31,6 +31,7 @@ jobs:
           if ($env:SUPABASE_PROJECT_REF -ne $env:EXPECTED_PROJECT_REF) { throw 'Unexpected Supabase project.' }
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260812030000_qnsa_bounded_price_research_rpc.sql'
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260812033000_qnsa_trading_reference_rows.sql')
           $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
 

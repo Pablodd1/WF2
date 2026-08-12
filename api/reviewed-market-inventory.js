@@ -1049,6 +1049,25 @@ module.exports = async function handler(req, res) {
       // view query. `restRes` is assigned before its normal declaration.
       var preloadedQnsaResponse = directResponse;
     }
+    if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      && brand && reference && !legacyMarketViewContractDetected) {
+      const normalizedBrand = String(brand).trim().toLowerCase();
+      const familyReference = (normalizedBrand === 'rolex' && reference === '116500')
+        || (normalizedBrand === 'patek philippe' && reference === '5712');
+      const referenceRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_reference_rows`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_brand: brand, p_reference: reference, p_family: familyReference,
+          p_limit: qnsaBrandScanLimit, p_offset: requestedOffset }),
+      });
+      if (!referenceRowsRes.ok) {
+        const referenceRowsError = await referenceRowsRes.text();
+        throw new Error(`QNSA reference rows failed: ${referenceRowsRes.status} ${referenceRowsError.slice(0, 200)}`);
+      }
+      const referenceRows = (await referenceRowsRes.json()).map(row => row.row_data || row).filter(Boolean);
+      var preloadedQnsaResponse = new Response(JSON.stringify(referenceRows), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
     let restUrl = `${process.env.SUPABASE_URL}/rest/v1/${MARKET_SOURCE_VIEW}?${activeQueryParams.toString()}`;
     let restRes = preloadedQnsaResponse || await fetch(restUrl, {
       headers,
