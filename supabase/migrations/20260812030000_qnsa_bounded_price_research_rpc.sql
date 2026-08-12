@@ -104,7 +104,7 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.qnsa_bounded_price_research_rows(text, text[], text, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.qnsa_bounded_price_research_rows(text, text[], text, integer)
-  TO anon, authenticated, service_role, postgres;
+  TO anon, authenticated, service_role, postgres, supabase_admin;
 
 CREATE INDEX IF NOT EXISTS idx_staging_qnsa_price_reference_rpc
   ON staging.listings (

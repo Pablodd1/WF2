@@ -47,7 +47,10 @@ jobs:
             'bundle_leakage', (SELECT count(*) FROM public.qnsa_bounded_price_research_rows('Patek Philippe', ARRAY['5164A'], 'WTS', 1000) AS row WHERE row->>'listing_status' IN ('bundle_pending_separation','bundle_child_pending_review'))
           ) AS result;
           "@
-          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          # Management sessions run as supabase_admin; the SECURITY DEFINER
+          # function itself is read-only, but a read-only transaction cannot
+          # execute it on this hosted role boundary.
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
           $evidence = $result[0].result
           if ([int]$evidence.wts_5164a -lt 1 -or [int]$evidence.wts_116500ln -lt 1) { throw 'Reference smoke test returned no WTS evidence.' }
