@@ -680,6 +680,17 @@ test('standalone listing type is indexed while condition remains narrowly guarde
   assert.doesNotMatch(source, /if \(\(listingType \|\| condition\)/);
 });
 
+test('QNSA broad intent lanes have an expression-matched cold-read index', () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, '../supabase/migrations/20260812041000_qnsa_intent_feed_index.sql'),
+    'utf8',
+  );
+  assert.match(migration, /brand_normalized/);
+  assert.match(migration, /upper\(COALESCE\(listing_type, intent, ''\)\)/);
+  assert.match(migration, /created_at DESC/);
+  assert.match(migration, /parent_id IS NULL/);
+});
+
 test('QNSA exact reference RPC preserves Patek catalog punctuation', () => {
   assert.match(source, /const patekBaseEquivalent[\s\S]*replace\(\/-001\$\/i, ''\)/);
   assert.match(source, /p_reference: familyReference \? reference : \(patekBaseEquivalent/);
