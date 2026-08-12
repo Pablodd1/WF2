@@ -56,6 +56,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install locked runtime dependencies
+        run: npm ci --ignore-scripts
+
       - name: Validate authorization and pinned target
         shell: pwsh
         run: |
