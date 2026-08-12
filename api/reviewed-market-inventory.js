@@ -919,8 +919,7 @@ module.exports = async function handler(req, res) {
     // unpartitioned 501-row window and filtering it in Node is both slower and
     // capable of starving one brand when the newest global rows skew toward the
     // other brand.
-    const qnsaBrandOnly = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
-      && Boolean(brand)
+    const qnsaBroadPage = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       && !reference;
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) {
@@ -1030,11 +1029,11 @@ module.exports = async function handler(req, res) {
     // Broad QNSA brand pages first resolve a tiny ordered ID page from the
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
-    if (qnsaBrandOnly && !legacyMarketViewContractDetected) {
+    if (qnsaBroadPage && !legacyMarketViewContractDetected) {
       const pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_page_rows`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_brand: brand, p_limit: qnsaBrandScanLimit, p_offset: requestedOffset }),
+        body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit, p_offset: requestedOffset }),
       });
       if (!pageRowsRes.ok) {
         const pageRowsError = await pageRowsRes.text();
@@ -1096,9 +1095,9 @@ module.exports = async function handler(req, res) {
     const sourceRows = data || [];
     const brandRows = sourceRows;
     let rawRows = brandRows.slice(0, pageSize);
-    let hasMore = brandRows.length > pageSize || (qnsaBrandOnly && sourceRows.length >= qnsaBrandScanLimit);
+    let hasMore = brandRows.length > pageSize || (qnsaBroadPage && sourceRows.length >= qnsaBrandScanLimit);
     let nextLane = requestedLane;
-    const lastReturnedSourceIndex = qnsaBrandOnly && rawRows.length
+    const lastReturnedSourceIndex = qnsaBroadPage && rawRows.length
       ? sourceRows.indexOf(rawRows[rawRows.length - 1]) + 1
       : rawRows.length;
     let nextOffset = requestedOffset + lastReturnedSourceIndex;

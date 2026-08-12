@@ -16,13 +16,36 @@ AS $$
 DECLARE
   v_run_key TEXT;
 BEGIN
-  SELECT control.enabled_run_key INTO v_run_key
+  SELECT min(control.enabled_run_key) INTO v_run_key
   FROM public.qnsa_two_brand_release_control AS control
-  WHERE control.canonical_brand = p_brand
-    AND control.trading_floor_enabled = true;
+  WHERE (p_brand IS NULL OR control.canonical_brand = p_brand)
+    AND control.trading_floor_enabled = true
+  HAVING count(DISTINCT control.enabled_run_key) = 1;
   IF v_run_key IS NULL THEN RETURN; END IF;
 
   RETURN QUERY
+  WITH eligible_ids AS MATERIALIZED (
+    SELECT l.id
+    FROM staging.listings AS l
+    WHERE l.normalization_run_key = v_run_key
+      AND (p_brand IS NULL OR l.brand_normalized = p_brand)
+      AND upper(COALESCE(l.category, '')) = 'WATCH'
+      AND l.parent_id IS NULL AND COALESCE(l.is_bundle, false) = false
+      AND upper(COALESCE(l.listing_type, l.intent, '')) IN ('WTS', 'WTB')
+      AND COALESCE(l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
+      AND l.raw_message_version_id IS NOT NULL AND COALESCE(l.source_record_id, '') <> ''
+      AND l.source_hash ~ '^[0-9a-f]{64}$' AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
+      AND lower(COALESCE(l.trading_floor_status, '')) NOT IN (
+        'bundle_child_pending_review', 'bundle_pending_separation', 'suppressed_exact_duplicate',
+        'withdrawn', 'rejected', 'hidden', 'deleted', 'archived')
+      AND upper(COALESCE(l.verdict, '')) NOT IN ('WITHDRAWN', 'REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED')
+      AND lower(COALESCE(l.price_research_status, '')) <> 'suppressed_exact_duplicate'
+      AND upper(COALESCE(l.publication_review_status, 'PENDING_REVIEW')) IN (
+        'PENDING_REVIEW', 'APPROVED', 'READY_FOR_PUBLICATION_REVIEW')
+    ORDER BY l.created_at DESC, l.id DESC
+    LIMIT LEAST(GREATEST(COALESCE(p_limit, 51), 1), 101)
+    OFFSET GREATEST(COALESCE(p_offset, 0), 0)
+  )
   SELECT to_jsonb(row_contract)
   FROM (
     SELECT
@@ -75,28 +98,13 @@ BEGIN
       COALESCE(l.dealer_rating, l.rating,
         CASE WHEN COALESCE(rv.raw_payload#>>'{raw_data,dealer_rating}', '') ~ '^[0-9]+([.][0-9]+)?$'
           THEN (rv.raw_payload#>>'{raw_data,dealer_rating}')::numeric ELSE NULL END) AS dealer_rating
-    FROM staging.listings AS l
+    FROM eligible_ids AS eligible
+    JOIN staging.listings AS l ON l.id = eligible.id
     JOIN public.raw_message_versions AS rv
       ON rv.id = l.raw_message_version_id
      AND rv.source_record_id = l.source_record_id
      AND rv.source_hash = l.source_hash
-    WHERE l.normalization_run_key = v_run_key AND l.brand_normalized = p_brand
-      AND upper(COALESCE(l.category, '')) = 'WATCH'
-      AND l.parent_id IS NULL AND COALESCE(l.is_bundle, false) = false
-      AND upper(COALESCE(l.listing_type, l.intent, '')) IN ('WTS', 'WTB')
-      AND COALESCE(l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
-      AND l.raw_message_version_id IS NOT NULL AND COALESCE(l.source_record_id, '') <> ''
-      AND l.source_hash ~ '^[0-9a-f]{64}$' AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
-      AND lower(COALESCE(l.trading_floor_status, '')) NOT IN (
-        'bundle_child_pending_review', 'bundle_pending_separation', 'suppressed_exact_duplicate',
-        'withdrawn', 'rejected', 'hidden', 'deleted', 'archived')
-      AND upper(COALESCE(l.verdict, '')) NOT IN ('WITHDRAWN', 'REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED')
-      AND lower(COALESCE(l.price_research_status, '')) <> 'suppressed_exact_duplicate'
-      AND upper(COALESCE(l.publication_review_status, 'PENDING_REVIEW')) IN (
-        'PENDING_REVIEW', 'APPROVED', 'READY_FOR_PUBLICATION_REVIEW')
     ORDER BY l.created_at DESC, l.id DESC
-    LIMIT LEAST(GREATEST(COALESCE(p_limit, 51), 1), 101)
-    OFFSET GREATEST(COALESCE(p_offset, 0), 0)
   ) AS row_contract;
 END;
 $$;
