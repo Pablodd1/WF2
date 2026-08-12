@@ -22,6 +22,8 @@ test('Price Research shows compact full-width WTS evidence and keeps WTB aggrega
   assert.match(page, /filter\(row => !\['WTB', 'BUY'\]\.includes/);
   assert.match(page, /Compact, full-width WTS source evidence only/);
   assert.match(page, /width: '100%'/);
+  assert.match(page, /grid-cols-\[60px_minmax\(0,1fr\)\] sm:!flex/);
+  assert.match(page, /line-clamp-1 sm:line-clamp-2/);
   assert.match(page, /WTB \/ WTS ratio/);
   assert.match(page, /wtbDemandCount\.toLocaleString\(\)/);
 });

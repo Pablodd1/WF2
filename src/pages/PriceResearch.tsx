@@ -2032,7 +2032,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
     : 'Included in qualified comparable average';
   return (
     <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}, ${evidenceStatus}`}
-      className="min-h-20"
+      className="!grid min-h-20 grid-cols-[60px_minmax(0,1fr)] sm:!flex"
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
@@ -2050,6 +2050,10 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
           <span className="mr-2">· {row.condition || 'Unspecified'}</span>
           {date && <span>· {date.split('T')[0]}</span>}
         </div>
+        <div className="mt-1 flex items-center justify-between gap-2 sm:hidden">
+          <span style={{ fontSize: 13, fontWeight: 700, color: excludedFromAverages ? '#8a6500' : GOLD }}>{priceLabel}</span>
+          <span style={{ color: MUTED, fontSize: 9 }}>{excludedFromAverages ? 'Not used in analytics' : 'Used in analytics'}</span>
+        </div>
         <div
           style={{
             display: 'inline-flex', marginTop: 7, borderRadius: 999, padding: '4px 8px',
@@ -2061,7 +2065,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
           {evidenceStatus}
         </div>
         {rawMessage && (
-          <div className="line-clamp-2" style={{ color: MUTED, fontSize: 11, lineHeight: 1.45, marginTop: 7, whiteSpace: 'pre-wrap' }}>
+          <div className="line-clamp-1 sm:line-clamp-2" style={{ color: MUTED, fontSize: 11, lineHeight: 1.45, marginTop: 7, whiteSpace: 'pre-wrap' }}>
             {rawMessage}
           </div>
         )}
@@ -2072,13 +2076,13 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
           </div>
         )}
       </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+      <div className="hidden sm:block" style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: excludedFromAverages ? '#8a6500' : GOLD }}>{priceLabel}</div>
         <div style={{ color: MUTED, fontSize: 10, marginTop: 2 }}>
           {excludedFromAverages ? 'Not used in chart or statistics' : 'Used in chart and statistics'}
         </div>
       </div>
-      <Eye className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
+      <Eye className="hidden h-3.5 w-3.5 sm:block" style={{ color: MUTED, flexShrink: 0 }} />
     </button>
   );
 }
