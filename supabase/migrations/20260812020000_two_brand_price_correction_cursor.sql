@@ -213,8 +213,7 @@ BEGIN
       AND upper(COALESCE(listing.verdict, '')) NOT IN ('WITHDRAWN', 'REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED')
     ORDER BY listing.id LIMIT p_scanned_rows
   )
-  SELECT count(*) INTO v_expected_count FROM exact_page;
-  SELECT id INTO v_expected_last FROM exact_page ORDER BY id DESC LIMIT 1;
+  SELECT count(*), max(id) INTO v_expected_count, v_expected_last FROM exact_page;
   IF v_expected_count <> p_scanned_rows OR v_expected_last IS DISTINCT FROM p_next_cursor THEN
     RAISE EXCEPTION 'cursor page membership does not reconcile';
   END IF;
