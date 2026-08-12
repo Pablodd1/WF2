@@ -110,10 +110,11 @@ test('Trading Floor and Price Research share controlled featured reference short
   const research = read('src/pages/PriceResearch.tsx');
 
   assert.match(cohorts, /116500LN/);
-  assert.match(cohorts, /5712\/1A-001/);
+  assert.match(cohorts, /reference: '5712'/);
   assert.match(cohorts, /tradingQuery: '5712'/);
   assert.match(shortcuts, /Featured research/);
   assert.match(floor, /mode="trading"/);
+  assert.match(floor, /reference: cohort\.reference/);
   assert.match(research, /mode="research"/);
 });
 

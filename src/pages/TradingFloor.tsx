@@ -270,6 +270,7 @@ export default function TradingFloor() {
     ? requestedIntent as IntentFilter
     : '';
   const search = searchParams.get('q') || '';
+  const exactReference = searchParams.get('reference') || '';
   const requestedBrand = searchParams.get('brand') || '';
   const imagesOnly = searchParams.get('images') === 'true';
   const pricedOnly = searchParams.get('priced') === 'true';
@@ -307,7 +308,7 @@ export default function TradingFloor() {
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter, ratingFilter, dateFilter].join('\u001f');
+  const viewKey = [brandFilter, categoryFilter, intentFilter, search, exactReference, imagesOnly, pricedOnly, locationFilter, ratingFilter, dateFilter].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
@@ -447,7 +448,7 @@ export default function TradingFloor() {
     setSuggestionsOpen(false);
     setCatalogSuggestions([]);
     resetResults();
-    updateViewParams({ q: selectedSearch, brand: suggestion.brand });
+    updateViewParams({ q: selectedSearch, reference: suggestion.reference, brand: suggestion.brand });
   }, [resetResults, updateViewParams]);
 
   useEffect(() => {
@@ -483,6 +484,7 @@ export default function TradingFloor() {
         if (brandFilter) params.set('brand', brandFilter);
         if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
+        if (exactReference) params.set('reference', exactReference);
         if (imagesOnly) params.set('images', 'true');
         if (pricedOnly) params.set('priced', 'true');
         if (locationFilter) params.set('region', locationFilter);
@@ -530,7 +532,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [brandFilter, categoryFilter, cursor, dateFilter, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, ratingFilter, search]);
+  }, [brandFilter, categoryFilter, cursor, dateFilter, exactReference, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, ratingFilter, search]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -669,7 +671,7 @@ export default function TradingFloor() {
                     setSearchInput('');
                     setSuggestionsOpen(false);
                     resetResults();
-                    updateViewParams({ q: '', brand, item: 'watches' });
+                    updateViewParams({ q: '', reference: null, brand, item: 'watches' });
                   }}
                   className="min-h-10 rounded-md border px-3 text-xs font-semibold transition-colors"
                   style={{ borderColor: brandFilter === brand && !search ? GOLD : BORDER, background: brandFilter === brand && !search ? GOLD : '#FFFFFF', color: brandFilter === brand && !search ? '#FFFFFF' : INK }}
@@ -687,7 +689,7 @@ export default function TradingFloor() {
                 setSearchInput(cohort.tradingQuery);
                 setSuggestionsOpen(false);
                 resetResults();
-                updateViewParams({ q: cohort.tradingQuery, brand: cohort.brand, item: 'watches' });
+                updateViewParams({ q: cohort.tradingQuery, reference: cohort.reference, brand: cohort.brand, item: 'watches' });
               }}
             />
           </div>

@@ -24,7 +24,7 @@ export const PRIORITY_REFERENCE_COHORTS: PriorityReferenceCohort[] = [
   {
     brand: 'Patek Philippe',
     model: 'Nautilus',
-    reference: '5712/1A-001',
+    reference: '5712',
     tradingQuery: '5712',
     label: 'Patek Philippe Nautilus 5712',
     scope: 'Entire 5712 family',
