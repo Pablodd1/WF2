@@ -61,7 +61,12 @@ BEGIN
       l.dial_color_normalized AS dial_color, l.dial_color_normalized AS catalog_dial,
       l.condition_normalized AS condition, l.price_usd AS workbook_price_usd,
       l.price_normalized AS source_price_amount, l.currency_normalized AS source_currency,
-      CASE WHEN l.price_normalized > 0 THEN 'SOURCE_PRICE_SUPPLIED' ELSE 'PRICE_NOT_SUPPLIED' END AS price_evidence_status,
+      CASE
+        WHEN l.currency_normalized IN ('USD','USDT') AND l.price_usd > 0 THEN 'SOURCE_EXPLICIT_USD_MATCH'
+        WHEN l.price_usd > 0 AND l.conversion_rate > 0 AND l.conversion_timestamp IS NOT NULL THEN 'EXPLICIT_SOURCE_FX_CONVERTED'
+        WHEN l.price_normalized > 0 THEN 'CURRENCY_UNCONFIRMED'
+        ELSE 'PRICE_NOT_SUPPLIED'
+      END AS price_evidence_status,
       l.overall_confidence AS confidence, l.verdict, l.verdict AS verification_status,
       CASE WHEN btrim(COALESCE(l.image_url, l.source_media_url_candidate, '')) ~* '^https?://[^[:space:]]+$'
         THEN btrim(COALESCE(l.image_url, l.source_media_url_candidate)) END AS user_image_url,

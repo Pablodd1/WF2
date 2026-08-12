@@ -1645,7 +1645,10 @@ function listingKindLabel(listing: ListingRecord) {
 function verifiedUsdPrice(listing: ListingRecord) {
   const usdEvidence = listing.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
     || listing.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED';
-  if (!usdEvidence || listing.price_research_eligible !== true) return null;
+  // Customer display may use a source-backed USD conversion even when a
+  // missing dial/model keeps this observation out of analytical averages.
+  // Display eligibility and analytics eligibility are separate contracts.
+  if (!usdEvidence) return null;
   const value = Number(listing.price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
