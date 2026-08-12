@@ -24,6 +24,7 @@ test('Trading Floor reference autocomplete exposes accessible combobox keyboard 
 test('an explicit catalog selection connects Trading Floor and Price Research', () => {
   assert.match(source, /updateViewParams\(\{ q: selectedSearch, reference: suggestion\.reference, brand: suggestion\.brand \}\)/);
   assert.match(source, /params\.set\('reference', exactReference\)/);
+  assert.match(source, /if \(search && !exactReference\) params\.set\('q', search\)/);
   assert.match(source, /Open Price Research/);
   assert.match(source, /selectedCatalogReference\.reference/);
 });

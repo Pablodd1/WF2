@@ -684,3 +684,18 @@ test('QNSA exact reference RPC preserves Patek catalog punctuation', () => {
   assert.match(source, /p_family: Boolean\(familyReference \|\| patekBaseEquivalent\)/);
   assert.doesNotMatch(source, /p_reference: reference, p_family/);
 });
+
+test('obvious immutable-raw cross-brand conflicts never reach customer cards', () => {
+  assert.equal(api.hasObviousCrossBrandConflict(record({
+    canonical_brand: 'Patek Philippe',
+    supplied_brand: null,
+    brand_scope: null,
+    raw_message: 'Vacheron Constantin 3110V full set 16700usd',
+  })), false);
+  assert.equal(api.hasObviousCrossBrandConflict(record({
+    canonical_brand: 'Patek Philippe',
+    supplied_brand: null,
+    brand_scope: null,
+    raw_message: 'Patek Philippe 5712 plus Vacheron trade considered',
+  })), false);
+});

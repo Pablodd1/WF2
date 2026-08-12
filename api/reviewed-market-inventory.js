@@ -378,12 +378,28 @@ function effectiveItemCategory(row) {
   return WATCH_EXCLUSIVE_BRANDS.has(brand) && reference ? 'WATCH' : 'OTHER';
 }
 
+function hasObviousCrossBrandConflict(row) {
+  const brand = cleanExactText(row?.canonical_brand || row?.supplied_brand || row?.brand_scope, 80).toUpperCase();
+  const raw = String(row?.raw_message || '').toLowerCase();
+  if (!raw) return false;
+  const explicitlyPatek = /\b(?:patek|philippe)\b/i.test(raw);
+  const explicitlyRolex = /\brolex\b/i.test(raw);
+  if (brand === 'PATEK PHILIPPE') {
+    return !explicitlyPatek && /\b(?:vacheron|rolex|audemars|cartier|omega|hublot)\b|\brichard\s+mille\b/i.test(raw);
+  }
+  if (brand === 'ROLEX') {
+    return !explicitlyRolex && /\b(?:patek|vacheron|audemars|cartier|omega|hublot)\b|\brichard\s+mille\b/i.test(raw);
+  }
+  return false;
+}
+
 function isTradingFloorSourceRow(row) {
   const itemCategory = effectiveItemCategory(row);
   const listingType = cleanExactText(row?.listing_type, 30).toUpperCase();
   const status = cleanExactText(row?.trading_floor_status || row?.listing_status, 60).toUpperCase();
   if (!['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY'].includes(itemCategory)) return false;
   if (!['WTS', 'WTB'].includes(listingType)) return false;
+  if (hasObviousCrossBrandConflict(row)) return false;
   if (row?.parent_id || row?.is_bundle === true) return false;
   if (['BUNDLE_CHILD_PENDING_REVIEW', 'BUNDLE_PENDING_SEPARATION', 'SUPPRESSED_EXACT_DUPLICATE', 'HIDDEN', 'REJECTED', 'DELETED', 'ARCHIVED'].includes(status)) {
     return false;
@@ -1232,6 +1248,7 @@ module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;
 module.exports.isTradingFloorSourceRow = isTradingFloorSourceRow;
 module.exports.normalizeItemCategory = normalizeItemCategory;
 module.exports.effectiveItemCategory = effectiveItemCategory;
+module.exports.hasObviousCrossBrandConflict = hasObviousCrossBrandConflict;
 module.exports.isLegacyReviewedInventoryRecord = isLegacyReviewedInventoryRecord;
 module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;

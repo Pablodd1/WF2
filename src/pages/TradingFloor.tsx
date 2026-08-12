@@ -483,7 +483,11 @@ export default function TradingFloor() {
         if (cursor) params.set('cursor', cursor);
         if (brandFilter) params.set('brand', brandFilter);
         if (intentFilter) params.set('type', intentFilter);
-        if (search) params.set('q', search);
+        // Once the customer chooses a catalog reference, the exact server
+        // predicate is authoritative. Keeping the display label in `q` caused
+        // the client-side token filter to discard valid Patek base/-001
+        // equivalents returned by the indexed reference cohort.
+        if (search && !exactReference) params.set('q', search);
         if (exactReference) params.set('reference', exactReference);
         if (imagesOnly) params.set('images', 'true');
         if (pricedOnly) params.set('priced', 'true');
