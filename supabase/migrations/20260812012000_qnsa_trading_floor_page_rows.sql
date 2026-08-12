@@ -5,7 +5,8 @@
 CREATE OR REPLACE FUNCTION public.qnsa_trading_floor_page_rows(
   p_brand TEXT,
   p_limit INTEGER DEFAULT 51,
-  p_offset INTEGER DEFAULT 0
+  p_offset INTEGER DEFAULT 0,
+  p_listing_type TEXT DEFAULT NULL
 )
 RETURNS TABLE(row_data JSONB)
 LANGUAGE plpgsql
@@ -32,6 +33,7 @@ BEGIN
       AND upper(COALESCE(l.category, '')) = 'WATCH'
       AND l.parent_id IS NULL AND COALESCE(l.is_bundle, false) = false
       AND upper(COALESCE(l.listing_type, l.intent, '')) IN ('WTS', 'WTB')
+      AND (p_listing_type IS NULL OR upper(COALESCE(l.listing_type, l.intent, '')) = upper(p_listing_type))
     ORDER BY l.created_at DESC, l.id DESC
     -- Resolve a small index-backed candidate window before evaluating JSON,
     -- regex and publication-state evidence. The final query still enforces
@@ -122,4 +124,9 @@ $$;
 REVOKE ALL ON FUNCTION public.qnsa_trading_floor_page_rows(TEXT, INTEGER, INTEGER)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.qnsa_trading_floor_page_rows(TEXT, INTEGER, INTEGER)
+  TO service_role;
+
+REVOKE ALL ON FUNCTION public.qnsa_trading_floor_page_rows(TEXT, INTEGER, INTEGER, TEXT)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.qnsa_trading_floor_page_rows(TEXT, INTEGER, INTEGER, TEXT)
   TO service_role;

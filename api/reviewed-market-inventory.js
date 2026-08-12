@@ -1049,7 +1049,8 @@ module.exports = async function handler(req, res) {
       const pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_page_rows`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit, p_offset: requestedOffset }),
+        body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
+          p_offset: requestedOffset, p_listing_type: listingType || null }),
       });
       if (!pageRowsRes.ok) {
         const pageRowsError = await pageRowsRes.text();

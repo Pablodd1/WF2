@@ -35,6 +35,8 @@ test('broad QNSA page RPC bounds IDs before joining immutable evidence', () => {
   assert.match(migration, /eligible_ids AS MATERIALIZED/);
   assert.match(migration, /JOIN staging\.listings AS l ON l\.id = eligible\.id/);
   assert.match(migration, /p_brand IS NULL OR l\.brand_normalized = p_brand/);
+  assert.match(migration, /p_listing_type TEXT DEFAULT NULL/);
+  assert.match(migration, /p_listing_type IS NULL OR upper/);
   assert.match(source, /body: JSON\.stringify\(\{ p_brand: brand \|\| null/);
 });
 
@@ -701,6 +703,7 @@ test('obvious immutable-raw cross-brand conflicts never reach customer cards', (
 });
 
 test('bounded QNSA RPC rows reapply every customer filter before publication', () => {
+  assert.match(source, /p_listing_type: listingType \|\| null/);
   assert.match(source, /!listingType \|\| String\(record\.listing_type/);
   assert.match(source, /!imagesOnly \|\| record\.has_images === true/);
   assert.match(source, /!pricedOnly \|\| hasUsableSourcePrice\(record\)/);
