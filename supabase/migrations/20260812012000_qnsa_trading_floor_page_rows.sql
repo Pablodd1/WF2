@@ -24,7 +24,7 @@ BEGIN
   IF v_run_key IS NULL THEN RETURN; END IF;
 
   RETURN QUERY
-  WITH eligible_ids AS MATERIALIZED (
+  WITH candidate_ids AS MATERIALIZED (
     SELECT l.id
     FROM staging.listings AS l
     WHERE l.normalization_run_key = v_run_key
@@ -32,7 +32,18 @@ BEGIN
       AND upper(COALESCE(l.category, '')) = 'WATCH'
       AND l.parent_id IS NULL AND COALESCE(l.is_bundle, false) = false
       AND upper(COALESCE(l.listing_type, l.intent, '')) IN ('WTS', 'WTB')
-      AND COALESCE(l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
+    ORDER BY l.created_at DESC, l.id DESC
+    -- Resolve a small index-backed candidate window before evaluating JSON,
+    -- regex and publication-state evidence. The final query still enforces
+    -- every release gate; this only prevents those expressions from forcing a
+    -- full scan of the reconciled run for each 50-card customer page.
+    LIMIT LEAST(GREATEST(COALESCE(p_limit, 51), 1) * 10, 1010)
+    OFFSET GREATEST(COALESCE(p_offset, 0), 0)
+  ), eligible_ids AS MATERIALIZED (
+    SELECT l.id
+    FROM candidate_ids AS candidate
+    JOIN staging.listings AS l ON l.id = candidate.id
+    WHERE COALESCE(l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
       AND l.raw_message_version_id IS NOT NULL AND COALESCE(l.source_record_id, '') <> ''
       AND l.source_hash ~ '^[0-9a-f]{64}$' AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
       AND lower(COALESCE(l.trading_floor_status, '')) NOT IN (
@@ -44,7 +55,6 @@ BEGIN
         'PENDING_REVIEW', 'APPROVED', 'READY_FOR_PUBLICATION_REVIEW')
     ORDER BY l.created_at DESC, l.id DESC
     LIMIT LEAST(GREATEST(COALESCE(p_limit, 51), 1), 101)
-    OFFSET GREATEST(COALESCE(p_offset, 0), 0)
   )
   SELECT to_jsonb(row_contract)
   FROM (
