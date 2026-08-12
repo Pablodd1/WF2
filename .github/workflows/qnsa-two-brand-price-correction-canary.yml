@@ -159,7 +159,10 @@ jobs:
             ), '[]'::jsonb)
           ) AS evidence;
           "@
-          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          # The management API's read-only session cannot execute the bounded
+          # security-definer feed. This statement remains SELECT-only, but it
+          # runs in the explicitly granted administrative session.
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
           if (-not $result[0].evidence) { throw 'Bounded immutable candidate query returned no evidence.' }
           $evidence = $result[0].evidence
