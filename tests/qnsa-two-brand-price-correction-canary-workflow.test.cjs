@@ -19,13 +19,12 @@ test('canary is explicit, GitHub-hosted, pinned, and exactly 100 rows', () => {
   assert.match(workflow, /corrected_rows -ne 100/);
 });
 
-test('canary fetches no more than 500 exact immutable QNSA version rows', () => {
-  assert.match(workflow, /WITH bounded_listings AS MATERIALIZED/);
-  assert.match(workflow, /LIMIT 250[\s\S]*LIMIT 250/);
+test('canary fetches no more than 202 exact immutable QNSA version rows', () => {
+  assert.match(workflow, /WITH bounded_ids AS MATERIALIZED/);
+  assert.equal((workflow.match(/qnsa_trading_floor_page_rows\('[^']+', 101, 0\)/g) || []).length, 2);
   assert.match(workflow, /JOIN public\.raw_message_versions AS version/);
   assert.match(workflow, /version\.source_record_id = listing\.source_record_id/);
   assert.match(workflow, /version\.source_hash = listing\.source_hash/);
-  assert.equal((workflow.match(/LIMIT 250/g) || []).length, 2);
   assert.doesNotMatch(workflow, /RAW_INPUT: C:\\/);
 });
 

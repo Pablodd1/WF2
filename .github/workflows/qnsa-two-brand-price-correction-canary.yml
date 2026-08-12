@@ -130,30 +130,12 @@ jobs:
             'records', COALESCE((
               SELECT jsonb_agg(candidate.payload ORDER BY candidate.brand_rank, candidate.listing_id)
               FROM (
-                WITH bounded_listings AS MATERIALIZED (
-                  (SELECT listing.*
-                   FROM staging.listings AS listing
-                   WHERE listing.normalization_run_key = '$escapedRunKey'
-                     AND listing.brand_normalized = 'Rolex'
-                     AND listing.parent_id IS NULL
-                     AND COALESCE(listing.is_bundle, false) = false
-                     AND upper(COALESCE(listing.category, '')) = 'WATCH'
-                     AND listing.listing_type = 'WTS'
-                     AND NULLIF(btrim(listing.reference_normalized), '') IS NOT NULL
-                   ORDER BY listing.created_at DESC, listing.id DESC
-                   LIMIT 250)
+                WITH bounded_ids AS MATERIALIZED (
+                  (SELECT (page.row_data->>'id')::uuid AS id
+                   FROM public.qnsa_trading_floor_page_rows('Rolex', 101, 0) AS page)
                   UNION ALL
-                  (SELECT listing.*
-                   FROM staging.listings AS listing
-                   WHERE listing.normalization_run_key = '$escapedRunKey'
-                     AND listing.brand_normalized = 'Patek Philippe'
-                     AND listing.parent_id IS NULL
-                     AND COALESCE(listing.is_bundle, false) = false
-                     AND upper(COALESCE(listing.category, '')) = 'WATCH'
-                     AND listing.listing_type = 'WTS'
-                     AND NULLIF(btrim(listing.reference_normalized), '') IS NOT NULL
-                   ORDER BY listing.created_at DESC, listing.id DESC
-                   LIMIT 250)
+                  (SELECT (page.row_data->>'id')::uuid AS id
+                   FROM public.qnsa_trading_floor_page_rows('Patek Philippe', 101, 0) AS page)
                 )
                 SELECT
                   listing.id AS listing_id,
@@ -165,10 +147,13 @@ jobs:
                     'normalized_reference', listing.reference_normalized,
                     'raw_payload', version.raw_payload
                   ) AS payload
-                FROM bounded_listings AS listing
+                FROM bounded_ids AS bounded
+                JOIN staging.listings AS listing ON listing.id = bounded.id
                 JOIN public.raw_message_versions AS version ON version.id = listing.raw_message_version_id
                 WHERE version.source_record_id = listing.source_record_id
                   AND version.source_hash = listing.source_hash
+                  AND listing.normalization_run_key = '$escapedRunKey'
+                  AND listing.listing_type = 'WTS'
               ) AS candidate
             ), '[]'::jsonb)
           ) AS evidence;
@@ -179,7 +164,7 @@ jobs:
           $evidence = $result[0].evidence
           "STAGING_ROWS_BEFORE=$($evidence.staging_rows_before)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           @($evidence.records) | ConvertTo-Json -Depth 20 -Compress | Set-Content -Encoding utf8 $env:QNSA_CANARY_INPUT
-          Write-Output 'Fetched a bounded encrypted-in-transit candidate window; raw values are intentionally not logged.'
+          Write-Output 'Fetched at most 202 indexed feed candidates; raw values are intentionally not logged.'
 
       - name: Build exactly 100 raw-free correction records
         shell: pwsh
