@@ -25,7 +25,7 @@ test('canary fetches no more than 500 exact immutable QNSA version rows', () => 
   assert.match(workflow, /JOIN public\.raw_message_versions AS version/);
   assert.match(workflow, /version\.source_record_id = listing\.source_record_id/);
   assert.match(workflow, /version\.source_hash = listing\.source_hash/);
-  assert.match(workflow, /LIMIT 500/);
+  assert.equal((workflow.match(/LIMIT 250/g) || []).length, 2);
   assert.doesNotMatch(workflow, /RAW_INPUT: C:\\/);
 });
 
