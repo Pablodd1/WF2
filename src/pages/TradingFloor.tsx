@@ -744,10 +744,15 @@ export default function TradingFloor() {
       <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-6">
         <div className="mb-5 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
-            Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong>
-            {total === null
-              ? ' listings'
-              : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> listings</>}
+            {loading && listings.length === 0 ? (
+              <><strong style={{ color: INK }}>Loading Rolex and Patek inventory…</strong></>
+            ) : (
+              <>Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong>
+                {total === null
+                  ? ' listings'
+                  : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> listings</>}
+              </>
+            )}
           </span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>

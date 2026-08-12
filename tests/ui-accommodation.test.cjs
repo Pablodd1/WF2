@@ -102,6 +102,7 @@ test('Trading Floor recovers once from transient inventory timeouts without cach
   const api = read('api/reviewed-market-inventory.js');
   assert.match(floor, /response\.status === 502 \|\| response\.status === 503 \|\| response\.status === 504/);
   assert.match(floor, /cache: 'no-store'/);
+  assert.match(floor, /Loading Rolex and Patek inventory/);
   assert.match(api, /private, no-store, max-age=0/);
 });
 
