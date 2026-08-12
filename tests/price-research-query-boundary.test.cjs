@@ -46,7 +46,7 @@ test('QNSA analytics uses the indexed Trading release and skips supplemental dia
   assert.match(source, /!usingQnsaReviewedSource[\s\S]*supplementalCatalogDials\.length/);
   assert.match(source, /loadQnsaTradingDemand[\s\S]*\.from\(QNSA_TRADING_SOURCE\)/);
   assert.match(source, /client\.rpc\('qnsa_bounded_price_research_rows'/);
-  assert.match(source, /familyPrefix \? \[`\$\{familyPrefix\}%`\] : referenceVariants/);
+  assert.match(source, /if \(!familyPrefix\)[\s\S]*qnsa_bounded_price_research_rows/);
   const qnsaLoader = source.slice(
     source.indexOf('async function loadQnsaVerifiedTradingPrices'),
     source.indexOf('// Look up a human model name'),

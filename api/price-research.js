@@ -78,14 +78,16 @@ async function loadQnsaVerifiedTradingPrices(client, {
   familyPrefix,
   limit,
 }) {
-  const { data: rpcRows, error: rpcError } = await client.rpc('qnsa_bounded_price_research_rows', {
-    p_brand: brand,
-    p_references: familyPrefix ? [`${familyPrefix}%`] : referenceVariants,
-    p_listing_type: 'WTS',
-    p_limit: limit,
-  });
-  if (!rpcError) return rpcRows || [];
-  console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
+  if (!familyPrefix) {
+    const { data: rpcRows, error: rpcError } = await client.rpc('qnsa_bounded_price_research_rows', {
+      p_brand: brand,
+      p_references: referenceVariants,
+      p_listing_type: 'WTS',
+      p_limit: limit,
+    });
+    if (!rpcError) return rpcRows || [];
+    console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
+  }
   // The dedicated research view is the primary source. This bounded fallback
   // uses the same reconciled release base when PostgREST has not refreshed that
   // view yet. Only rows already marked as verified USD evidence are admitted;
@@ -147,14 +149,16 @@ async function loadQnsaTradingDemand(client, {
   familyPrefix,
   limit,
 }) {
-  const { data: rpcRows, error: rpcError } = await client.rpc('qnsa_bounded_price_research_rows', {
-    p_brand: brand,
-    p_references: familyPrefix ? [`${familyPrefix}%`] : referenceVariants,
-    p_listing_type: 'WTB',
-    p_limit: limit,
-  });
-  if (!rpcError) return rpcRows || [];
-  console.warn('[price-research] bounded QNSA WTB RPC unavailable; using release fallback:', rpcError.message || rpcError);
+  if (!familyPrefix) {
+    const { data: rpcRows, error: rpcError } = await client.rpc('qnsa_bounded_price_research_rows', {
+      p_brand: brand,
+      p_references: referenceVariants,
+      p_listing_type: 'WTB',
+      p_limit: limit,
+    });
+    if (!rpcError) return rpcRows || [];
+    console.warn('[price-research] bounded QNSA WTB RPC unavailable; using release fallback:', rpcError.message || rpcError);
+  }
   const columns = [
     'id,canonical_brand,catalog_model,normalized_reference,source_price_amount',
     'workbook_price_usd,source_currency,raw_message,posting_date,condition',

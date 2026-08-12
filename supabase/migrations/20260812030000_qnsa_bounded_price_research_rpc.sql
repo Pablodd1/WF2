@@ -21,14 +21,7 @@ AS $function$
       ON control.canonical_brand = l.brand_normalized
      AND control.enabled_run_key = l.normalization_run_key
     WHERE l.brand_normalized = p_brand
-      AND EXISTS (
-        SELECT 1
-        FROM unnest(p_references) AS requested(reference)
-        WHERE (
-          right(requested.reference, 1) = '%'
-          AND l.reference_normalized LIKE requested.reference
-        ) OR l.reference_normalized = requested.reference
-      )
+      AND l.reference_normalized = ANY (p_references)
       AND upper(COALESCE(l.listing_type, l.intent, '')) = upper(p_listing_type)
       AND upper(COALESCE(l.category, '')) = 'WATCH'
       AND l.parent_id IS NULL

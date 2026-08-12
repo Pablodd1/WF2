@@ -16,7 +16,7 @@ test('bounded RPC is pinned to released single Rolex/Patek evidence', () => {
   assert.match(migration, /suppressed_exact_duplicate/);
   assert.match(migration, /PENDING_REVIEW', 'APPROVED'/);
   assert.match(migration, /upper\(p_listing_type\) = 'WTB'/i);
-  assert.match(migration, /right\(requested\.reference, 1\) = '%'/);
+  assert.match(migration, /reference_normalized = ANY \(p_references\)/);
   assert.match(migration, /l\.price_usd > 0/);
   assert.match(migration, /CASE WHEN l\.contact_consent/);
   assert.match(migration, /LEAST\(GREATEST\(COALESCE\(p_limit, 1000\), 1\), 2500\)/);
