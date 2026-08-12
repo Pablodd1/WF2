@@ -22,7 +22,8 @@ test('owner-approved workbook contacts are public only through the explicit reco
 
 test('Trading Floor shows USD only for source-confirmed eligible evidence', () => {
   const page = read('src/pages/TradingFloor.tsx');
-  assert.match(page, /listing\.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH'/);
+  assert.match(page, /listing\.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'/);
+  assert.match(page, /listing\.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED'/);
   assert.match(page, /listing\.price_research_eligible !== true/);
   assert.match(page, /verifiedUsd !== null[\s\S]*formatUsdPrice\(verifiedUsd\)/);
   assert.doesNotMatch(page, /Price on request/);

@@ -1053,13 +1053,20 @@ module.exports = async function handler(req, res) {
       const normalizedBrand = String(brand).trim().toLowerCase();
       const familyReference = (normalizedBrand === 'rolex' && reference === '116500')
         || (normalizedBrand === 'patek philippe' && reference === '5712');
+      const patekBaseEquivalent = normalizedBrand === 'patek philippe'
+        && /-001$/i.test(String(requestedReference || ''))
+        ? String(requestedReference).trim().toUpperCase().replace(/-001$/i, '')
+        : null;
       const referenceRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_reference_rows`, {
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
         // Preserve catalog punctuation for the indexed exact-reference RPC.
         // `reference` is the alphanumeric search key used by the UI/filter
         // layer; passing it to PostgreSQL made Patek 5712/1A-001 become
         // 57121A001 and miss the stored canonical reference.
-        body: JSON.stringify({ p_brand: brand, p_reference: familyReference || String(requestedReference).trim().toUpperCase(), p_family: familyReference,
+        body: JSON.stringify({
+          p_brand: brand,
+          p_reference: familyReference ? reference : (patekBaseEquivalent || String(requestedReference).trim().toUpperCase()),
+          p_family: Boolean(familyReference || patekBaseEquivalent),
           p_limit: qnsaBrandScanLimit, p_offset: requestedOffset }),
       });
       if (!referenceRowsRes.ok) {

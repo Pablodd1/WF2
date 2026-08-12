@@ -679,6 +679,8 @@ test('standalone listing type is indexed while condition remains narrowly guarde
 });
 
 test('QNSA exact reference RPC preserves Patek catalog punctuation', () => {
-  assert.match(source, /p_reference: familyReference \|\| String\(requestedReference\)\.trim\(\)\.toUpperCase\(\)/);
+  assert.match(source, /const patekBaseEquivalent[\s\S]*replace\(\/-001\$\/i, ''\)/);
+  assert.match(source, /p_reference: familyReference \? reference : \(patekBaseEquivalent/);
+  assert.match(source, /p_family: Boolean\(familyReference \|\| patekBaseEquivalent\)/);
   assert.doesNotMatch(source, /p_reference: reference, p_family/);
 });

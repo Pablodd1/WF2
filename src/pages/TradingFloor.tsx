@@ -1639,7 +1639,9 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function verifiedUsdPrice(listing: ListingRecord) {
-  if (listing.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH' || listing.price_research_eligible !== true) return null;
+  const usdEvidence = listing.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
+    || listing.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED';
+  if (!usdEvidence || listing.price_research_eligible !== true) return null;
   const value = Number(listing.price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
