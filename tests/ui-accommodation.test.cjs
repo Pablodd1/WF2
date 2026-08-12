@@ -173,7 +173,7 @@ test('dealer directory separates verified Reference Check from provenance-backed
 
   assert.match(directory, /Reference Check/);
   assert.match(directory, /Top Rated Dealers/);
-  assert.match(directory, /feedback reviews/);
+  assert.match(directory, /review_count\.toLocaleString\(\).*reviews/);
   assert.match(directory, /member_since/);
   assert.match(directory, /label="For sale"/);
   assert.match(directory, /label="Looking for"/);
