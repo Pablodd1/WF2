@@ -1,0 +1,112 @@
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+const { sha256, stableJson } = require('./lib.cjs');
+const { normalizeSourceRecord, loadFxSnapshot } = require('./normalize-local.cjs');
+const { normalizedPrice } = require('./publication-review.cjs');
+
+const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe']);
+
+function exactIdentity(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function correctionRecord(row, fxSnapshot) {
+  const source = row?.raw_payload;
+  if (!source || typeof source !== 'object') return null;
+  if (source.source_record_id !== row.source_record_id || source.raw_sha256 !== row.source_hash) return null;
+  if (!ALLOWED_BRANDS.has(row.canonical_brand)) return null;
+  const proposal = normalizeSourceRecord(source, { fxSnapshot });
+  if (proposal.bundle_status !== 'SINGLE_CANDIDATE') return null;
+  const candidates = proposal.normalization?.proposed_candidates || [];
+  if (candidates.length !== 1) return null;
+  const candidate = candidates[0];
+  if (candidate.brand !== row.canonical_brand
+    || exactIdentity(candidate.reference) !== exactIdentity(row.normalized_reference)) return null;
+  const price = normalizedPrice(candidate);
+  if (!price?.amount_original || !price?.amount_usd || !price?.currency_original
+    || !price?.conversion_rate || !price?.conversion_source) return null;
+  if (!['USD', 'USDT'].includes(price.currency_original)
+    && !price.conversion_timestamp) return null;
+  return {
+    materialization: 'SINGLE',
+    source_record_id: row.source_record_id,
+    source_hash: row.source_hash,
+    candidate: {
+      brand: row.canonical_brand,
+      reference: row.normalized_reference,
+      price,
+    },
+  };
+}
+
+function buildCanary(rows, fxSnapshot, options = {}) {
+  const targetRows = Number(options.targetRows || 100);
+  if (!Number.isSafeInteger(targetRows) || targetRows < 1 || targetRows > 100) {
+    throw new Error('targetRows must be an integer between 1 and 100');
+  }
+  const records = [];
+  const seen = new Set();
+  for (const row of rows || []) {
+    const record = correctionRecord(row, fxSnapshot);
+    if (!record || seen.has(record.source_record_id)) continue;
+    seen.add(record.source_record_id);
+    records.push(record);
+    if (records.length === targetRows) break;
+  }
+  if (records.length !== targetRows) {
+    throw new Error(`Canary selection produced ${records.length}/${targetRows} exact eligible rows`);
+  }
+  const runKey = String(options.runKey || '');
+  if (!/^[A-Za-z0-9._:-]{1,100}$/.test(runKey)) throw new Error('runKey is invalid');
+  const batchToken = sha256(stableJson({
+    contract: 'wf-two-brand-price-policy-canary-v1',
+    run_key: runKey,
+    records,
+  }));
+  return {
+    contract: 'wf-two-brand-price-policy-canary-v1',
+    run_key: runKey,
+    batch_token: batchToken,
+    input_rows: records.length,
+    records,
+  };
+}
+
+function main() {
+  const inputPath = path.resolve(process.env.QNSA_CANARY_INPUT || 'qnsa-canary-input.json');
+  const fxPath = path.resolve(process.env.MARIADB_NORMALIZE_FX_SNAPSHOT || 'fx-snapshot.json');
+  const outputPath = path.resolve(process.env.QNSA_CANARY_OUTPUT || 'qnsa-canary-records.json');
+  const rows = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+  const fxSnapshot = loadFxSnapshot(fxPath);
+  const canary = buildCanary(rows, fxSnapshot, {
+    runKey: process.env.NORMALIZED_RUN_KEY,
+    targetRows: process.env.QNSA_CANARY_ROWS || 100,
+  });
+  fs.writeFileSync(outputPath, JSON.stringify(canary));
+  // Do not print record IDs, raw text, private contact fields, or price values.
+  process.stdout.write(`${JSON.stringify({
+    event: 'two_brand_price_canary_built',
+    contract: canary.contract,
+    input_rows: canary.input_rows,
+    batch_token: canary.batch_token,
+    raw_text_logged: false,
+    pii_logged: false,
+  })}\n`);
+}
+
+if (require.main === module) {
+  try { main(); } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      event: 'two_brand_price_canary_error',
+      error_name: error.name || 'Error',
+      error_message: error.message || String(error),
+      raw_text_logged: false,
+      pii_logged: false,
+    })}\n`);
+    process.exitCode = 1;
+  }
+}
+
+module.exports = { buildCanary, correctionRecord, exactIdentity };

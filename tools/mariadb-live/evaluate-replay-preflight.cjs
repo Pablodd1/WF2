@@ -38,6 +38,7 @@ function evaluateReplayPreflight(snapshot, limits) {
   const maxFailedJobs = nonNegativeInteger(limits.max_failed_jobs, 'limits.max_failed_jobs');
   const expectedProjectRef = String(limits.expected_project_ref || '');
   const requestedRunKey = String(limits.run_key || '');
+  const operation = limits.operation === 'price_correction' ? 'price_correction' : 'replay';
   const pendingJobs = queueCount(snapshot, ['received', 'queued', 'processing']);
   const failedJobs = queueCount(snapshot, ['failed', 'dead_letter']);
   const headroomGib = databaseLimitGib - databaseGib;
@@ -65,9 +66,11 @@ function evaluateReplayPreflight(snapshot, limits) {
   }
 
   const alreadyComplete = target?.status === 'NORMALIZATION_STAGED';
+  if (operation === 'price_correction' && !alreadyComplete) blockers.push('PRICE_CORRECTION_REQUIRES_COMPLETED_RUN');
   return {
     contract: PREFLIGHT_CONTRACT,
-    allowed: blockers.length === 0 && !alreadyComplete,
+    allowed: blockers.length === 0 && (operation === 'price_correction' || !alreadyComplete),
+    operation,
     already_complete: alreadyComplete,
     requested_run_key: requestedRunKey,
     database_gib: databaseGib,
@@ -93,6 +96,7 @@ function main() {
     minimum_headroom_gib: process.env.MINIMUM_HEADROOM_GIB,
     max_pending_jobs: process.env.MAX_PENDING_JOBS,
     max_failed_jobs: process.env.MAX_FAILED_JOBS,
+    operation: process.env.REPLAY_PREFLIGHT_OPERATION,
   });
   process.stdout.write(`${JSON.stringify(result)}\n`);
   if (!result.allowed && !result.already_complete) process.exitCode = 2;

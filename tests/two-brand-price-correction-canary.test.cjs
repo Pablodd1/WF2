@@ -31,8 +31,8 @@ test('RPC payload is bounded and deterministic', async () => {
 
 test('workflow requires exact 100-row reconciliation and zero staging growth', () => {
   const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/qnsa-two-brand-price-correction-canary.yml'), 'utf8');
-  assert.match(workflow, /APPLY_100_PRICE_CORRECTIONS/);
-  assert.match(workflow, /MARIADB_CORRECTION_LIMIT: '100'/);
+  assert.match(workflow, /APPLY_TWO_BRAND_PRICE_CANARY_100/);
+  assert.match(workflow, /QNSA_CANARY_ROWS: '100'/);
   assert.match(workflow, /duplicate_staging_rows_created/);
   assert.match(workflow, /STAGING_ROWS_BEFORE/);
   assert.match(workflow, /mariadb_price_policy_correction_audit/);

@@ -70,6 +70,18 @@ test('reports a completed target as a safe no-op instead of replaying it', () =>
   assert.deepEqual(result.blockers, []);
 });
 
+test('allows a bounded price correction only against a completed reconciled run', () => {
+  const result = evaluateReplayPreflight(snapshot({
+    target_checkpoint: { status: 'NORMALIZATION_STAGED', error_rows: 0 },
+  }), { ...limits, operation: 'price_correction' });
+  assert.equal(result.allowed, true);
+  assert.equal(result.operation, 'price_correction');
+
+  const incomplete = evaluateReplayPreflight(snapshot(), { ...limits, operation: 'price_correction' });
+  assert.equal(incomplete.allowed, false);
+  assert.ok(incomplete.blockers.includes('PRICE_CORRECTION_REQUIRES_COMPLETED_RUN'));
+});
+
 test('rejects a project mismatch and an errored resumable target', () => {
   const result = evaluateReplayPreflight(snapshot({
     project_ref: 'legacy-project',
