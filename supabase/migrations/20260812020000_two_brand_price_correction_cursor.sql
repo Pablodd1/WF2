@@ -68,10 +68,6 @@ BEGIN
 
   SELECT count(*) INTO v_census
   FROM staging.listings AS listing
-  JOIN public.raw_message_versions AS version
-    ON version.id = listing.raw_message_version_id
-   AND version.source_record_id = listing.source_record_id
-   AND version.source_hash = listing.source_hash
   WHERE listing.normalization_run_key = p_normalization_run_key
     AND listing.brand_normalized IN ('Rolex', 'Patek Philippe')
     AND upper(COALESCE(listing.category, '')) = 'WATCH'
@@ -121,6 +117,19 @@ BEGIN
 
   SELECT COALESCE(jsonb_agg(page.payload ORDER BY page.listing_id), '[]'::jsonb) INTO v_records
   FROM (
+    WITH bounded_ids AS MATERIALIZED (
+      SELECT listing.id
+      FROM staging.listings AS listing
+      WHERE listing.normalization_run_key = v_run.normalization_run_key
+        AND listing.brand_normalized IN ('Rolex', 'Patek Philippe')
+        AND upper(COALESCE(listing.category, '')) = 'WATCH'
+        AND listing.parent_id IS NULL AND COALESCE(listing.is_bundle, false) = false
+        AND upper(COALESCE(listing.listing_type, listing.intent, '')) = 'WTS'
+        AND NULLIF(btrim(listing.reference_normalized), '') IS NOT NULL
+        AND (v_run.cursor_listing_id IS NULL OR listing.id > v_run.cursor_listing_id)
+      ORDER BY listing.id
+      LIMIT p_limit
+    )
     SELECT listing.id AS listing_id,
       jsonb_build_object(
         'listing_id', listing.id,
@@ -130,7 +139,8 @@ BEGIN
         'normalized_reference', listing.reference_normalized,
         'raw_payload', version.raw_payload
       ) AS payload
-    FROM staging.listings AS listing
+    FROM bounded_ids AS bounded
+    JOIN staging.listings AS listing ON listing.id = bounded.id
     JOIN public.raw_message_versions AS version
       ON version.id = listing.raw_message_version_id
      AND version.source_record_id = listing.source_record_id
@@ -149,7 +159,6 @@ BEGIN
         'withdrawn', 'rejected', 'hidden', 'deleted', 'archived')
       AND upper(COALESCE(listing.verdict, '')) NOT IN ('WITHDRAWN', 'REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED')
     ORDER BY listing.id
-    LIMIT p_limit
   ) AS page;
 
   RETURN jsonb_build_object(
