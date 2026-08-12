@@ -13,11 +13,16 @@ function jsonSql(value) {
 }
 
 async function managementQuery(config, query, readOnly, fetchImpl = fetch) {
-  const response = await fetchImpl(`https://api.supabase.com/v1/projects/${config.projectRef}/database/query`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${config.accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, read_only: readOnly }),
-  });
+  let response;
+  for (let attempt = 0; attempt < (readOnly ? 3 : 1); attempt += 1) {
+    response = await fetchImpl(`https://api.supabase.com/v1/projects/${config.projectRef}/database/query`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, read_only: readOnly }),
+    });
+    if (response.ok || ![502, 503, 504].includes(response.status) || attempt === 2) break;
+    await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+  }
   if (!response.ok) {
     const body = await response.text();
     let message = 'database request rejected';
