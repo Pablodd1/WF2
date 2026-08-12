@@ -528,6 +528,7 @@ export default function PriceResearch() {
   const [activeReferenceSuggestion, setActiveReferenceSuggestion] = useState(-1);
   const [selectedCatalogReference, setSelectedCatalogReference] = useState<CatalogSuggestion | null>(null);
   const referenceSearchBoxRef = useRef<HTMLDivElement | null>(null);
+  const analyticsChartsRef = useRef<HTMLElement | null>(null);
 
   // ── Drill-down picker state (brand → model → reference) ──
   const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
@@ -1291,6 +1292,11 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             </div>
 
+            <nav aria-label="Price Research result sections" className="mb-6 flex flex-wrap gap-2 rounded-lg border bg-[#fffaf0] p-3" style={{ borderColor: '#ead9a2' }}>
+              <button type="button" onClick={() => analyticsChartsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="min-h-11 rounded-md bg-[#9a7127] px-4 text-sm font-semibold text-white">View graphic analytics &amp; 3-month outlook</button>
+              <span className="flex items-center px-2 text-xs leading-5" style={{ color: MUTED }}>Solid dial-colored lines are observed WTS averages. Dotted points are estimates and are labeled indicative unless the trend passes validation.</span>
+            </nav>
+
             {(data.dial_analysis || []).length > 0 && (
               <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
@@ -1449,7 +1455,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             )}
 
             {data.dial_trends && data.dial_trends.length > 0 && dialTrendChartData.length > 0 && (
-              <section data-testid="dial-price-outlook" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+              <section ref={analyticsChartsRef} data-testid="dial-price-outlook" style={{ scrollMarginTop: 24, backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Dial Price History &amp; 3-Month Outlook</h3>
                 <p style={{ fontSize: 12, color: MUTED, marginTop: 4, marginBottom: 14 }}>
                   Monthly average qualified WTS price by dial for {displayRef}. Solid points are observed; dotted points are estimates. When dated history is insufficient for a validated trend, the outlook holds the current cohort median flat and is labeled indicative.

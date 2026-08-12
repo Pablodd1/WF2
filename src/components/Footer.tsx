@@ -24,6 +24,7 @@ const MARKET_LINKS = [
   ['POST IT', '/dealer/post'],
   ['Workspace', '/dealer/workspace'],
   ['Account', '/dealer/account/profile'],
+  ['Blog', '/blog'],
 ] as const;
 
 export const DEALER_GLOSSARY = [
