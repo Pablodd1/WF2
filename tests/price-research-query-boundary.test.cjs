@@ -44,6 +44,7 @@ test('QNSA analytics uses the indexed Trading release and skips supplemental dia
   assert.match(source, /sourceTable === QNSA_PRICE_RESEARCH_SOURCE[\s\S]*loadQnsaVerifiedTradingPrices/);
   assert.match(source, /\.eq\('has_verified_usd_price', true\)/);
   assert.match(source, /!usingQnsaReviewedSource[\s\S]*supplementalCatalogDials\.length/);
+  assert.match(source, /loadQnsaTradingDemand[\s\S]*\.from\(QNSA_TRADING_SOURCE\)/);
 });
 
 test('verified workbook preload short-circuits redundant legacy lookups', () => {

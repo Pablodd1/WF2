@@ -135,6 +135,58 @@ async function loadQnsaVerifiedTradingPrices(client, {
     }));
 }
 
+async function loadQnsaTradingDemand(client, {
+  brand,
+  referenceVariants,
+  familyPrefix,
+  limit,
+}) {
+  const columns = [
+    'id,canonical_brand,catalog_model,normalized_reference,source_price_amount',
+    'workbook_price_usd,source_currency,raw_message,posting_date,condition',
+    'dial_color,listing_type,dealer_id,seller_name,seller_phone,confidence',
+    'verdict,trading_floor_status,user_image_url,has_exact_source_image',
+  ].join(',');
+  let query = client
+    .from(QNSA_TRADING_SOURCE)
+    .select(columns)
+    .eq('brand_scope', brand)
+    .eq('listing_type', 'WTB');
+  query = familyPrefix
+    ? query.like('normalized_reference', `${familyPrefix}%`)
+    : query.in('normalized_reference', referenceVariants);
+  const { data, error } = await query
+    .order('posting_date', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []).map(row => ({
+    id: row.id,
+    brand: row.canonical_brand,
+    model: row.catalog_model,
+    reference: row.normalized_reference,
+    dial_color: row.dial_color,
+    condition: row.condition,
+    listing_type: row.listing_type,
+    verdict: row.verdict,
+    confidence: row.confidence,
+    raw_message: row.raw_message,
+    dealer_id: row.dealer_id,
+    source: 'MARIADB_IMMUTABLE_RAW',
+    seller_name: row.seller_name,
+    seller_phone: row.seller_phone,
+    thumbnail_url: row.user_image_url,
+    image_urls: row.user_image_url ? [row.user_image_url] : [],
+    has_images: row.has_exact_source_image === true,
+    price_raw: row.source_price_amount,
+    price_usd: row.workbook_price_usd,
+    currency: row.source_currency,
+    created_at: row.posting_date,
+    listing_date: row.posting_date,
+    listing_status: row.trading_floor_status,
+    owner_reviewed_identity: true,
+  }));
+}
+
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
 // by /api/catalog-lookup. The Supabase cached_price_guide_watches table is empty
@@ -207,21 +259,17 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     data = preloadedRows.filter(row => ['WTB', 'NTQ'].includes(String(row.listing_type || '').toUpperCase()));
     demandSampleCapped = preloadedRows.sampleCapped === true;
   } else if (sourceTable === QNSA_PRICE_RESEARCH_SOURCE) {
-    const qnsaColumns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at,listing_date,listing_status';
-    let demandQuery = client
-      .from(QNSA_WTB_DEMAND_SOURCE)
-      .select(qnsaColumns)
-      .eq('brand', brand)
-      .limit(DEMAND_SAMPLE_LIMIT);
-    demandQuery = familyPrefix
-      ? demandQuery.like('reference', `${familyPrefix}%`)
-      : demandQuery.in('reference', referenceVariants);
-    const { data: qnsaDemandRows, error: qnsaDemandError } = await demandQuery;
-    if (qnsaDemandError) {
+    try {
+      data = await loadQnsaTradingDemand(client, {
+        brand,
+        referenceVariants,
+        familyPrefix,
+        limit: DEMAND_SAMPLE_LIMIT,
+      });
+    } catch (qnsaDemandError) {
       console.warn('[price-research] QNSA WTB demand unavailable:', qnsaDemandError.message || qnsaDemandError);
       return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
     }
-    data = qnsaDemandRows || [];
     demandSampleCapped = data.length >= DEMAND_SAMPLE_LIMIT;
   } else {
     // Select only physical watch_records columns. phone_number, posted_by,
