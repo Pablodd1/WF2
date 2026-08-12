@@ -128,15 +128,36 @@ jobs:
           SELECT jsonb_build_object(
             'staging_rows_before', (SELECT count(*) FROM staging.listings),
             'records', COALESCE((
-              SELECT jsonb_agg(candidate.payload ORDER BY candidate.priority, candidate.listing_id)
+              SELECT jsonb_agg(candidate.payload ORDER BY candidate.brand_rank, candidate.listing_id)
               FROM (
+                WITH bounded_listings AS MATERIALIZED (
+                  (SELECT listing.*
+                   FROM staging.listings AS listing
+                   WHERE listing.normalization_run_key = '$escapedRunKey'
+                     AND listing.brand_normalized = 'Rolex'
+                     AND listing.parent_id IS NULL
+                     AND COALESCE(listing.is_bundle, false) = false
+                     AND upper(COALESCE(listing.category, '')) = 'WATCH'
+                     AND listing.listing_type = 'WTS'
+                     AND NULLIF(btrim(listing.reference_normalized), '') IS NOT NULL
+                   ORDER BY listing.created_at DESC, listing.id DESC
+                   LIMIT 250)
+                  UNION ALL
+                  (SELECT listing.*
+                   FROM staging.listings AS listing
+                   WHERE listing.normalization_run_key = '$escapedRunKey'
+                     AND listing.brand_normalized = 'Patek Philippe'
+                     AND listing.parent_id IS NULL
+                     AND COALESCE(listing.is_bundle, false) = false
+                     AND upper(COALESCE(listing.category, '')) = 'WATCH'
+                     AND listing.listing_type = 'WTS'
+                     AND NULLIF(btrim(listing.reference_normalized), '') IS NOT NULL
+                   ORDER BY listing.created_at DESC, listing.id DESC
+                   LIMIT 250)
+                )
                 SELECT
                   listing.id AS listing_id,
-                  CASE
-                    WHEN listing.currency_evidence IN ('bare_dollar_unconfirmed', 'usd_defaulted_by_policy') THEN 0
-                    WHEN listing.currency_normalized NOT IN ('USD', 'USDT') THEN 1
-                    ELSE 2
-                  END AS priority,
+                  CASE WHEN listing.brand_normalized = 'Rolex' THEN 0 ELSE 1 END AS brand_rank,
                   jsonb_build_object(
                     'source_record_id', listing.source_record_id,
                     'source_hash', listing.source_hash,
@@ -144,18 +165,10 @@ jobs:
                     'normalized_reference', listing.reference_normalized,
                     'raw_payload', version.raw_payload
                   ) AS payload
-                FROM staging.listings AS listing
+                FROM bounded_listings AS listing
                 JOIN public.raw_message_versions AS version ON version.id = listing.raw_message_version_id
-                WHERE listing.normalization_run_key = '$escapedRunKey'
-                  AND listing.brand_normalized IN ('Rolex', 'Patek Philippe')
-                  AND listing.parent_id IS NULL
-                  AND COALESCE(listing.is_bundle, false) = false
-                  AND listing.listing_type = 'WTS'
-                  AND NULLIF(btrim(listing.reference_normalized), '') IS NOT NULL
-                  AND version.source_record_id = listing.source_record_id
+                WHERE version.source_record_id = listing.source_record_id
                   AND version.source_hash = listing.source_hash
-                ORDER BY priority, listing.id
-                LIMIT 500
               ) AS candidate
             ), '[]'::jsonb)
           ) AS evidence;
