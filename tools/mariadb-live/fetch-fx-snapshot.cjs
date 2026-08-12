@@ -2,7 +2,11 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { parseEcbRates, SUPPORTED_CURRENCIES } = require('../../api/_lib/fx-rates.cjs');
+const {
+  parseEcbRates,
+  RECOGNIZED_WITHHELD_CURRENCIES,
+  SUPPORTED_CURRENCIES,
+} = require('../../api/_lib/fx-rates.cjs');
 const { atomicJson } = require('./lib.cjs');
 
 const SOURCE = 'European Central Bank reference rates';
@@ -27,6 +31,8 @@ async function fetchFxSnapshot(options = {}) {
     if (Number.isFinite(quote) && quote > 0) usdPerUnit[currency] = 1 / quote;
   }
   usdPerUnit.USD = 1;
+  const missing = SUPPORTED_CURRENCIES.filter(currency => !Number.isFinite(usdPerUnit[currency]) || usdPerUnit[currency] <= 0);
+  if (missing.length) throw new Error(`ECB snapshot is incomplete for configured currencies: ${missing.join(', ')}`);
   return {
     contract: 'wf-dated-fx-snapshot-v1',
     fetched_at: now.toISOString(),
@@ -35,6 +41,7 @@ async function fetchFxSnapshot(options = {}) {
     source_url: SOURCE_URL,
     base: 'USD',
     usd_per_unit: usdPerUnit,
+    recognized_but_withheld: [...RECOGNIZED_WITHHELD_CURRENCIES],
   };
 }
 

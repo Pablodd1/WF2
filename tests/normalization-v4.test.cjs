@@ -394,3 +394,102 @@ test('explicit listing condition overrides an inherited section condition', () =
   assert.equal(candidates[0].context.condition_context, 'Used');
   assert.equal(candidates[1].context.condition_context, 'New');
 });
+
+test('normalizes global currency codes and unambiguous local symbols on either side of prices', () => {
+  const cases = [
+    ['USD18000', 18_000, 'USD'],
+    ['18kUSDT', 18_000, 'USDT'],
+    ['298,000HKN', 298_000, 'HKD'],
+    ['HNK305k', 305_000, 'HKD'],
+    ['HDK 380 mil', 380_000, 'HKD'],
+    ['EUR18.000', 18_000, 'EUR'],
+    ['4.5m\u20ac', 4_500_000, 'EUR'],
+    ['\u00a320,000', 20_000, 'GBP'],
+    ['25000CHF', 25_000, 'CHF'],
+    ['S$18k', 18_000, 'SGD'],
+    ['AED100k', 100_000, 'AED'],
+    ['100kSAR', 100_000, 'SAR'],
+    ['CN\u00a5200k', 200_000, 'CNY'],
+    ['3mJP\u00a5', 3_000_000, 'JPY'],
+    ['\u20a945m', 45_000_000, 'KRW'],
+    ['1.2m\u0e3f', 1_200_000, 'THB'],
+    ['C$20k', 20_000, 'CAD'],
+    ['30kA$', 30_000, 'AUD'],
+    ['NZ$40000', 40_000, 'NZD'],
+    ['RM 50k', 50_000, 'MYR'],
+    ['50000RM', 50_000, 'MYR'],
+    ['Rp250m', 250_000_000, 'IDR'],
+    ['\u20b92.5m', 2_500_000, 'INR'],
+    ['1m\u20b1', 1_000_000, 'PHP'],
+    ['NT$800k', 800_000, 'TWD'],
+    ['900m\u20ab', 900_000_000, 'VND'],
+  ];
+
+  for (const [raw, amount, currency] of cases) {
+    const prices = extractPriceObservations(raw);
+    assert.deepEqual(
+      prices.map(price => [price.amount_original, price.currency_original]),
+      [[amount, currency]],
+      raw,
+    );
+  }
+});
+
+test('supports defensible additional ISO currency tokens without assuming one-to-one USD', () => {
+  const cases = [
+    ['R$100k', 100_000, 'BRL'],
+    ['MXN350k', 350_000, 'MXN'],
+    ['400kZAR', 400_000, 'ZAR'],
+    ['SEK 200000', 200_000, 'SEK'],
+    ['200000NOK', 200_000, 'NOK'],
+    ['DKK180k', 180_000, 'DKK'],
+  ];
+  for (const [raw, amount, currency] of cases) {
+    const [price] = extractPriceObservations(raw);
+    assert.equal(price.amount_original, amount, raw);
+    assert.equal(price.currency_original, currency, raw);
+    assert.equal(price.amount_usd, null, raw);
+  }
+});
+
+test('keeps symbol ambiguity and local-dollar precedence explicit', () => {
+  assert.deepEqual(extractPriceObservations('\u00a5200k'), []);
+  assert.deepEqual(extractPriceObservations('200k\uffe5'), []);
+
+  const cny = extractPriceObservations('\u00a5200k', { currency_context: 'CNY' });
+  const jpy = extractPriceObservations('200k\uffe5', { currency_context: 'JPY' });
+  const inlineCny = extractPriceObservations('CNY \u00a5200k');
+  const inlineJpy = extractPriceObservations('JPY \uffe5200k');
+  assert.deepEqual(cny.map(price => [price.amount_original, price.currency_original]), [[200_000, 'CNY']]);
+  assert.deepEqual(jpy.map(price => [price.amount_original, price.currency_original]), [[200_000, 'JPY']]);
+  assert.deepEqual(inlineCny.map(price => [price.amount_original, price.currency_original]), [[200_000, 'CNY']]);
+  assert.deepEqual(inlineJpy.map(price => [price.amount_original, price.currency_original]), [[200_000, 'JPY']]);
+
+  assert.equal(extractPriceObservations('$18k')[0].currency_original, 'USD');
+  assert.equal(extractPriceObservations('HK$18k')[0].currency_original, 'HKD');
+  assert.equal(extractPriceObservations('C$18k')[0].currency_original, 'CAD');
+  assert.equal(extractPriceObservations('A$18k')[0].currency_original, 'AUD');
+  assert.equal(extractPriceObservations('S$18k')[0].currency_original, 'SGD');
+  assert.equal(extractPriceObservations('NT$18k')[0].currency_original, 'TWD');
+
+  assert.deepEqual(
+    extractPriceObservations('HKD100k / $13k').map(price => [price.amount_original, price.currency_original]),
+    [[100_000, 'HKD'], [13_000, 'USD']],
+  );
+});
+
+test('global currency support preserves reference year date and bundle guards', () => {
+  assert.deepEqual(extractPriceObservations('RM11-03'), []);
+  assert.deepEqual(extractPriceObservations('15202ST 2025/8 JPY'), []);
+  assert.deepEqual(extractPriceObservations('Rolex 126500LN USD'), []);
+
+  const richardMille = extractPriceObservations('RM11-03 USD250k');
+  assert.deepEqual(richardMille.map(price => [price.amount_original, price.currency_original]), [[250_000, 'USD']]);
+
+  const noCurrency = extractPriceObservations('116688 37000');
+  assert.deepEqual(noCurrency.map(price => [price.amount_original, price.currency_original]), [[37_000, 'USD']]);
+
+  const bundle = segmentDealerMessage('WTS AP 15500ST C$40k\nRolex 126500LN USD30k');
+  assert.equal(bundle.length, 2);
+  assert.deepEqual(bundle.map(item => item.prices[0].currency_original), ['CAD', 'USD']);
+});

@@ -7,6 +7,7 @@ const test = require('node:test');
 const { applyCurrencyPolicy } = require('../tools/shadow-reprocess/shadow-reprocess.cjs');
 const { loadFxSnapshot } = require('../tools/mariadb-live/normalize-local.cjs');
 const { fetchFxSnapshot } = require('../tools/mariadb-live/fetch-fx-snapshot.cjs');
+const { RECOGNIZED_WITHHELD_CURRENCIES, SUPPORTED_CURRENCIES } = require('../api/_lib/fx-rates.cjs');
 const { extractPriceObservations } = require('../api/_lib/normalization-v4.cjs');
 
 const migration = fs.readFileSync(path.join(
@@ -98,20 +99,23 @@ test('two-brand correction updates exact existing lineage without duplicate stag
 });
 
 test('ECB snapshot is converted into USD-per-unit rates with a dated source', async () => {
-  const csv = [
-    'TIME_PERIOD,CURRENCY,OBS_VALUE',
-    '2026-08-10,USD,1.20',
-    '2026-08-10,HKD,9.36',
-    '2026-08-10,CNY,8.64',
-    '2026-08-10,JPY,176.40',
-  ].join('\n');
+  const eurQuotes = Object.fromEntries(SUPPORTED_CURRENCIES.map((currency, index) => [currency, currency === 'USD' ? 1.20 : 2 + index]));
+  const csv = ['TIME_PERIOD,CURRENCY,OBS_VALUE', ...Object.entries(eurQuotes)
+    .map(([currency, value]) => `2026-08-10,${currency},${value}`)].join('\n');
   const snapshot = await fetchFxSnapshot({
     now: new Date('2026-08-11T12:00:00Z'),
     fetchImpl: async () => ({ ok: true, text: async () => csv }),
   });
   assert.equal(snapshot.observed_at, '2026-08-10T00:00:00Z');
   assert.equal(snapshot.source, 'European Central Bank reference rates');
-  assert.ok(Math.abs(snapshot.usd_per_unit.HKD - (1 / 7.8)) < 1e-9);
-  assert.ok(Math.abs(snapshot.usd_per_unit.CNY - (1 / 7.2)) < 1e-9);
-  assert.ok(Math.abs(snapshot.usd_per_unit.JPY - (1 / 147)) < 1e-9);
+  for (const currency of SUPPORTED_CURRENCIES) assert.ok(Number(snapshot.usd_per_unit[currency]) > 0, currency);
+  assert.deepEqual(snapshot.recognized_but_withheld, RECOGNIZED_WITHHELD_CURRENCIES);
+});
+
+test('snapshot fetch fails closed when ECB omits a configured conversion currency', async () => {
+  const csv = ['TIME_PERIOD,CURRENCY,OBS_VALUE', '2026-08-10,USD,1.20', '2026-08-10,HKD,9.36'].join('\n');
+  await assert.rejects(fetchFxSnapshot({
+    now: new Date('2026-08-11T12:00:00Z'),
+    fetchImpl: async () => ({ ok: true, text: async () => csv }),
+  }), /incomplete for configured currencies/);
 });

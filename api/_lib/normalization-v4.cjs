@@ -9,8 +9,29 @@ const CURRENCY_ALIASES = [
   { code: 'GBP', pattern: 'GBP|£' },
   { code: 'CHF', pattern: 'CHF' },
   { code: 'SGD', pattern: 'SGD|S\\$' },
-  { code: 'CNY', pattern: 'CNY|RMB|CN¥' },
-  { code: 'JPY', pattern: 'JPY' },
+  { code: 'AED', pattern: 'AED|DHS|DH' },
+  { code: 'SAR', pattern: 'SAR' },
+  { code: 'CNY', pattern: 'CNY|RMB|CN(?:¥|￥)' },
+  { code: 'JPY', pattern: 'JPY|JP(?:¥|￥)' },
+  { code: 'KRW', pattern: 'KRW|₩' },
+  { code: 'THB', pattern: 'THB|฿' },
+  { code: 'CAD', pattern: 'CAD|C\\$' },
+  { code: 'AUD', pattern: 'AUD|A\\$' },
+  { code: 'NZD', pattern: 'NZD|NZ\\$' },
+  // Bare RM is accepted only when it is not immediately followed by a digit,
+  // avoiding Richard Mille references such as RM11-03 and RM67-01.
+  { code: 'MYR', pattern: 'MYR|RM(?!\\d)' },
+  { code: 'IDR', pattern: 'IDR|RP' },
+  { code: 'INR', pattern: 'INR|₹' },
+  { code: 'PHP', pattern: 'PHP|₱' },
+  { code: 'TWD', pattern: 'TWD|NT\\$' },
+  { code: 'VND', pattern: 'VND|₫' },
+  { code: 'BRL', pattern: 'BRL|R\\$' },
+  { code: 'MXN', pattern: 'MXN' },
+  { code: 'ZAR', pattern: 'ZAR' },
+  { code: 'SEK', pattern: 'SEK' },
+  { code: 'NOK', pattern: 'NOK' },
+  { code: 'DKK', pattern: 'DKK' },
 ];
 
 const CURRENCY_TOKEN = CURRENCY_ALIASES.map(item => item.pattern).join('|');
@@ -94,8 +115,23 @@ function normalizeCurrencyToken(token) {
   if (clean === 'GBP' || clean === '£') return 'GBP';
   if (clean === 'CHF') return 'CHF';
   if (clean === 'SGD' || clean === 'S$') return 'SGD';
-  if (/^(CNY|RMB|CN¥)$/.test(clean)) return 'CNY';
-  if (clean === 'JPY') return 'JPY';
+  if (/^(AED|DH|DHS)$/.test(clean)) return 'AED';
+  if (clean === 'SAR') return 'SAR';
+  if (/^(CNY|RMB|CN[¥￥])$/.test(clean)) return 'CNY';
+  if (/^(JPY|JP[¥￥])$/.test(clean)) return 'JPY';
+  if (clean === 'KRW' || clean === '₩') return 'KRW';
+  if (clean === 'THB' || clean === '฿') return 'THB';
+  if (clean === 'CAD' || clean === 'C$') return 'CAD';
+  if (clean === 'AUD' || clean === 'A$') return 'AUD';
+  if (clean === 'NZD' || clean === 'NZ$') return 'NZD';
+  if (clean === 'MYR' || clean === 'RM') return 'MYR';
+  if (clean === 'IDR' || clean === 'RP') return 'IDR';
+  if (clean === 'INR' || clean === '₹') return 'INR';
+  if (clean === 'PHP' || clean === '₱') return 'PHP';
+  if (clean === 'TWD' || clean === 'NT$') return 'TWD';
+  if (clean === 'VND' || clean === '₫') return 'VND';
+  if (clean === 'BRL' || clean === 'R$') return 'BRL';
+  if (['MXN', 'ZAR', 'SEK', 'NOK', 'DKK'].includes(clean)) return clean;
   return null;
 }
 
@@ -153,7 +189,12 @@ function extractPriceObservations(text, context = {}) {
       price_type: observations.length === 0 ? 'ASK_PRICE' : 'ALT_CURRENCY_PRICE',
       amount_original: amount,
       currency_original: currency,
-      amount_usd: Math.round(amount * (USD_PER_UNIT[currency] || 1)),
+      // Recognizing a source currency is not permission to invent an FX
+      // conversion. Currencies without a maintained parser rate stay null for
+      // the dated-FX stage instead of being silently treated as USD 1:1.
+      amount_usd: Number.isFinite(USD_PER_UNIT[currency])
+        ? Math.round(amount * USD_PER_UNIT[currency])
+        : null,
       is_primary: observations.length === 0,
       raw_price_text: parsingView.originalSlice(index, index + raw.length).trim(),
       confidence: 98,
@@ -167,11 +208,11 @@ function extractPriceObservations(text, context = {}) {
   };
 
   const leftCurrency = new RegExp(`(?<![A-Za-z])(${PRICE_CURRENCY_TOKEN})\\s*[:=]?\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
-  const rightCurrency = new RegExp(`(?<![A-Za-z0-9])(?!19\\d{2}\\s*[,;]|20\\d{2}\\s*[,;])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?\\s*(${PRICE_CURRENCY_TOKEN})`, 'gi');
+  const rightCurrency = new RegExp(`(?<![A-Za-z0-9])(?!19\\d{2}\\s*[,;]|20\\d{2}\\s*[,;])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?\\s*(${PRICE_CURRENCY_TOKEN})`, 'gi');
 
   for (const match of line.matchAll(leftCurrency)) {
     const amount = parseNumber(match[2], match[3]);
-    const followedByDateSeparator = /^\s*\//.test(line.slice(match.index + match[0].length));
+    const followedByDateSeparator = /^\s*\/\s*\d/.test(line.slice(match.index + match[0].length));
     const yearLike = !match[3] && amount >= 1900 && amount <= 2099;
     if (followedByDateSeparator || yearLike) continue;
     add(match[0], match[2], match[3], match[1], match.index, 'explicit_line_currency', 'prefix');
@@ -219,9 +260,13 @@ function extractPriceObservations(text, context = {}) {
 
   // A bare dollar sign is USD unless an explicit section/message currency is
   // present. The evidence label keeps this product default auditable.
-  const dollarPattern = new RegExp(`\\$\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
+  const dollarPattern = new RegExp(`(?<![A-Za-z])\\$\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
   for (const match of line.matchAll(dollarPattern)) {
-    if (observations.length) continue;
+    // `$225,000hkd` is one HKD amount, not simultaneous USD and HKD prices.
+    // The explicit suffix observation above is the stronger evidence.
+    const followedByExplicitCurrency = new RegExp(`^\\s*(?:${PRICE_CURRENCY_TOKEN})`, 'i')
+      .test(line.slice(match.index + match[0].length));
+    if (followedByExplicitCurrency) continue;
     const contextCurrency = context.currency_context || 'USD';
     add(match[0], match[1], match[2], contextCurrency, match.index,
       context.currency_context ? 'section_currency' : 'usd_defaulted_by_policy');
@@ -229,8 +274,26 @@ function extractPriceObservations(text, context = {}) {
 
   const suffixDollarPattern = new RegExp(`(?<![A-Za-z0-9])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?\\$`, 'gi');
   for (const match of line.matchAll(suffixDollarPattern)) {
-    if (observations.length) continue;
     add(match[0], match[1], match[2], 'USD', match.index, 'usd_defaulted_by_policy');
+  }
+
+  // A bare yen sign is ambiguous between CNY and JPY. Accept it only after an
+  // explicit section context established one of those currencies. CN¥ and
+  // JP¥ are handled as explicit tokens above without this contextual path.
+  const inlineYenContext = /\b(?:CNY|RMB)\b/i.test(line)
+    ? 'CNY'
+    : /\bJPY\b/i.test(line) ? 'JPY' : null;
+  const yenContext = context.currency_context || inlineYenContext;
+  if (!observations.length && ['CNY', 'JPY'].includes(yenContext)) {
+    const yenPrefixPattern = new RegExp(`(?:¥|￥)\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
+    const yenSuffixPattern = new RegExp(`(?<![A-Za-z0-9])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?\\s*(?:¥|￥)`, 'gi');
+    for (const match of line.matchAll(yenPrefixPattern)) {
+      add(match[0], match[1], match[2], yenContext, match.index, 'section_currency');
+    }
+    for (const match of line.matchAll(yenSuffixPattern)) {
+      if (observations.length) continue;
+      add(match[0], match[1], match[2], yenContext, match.index, 'section_currency');
+    }
   }
 
   if (!observations.length && !/[?]/.test(line)) {
