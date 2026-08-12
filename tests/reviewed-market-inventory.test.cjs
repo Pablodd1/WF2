@@ -699,3 +699,12 @@ test('obvious immutable-raw cross-brand conflicts never reach customer cards', (
     raw_message: 'Patek Philippe 5712 plus Vacheron trade considered',
   })), false);
 });
+
+test('bounded QNSA RPC rows reapply every customer filter before publication', () => {
+  assert.match(source, /!listingType \|\| String\(record\.listing_type/);
+  assert.match(source, /!imagesOnly \|\| record\.has_images === true/);
+  assert.match(source, /!pricedOnly \|\| hasUsableSourcePrice\(record\)/);
+  assert.match(source, /!postedAfter \|\| new Date\(record\.listing_date/);
+  assert.match(source, /!requestedDial \|\| cleanExactText\(record\.dial_color/);
+  assert.match(source, /!condition \|\| cleanExactText\(record\.condition/);
+});

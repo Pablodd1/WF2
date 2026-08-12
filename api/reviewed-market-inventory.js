@@ -1172,6 +1172,12 @@ module.exports = async function handler(req, res) {
     let records = eligibleRows
       .map(mapReviewedRecord)
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
+      .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
+      .filter(record => !imagesOnly || record.has_images === true)
+      .filter(record => !pricedOnly || hasUsableSourcePrice(record))
+      .filter(record => !postedAfter || new Date(record.listing_date || record.created_at || 0).getTime() >= new Date(postedAfter).getTime())
+      .filter(record => !requestedDial || cleanExactText(record.dial_color, 40).toLowerCase() === requestedDial.toLowerCase())
+      .filter(record => !condition || cleanExactText(record.condition, 80).toLowerCase() === condition.toLowerCase())
       .filter(record => !search || searchTermsMatch(record, search))
       .filter(record => !region || locationMatches(record.location, region))
       .filter(record => ratingMatches(record, rating))
