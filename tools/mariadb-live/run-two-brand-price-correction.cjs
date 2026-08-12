@@ -18,7 +18,12 @@ async function managementQuery(config, query, readOnly, fetchImpl = fetch) {
     headers: { Authorization: `Bearer ${config.accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, read_only: readOnly }),
   });
-  if (!response.ok) throw new Error(`Supabase management query failed (${response.status})`);
+  if (!response.ok) {
+    const body = await response.text();
+    let message = 'database request rejected';
+    try { message = JSON.parse(body)?.message || message; } catch {}
+    throw new Error(`Supabase management query failed (${response.status}): ${String(message).slice(0, 300)}`);
+  }
   return response.json();
 }
 
