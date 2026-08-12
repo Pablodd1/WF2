@@ -26,6 +26,7 @@ const TelegramTest = lazy(() => import('@/pages/TelegramTest'));
 const MultiListings = lazy(() => import('@/pages/MultiListings'));
 const PublicInfo = lazy(() => import('@/pages/PublicInfo'));
 const FlashSaleDetail = lazy(() => import('@/pages/FlashSaleDetail'));
+const Blog = lazy(() => import('@/pages/Blog'));
 
 export default function App() {
   return (
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="/insight" element={<InsightDetails />} />
         <Route path="/info/:page" element={<PublicInfo />} />
         <Route path="/flash-sales/:id" element={<FlashSaleDetail />} />
+        <Route path="/blog" element={<Blog />} />
         <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
