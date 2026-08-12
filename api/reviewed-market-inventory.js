@@ -1055,7 +1055,11 @@ module.exports = async function handler(req, res) {
         || (normalizedBrand === 'patek philippe' && reference === '5712');
       const referenceRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_reference_rows`, {
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_brand: brand, p_reference: reference, p_family: familyReference,
+        // Preserve catalog punctuation for the indexed exact-reference RPC.
+        // `reference` is the alphanumeric search key used by the UI/filter
+        // layer; passing it to PostgreSQL made Patek 5712/1A-001 become
+        // 57121A001 and miss the stored canonical reference.
+        body: JSON.stringify({ p_brand: brand, p_reference: familyReference || String(requestedReference).trim().toUpperCase(), p_family: familyReference,
           p_limit: qnsaBrandScanLimit, p_offset: requestedOffset }),
       });
       if (!referenceRowsRes.ok) {

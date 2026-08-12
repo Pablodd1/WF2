@@ -677,3 +677,8 @@ test('standalone listing type is indexed while condition remains narrowly guarde
   assert.match(source, /if \(condition && !\(requestedBrand && reference\)\)/);
   assert.doesNotMatch(source, /if \(\(listingType \|\| condition\)/);
 });
+
+test('QNSA exact reference RPC preserves Patek catalog punctuation', () => {
+  assert.match(source, /p_reference: familyReference \|\| String\(requestedReference\)\.trim\(\)\.toUpperCase\(\)/);
+  assert.doesNotMatch(source, /p_reference: reference, p_family/);
+});

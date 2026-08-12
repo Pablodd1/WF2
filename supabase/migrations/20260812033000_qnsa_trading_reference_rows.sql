@@ -25,7 +25,15 @@ BEGIN
     SELECT l.id
     FROM staging.listings AS l
     WHERE l.normalization_run_key=v_run_key AND l.brand_normalized=p_brand
-      AND (CASE WHEN p_family THEN l.reference_normalized LIKE p_reference || '%' ELSE l.reference_normalized=p_reference END)
+      AND (CASE
+        WHEN p_family THEN l.reference_normalized LIKE p_reference || '%'
+        WHEN p_brand = 'Patek Philippe' THEN l.reference_normalized IN (
+          p_reference,
+          regexp_replace(p_reference, '-001$', ''),
+          regexp_replace(p_reference, '-001$', '') || '-001'
+        )
+        ELSE l.reference_normalized = p_reference
+      END)
       AND upper(COALESCE(l.category,''))='WATCH' AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
       AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
       AND COALESCE(l.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
