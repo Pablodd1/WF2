@@ -40,6 +40,12 @@ test('QNSA Rolex and Patek release sources are explicit and fail closed', () => 
   assert.match(source, /QNSA_WTB_DEMAND_SOURCE/);
 });
 
+test('QNSA analytics uses the indexed Trading release and skips supplemental dial scans', () => {
+  assert.match(source, /sourceTable === QNSA_PRICE_RESEARCH_SOURCE[\s\S]*loadQnsaVerifiedTradingPrices/);
+  assert.match(source, /\.eq\('has_verified_usd_price', true\)/);
+  assert.match(source, /!usingQnsaReviewedSource[\s\S]*supplementalCatalogDials\.length/);
+});
+
 test('verified workbook preload short-circuits redundant legacy lookups', () => {
   assert.match(source, /if \(exactReviewedWorkbookRelease\) \{/);
   assert.match(source, /preloadedReviewedWorkbookRows[\s\S]*\.map\(row => row\.reference\)/);

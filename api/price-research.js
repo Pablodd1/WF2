@@ -92,7 +92,11 @@ async function loadQnsaVerifiedTradingPrices(client, {
     .from(QNSA_TRADING_SOURCE)
     .select(columns)
     .eq('brand_scope', brand)
-    .eq('listing_type', 'WTS');
+    .eq('listing_type', 'WTS')
+    // Keep this predicate in Postgres. Fetching the newest 1,000 Trading rows
+    // and filtering unpriced evidence in Node can hide older valid prices for
+    // high-volume references.
+    .eq('has_verified_usd_price', true);
   query = familyPrefix
     ? query.like('normalized_reference', `${familyPrefix}%`)
     : query.in('normalized_reference', referenceVariants);
@@ -592,6 +596,20 @@ module.exports = async function handler(req, res) {
       // Do not query the legacy view for rows that the strict workbook preload
       // has already returned. The same immutable rows are used downstream.
       rows = preloadedReviewedWorkbookRows;
+    } else if (sourceTable === QNSA_PRICE_RESEARCH_SOURCE) {
+      // The dedicated analytics view performs raw-message reference checks and
+      // several joins. After the reconciled two-brand release grew, Postgres
+      // could time out planning/executing that view for high-volume references.
+      // The Trading release base already enforces the same immutable lineage,
+      // single-item, duplicate, release-control and verified-price boundaries.
+      // Query its indexed brand/reference projection directly and preserve the
+      // downstream eligibility/outlier gates below.
+      rows = await loadQnsaVerifiedTradingPrices(client, {
+        brand,
+        referenceVariants,
+        familyPrefix,
+        limit: pageSize,
+      });
     } else {
       let result = await buildRowsQuery(sourceTable);
       if (!configuredSourceTable && (result.error || !(result.data || []).length)) {
@@ -714,7 +732,10 @@ module.exports = async function handler(req, res) {
         || (sourceSampleCapped && observedDialCounts.get(dial.value.toLowerCase()) < 1000)
       ))
       .map(dial => dial.value);
-    if (!controlledPaneraiRelease && !usingReviewedWorkbook && supplementalCatalogDials.length) {
+    if (!controlledPaneraiRelease
+      && !usingReviewedWorkbook
+      && !usingQnsaReviewedSource
+      && supplementalCatalogDials.length) {
       const supplementalPages = await Promise.all(supplementalCatalogDials.map(dial => client
         .from(sourceTable)
         .select(columns)
