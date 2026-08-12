@@ -111,6 +111,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260812010000_dated_fx_normalized_staging_transport.sql'
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260812013000_qnsa_correction_reader_grant.sql')
           if ($sql -match '(?i)INSERT\s+INTO\s+(?:public\.)?watch_records') { throw 'Migration attempts a legacy publication write.' }
           $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null

@@ -14,6 +14,7 @@ test('canary is explicit, GitHub-hosted, pinned, and exactly 100 rows', () => {
   assert.match(workflow, /runs-on: ubuntu-latest/);
   assert.match(workflow, /SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.match(workflow, /npm ci --ignore-scripts/);
+  assert.match(workflow, /20260812013000_qnsa_correction_reader_grant\.sql/);
   assert.match(workflow, /QNSA_CANARY_ROWS: '100'/);
   assert.match(workflow, /input_rows -ne 100/);
   assert.match(workflow, /corrected_rows -ne 100/);
