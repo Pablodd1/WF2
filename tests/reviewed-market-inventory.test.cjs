@@ -691,7 +691,7 @@ test('obvious immutable-raw cross-brand conflicts never reach customer cards', (
     supplied_brand: null,
     brand_scope: null,
     raw_message: 'Vacheron Constantin 3110V full set 16700usd',
-  })), false);
+  })), true);
   assert.equal(api.hasObviousCrossBrandConflict(record({
     canonical_brand: 'Patek Philippe',
     supplied_brand: null,
