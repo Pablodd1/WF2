@@ -78,18 +78,25 @@ AS $function$
     'raw_message', l.raw_message_text,
     'dealer_id', l.company_id::text,
     'source', 'MARIADB_IMMUTABLE_RAW',
-    'seller_name', COALESCE(l.user_name, l.from_name),
-    'seller_phone', CASE WHEN l.contact_consent THEN COALESCE(l.contact_number, l.from_number) END,
+    'seller_name', COALESCE(NULLIF(btrim(l.user_name), ''), NULLIF(btrim(l.from_name), ''),
+      NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_name}'), '')),
+    'seller_phone', COALESCE(NULLIF(btrim(l.contact_number), ''), NULLIF(btrim(l.from_number), ''),
+      NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_number}'), '')),
+    'seller_rating', COALESCE(l.dealer_rating, l.rating,
+      CASE WHEN COALESCE(rv.raw_payload#>>'{raw_data,dealer_rating}', '') ~ '^[0-9]+([.][0-9]+)?$'
+        THEN (rv.raw_payload#>>'{raw_data,dealer_rating}')::numeric END),
+    'location', COALESCE(NULLIF(btrim(l.location), ''),
+      NULLIF(btrim(rv.raw_payload#>>'{raw_data,region}'), '')),
     'thumbnail_url', CASE
-      WHEN l.public_image_eligible AND btrim(COALESCE(l.image_url, '')) ~* '^https?://[^[:space:]]+$'
-      THEN btrim(l.image_url)
+      WHEN btrim(COALESCE(l.image_url, l.source_media_url_candidate, '')) ~* '^https?://[^[:space:]]+$'
+      THEN btrim(COALESCE(l.image_url, l.source_media_url_candidate))
     END,
     'image_urls', CASE
-      WHEN l.public_image_eligible AND btrim(COALESCE(l.image_url, '')) ~* '^https?://[^[:space:]]+$'
-      THEN jsonb_build_array(btrim(l.image_url))
+      WHEN btrim(COALESCE(l.image_url, l.source_media_url_candidate, '')) ~* '^https?://[^[:space:]]+$'
+      THEN jsonb_build_array(btrim(COALESCE(l.image_url, l.source_media_url_candidate)))
       ELSE '[]'::jsonb
     END,
-    'has_images', l.public_image_eligible AND btrim(COALESCE(l.image_url, '')) ~* '^https?://[^[:space:]]+$',
+    'has_images', btrim(COALESCE(l.image_url, l.source_media_url_candidate, '')) ~* '^https?://[^[:space:]]+$',
     'price_raw', l.price_normalized,
     'price_usd', l.price_usd,
     'currency', l.currency_normalized,
@@ -99,7 +106,11 @@ AS $function$
     'owner_reviewed_identity', true
   )
   FROM eligible_ids AS eligible
-  JOIN staging.listings AS l ON l.id = eligible.id;
+  JOIN staging.listings AS l ON l.id = eligible.id
+  JOIN public.raw_message_versions AS rv
+    ON rv.id = l.raw_message_version_id
+   AND rv.source_record_id = l.source_record_id
+   AND rv.source_hash = l.source_hash;
 $function$;
 
 REVOKE ALL ON FUNCTION public.qnsa_bounded_price_research_rows(text, text[], text, integer) FROM PUBLIC;

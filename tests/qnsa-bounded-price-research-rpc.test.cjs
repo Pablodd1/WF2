@@ -18,7 +18,11 @@ test('bounded RPC is pinned to released single Rolex/Patek evidence', () => {
   assert.match(migration, /upper\(p_listing_type\) = 'WTB'/i);
   assert.match(migration, /reference_normalized = ANY \(p_references\)/);
   assert.match(migration, /l\.price_usd > 0/);
-  assert.match(migration, /CASE WHEN l\.contact_consent/);
+  assert.match(migration, /raw_message_versions AS rv/);
+  assert.match(migration, /source_media_url_candidate/);
+  assert.match(migration, /seller_phone[\s\S]*raw_data,from_number/);
+  assert.match(migration, /seller_rating[\s\S]*raw_data,dealer_rating/);
+  assert.doesNotMatch(migration, /public_image_eligible AND/);
   assert.match(migration, /LEAST\(GREATEST\(COALESCE\(p_limit, 1000\), 1\), 2500\)/);
 });
 

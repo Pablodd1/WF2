@@ -35,7 +35,8 @@ BEGIN
     -- PostgreSQL sorts NULL before TRUE in DESC order unless NULLS LAST is
     -- explicit. Treat both normalized and USD prices as usable so corrected
     -- FX rows lead the reference feed while genuine no-price activity follows.
-    ORDER BY ((l.price_usd > 0) OR (l.price_normalized > 0)) DESC NULLS LAST,
+    ORDER BY (l.price_usd >= 1000 AND (l.currency_normalized IN ('USD','USDT') OR
+        (l.conversion_rate > 0 AND l.conversion_timestamp IS NOT NULL))) DESC NULLS LAST,
       l.created_at DESC, l.id DESC
     LIMIT LEAST(GREATEST(COALESCE(p_limit,51),1),101)
     OFFSET GREATEST(COALESCE(p_offset,0),0)
@@ -71,7 +72,8 @@ BEGIN
         (l.conversion_rate > 0 AND l.conversion_timestamp IS NOT NULL))) AS has_verified_usd_price,
       true AS has_complete_identity, l.trading_floor_status,
       regexp_replace(upper(l.reference_normalized), '[^A-Z0-9]', '', 'g') AS reference_search_key,
-      NULLIF(btrim(l.location), '') AS location, 'WATCH'::text AS item_category,
+      COALESCE(NULLIF(btrim(l.location), ''), NULLIF(btrim(rv.raw_payload#>>'{raw_data,region}'), '')) AS location,
+      'WATCH'::text AS item_category,
       CASE WHEN upper(COALESCE(l.verdict,''))='APPROVED' OR upper(COALESCE(l.publication_review_status,''))='APPROVED'
         THEN 'APPROVED' ELSE 'PENDING_VERIFICATION' END AS publication_state,
       'QNSA_ROLEX_PATEK_REVIEWED_V1'::text AS publication_lane,
@@ -83,7 +85,8 @@ BEGIN
     JOIN staging.listings AS l ON l.id=eligible.id
     JOIN public.raw_message_versions AS rv ON rv.id=l.raw_message_version_id
       AND rv.source_record_id=l.source_record_id AND rv.source_hash=l.source_hash
-    ORDER BY ((l.price_usd > 0) OR (l.price_normalized > 0)) DESC NULLS LAST,
+    ORDER BY (l.price_usd >= 1000 AND (l.currency_normalized IN ('USD','USDT') OR
+        (l.conversion_rate > 0 AND l.conversion_timestamp IS NOT NULL))) DESC NULLS LAST,
       l.created_at DESC, l.id DESC
   ) AS row_contract;
 END;
