@@ -16,8 +16,29 @@ const {
 const { repostSignature } = require('./_lib/repost-deduplication.cjs');
 
 const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'];
+const QNSA_MARKET_SOURCE = 'qnsa_rolex_patek_trading_floor_source';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cached = null;
+
+async function loadQnsaSummary(client) {
+  const { data, error } = await client.rpc('qnsa_market_feed_counts');
+  if (error) throw error;
+  const watchRows = (data || []).filter(row => String(row.category || '').toUpperCase() === 'WATCH');
+  const brands = ['Rolex', 'Patek Philippe'].map(brand => ({
+    brand,
+    listing_count: watchRows
+      .filter(row => String(row.brand || '').toLowerCase() === brand.toLowerCase())
+      .reduce((sum, row) => sum + Number(row.row_count || 0), 0),
+  }));
+  return {
+    success: true,
+    surface: 'Trading Floor',
+    category: 'WATCH',
+    brands,
+    total_listing_count: brands.reduce((total, brand) => total + brand.listing_count, 0),
+    count_source: 'qnsa_market_feed_counts',
+  };
+}
 
 async function loadControlledRows(client, brand) {
   const columns = 'id,brand,reference,dial_color,condition,price_usd,dealer_id,raw_message,source,verdict,confidence,listing_type,listing_status';
@@ -53,6 +74,11 @@ async function loadControlledRows(client, brand) {
 async function loadSummary() {
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.payload;
   const client = getClient();
+  if (String(process.env.TRADING_FLOOR_SOURCE_VIEW || '').trim() === QNSA_MARKET_SOURCE) {
+    const payload = await loadQnsaSummary(client);
+    cached = { at: Date.now(), payload };
+    return payload;
+  }
   const configuredBrands = publicationBrands();
   const brands = configuredBrands.length ? configuredBrands : DEFAULT_BRANDS;
   const reviewedReleaseCache = process.env.THREE_BRAND_RELEASE_CACHE === 'true'

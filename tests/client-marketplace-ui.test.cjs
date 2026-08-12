@@ -89,7 +89,9 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.match(floor, /listing\.multi_listing \|\| listing\.is_unbundled_child/);
   assert.match(floor, /'MULTI', 'MULTI_LISTING', 'BUNDLE'/);
   assert.match(floor, /Number\(hasListingImage\(right\)\) - Number\(hasListingImage\(left\)\)/);
-  assert.match(floor, /aria-label="Trading Floor pages"/);
+  assert.match(floor, /paginationControls\('top'\)/);
+  assert.match(floor, /paginationControls\('bottom'\)/);
+  assert.match(floor, /'Trading Floor pages top'/);
   assert.match(floor, /Page \{cursorHistory\.length \+ 1\}/);
   assert.match(floor, /onUnavailable=\{\(\) => setImageAvailable\(false\)\}/);
   assert.match(floor, /onError=\{onUnavailable\}/);

@@ -549,6 +549,47 @@ export default function TradingFloor() {
     return () => controller.abort();
   }, [brandFilter, categoryFilter, cursor, dateFilter, exactReference, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, ratingFilter, search]);
 
+  const showPagination = !selectedListing && (cursorHistory.length > 0 || (hasMore && nextCursor));
+  const changePage = (direction: 'previous' | 'next') => {
+    if (direction === 'previous') {
+      const previousCursor = cursorHistory[cursorHistory.length - 1] ?? null;
+      setCursorHistory(history => history.slice(0, -1));
+      setCursor(previousCursor);
+    } else {
+      if (!nextCursor) return;
+      setCursorHistory(history => [...history, cursor]);
+      setCursor(nextCursor);
+    }
+    resultsTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const paginationControls = (position: 'top' | 'bottom') => showPagination ? (
+    <nav
+      className={`flex items-center justify-center gap-3 ${position === 'top' ? 'mb-6' : 'pt-8'}`}
+      aria-label={position === 'top' ? 'Trading Floor pages top' : 'Trading Floor pages'}
+    >
+      <button
+        type="button"
+        onClick={() => changePage('previous')}
+        disabled={loading || cursorHistory.length === 0}
+        className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
+        style={{ borderColor: GOLD, background: SURFACE, color: GOLD_BRIGHT }}
+      >
+        Previous
+      </button>
+      <span className="text-sm" style={{ color: MUTED }}>Page {cursorHistory.length + 1}</span>
+      <button
+        type="button"
+        onClick={() => changePage('next')}
+        disabled={loading || !hasMore || !nextCursor}
+        className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
+        style={{ borderColor: GOLD, background: GOLD, color: '#09090D' }}
+      >
+        {loading ? 'Loading...' : 'Next'}
+      </button>
+    </nav>
+  ) : null;
+
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketActivityTicker />
@@ -759,6 +800,8 @@ export default function TradingFloor() {
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
+        {paginationControls('top')}
+
         {selectedListing ? (
           <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={closeListing} />
         ) : (
@@ -807,37 +850,7 @@ export default function TradingFloor() {
           </div>
         )}
 
-        {(cursorHistory.length > 0 || (hasMore && nextCursor)) && !selectedListing && (
-          <nav className="flex items-center justify-center gap-3 pt-8" aria-label="Trading Floor pages">
-            <button
-              type="button"
-              onClick={() => {
-                const previousCursor = cursorHistory[cursorHistory.length - 1] ?? null;
-                setCursorHistory(history => history.slice(0, -1));
-                setCursor(previousCursor);
-              }}
-              disabled={loading || cursorHistory.length === 0}
-              className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
-              style={{ borderColor: GOLD, background: SURFACE, color: GOLD_BRIGHT }}
-            >
-              Previous
-            </button>
-            <span className="text-sm" style={{ color: MUTED }}>Page {cursorHistory.length + 1}</span>
-            <button
-              type="button"
-              onClick={() => {
-                if (!nextCursor) return;
-                setCursorHistory(history => [...history, cursor]);
-                setCursor(nextCursor);
-              }}
-              disabled={loading || !hasMore || !nextCursor}
-              className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
-              style={{ borderColor: GOLD, background: GOLD, color: '#09090D' }}
-            >
-              {loading ? 'Loading...' : 'Next'}
-            </button>
-          </nav>
-        )}
+        {paginationControls('bottom')}
 
       </div>
       <Footer />
