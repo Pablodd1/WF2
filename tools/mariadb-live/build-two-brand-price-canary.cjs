@@ -74,6 +74,52 @@ function buildCanary(rows, fxSnapshot, options = {}) {
   };
 }
 
+function buildCorrectionPage(rows, fxSnapshot, options = {}) {
+  if (!Array.isArray(rows) || rows.length < 1 || rows.length > 500) {
+    throw new Error('Correction page must contain between 1 and 500 scanned rows');
+  }
+  const runKey = String(options.runKey || '');
+  const correctionRunKey = String(options.correctionRunKey || '');
+  if (!/^[A-Za-z0-9._:-]{1,100}$/.test(runKey)
+    || !/^[A-Za-z0-9._:-]{1,100}$/.test(correctionRunKey)) throw new Error('run keys are invalid');
+  const seen = new Set();
+  const records = [];
+  const skipped = {};
+  for (const row of rows) {
+    const listingId = String(row?.listing_id || '');
+    if (!/^[0-9a-f-]{36}$/i.test(listingId) || seen.has(listingId)) {
+      throw new Error('Correction page contains an invalid or duplicate listing cursor');
+    }
+    seen.add(listingId);
+    const record = correctionRecord(row, fxSnapshot);
+    if (record) records.push(record);
+    else skipped.NOT_EXACTLY_REPARSABLE = (skipped.NOT_EXACTLY_REPARSABLE || 0) + 1;
+  }
+  const previousCursor = options.previousCursor || null;
+  const nextCursor = rows.at(-1).listing_id;
+  const batchToken = records.length ? sha256(stableJson({
+    contract: 'wf-two-brand-price-policy-full-v1',
+    correction_run_key: correctionRunKey,
+    normalization_run_key: runKey,
+    previous_cursor: previousCursor,
+    next_cursor: nextCursor,
+    records,
+  })) : null;
+  return {
+    contract: 'wf-two-brand-price-policy-full-v1',
+    correction_run_key: correctionRunKey,
+    run_key: runKey,
+    previous_cursor: previousCursor,
+    next_cursor: nextCursor,
+    scanned_rows: rows.length,
+    corrected_rows: records.length,
+    skipped_rows: rows.length - records.length,
+    skipped_by_reason: skipped,
+    batch_token: batchToken,
+    records,
+  };
+}
+
 function main() {
   const inputPath = path.resolve(process.env.QNSA_CANARY_INPUT || 'qnsa-canary-input.json');
   const fxPath = path.resolve(process.env.MARIADB_NORMALIZE_FX_SNAPSHOT || 'fx-snapshot.json');
@@ -109,4 +155,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { buildCanary, correctionRecord, exactIdentity };
+module.exports = { buildCanary, buildCorrectionPage, correctionRecord, exactIdentity };

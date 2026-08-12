@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { sourceRecord } = require('../tools/mariadb-live/lib.cjs');
-const { buildCanary, correctionRecord } = require('../tools/mariadb-live/build-two-brand-price-canary.cjs');
+const { buildCanary, buildCorrectionPage, correctionRecord } = require('../tools/mariadb-live/build-two-brand-price-canary.cjs');
 
 const fx = {
   observed_at: '2026-08-11T00:00:00Z',
@@ -14,6 +14,7 @@ const fx = {
 function row(id, title, brand, reference) {
   const raw = sourceRecord({ id, type: 'sale', title, brand, reference });
   return {
+    listing_id: `00000000-0000-0000-0000-${String(id).padStart(12, '0')}`,
     source_record_id: raw.source_record_id,
     source_hash: raw.raw_sha256,
     canonical_brand: brand,
@@ -28,6 +29,23 @@ test('builds a raw-free correction record from exact immutable lineage', () => {
   assert.equal(record.candidate.price.conversion_source, 'USD_DEFAULTED_BY_POLICY');
   assert.equal(Object.hasOwn(record, 'raw_payload'), false);
   assert.equal(JSON.stringify(record).includes('from_number'), false);
+});
+
+test('full page accounts for every scanned row and advances a deterministic cursor', () => {
+  const rows = [
+    row('11', 'Rolex 116688 $37k', 'Rolex', '116688'),
+    row('12', 'Patek 5712 and Rolex 116688 bundle $100000', 'Patek Philippe', '5712'),
+  ];
+  rows[1].source_hash = 'f'.repeat(64);
+  const result = buildCorrectionPage(rows, fx, {
+    runKey: 'existing-run', correctionRunKey: 'price-policy-v1', previousCursor: null,
+  });
+  assert.equal(result.scanned_rows, 2);
+  assert.equal(result.corrected_rows, 1);
+  assert.equal(result.skipped_rows, 1);
+  assert.equal(result.corrected_rows + result.skipped_rows, result.scanned_rows);
+  assert.equal(result.next_cursor, rows[1].listing_id);
+  assert.match(result.batch_token, /^[0-9a-f]{64}$/);
 });
 
 test('builds exactly the requested bounded canary and deduplicates source IDs', () => {
