@@ -50,6 +50,8 @@ test('listing evidence preserves raw message and seller facts while suppressing 
   assert.match(source, /Posted by:/);
   assert.match(source, /Contact:/);
   assert.match(source, /row\.seller_name \|\| row\.posted_by/);
+  assert.match(source, /const summaryPosterName = summary\.seller_name \|\| summary\.posted_by/);
+  assert.match(source, /const summaryPosterPhone = summary\.seller_phone \|\| summary\.phone_number/);
   assert.match(source, /row\.seller_phone \|\| row\.phone_number/);
   assert.match(source, /row\.has_images === false \? '' : imageCandidate/);
   assert.match(source, /row\.has_images === false[\s\S]*\? null[\s\S]*row\.image_url/);

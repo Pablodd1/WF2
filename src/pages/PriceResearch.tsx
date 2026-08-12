@@ -2019,6 +2019,8 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
     .map(value => String(value || '').trim())
     .filter(value => value && !/^unknown$/i.test(value))
     .join(', ');
+  const summaryPosterName = summary.seller_name || summary.posted_by || summary['Posted By'] || '';
+  const summaryPosterPhone = summary.seller_phone || summary.phone_number || summary['Phone Number'] || '';
   // The summary price is the exact value used by the comparable-set and
   // outlier calculations. A legacy detail row may still contain an older
   // currency conversion, so it must never replace the analytics value here.
@@ -2229,18 +2231,18 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
               )}
 
               <DetailCard title="Posted by">
-                {seller?.dealer_name || seller?.phone_display || summary.posted_by || summary.phone_number || summary['Posted By'] || summary['Phone Number'] ? (
+                {seller?.dealer_name || seller?.phone_display || summaryPosterName || summaryPosterPhone ? (
                   <>
-                    {(seller?.dealer_name || summary.posted_by || summary['Posted By']) && (
+                    {(seller?.dealer_name || summaryPosterName) && (
                       <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>
-                        {seller?.dealer_name || summary.posted_by || summary['Posted By']}
+                        {seller?.dealer_name || summaryPosterName}
                       </div>
                     )}
                     {seller?.dealer_company && <div style={{ color: MUTED, fontSize: 13, marginTop: 3 }}>{seller.dealer_company}</div>}
                     {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
-                    {(seller?.phone_display || summary.phone_number || summary['Phone Number']) && (
+                    {(seller?.phone_display || summaryPosterPhone) && (
                       <div style={{ color: NAVY, fontSize: 13, fontWeight: 800, marginTop: 8 }}>
-                        {seller?.phone_display || summary.phone_number || summary['Phone Number']}
+                        {seller?.phone_display || summaryPosterPhone}
                       </div>
                     )}
                     {seller?.dealer_stats ? (
@@ -2268,7 +2270,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                       {seller?.dealer_profile_url && <Link to={seller.dealer_profile_url} style={{ color: NAVY, border: `1px solid ${BORDER}`, padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>View profile</Link>}
                       {(() => {
                         const waUrl = seller?.whatsapp_url || (() => {
-                          const rawPhone = seller?.phone_display || summary.phone_number || summary['Phone Number'];
+                          const rawPhone = seller?.phone_display || summaryPosterPhone;
                           const digits = String(rawPhone || '').replace(/\D/g, '');
                           return digits.length >= 7 ? `https://wa.me/${digits}` : null;
                         })();
