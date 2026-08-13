@@ -4,37 +4,6 @@ BEGIN;
 -- exact source image, usable price, newest observation, stable identifier.
 -- Bundle parents/children remain excluded by each function's existing gates.
 
-CREATE OR REPLACE FUNCTION public.qnsa_three_brand_fx_trading_floor_rows(
-  p_brand text,
-  p_limit integer DEFAULT 51,
-  p_offset integer DEFAULT 0,
-  p_listing_type text DEFAULT NULL
-)
-RETURNS SETOF jsonb
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog, public, staging
-AS $$
-  SELECT to_jsonb(t)
-  FROM public.qnsa_three_brand_trading_floor_fx_contract t
-  JOIN public.qnsa_two_brand_release_control control
-    ON control.canonical_brand = t.brand_normalized
-   AND control.enabled_run_key = t.normalization_run_key
-   AND control.trading_floor_enabled
-  WHERE (p_brand IS NULL OR t.brand_normalized = p_brand)
-    AND (p_listing_type IS NULL
-      OR upper(COALESCE(t.listing_type, t.intent, '')) = upper(p_listing_type))
-  ORDER BY
-    (btrim(COALESCE(t.image_url, t.source_media_url_candidate, ''))
-      ~* '^https?://[^[:space:]]+$') DESC,
-    (t.effective_price_usd IS NOT NULL AND t.effective_price_usd > 0) DESC,
-    t.created_at DESC,
-    t.id DESC
-  LIMIT LEAST(GREATEST(COALESCE(p_limit, 51), 1), 101)
-  OFFSET GREATEST(COALESCE(p_offset, 0), 0)
-$$;
-
 CREATE OR REPLACE FUNCTION public.qnsa_trading_floor_reference_rows(
   p_brand text,
   p_reference text,
@@ -337,10 +306,6 @@ CREATE INDEX IF NOT EXISTS idx_qnsa_listing_reference_image_price_order_20260813
   WHERE parent_id IS NULL AND COALESCE(is_bundle, false) = false
     AND upper(COALESCE(category, '')) = 'WATCH';
 
-REVOKE ALL ON FUNCTION public.qnsa_three_brand_fx_trading_floor_rows(text,integer,integer,text)
-  FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.qnsa_three_brand_fx_trading_floor_rows(text,integer,integer,text)
-  TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.qnsa_trading_floor_reference_rows(text,text,boolean,integer,integer)
   FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.qnsa_trading_floor_reference_rows(text,text,boolean,integer,integer)

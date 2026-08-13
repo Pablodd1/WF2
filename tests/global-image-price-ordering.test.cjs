@@ -27,12 +27,13 @@ test('display comparator enforces image then price then date then stable id', ()
 
 test('forward migration aligns every active QNSA Trading Floor RPC', () => {
   for (const functionName of [
-    'qnsa_three_brand_fx_trading_floor_rows',
     'qnsa_trading_floor_reference_rows',
     'qnsa_market_feed_page_rows',
   ]) {
     assert.match(migration, new RegExp(`CREATE OR REPLACE FUNCTION public\\.${functionName}\\(`));
   }
+  assert.doesNotMatch(migration, /qnsa_three_brand_trading_floor_fx_contract/,
+    'the optional, undeployed FX sidecar must not be a migration dependency');
   const imageOrder = /btrim\(COALESCE\([^)]*image_url[^)]*source_media_url_candidate[^)]*\)\)[\s\S]{0,100}DESC/gi;
   assert.ok([...migration.matchAll(imageOrder)].length >= 5, 'all source scans must lead with exact source-image order');
   assert.match(migration, /created_at DESC,[\s\S]{0,30}(?:l\.|t\.)?id DESC/);
@@ -47,4 +48,3 @@ test('Price Research omits missing and failed image frames', () => {
   assert.match(research, /onError=\{\(\) => setImageFailed\(true\)\}/);
   assert.match(research, /images\.length > 0 && \(/);
 });
-
