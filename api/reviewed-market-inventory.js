@@ -322,11 +322,6 @@ function inventoryIdentityKey(record) {
 }
 
 function compareInventoryForDisplay(left, right) {
-  if (inventoryIdentityKey(left) === inventoryIdentityKey(right)) {
-    const priceDifference = Number(Boolean(hasUsableSourcePrice(right)))
-      - Number(Boolean(hasUsableSourcePrice(left)));
-    if (priceDifference !== 0) return priceDifference;
-  }
   const imageDifference = Number(right?.has_images === true) - Number(left?.has_images === true);
   if (imageDifference !== 0) return imageDifference;
   const priceDifference = Number(Boolean(hasUsableSourcePrice(right)))
@@ -1264,6 +1259,7 @@ module.exports = async function handler(req, res) {
       .filter(record => !region || locationMatches(record.location, region))
       .filter(record => ratingMatches(record, rating))
       .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
+    let consumedSourceRecordCount = records.length;
     if (firstPageOfLane) {
       const { data: directRows, error: directError } = await directRowsPromise;
       if (!directError) {
@@ -1274,10 +1270,20 @@ module.exports = async function handler(req, res) {
             imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search, itemCategory, region,
             rating, postedAfter,
           }));
+        const directRecordIds = new Set(directRecords.map(record => String(record.id)));
         records = [...directRecords, ...records]
           .sort(compareInventoryForDisplay)
           .slice(0, pageSize);
+        // The cursor advances only past database rows actually shown. Direct
+        // submissions are merged on the first page and must not cause unseen
+        // source rows to be skipped on the next cursor page.
+        consumedSourceRecordCount = records
+          .filter(record => !directRecordIds.has(String(record.id)))
+          .length;
       }
+    }
+    if (pagination === 'cursor') {
+      nextOffset = requestedOffset + consumedSourceRecordCount;
     }
     const nextCursor = hasMore
       ? encodeInventoryCursor({ lane: nextLane, offset: nextOffset, page: page + 1 })

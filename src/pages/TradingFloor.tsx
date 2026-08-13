@@ -220,10 +220,6 @@ function listingIdentityKey(listing: ListingRecord) {
 }
 
 function compareListingsForDisplay(left: ListingRecord, right: ListingRecord) {
-  if (listingIdentityKey(left) === listingIdentityKey(right)) {
-    const priceDifference = Number(hasListingPrice(right)) - Number(hasListingPrice(left));
-    if (priceDifference !== 0) return priceDifference;
-  }
   const imageDifference = Number(hasListingImage(right)) - Number(hasListingImage(left));
   if (imageDifference !== 0) return imageDifference;
   const priceDifference = Number(hasListingPrice(right)) - Number(hasListingPrice(left));

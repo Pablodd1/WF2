@@ -37,7 +37,9 @@ test('featured-sale rows preserve source evidence while excluded rows never alte
   assert.match(pageRender, /Compact, full-width WTS source evidence only/);
   assert.match(pageRender, /WTB requests remain counted separately in the WTB \/ WTS ratio above/);
   assert.match(pageRender, /exclusionLabel=\{outlierReason\(row\.outlier_reason\)\}/);
-  assert.match(source, /function ComparableThumbnail/);
+  assert.doesNotMatch(source, /No image|Source listing image unavailable/);
+  assert.match(source, /const showImage = Boolean\(imageUrl\) && !imageFailed/);
+  assert.match(source, /\{showImage && \(/);
   assert.match(source, /row\.raw_message \?\? row\.raw_line/);
 });
 

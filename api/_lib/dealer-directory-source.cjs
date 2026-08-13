@@ -31,6 +31,15 @@ function phoneDigits(value) {
   return String(value || '').replace(/[^0-9]/g, '');
 }
 
+function withoutPrivateProvenance(profile) {
+  if (!profile) return profile;
+  const {
+    source_url: _sourceUrl,
+    ...publicProfile
+  } = profile;
+  return publicProfile;
+}
+
 function ratedProfileSummary(profile, rank) {
   const existing = (crawl.profiles || []).find(row => String(row.id) === String(profile.profile_id));
   const summary = profileSummary(existing || {
@@ -233,8 +242,6 @@ function sourceProfilePayload(identity) {
     created_at: null,
     raw_message: row.title || null,
     image_url: row.image_url || row.source_images?.[0] || null,
-    source_url: row.detail_url || null,
-    availability_url: row.availability_url || null,
     source_status: row.source_status || null,
     box: row.box || null,
     papers: row.papers || null,
@@ -242,7 +249,7 @@ function sourceProfilePayload(identity) {
   const summary = profileSummary(profile, sourceIndex + 1);
   return {
     success: true,
-    dealer: summary,
+    dealer: withoutPrivateProvenance(summary),
     stats: {
       wts_count: nonNegativeInteger(profile.wts) || publicListings.filter(row => row.listing_type === 'WTS').length,
       wtb_count: nonNegativeInteger(profile.wtb) || publicListings.filter(row => row.listing_type === 'WTB').length,
@@ -250,7 +257,6 @@ function sourceProfilePayload(identity) {
       first_post: dates[0]?.toISOString() || null,
       latest_post: dates.at(-1)?.toISOString() || null,
       verified_contact_info: null,
-      source_contact_url: profile.whatsapp_url || profile.chat_url || null,
     },
     listings: publicListings,
     reviews: (profile.reviews || []).map(review => ({
@@ -258,16 +264,11 @@ function sourceProfilePayload(identity) {
       reviewer: review.reviewer || null,
       sentiment: review.sentiment || null,
     })),
-    source_links: {
-      profile: profile.profile_url || null,
-      for_sale: profile.wts_url || null,
-      want_to_buy: profile.wtb_url || null,
-      all_listings: profile.all_listings_url || null,
-    },
     source_provenance: {
       source_system: SOURCE_SYSTEM,
-      source_url: crawl.source || null,
       crawled_at: crawl.crawled_at || null,
+      captured_listing_count: publicListings.length,
+      captured_review_count: (profile.reviews || []).length,
     },
     raw_message_access: true,
   };
@@ -281,7 +282,7 @@ function ratedProfilePayload(identity) {
   const summary = ratedProfileSummary(ratedDealers.profiles[ratedIndex], ratedIndex + 1);
   return {
     success: true,
-    dealer: summary,
+    dealer: withoutPrivateProvenance(summary),
     stats: {
       wts_count: summary.stats?.wts_posts ?? null,
       wtb_count: summary.stats?.wtb_posts ?? null,
@@ -297,16 +298,10 @@ function ratedProfilePayload(identity) {
     },
     listings: [],
     reviews: [],
-    source_links: {
-      profile: summary.source_url,
-      for_sale: null,
-      want_to_buy: null,
-      all_listings: null,
-    },
     source_provenance: {
       source_system: RATED_SOURCE_SYSTEM,
-      source_url: ratedDealers.source,
       crawled_at: ratedDealers.crawled_at,
+      captured_review_count: summary.review_count,
     },
     raw_message_access: false,
   };
@@ -319,9 +314,51 @@ function legacyProfilePayload(identity) {
   if (!profile) return null;
   const posts = (legacyAudit.posts || []).filter(row => String(row.legacy_profile_id) === match[1]);
   const snapshots = (legacyAudit.stat_snapshots || []).filter(row => String(row.legacy_profile_id) === match[1]);
+  const postById = new Map(posts.map(row => [String(row.post_id), row]));
+  const inventory = (legacyAudit.inventory_lines || [])
+    .filter(row => String(row.legacy_profile_id) === match[1]);
+  const inventoryListings = inventory.map(row => {
+    const post = postById.get(String(row.post_id)) || null;
+    return {
+      id: `watchfacts-legacy-item-${row.item_row_id}`,
+      post_id: row.post_id || null,
+      source_line_no: row.source_line_no ?? null,
+      category: row.category || null,
+      brand: row.brand_context || null,
+      reference: row.reference_candidate || null,
+      dial_color: null,
+      condition: row.condition_raw || null,
+      year: row.year_raw || null,
+      price_usd: null,
+      currency: null,
+      display_price: row.price_raw || null,
+      currency_evidence_status: row.currency_status || null,
+      listing_type: row.intent || post?.post_intent || null,
+      listing_date: post?.posted_on || null,
+      created_at: null,
+      raw_message: row.raw_source_line || post?.raw_post_summary || null,
+      image_url: null,
+      repost_count: post?.repost_count ?? null,
+      box: row.box_evidence || post?.page_box || null,
+      papers: row.papers_evidence || post?.page_papers || null,
+      availability_status: row.availability_status || null,
+      quality_flags: row.quality_flags || null,
+      evidence_only: true,
+    };
+  });
+  const postListings = posts.map(row => ({
+    id: `watchfacts-legacy-post-${row.post_id}`,
+    brand: null, reference: null, dial_color: null, condition: null,
+    price_usd: null, currency: null, listing_type: row.post_intent || null,
+    listing_date: row.posted_on || null, created_at: null,
+    raw_message: row.raw_post_summary || null, image_url: null,
+    repost_count: row.repost_count,
+    box: row.page_box || null, papers: row.page_papers || null,
+    evidence_only: true,
+  }));
   return {
     success: true,
-    dealer: profile,
+    dealer: withoutPrivateProvenance(profile),
     stats: {
       wts_count: profile.stats.latest_captured_wts,
       wtb_count: profile.stats.latest_captured_wtb,
@@ -330,22 +367,14 @@ function legacyProfilePayload(identity) {
       latest_post: null,
       verified_contact_info: null,
       snapshot_range: profile.stats,
+      captured_inventory_count: inventoryListings.length,
+      captured_inventory_wts_count: inventoryListings.filter(row => row.listing_type === 'WTS').length,
+      captured_inventory_wtb_count: inventoryListings.filter(row => row.listing_type === 'WTB').length,
     },
-    listings: posts.map(row => ({
-      id: `watchfacts-legacy-post-${row.post_id}`,
-      brand: null, reference: null, dial_color: null, condition: null,
-      price_usd: null, currency: null, listing_type: row.post_intent || null,
-      listing_date: row.posted_on || null, created_at: null,
-      raw_message: row.raw_post_summary || null, image_url: null,
-      source_url: row.source_url || null, repost_count: row.repost_count,
-      box: row.page_box || null, papers: row.page_papers || null,
-      evidence_only: true,
-    })),
-    stat_snapshots: snapshots,
-    source_links: { profile: profile.source_url, for_sale: profile.source_url, want_to_buy: profile.source_url?.replace('for=sale', 'for=search') || null },
+    listings: inventoryListings.length ? inventoryListings : postListings,
+    stat_snapshots: snapshots.map(({ source_url: _sourceUrl, ...snapshot }) => snapshot),
     source_provenance: {
       source_system: LEGACY_SOURCE_SYSTEM,
-      source_url: profile.source_url || null,
       crawled_at: '2026-08-11',
       source_file: legacyAudit.source_file,
       source_sha256: legacyAudit.source_sha256,
@@ -370,4 +399,5 @@ module.exports = {
   topRatedProfiles,
   ratedDealerEvidence,
   ratedProfiles,
+  withoutPrivateProvenance,
 };

@@ -116,7 +116,8 @@ test('Price Research uses dial colors, closed methodology, images, and complete 
   assert.match(research, /key=\{`methodology-/);
   assert.doesNotMatch(research, /<details open/);
   assert.match(research, /row\.display_image_url/);
-  assert.match(research, /Source listing image unavailable/);
+  assert.doesNotMatch(research, /No image|Source listing image unavailable/);
+  assert.match(research, /images\.length > 0 \? 'grid md:grid-cols/);
   assert.match(research, /const rawSourceMessage = detail\?\.raw_message \?\? summary\.raw_message \?\? summary\.raw_line/);
   assert.match(research, /void fetch\(contactEndpoint[\s\S]*setListingSeller/);
   assert.match(research, /<DetailCard title="Original listing"/);
@@ -188,14 +189,15 @@ test('dealer directory separates verified Reference Check from provenance-backed
   assert.match(directory, /view === 'legacy' \? 'Captured WTS' : 'For sale'/);
   assert.match(directory, /view === 'legacy' \? 'Captured WTB' : 'Looking for'/);
   assert.match(directory, /Full profile/);
-  assert.match(directory, /Source profile/);
+  assert.doesNotMatch(directory, /Source profile/);
   assert.match(directory, /public-source leaderboard/);
   const profile = read('src/pages/DealerProfile.tsx');
   assert.match(profile, /Raw source message/);
   assert.match(profile, /Verified dealer/);
-  assert.match(profile, /Public-source Top Rated profile/);
+  assert.match(profile, /Top Rated dealer evidence/);
   assert.match(profile, /Find on Trading Floor/);
-  assert.doesNotMatch(profile, /Actual listing|Dealer feedback|Source workflow/);
+  assert.doesNotMatch(profile, /Open source listing|All source listings|Source WTS|Source WTB|Contact through public source/);
+  assert.doesNotMatch(profile, /Actual listing|Source workflow/);
 });
 
 test('home and Post an Item share a persistent multilingual interface without changing raw source text', () => {

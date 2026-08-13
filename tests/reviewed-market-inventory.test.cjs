@@ -41,7 +41,7 @@ test('general QNSA market feed bounds pages and joins immutable evidence', () =>
   assert.match(source, /p_category: itemCategory === 'ALL' \? null : itemCategory/);
 });
 
-test('same-reference Trading Floor listings place supplied prices before no-price activity', () => {
+test('same-reference Trading Floor listings preserve the global image boundary before price', () => {
   const priced = {
     id: 'priced', brand: 'Patek Philippe', reference: '5712/1A-001',
     source_price_amount: 92000, has_images: false, listing_date: '2026-01-01',
@@ -51,7 +51,7 @@ test('same-reference Trading Floor listings place supplied prices before no-pric
     source_price_amount: null, has_images: true, listing_date: '2026-08-01',
   };
   const records = [unpriced, priced].sort(api.compareInventoryForDisplay);
-  assert.deepEqual(records.map(record => record.id), ['priced', 'unpriced']);
+  assert.deepEqual(records.map(record => record.id), ['unpriced', 'priced']);
   assert.equal(api.hasUsableSourcePrice(priced), 92000);
   assert.equal(api.hasUsableSourcePrice(unpriced), null);
   assert.deepEqual(api.summarizeCoverage([

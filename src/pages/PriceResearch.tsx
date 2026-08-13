@@ -1942,14 +1942,8 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
 
   return (
     <article style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 18, background: WHITE, minWidth: 0 }}>
-      {/* ponytail: multi-listing children show a badge, not the parent's multi-watch image */}
-      {record.multi_listing ? (
-        <div style={{ height: 270, background: '#f1f3f5', borderRadius: 8, marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#C9A96E' }}>Multi-Listing</span>
-        </div>
-      ) : (
-        <ReviewedEvidenceImage src={imageUrl} alt={`${title} original listing image`} />
-      )}
+      {/* Multi-listing media is never reused. Missing media leaves no empty frame. */}
+      {!record.multi_listing && <ReviewedEvidenceImage src={imageUrl} alt={`${title} original listing image`} />}
       <div style={{ color: GOLD, fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>
         {record.listing_type || 'Listing'}{record.condition ? ` · ${record.condition}` : ''}
       </div>
@@ -2008,9 +2002,11 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
   exclusionLabel: string;
   onOpen: () => void;
 }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const date = row.listing_date || row.created_at;
   const imageCandidate = row.thumbnail_url || row.display_image_url || row.image_url || row.image_urls?.find(Boolean) || '';
   const imageUrl = row.has_images === false ? '' : imageCandidate;
+  const showImage = Boolean(imageUrl) && !imageFailed;
   const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
   const hasUsdPrice = Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0;
   const hasSourcePrice = Boolean(
@@ -2032,11 +2028,21 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
     : 'Included in qualified comparable average';
   return (
     <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}, ${evidenceStatus}`}
-      className="!grid min-h-20 grid-cols-[60px_minmax(0,1fr)] sm:!flex"
+      className={showImage ? '!grid min-h-20 grid-cols-[60px_minmax(0,1fr)] sm:!flex' : '!grid min-h-20 grid-cols-1 sm:!flex'}
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
-      <ComparableThumbnail src={imageUrl} alt={`${title} listing image`} />
+      {showImage && (
+        <div style={{ width: 60, height: 60, flex: '0 0 60px', borderRadius: 8, overflow: 'hidden' }}>
+          <img
+            src={imageUrl}
+            alt={`${title} listing image`}
+            loading="lazy"
+            onError={() => setImageFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="flex items-center gap-2">
           <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
@@ -2084,17 +2090,6 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
       </div>
       <Eye className="hidden h-3.5 w-3.5 sm:block" style={{ color: MUTED, flexShrink: 0 }} />
     </button>
-  );
-}
-
-function ComparableThumbnail({ src, alt }: { src: string; alt: string }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <div aria-hidden={!src || failed} style={{ width: 60, height: 60, flex: '0 0 60px', borderRadius: 8, overflow: 'hidden', display: 'grid', placeItems: 'center', background: '#f1f3f5', color: MUTED, fontSize: 10 }}>
-      {src && !failed
-        ? <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        : <span>No image</span>}
-    </div>
   );
 }
 
@@ -2200,17 +2195,12 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
         {!loading && error && <div style={{ margin: 28, padding: 20, border: '1px solid #ead9a2', background: '#fffaf0', color: '#7a5900' }}><strong>Some source details are unavailable.</strong> The verified comparable summary is shown below.</div>}
 
         {!loading && !detail && error && (
-          <div className="grid md:grid-cols-[minmax(220px,0.65fr)_minmax(0,1.35fr)]" style={{ padding: 28, gap: 24 }}>
-            <section style={{ minHeight: 300, borderRadius: 10, background: LIGHT_GRAY, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
-              {images.length > 0 ? (
+          <div className={images.length > 0 ? 'grid md:grid-cols-[minmax(220px,0.65fr)_minmax(0,1.35fr)]' : ''} style={{ padding: 28, gap: 24 }}>
+            {images.length > 0 && (
+              <section style={{ minHeight: 300, borderRadius: 10, background: LIGHT_GRAY, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
                 <img src={images[0]} alt={`${title} source listing image`} onError={() => setFailedImages(current => new Set(current).add(images[0]))} style={{ width: '100%', height: '100%', maxHeight: 460, objectFit: 'contain', background: WHITE }} />
-              ) : (
-                <div style={{ padding: 24, color: MUTED, fontSize: 13, textAlign: 'center' }}>
-                  <Store size={28} style={{ margin: '0 auto 10px' }} />
-                  Source listing image unavailable
-                </div>
-              )}
-            </section>
+              </section>
+            )}
             <section>
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 28, lineHeight: 1.15 }}>{title}</h1>
               <div style={{ color: GOLD, fontSize: 22, fontWeight: 800, marginTop: 10 }}>
@@ -2549,6 +2539,7 @@ function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpen
 }
 
 function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => void }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const brandRef = [row.brand, row.reference].filter(Boolean).join(' ');
   const title = row.model ? `${brandRef} (${row.model})` : brandRef;
   const phone = row.seller_phone;
@@ -2578,9 +2569,9 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
 
         {/* Content & Image */}
         <div className="flex gap-3 mb-3">
-          {imgUrl && (
+          {imgUrl && !imageFailed && (
             <div style={{ width: 72, height: 72, flexShrink: 0, borderRadius: 6, background: LIGHT_GRAY, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
-              <img src={imgUrl} alt={title} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
+              <img src={imgUrl} alt={title} onError={() => setImageFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
             </div>
           )}
           <div style={{ minWidth: 0, flex: 1 }}>
