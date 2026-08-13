@@ -75,6 +75,25 @@ test('requires the verified-price flag even when a USD value is populated', () =
   assert.equal(row.analytics_currency_status, 'CURRENCY_UNVERIFIED');
 });
 
+test('qualified sidecar price becomes the effective WTS analytics price with audit provenance', () => {
+  const row = mapWorkbookAnalyticsRow({
+    id: 'row-corrected', listing_type: 'WTS', brand_scope: 'Rolex',
+    normalized_reference: '116500LN', model: 'Daytona', dial_color: 'Black',
+    source_price_amount: 298000, source_currency: 'HKD',
+    verified_price_usd: null, has_verified_usd_price: false,
+    corrected_price_usd: 38205, corrected_source_amount: 298000,
+    corrected_source_currency: 'HKD', corrected_fx_rate: 0.128205,
+    corrected_fx_source: 'ECB_REFERENCE_RATES', corrected_fx_date: '2026-08-11',
+    price_correction_status: 'QUALIFIED', price_correction_id: 'sidecar-row-1',
+    price_correction_key: 'three-brand-v1',
+  });
+  assert.equal(row.price_usd, 38205);
+  assert.equal(row.has_verified_usd_price, true);
+  assert.equal(row.effective_price_source, 'SIDECAR_CORRECTION');
+  assert.equal(row.price_correction_applied, true);
+  assert.equal(row.analytics_fx_source, 'ECB_REFERENCE_RATES');
+});
+
 test('Price Research prefers verified reviewed-workbook cohorts and keeps legacy fallback', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
   assert.match(source, /loadReviewedWorkbookAnalyticsRows/);

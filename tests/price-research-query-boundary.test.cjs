@@ -27,11 +27,11 @@ test('high-volume Price Research uses one bounded strict-source query', () => {
   assert.match(source, /seller_name,seller_phone/);
 });
 
-test('QNSA Rolex and Patek release sources are explicit and fail closed', () => {
+test('QNSA three-brand release sources are explicit and fail closed', () => {
   assert.match(source, /const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source'/);
   assert.match(source, /const QNSA_WTB_DEMAND_SOURCE = 'qnsa_rolex_patek_wtb_demand_source'/);
   assert.match(source, /process\.env\.PRICE_RESEARCH_SOURCE_VIEW/);
-  assert.match(source, /\['rolex', 'patek philippe'\]\.includes\(normalizedBrand\)/);
+  assert.match(source, /\['rolex', 'patek philippe', 'audemars piguet'\]\.includes\(normalizedBrand\)/);
   assert.match(source, /table !== QNSA_PRICE_RESEARCH_SOURCE/);
   assert.match(source, /sourceTable === QNSA_PRICE_RESEARCH_SOURCE/);
   assert.match(source, /!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationBrandAllowed/);
@@ -45,8 +45,9 @@ test('QNSA analytics uses the indexed Trading release and skips supplemental dia
   assert.match(source, /\.eq\('has_verified_usd_price', true\)/);
   assert.match(source, /!usingQnsaReviewedSource[\s\S]*supplementalCatalogDials\.length/);
   assert.match(source, /loadQnsaTradingDemand[\s\S]*\.from\(QNSA_TRADING_SOURCE\)/);
-  assert.match(source, /client\.rpc\('qnsa_bounded_price_research_rows'/);
-  assert.match(source, /if \(!familyPrefix\)[\s\S]*qnsa_bounded_price_research_rows/);
+  assert.match(source, /client\.rpc\('qnsa_three_brand_fx_price_research_rows'/);
+  assert.match(source, /isMissingRpcError[\s\S]*client\.rpc\('qnsa_bounded_price_research_rows'/);
+  assert.match(source, /if \(!familyPrefix\)[\s\S]*loadQnsaPriceRpcRows/);
   const qnsaLoader = source.slice(
     source.indexOf('async function loadQnsaVerifiedTradingPrices'),
     source.indexOf('// Look up a human model name'),

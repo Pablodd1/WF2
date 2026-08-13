@@ -1,5 +1,7 @@
 'use strict';
 
+const { applyEffectivePrice } = require('./corrected-price-source.cjs');
+
 const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
 
 function clean(value) {
@@ -8,6 +10,7 @@ function clean(value) {
 }
 
 function mapWorkbookAnalyticsRow(row) {
+  row = applyEffectivePrice(row);
   const isBundle = String(row.listing_type || '').toUpperCase() === 'BUNDLE';
   const imageCandidate = clean(row.final_image_url) || clean(row.user_image_url);
   const exactImage = !isBundle && (row.has_exact_source_image === true || Boolean(imageCandidate)) ? imageCandidate : null;
@@ -29,6 +32,13 @@ function mapWorkbookAnalyticsRow(row) {
     price_usd: priceUsd,
     verified_price_usd: verifiedUsd,
     has_verified_usd_price: hasVerifiedUsd,
+    effective_price_source: clean(row.effective_price_source),
+    price_correction_applied: row.price_correction_applied === true,
+    price_correction_id: clean(row.price_correction_id),
+    price_correction_key: clean(row.price_correction_key),
+    analytics_fx_rate: row.effective_fx_rate == null ? null : Number(row.effective_fx_rate),
+    analytics_fx_source: clean(row.effective_fx_source),
+    analytics_fx_date: clean(row.effective_fx_date),
     currency: clean(row.source_currency),
     raw_message: clean(row.raw_message),
     flags: {},
@@ -66,10 +76,13 @@ const WORKBOOK_COLUMNS = [
   'normalized_reference,catalog_reference,public_reference,dial_color,catalog_dial,condition',
   'source_price_amount,source_currency,price_evidence_status,confidence,verification_status',
   'user_image_url,verified_price_usd,imported_at,has_exact_source_image,has_verified_usd_price',
+  'corrected_price_usd,corrected_source_amount,corrected_source_currency,corrected_fx_rate',
+  'corrected_fx_source,corrected_fx_date,price_correction_status,price_correction_id,price_correction_key',
   'reference_search_key,has_complete_identity,seller_name,seller_phone,contact_publication_approved,verdict,listing_status',
 ].join(',');
 
 const LEGACY_WORKBOOK_COLUMNS = WORKBOOK_COLUMNS
+  .replace(/,corrected_price_usd,corrected_source_amount,corrected_source_currency,corrected_fx_rate,corrected_fx_source,corrected_fx_date,price_correction_status,price_correction_id,price_correction_key/, '')
   .replace('seller_name,seller_phone,', 'posted_by,phone_number,')
   .replace(',verdict,listing_status', '');
 
