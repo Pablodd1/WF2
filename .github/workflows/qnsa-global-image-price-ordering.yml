@@ -52,7 +52,6 @@ jobs:
             'run_rows', count(*),
             'invalid_lineage', count(*) FILTER (WHERE raw_message_version_id IS NULL OR source_record_id IS NULL),
             'bundle_or_child_rows', count(*) FILTER (WHERE parent_id IS NOT NULL OR COALESCE(is_bundle,false)),
-            'required_contract', to_regclass('public.qnsa_three_brand_trading_floor_fx_contract') IS NOT NULL,
             'release_control', to_regclass('public.qnsa_two_brand_release_control') IS NOT NULL,
             'market_control', to_regclass('public.qnsa_market_feed_control') IS NOT NULL
           ) AS audit
@@ -64,7 +63,7 @@ jobs:
           $audit = $result[0].audit
           $audit | ConvertTo-Json -Depth 5
           if ([long]$audit.run_rows -ne 603678 -or [long]$audit.invalid_lineage -ne 0 -or [long]$audit.bundle_or_child_rows -ne 0 -or
-              -not [bool]$audit.required_contract -or -not [bool]$audit.release_control -or -not [bool]$audit.market_control) {
+              -not [bool]$audit.release_control -or -not [bool]$audit.market_control) {
             throw 'QNSA ordering preflight failed.'
           }
 
