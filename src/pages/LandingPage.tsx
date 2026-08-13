@@ -6,10 +6,10 @@ import { MarketActivityTicker } from '@/components/MarketActivityTicker';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 const networkStats = [
-  ['25,000+', 'Verified dealers'],
-  ['750K+', 'Daily listings'],
-  ['600+', 'Private channels'],
-  ['4m', 'Average match time'],
+  ['Source-backed', 'Dealer directory'],
+  ['1.39M', 'Historical source records'],
+  ['WTS + WTB', 'Market activity'],
+  ['Dated', 'Price evidence'],
 ] as const;
 
 const workflow = [

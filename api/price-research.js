@@ -30,6 +30,7 @@ const { buildIndicativeForecast, buildMarketForecast } = require('./_lib/market-
 const { selectDialGroup } = require('./_lib/dial-cohort-selection.cjs');
 const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
 const { loadVerifiedDemandIdentityRows } = require('./_lib/verified-demand-identity.cjs');
+const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -50,6 +51,18 @@ const DEMAND_SAMPLE_LIMIT = 2500;
 const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source';
 const QNSA_WTB_DEMAND_SOURCE = 'qnsa_rolex_patek_wtb_demand_source';
 const QNSA_TRADING_SOURCE = 'qnsa_rolex_patek_trading_floor_source';
+function isMissingRpcError(error) {
+  return /PGRST202|42883|could not find the function|does not exist/i
+    .test(`${error?.code || ''} ${error?.message || error || ''}`);
+}
+
+async function loadQnsaPriceRpcRows(client, args) {
+  let result = await client.rpc('qnsa_three_brand_fx_price_research_rows', args);
+  if (result.error && isMissingRpcError(result.error)) {
+    result = await client.rpc('qnsa_bounded_price_research_rows', args);
+  }
+  return result;
+}
 
 function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
@@ -80,40 +93,56 @@ async function loadQnsaVerifiedTradingPrices(client, {
   limit,
 }) {
   if (!familyPrefix) {
-    const { data: rpcRows, error: rpcError } = await client.rpc('qnsa_bounded_price_research_rows', {
+    const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
       p_references: referenceVariants,
       p_listing_type: 'WTS',
       p_limit: limit,
     });
-    if (!rpcError) return rpcRows || [];
+    if (!rpcError) return (rpcRows || []).map(row => {
+      const effective = applyEffectivePrice(row);
+      return effective.price_correction_applied
+        ? { ...effective, price_usd: effective.verified_price_usd }
+        : row;
+    });
     console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
   }
   // The dedicated research view is the primary source. This bounded fallback
   // uses the same reconciled release base when PostgREST has not refreshed that
   // view yet. Only rows already marked as verified USD evidence are admitted;
   // no-price, ambiguous-currency, WTB, bundle, and suppressed rows remain out.
-  const columns = [
+  const baseColumns = [
     'id,canonical_brand,catalog_model,normalized_reference,source_price_amount',
     'verified_price_usd,source_currency,raw_message,posting_date,condition',
     'dial_color,listing_type,dealer_id,seller_name,seller_phone,confidence',
     'verdict,trading_floor_status,user_image_url,has_exact_source_image,has_verified_usd_price',
   ].join(',');
-  let query = client
-    .from(QNSA_TRADING_SOURCE)
-    .select(columns)
-    .eq('brand_scope', brand)
-    .eq('listing_type', 'WTS')
-    // Keep this predicate in Postgres. Fetching the newest 1,000 Trading rows
-    // and filtering unpriced evidence in Node can hide older valid prices for
-    // high-volume references.
-    .eq('has_verified_usd_price', true);
-  query = familyPrefix
-    ? query.like('normalized_reference', `${familyPrefix}%`)
-    : query.in('normalized_reference', referenceVariants);
-  const { data, error } = await query.limit(limit);
+  const columns = [
+    baseColumns,
+    'corrected_price_usd,corrected_source_amount,corrected_source_currency,corrected_fx_rate',
+    'corrected_fx_source,corrected_fx_date,price_correction_status,price_correction_id,price_correction_key',
+  ].join(',');
+  const execute = selectedColumns => {
+    let query = client
+      .from(QNSA_TRADING_SOURCE)
+      .select(selectedColumns)
+      .eq('brand_scope', brand)
+      .eq('listing_type', 'WTS')
+      // The effective view promotes only qualified sidecar corrections into
+      // this flag. Unpriced and incomplete corrections remain excluded.
+      .eq('has_verified_usd_price', true);
+    query = familyPrefix
+      ? query.like('normalized_reference', `${familyPrefix}%`)
+      : query.in('normalized_reference', referenceVariants);
+    return query.limit(limit);
+  };
+  let { data, error } = await execute(columns);
+  if (error && /42703|does not exist/i.test(`${error.code || ''} ${error.message || error}`)) {
+    ({ data, error } = await execute(baseColumns));
+  }
   if (error) throw error;
   return (data || [])
+    .map(applyEffectivePrice)
     .filter(row => row.has_verified_usd_price === true && Number(row.verified_price_usd) > 0)
     .map(row => ({
     id: row.id,
@@ -129,6 +158,13 @@ async function loadQnsaVerifiedTradingPrices(client, {
     listing_date: row.posting_date,
     condition: row.condition,
     source: 'MARIADB_IMMUTABLE_RAW',
+    effective_price_source: row.effective_price_source,
+    price_correction_applied: row.price_correction_applied === true,
+    price_correction_id: row.price_correction_id,
+    price_correction_key: row.price_correction_key,
+    analytics_fx_rate: row.effective_fx_rate,
+    analytics_fx_source: row.effective_fx_source,
+    analytics_fx_date: row.effective_fx_date,
     dial_color: row.dial_color,
     year: null,
     listing_type: row.listing_type,
@@ -151,7 +187,7 @@ async function loadQnsaTradingDemand(client, {
   limit,
 }) {
   if (!familyPrefix) {
-    const { data: rpcRows, error: rpcError } = await client.rpc('qnsa_bounded_price_research_rows', {
+    const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
       p_references: referenceVariants,
       p_listing_type: 'WTB',
@@ -851,8 +887,13 @@ module.exports = async function handler(req, res) {
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
-        const normalized = usingReviewedWorkbook
-          ? { ...row, analytics_price_usd: row.price_usd, price_normalization: null }
+        const normalized = usingReviewedWorkbook || row.price_correction_applied === true
+          ? {
+              ...row,
+              analytics_price_usd: row.price_usd,
+              price_normalization: row.price_correction_applied ? 'QUALIFIED_SIDECAR_CORRECTION' : null,
+              analytics_currency_status: 'VERIFIED',
+            }
           : normalizeMarketRow(row, referenceVariants);
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {

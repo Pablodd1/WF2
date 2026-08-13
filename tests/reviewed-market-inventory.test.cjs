@@ -411,6 +411,25 @@ test('never promotes unresolved workbook USD values into verified USD price', ()
   assert.equal(mapped.price_research_eligible, false);
 });
 
+test('Trading Floor prefers a qualified corrected USD price and retains original source evidence', () => {
+  const mapped = api.mapReviewedRecord({
+    id: 'corrected-1', supplied_brand: 'Patek Philippe', model: 'Nautilus',
+    normalized_reference: '5712/1A', dial_color: 'Blue', listing_type: 'WTS',
+    source_price_amount: 305000, source_currency: 'HKD',
+    verified_price_usd: null, has_verified_usd_price: false,
+    corrected_price_usd: 39102, corrected_source_amount: 305000,
+    corrected_source_currency: 'HKD', corrected_fx_rate: 0.128203,
+    corrected_fx_source: 'ECB_REFERENCE_RATES', corrected_fx_date: '2026-08-11',
+    price_correction_status: 'QUALIFIED', price_correction_id: 'sidecar-row-2',
+    price_correction_key: 'three-brand-v1', confidence: 100, verdict: 'APPROVED',
+  });
+  assert.equal(mapped.price_usd, 39102);
+  assert.equal(mapped.price_raw, 305000);
+  assert.equal(mapped.currency, 'HKD');
+  assert.equal(mapped.price_correction_applied, true);
+  assert.equal(mapped.price_research_eligible, true);
+});
+
 test('holds implausible workbook-only amounts for review instead of displaying them as USD', () => {
   const mapped = api.mapReviewedRecord(record({
     workbook_price_usd: '25000000000',

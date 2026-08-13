@@ -4,6 +4,7 @@ const { getClient } = require('./_lib/supabase');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { listCatalogReferences, listEquivalentReferences } = require('./_lib/catalog');
 const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
+const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -517,6 +518,7 @@ function directSubmissionMatchesImageLane(record, lane) {
 }
 
 function mapReviewedRecord(row) {
+  row = applyEffectivePrice(row);
   // Publish only user_image_url, the exact source upload retained by the view.
   const candidateImageUrl = row.user_image_url || null;
   const hasExactSourceImage = row.has_exact_source_image === true
@@ -638,6 +640,13 @@ function mapReviewedRecord(row) {
     seller_rating_source_url: publicRatedEvidence?.source_url || null,
     contact_publication_approved: contactApproved,
     price_usd: verifiedUsd,
+    effective_price_source: row.effective_price_source || null,
+    price_correction_applied: row.price_correction_applied === true,
+    price_correction_id: row.price_correction_id || null,
+    price_correction_key: row.price_correction_key || null,
+    analytics_fx_rate: row.effective_fx_rate || null,
+    analytics_fx_source: row.effective_fx_source || null,
+    analytics_fx_date: row.effective_fx_date || null,
     price_raw: sourceAmount,
     currency: row.source_currency || null,
     workbook_price_usd: workbookUsd,
@@ -940,6 +949,7 @@ module.exports = async function handler(req, res) {
       'workbook_price_usd,source_price_amount,source_currency',
       'price_evidence_status,confidence,verdict,verification_status,user_image_url,imported_at',
       'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity,trading_floor_status,reference_search_key,location,item_category',
+      'corrected_price_usd,corrected_source_amount,corrected_source_currency,corrected_fx_rate,corrected_fx_source,corrected_fx_date,price_correction_status,price_correction_id,price_correction_key',
       'publication_state,publication_lane,normalization_run_complete,raw_lineage_verified,dealer_rating,review_count',
     ].join(',');
 
@@ -1068,7 +1078,21 @@ module.exports = async function handler(req, res) {
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
     if (qnsaBroadPage && !legacyMarketViewContractDetected) {
-      let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
+      const sidecarRpcEligible = ['ALL', 'WATCH'].includes(itemCategory)
+        && ['rolex', 'patek philippe', 'audemars piguet'].includes(String(brand || '').trim().toLowerCase())
+        && !imagesOnly && !region && !postedAfter;
+      let pageRowsRes = sidecarRpcEligible
+        ? await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_three_brand_fx_trading_floor_rows`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              p_brand: brand,
+              p_limit: qnsaBrandScanLimit,
+              p_offset: requestedOffset,
+              p_listing_type: listingType || null,
+            }),
+          })
+        : await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1082,6 +1106,22 @@ module.exports = async function handler(req, res) {
           p_posted_after: postedAfter,
         }),
       });
+      if (sidecarRpcEligible && !pageRowsRes.ok && [404, 400].includes(pageRowsRes.status)) {
+        pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            p_brand: brand,
+            p_category: itemCategory === 'ALL' ? null : itemCategory,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: listingType || null,
+            p_images_only: imagesOnly,
+            p_location: region || null,
+            p_posted_after: postedAfter,
+          }),
+        });
+      }
       if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
         // The application can deploy before the forward database migration.
         // Preserve the proven two-brand watch feed during that short window;
@@ -1097,7 +1137,7 @@ module.exports = async function handler(req, res) {
         const pageRowsError = await pageRowsRes.text();
         throw new Error(`QNSA page rows failed: ${pageRowsRes.status} ${pageRowsError.slice(0, 200)}`);
       }
-      const pageRows = (await pageRowsRes.json()).map(row => row.row_data).filter(Boolean);
+      const pageRows = (await pageRowsRes.json()).map(row => row.row_data || row).filter(Boolean);
       const directResponse = new Response(JSON.stringify(pageRows), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

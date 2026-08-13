@@ -577,7 +577,12 @@ export default function TradingFloor() {
       >
         Previous
       </button>
-      <span className="text-sm" style={{ color: MUTED }}>Page {cursorHistory.length + 1}</span>
+      <span className="text-center text-sm" style={{ color: MUTED }}>
+        <span className="block">Page {cursorHistory.length + 1}</span>
+        <span className="block text-[11px]">
+          {visibleListings.length.toLocaleString()} shown · up to {pageSize.toLocaleString()} per page
+        </span>
+      </span>
       <button
         type="button"
         onClick={() => changePage('next')}
@@ -601,7 +606,9 @@ export default function TradingFloor() {
               <p className="font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: GOLD_BRIGHT }}>Curated Luxury</p>
               <h1 className="mt-1 font-serif text-[36px] font-normal tracking-[-0.025em]" style={{ color: INK }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {total === null ? 'Watch inventory' : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings`}
+                {total === null
+                  ? `${((cursorHistory.length * pageSize) + visibleListings.length).toLocaleString()} viewed so far${hasMore ? ' · more listings available' : ''}`
+                  : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings globally`}
               </p>
             </div>
 
@@ -792,7 +799,9 @@ export default function TradingFloor() {
             ) : (
               <>Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong>
                 {total === null
-                  ? ' listings'
+                  ? <> on page <strong style={{ color: INK }}>{cursorHistory.length + 1}</strong>
+                    {' · '}<strong style={{ color: INK }}>{((cursorHistory.length * pageSize) + visibleListings.length).toLocaleString()}</strong> viewed so far
+                    {hasMore ? ' · more available globally' : ''}</>
                   : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> listings</>}
               </>
             )}
