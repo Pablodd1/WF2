@@ -57,7 +57,9 @@ test('every rated dealer card resolves to an internal profile payload', () => {
     assert.equal(payload?.dealer?.id, dealer.id);
     assert.equal(payload?.dealer?.rating, null);
     assert.equal(payload?.dealer?.review_count, dealer.review_count);
-    assert.match(payload?.source_links?.profile || '', /^https:\/\/watchfacts\.com\/(?:profile\/|user\/\d+\/profile)/);
+    assert.equal(payload?.source_links, undefined);
+    assert.equal(payload?.dealer?.source_url, undefined);
+    assert.equal(payload?.source_provenance?.source_url, undefined);
   }
 });
 
@@ -116,15 +118,37 @@ test('source profile workflow is provenance-labeled and remains distinct from ve
   assert.equal(payload.dealer.rating, null);
   assert.equal(payload.stats.verified_contact_info, null);
   assert.equal(payload.source_provenance.source_system, 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT');
-  assert.ok(payload.source_links.profile.startsWith('https://watchfacts.com/user/'));
+  assert.equal(payload.source_links, undefined);
+  assert.equal(payload.dealer.source_url, undefined);
+  assert.ok(payload.source_provenance.captured_listing_count > 0);
 
   const directory = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
   const profile = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerProfile.tsx'), 'utf8');
   assert.match(directory, /public-source leaderboard/);
-  assert.match(profile, /Public-source Top Rated profile/);
-  assert.match(profile, /Source facts remain distinct from internally verified seller lineage/);
+  assert.match(profile, /Top Rated dealer evidence/);
+  assert.match(profile, /Captured facts remain distinct from internally verified seller lineage/);
   assert.match(directory, /Full profile/);
   assert.match(profile, /Verified dealer/);
+  assert.doesNotMatch(directory, /Source profile/);
+  assert.doesNotMatch(profile, /Open source listing|All source listings|Source WTS|Source WTB|Contact through public source/);
+  assert.doesNotMatch(profile, /No source image/);
+});
+
+test('public dealer API payloads never expose private provenance URLs', async () => {
+  for (const query of [
+    { mode: 'top-rated', pageSize: '25' },
+    { mode: 'rated', pageSize: '100' },
+    { mode: 'legacy', pageSize: '100' },
+  ]) {
+    const response = await invoke(dealersHandler, query);
+    assert.equal(response.statusCode, 200);
+    assert.doesNotMatch(JSON.stringify(response.payload), /https:\/\/watchfacts\.com\//i);
+  }
+  for (const id of ['watchfacts-source-3435', 'watchfacts-legacy-9641']) {
+    const response = await invoke(dealerProfileHandler, { id });
+    assert.equal(response.statusCode, 200);
+    assert.doesNotMatch(JSON.stringify(response.payload), /https:\/\/watchfacts\.com\//i);
+  }
 });
 
 test('Dealer Directory opens on Rated Dealers while Reference Check and Top Rated remain available', () => {

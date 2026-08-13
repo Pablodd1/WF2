@@ -1,7 +1,7 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
-const { legacyProfiles, ratedProfiles, topRatedProfiles } = require('./_lib/dealer-directory-source.cjs');
+const { legacyProfiles, ratedProfiles, topRatedProfiles, withoutPrivateProvenance } = require('./_lib/dealer-directory-source.cjs');
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value || ''), 10);
@@ -80,7 +80,7 @@ module.exports = async function handler(req, res) {
         .filter(profile => !normalizedSearch
           || [profile.display_name, profile.company_name].some(value => String(value || '').toLocaleLowerCase().includes(normalizedSearch))
           || (phoneNeedle.length >= 4 && digits(profile.verified_phone).includes(phoneNeedle)));
-      const sourceProfiles = matchingProfiles.slice(from, from + pageSize);
+      const sourceProfiles = matchingProfiles.slice(from, from + pageSize).map(withoutPrivateProvenance);
       return res.status(200).json({
         success: true,
         page,
@@ -98,7 +98,7 @@ module.exports = async function handler(req, res) {
       const legacyFrom = (page - 1) * pageSize;
       return res.status(200).json({
         success: true, page, pageSize, total: profiles.length,
-        dealers: profiles.slice(legacyFrom, legacyFrom + pageSize),
+        dealers: profiles.slice(legacyFrom, legacyFrom + pageSize).map(withoutPrivateProvenance),
         source: 'legacy-profile-audit',
       });
     }

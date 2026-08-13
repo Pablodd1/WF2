@@ -35,7 +35,6 @@ interface DealerSummary {
   verified_phone?: string | null;
   member_since?: string | null;
   trust_status?: string | null;
-  source_url?: string | null;
   source_crawled_at?: string | null;
   legacy_profile_id?: string | null;
 }
@@ -142,7 +141,6 @@ export default function DealerDirectory() {
                 {view === 'legacy' && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Historical snapshot · {stats?.snapshot_count || 0} captured observations · live totals require verified listing lineage.</p>}
                 <div className="mt-5 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
                   <Link to={`/dealer/profile/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
-                  {dealer.source_url && <a href={dealer.source_url} target="_blank" rel="noreferrer" className="ml-5 inline-flex items-center gap-1 text-white/45 hover:text-white">Source profile</a>}
                 </div>
               </article>
             );

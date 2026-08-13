@@ -49,7 +49,31 @@ function normalizedAudit(workbook, sourcePath) {
     wts_count: integer(row.wts_count), wtb_count: integer(row.wtb_count),
     source_url: text(row.source_url), notes: text(row.notes),
   }));
-  const inventory = rows(workbook, 'Inventory_Lines');
+  const inventory = rows(workbook, 'Inventory_Lines').map(row => ({
+    item_row_id: text(row.item_row_id),
+    legacy_profile_id: text(row.legacy_profile_id),
+    display_name: text(row.display_name),
+    post_id: text(row.post_id),
+    source_line_no: integer(row.source_line_no),
+    intent: text(row.intent),
+    category: text(row.category),
+    brand_context: text(row.brand_context),
+    reference_candidate: text(row.reference_candidate),
+    raw_source_line: text(row.raw_source_line),
+    condition_raw: text(row.condition_raw),
+    year_raw: text(row.year_raw),
+    price_raw: text(row.price_raw),
+    price_amount_primary: text(row.price_amount_primary),
+    currency_status: text(row.currency_status),
+    box_evidence: text(row.box_evidence),
+    papers_evidence: text(row.papers_evidence),
+    availability_status: text(row.availability_status),
+    quality_flags: text(row.quality_flags),
+    parse_scope: text(row.parse_scope),
+    // Retained in this server-side evidence artifact for audit lineage only.
+    // Public directory/profile payloads must never expose this URL.
+    source_url: text(row.source_url),
+  }));
   const inventory_summary = {
     rows: inventory.length,
     stable_profile_rows: inventory.filter(row => text(row.legacy_profile_id)).length,
@@ -86,6 +110,7 @@ function normalizedAudit(workbook, sourcePath) {
     users,
     posts,
     stat_snapshots,
+    inventory_lines: inventory,
   };
 }
 

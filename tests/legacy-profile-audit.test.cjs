@@ -55,6 +55,8 @@ test('workbook inventory evidence is not duplicated into normalized market listi
   assert.equal(data.publication_policy.inventory_rows_publishable_without_lineage_review, false);
   assert.equal(data.publication_policy.groups_captured, false);
   assert.equal(data.publication_policy.ratings_captured, false);
+  assert.equal(data.inventory_lines.length, 705);
+  assert.equal(data.inventory_lines.filter(row => row.legacy_profile_id).length, 431);
 });
 
 test('directory UI labels legacy evidence and unknown fields honestly', () => {
@@ -64,7 +66,7 @@ test('directory UI labels legacy evidence and unknown fields honestly', () => {
   assert.match(directory, /Rating not captured/);
   assert.match(directory, /Groups not captured/);
   assert.match(directory, /Historical snapshot/);
-  assert.match(profile, /Legacy profile evidence/);
+  assert.match(profile, /Imported dealer evidence/);
   assert.match(profile, /do not replace live totals/);
 });
 
@@ -79,6 +81,21 @@ test('legacy directory and profile endpoints are public, searchable, and paginat
   assert.equal(profile.payload.dealer.display_name, 'Forest');
   assert.ok(profile.payload.listings.every(row => row.evidence_only === true));
   assert.equal(profile.payload.source_provenance.counts_are_historical_snapshots, true);
+  assert.equal(profile.payload.stats.captured_inventory_count, 0);
+  assert.doesNotMatch(JSON.stringify(profile.payload), /https:\/\/watchfacts\.com\//i);
+});
+
+test('inventory evidence is attributed only by exact stable legacy profile id', () => {
+  const data = require('../data/dealer-directory/legacy-profile-audit-2026-08-11.json');
+  const profile = legacyProfilePayload('watchfacts-legacy-4699');
+  const exactRows = data.inventory_lines.filter(row => row.legacy_profile_id === '4699');
+  const sameNameOtherIds = data.inventory_lines.filter(row => row.display_name === profile.dealer.display_name && row.legacy_profile_id !== '4699');
+  assert.equal(profile.stats.captured_inventory_count, exactRows.length);
+  assert.equal(profile.listings.length, exactRows.length);
+  assert.ok(profile.listings.every(row => row.id.startsWith('watchfacts-legacy-item-')));
+  assert.ok(profile.listings.every(row => row.evidence_only === true));
+  assert.ok(profile.listings.every(row => row.price_usd === null));
+  assert.equal(sameNameOtherIds.some(row => profile.listings.some(item => item.id.endsWith(row.item_row_id))), false);
 });
 
 test('live legacy listing mapper preserves listing and poster evidence', () => {
