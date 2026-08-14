@@ -7,6 +7,7 @@ const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { deterministicCandidateCount } = require('./_lib/unsplit-bundle-filter.cjs');
+const { classifyZenithIdentityEvidence } = require('./_lib/zenith-identity-evidence.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -203,6 +204,16 @@ function isMultiListing(row) {
   if ([row.model, row.catalog_model, row.dial_color, row.catalog_dial]
     .some(value => MULTIPLE_LISTING_IDENTITY_VALUES.includes(cleanExactText(value, 40).toLowerCase()))) {
     return true;
+  }
+
+  // The QNSA Zenith lane is reconciled against immutable raw text before its
+  // release control is enabled. Its exact classifier understands dotted Zenith
+  // references and quarantines cross-brand/Daytona/no-reference evidence. The
+  // generic splitter predates those references and falsely split 41 of the 453
+  // reconciled single-watch rows. Trust the narrower evidence classifier only
+  // for this audited publication lane; every other lane keeps the generic gate.
+  if (row.publication_lane === 'QNSA_ZENITH_REVIEWED_V1') {
+    return classifyZenithIdentityEvidence(row.raw_message || row.raw_message_text || '').decision !== 'RELEASE_SAFE';
   }
 
   // Some legacy rows were normalized as a single watch before the source raw
