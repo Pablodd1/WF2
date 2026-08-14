@@ -50,7 +50,7 @@ async function loadQnsaReviewedReleaseSummary(client) {
     reconciled: !error,
     count_snapshot_available: !error,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier'].map(brand => ({
+    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith'].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,
@@ -76,7 +76,7 @@ function unavailableQnsaReleaseSummary() {
     reconciled: false,
     count_snapshot_available: false,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier'].map(brand => ({
+    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith'].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,
