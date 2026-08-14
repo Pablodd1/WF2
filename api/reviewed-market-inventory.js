@@ -1430,7 +1430,14 @@ module.exports = async function handler(req, res) {
     const pageResult = boundedPage(rows, pageSize, false);
     const eligibleRows = usedLegacyViewContract
       ? pageResult.records
-      : pageResult.records.filter(isTradingFloorSourceRow);
+      : pageResult.records.filter(row => {
+          // The later-brand RPC already enforces WATCH category, immutable
+          // lineage, single-item status, duplicate suppression, and release
+          // controls. Do not reclassify Cartier as OTHER merely because the
+          // maison also produces jewelry; retain the raw cross-brand guard.
+          if (laterReviewedBrand && qnsaBroadPage) return !hasObviousCrossBrandConflict(row);
+          return isTradingFloorSourceRow(row);
+        });
     const recoveredMarketRecords = await recoverRecordPrices(eligibleRows.map(mapReviewedRecord));
     let records = recoveredMarketRecords
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
