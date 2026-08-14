@@ -95,7 +95,12 @@ jobs:
             'wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS'),
             'wtb',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTB'),
             'priced_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND price_usd>0),
-            'no_price_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND NOT (price_usd>0)),
+            'source_priced_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND price_normalized>0),
+            'genuine_no_price_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND NOT (price_normalized>0)),
+            'source_currency_counts',(SELECT COALESCE(jsonb_object_agg(currency,row_count),'{}'::jsonb) FROM (
+              SELECT upper(COALESCE(currency_normalized,'UNSPECIFIED')) currency,count(*) row_count
+              FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND price_normalized>0
+              GROUP BY 1 ORDER BY 1) currency_counts),
             'references',(SELECT count(DISTINCT reference_normalized) FROM candidates WHERE NULLIF(btrim(reference_normalized),'') IS NOT NULL),
             'models',(SELECT count(DISTINCT model_normalized) FROM candidates WHERE NULLIF(btrim(model_normalized),'') IS NOT NULL),
             'images',(SELECT count(*) FROM candidates WHERE btrim(COALESCE(image_url,source_media_url_candidate,'')) ~* '^https?://'),
@@ -116,11 +121,12 @@ jobs:
           $e | ConvertTo-Json -Depth 5 | Set-Content zenith-release-evidence.json
           $e | ConvertTo-Json -Depth 5
           if($e.checkpoint_status -ne 'NORMALIZATION_STAGED' -or [long]$e.checkpoint_errors -ne 0 -or $e.checkpoint_reconciles -ne $true){throw 'Run is not reconciled'}
-          if([long]$e.candidates -lt 1 -or [long]$e.wts -lt 1 -or [long]$e.priced_wts -lt 1 -or [long]$e.references -lt 1){throw 'Zenith candidate gate failed'}
+          if([long]$e.candidates -lt 1 -or [long]$e.wts -lt 1 -or [long]$e.references -lt 1){throw 'Zenith candidate gate failed'}
           if([long]$e.candidate_gate_failures -ne 0){throw 'Zenith rows failed immutable release admission'}
           if([long]$e.missing_bundle_provenance -ne 0){throw 'Zenith rows lack explicit bundle provenance'}
           if([long]$e.lineage_failures -ne 0){throw 'Zenith immutable lineage failure'}
           if([long]$e.high_confidence_multi_risk -ne 0){throw 'Zenith multi-listing candidates require quarantine before release'}
+          if ('${{ inputs.mode }}' -eq 'enable' -and [long]$e.priced_wts -lt 1){throw 'Zenith has no verified USD analytics rows'}
           if ('${{ inputs.mode }}' -eq 'enable') {
             $enableSql = "UPDATE public.qnsa_two_brand_release_control SET enabled_run_key='$env:RUN_KEY', trading_floor_enabled=true, price_research_enabled=true, updated_at=now(), change_reason='Zenith enabled after reconciled immutable-lineage single-item audit' WHERE canonical_brand='Zenith' RETURNING canonical_brand;"
             $enableBody=@{query=$enableSql;read_only=$false}|ConvertTo-Json -Depth 3
