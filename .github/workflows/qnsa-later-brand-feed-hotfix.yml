@@ -33,6 +33,7 @@ jobs:
           $sql = @(
             Get-Content -Raw supabase/migrations/20260814100000_qnsa_later_brand_bounded_feed.sql
             Get-Content -Raw supabase/migrations/20260814110000_qnsa_later_brand_reference_gate.sql
+            Get-Content -Raw supabase/migrations/20260814111500_qnsa_later_brand_reference_gate_bound.sql
           ) -join "`n"
           if ($sql -match '(?i)(CREATE\s+INDEX|INSERT\s+INTO\s+staging\.listings|UPDATE\s+staging\.listings|DELETE\s+FROM\s+staging\.listings)') {
             throw 'Unexpected storage-heavy or destructive statement'
