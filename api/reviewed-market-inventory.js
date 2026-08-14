@@ -1163,7 +1163,7 @@ module.exports = async function handler(req, res) {
       const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
       const laterReviewedBrand = ['Richard Mille', 'Cartier'].includes(brand);
       let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
-        ? (laterReviewedBrand ? 'qnsa_later_brand_page_rows' : 'qnsa_trading_floor_page_rows')
+        ? (laterReviewedBrand ? 'qnsa_later_brand_page_rows_strict' : 'qnsa_trading_floor_page_rows')
         : 'qnsa_market_feed_page_rows'}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },

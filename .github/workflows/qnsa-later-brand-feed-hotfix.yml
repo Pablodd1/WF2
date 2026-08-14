@@ -30,7 +30,10 @@ jobs:
         shell: pwsh
         run: |
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $sql = Get-Content -Raw supabase/migrations/20260814100000_qnsa_later_brand_bounded_feed.sql
+          $sql = @(
+            Get-Content -Raw supabase/migrations/20260814100000_qnsa_later_brand_bounded_feed.sql
+            Get-Content -Raw supabase/migrations/20260814110000_qnsa_later_brand_reference_gate.sql
+          ) -join "`n"
           if ($sql -match '(?i)(CREATE\s+INDEX|INSERT\s+INTO\s+staging\.listings|UPDATE\s+staging\.listings|DELETE\s+FROM\s+staging\.listings)') {
             throw 'Unexpected storage-heavy or destructive statement'
           }
@@ -44,8 +47,13 @@ jobs:
           $sql = @"
           SET LOCAL statement_timeout='8s';
           SELECT jsonb_build_object(
-            'rm_rows',(SELECT count(*) FROM public.qnsa_later_brand_page_rows('Richard Mille',21,0,NULL)),
-            'cartier_rows',(SELECT count(*) FROM public.qnsa_later_brand_page_rows('Cartier',21,0,NULL))
+            'rm_rows',(SELECT count(*) FROM public.qnsa_later_brand_page_rows_strict('Richard Mille',21,0,NULL)),
+            'cartier_rows',(SELECT count(*) FROM public.qnsa_later_brand_page_rows_strict('Cartier',21,0,NULL)),
+            'invalid_rows',(SELECT count(*) FROM (
+              SELECT row_data FROM public.qnsa_later_brand_page_rows_strict('Richard Mille',21,0,NULL)
+              UNION ALL
+              SELECT row_data FROM public.qnsa_later_brand_page_rows_strict('Cartier',21,0,NULL)
+            ) checked WHERE COALESCE(row_data->>'normalized_reference','') IN ('BRAND-NEW','BREATHABLE','RM001EITHER'))
           ) evidence;
           "@
           # The management API's read-only role cannot EXECUTE service-role-only
@@ -57,3 +65,4 @@ jobs:
           $e = $result[-1].evidence
           $e | ConvertTo-Json -Depth 3
           if ([long]$e.rm_rows -lt 20 -or [long]$e.cartier_rows -lt 20) { throw 'Bounded feed returned too few rows' }
+          if ([long]$e.invalid_rows -ne 0) { throw 'Parser-artifact reference escaped strict feed' }
