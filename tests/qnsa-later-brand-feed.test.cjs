@@ -54,7 +54,7 @@ test('strict later-brand wrapper rejects parser-artifact references', () => {
   assert.match(strictMigration, /qnsa_later_brand_page_rows\(/);
   assert.doesNotMatch(strictMigration, /CREATE INDEX|INSERT INTO staging\.listings|UPDATE staging\.listings/);
   assert.match(workflow, /invalid_rows/);
-  assert.match(workflow, /rm_reference_sample/);
+  assert.match(workflow, /\$evidence = @\(\$result\[-1\]\.evidence\)/);
 });
 
 test('strict later-brand wrapper stays inside the proven 51-row latency bound', () => {
