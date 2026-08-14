@@ -91,4 +91,7 @@ test('Zenith release verification respects the disabled control and counts null 
   assert.match(workflow, /control\.trading_floor_enabled=true/);
   assert.match(workflow, /identity_reconciliation_status'='RELEASE_SAFE_EXACT_SOURCE_REFERENCE'/);
   assert.match(workflow, /COALESCE\(price_normalized,0\)<=0/);
+  assert.match(workflow, /identity_audit_safe/);
+  assert.match(workflow, /identity_audit_quarantine/);
+  assert.match(workflow, /candidates -ne 453/);
 });
