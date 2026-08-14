@@ -37,13 +37,15 @@ test('leaves existing verified prices unchanged', async () => {
 test('never reintroduces a reference token that an earlier safety gate rejected as price', async () => {
   const [row] = await recoverRecordPrices([{
     id: 'rm-reference-token',
+    reference: 'RM001',
     raw_message: 'NTQ/ RM 001',
-    price_usd: null,
-    price_raw: null,
-    currency: null,
-    source_price_amount: null,
-    source_currency: null,
-    price_evidence_status: 'REFERENCE_TOKEN_AS_PRICE',
+    price_usd: 0,
+    price_raw: 1,
+    currency: 'MYR',
+    source_price_amount: 1,
+    source_price_text: 'RM 001',
+    source_currency: 'MYR',
+    price_evidence_status: 'PRICE_NOT_SUPPLIED',
   }], {
     snapshot: {
       observed_at: '2026-08-13T00:00:00Z',
@@ -57,5 +59,29 @@ test('never reintroduces a reference token that an earlier safety gate rejected 
   assert.equal(row.currency, null);
   assert.equal(row.source_price_amount, null);
   assert.equal(row.source_currency, null);
-  assert.equal(row.runtime_price_recovery_applied, undefined);
+  assert.equal(row.price_evidence_status, 'REFERENCE_TOKEN_AS_PRICE');
+  assert.equal(row.runtime_price_recovery_applied, false);
+});
+
+test('preserves a genuine MYR amount for an RM reference', async () => {
+  const [row] = await recoverRecordPrices([{
+    reference: 'RM001',
+    raw_message: 'RM001 asking MYR 500,000',
+    price_usd: null,
+    price_raw: 500000,
+    currency: 'MYR',
+    source_price_amount: 500000,
+    source_currency: 'MYR',
+  }], {
+    snapshot: {
+      observed_at: '2026-08-13T00:00:00Z',
+      source: 'European Central Bank reference rates',
+      usd_per_unit: { MYR: 0.24 },
+    },
+  });
+
+  assert.equal(row.price_usd, 120000);
+  assert.equal(row.source_price_amount, 500000);
+  assert.equal(row.source_currency, 'MYR');
+  assert.equal(row.runtime_price_recovery_applied, true);
 });

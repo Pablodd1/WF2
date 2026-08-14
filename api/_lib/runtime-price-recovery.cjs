@@ -70,8 +70,44 @@ function recoverObservation(observation, snapshot = null) {
   };
 }
 
+function rmReferenceIsMyrPriceArtifact(record) {
+  const currency = String(record?.source_currency || record?.currency || '').trim().toUpperCase();
+  if (currency !== 'MYR') return false;
+  const reference = String(record?.reference || record?.normalized_reference || record?.raw_reference || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  const match = reference.match(/^RM0*([1-9][0-9]{0,3})$/);
+  const amount = Number(record?.source_price_amount ?? record?.price_raw);
+  if (!match || !Number.isFinite(amount) || amount !== Number(match[1])) return false;
+  const raw = String(record?.raw_message || '');
+  const explicitMyrAmount = /\bMYR\b\s*[:=$-]?\s*\d[\d,.]*/i.test(raw)
+    || /\d[\d,.]*\s*\bMYR\b/i.test(raw);
+  return !explicitMyrAmount;
+}
+
+function suppressReferenceTokenPrice(record) {
+  if (!rmReferenceIsMyrPriceArtifact(record)) return record;
+  return {
+    ...record,
+    price_usd: null,
+    price_raw: null,
+    currency: null,
+    source_price_amount: null,
+    source_price_text: null,
+    source_currency: null,
+    analytics_fx_rate: null,
+    analytics_fx_source: null,
+    analytics_fx_date: null,
+    effective_price_source: null,
+    runtime_price_recovery_applied: false,
+    price_evidence_status: 'REFERENCE_TOKEN_AS_PRICE',
+  };
+}
+
 async function recoverRecordPrices(records, options = {}) {
-  const prepared = (records || []).map(record => ({
+  const prepared = (records || []).map(inputRecord => {
+    const record = suppressReferenceTokenPrice(inputRecord);
+    return {
     record,
     // A prior identity/price collision decision is authoritative. In
     // particular, references such as "RM 001" must never be reparsed as a
@@ -79,7 +115,8 @@ async function recoverRecordPrices(records, options = {}) {
     observation: String(record?.price_evidence_status || '').toUpperCase() === 'REFERENCE_TOKEN_AS_PRICE'
       ? null
       : explicitObservation(record?.raw_message),
-  }));
+  };
+  });
   const needsFx = prepared.some(({ record, observation }) => (
     !Number(record?.price_usd)
     && observation
@@ -121,4 +158,6 @@ module.exports = {
   loadLatestFxSnapshot,
   recoverObservation,
   recoverRecordPrices,
+  rmReferenceIsMyrPriceArtifact,
+  suppressReferenceTokenPrice,
 };
