@@ -1160,6 +1160,7 @@ module.exports = async function handler(req, res) {
         })
       : queryParams;
     let usedLegacyViewContract = legacyMarketViewContractDetected;
+    const laterReviewedBrand = ['Richard Mille', 'Cartier'].includes(brand);
     // Broad QNSA brand pages first resolve a tiny ordered ID page from the
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
@@ -1169,7 +1170,6 @@ module.exports = async function handler(req, res) {
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
       const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
-      const laterReviewedBrand = ['Richard Mille', 'Cartier'].includes(brand);
       let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
         ? (laterReviewedBrand ? 'qnsa_later_brand_page_rows' : 'qnsa_trading_floor_page_rows')
         : 'qnsa_market_feed_page_rows'}`, {
