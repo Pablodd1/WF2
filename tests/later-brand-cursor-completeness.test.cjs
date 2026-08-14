@@ -11,6 +11,8 @@ const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
   '20260814114000_qnsa_later_brand_stable_pagination.sql'), 'utf8');
 const candidateMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
   '20260814114500_qnsa_later_brand_candidate_cursor.sql'), 'utf8');
+const strideMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
+  '20260814115000_qnsa_later_brand_bounded_candidate_stride.sql'), 'utf8');
 const inventorySource = fs.readFileSync(path.join(root, 'api', 'reviewed-market-inventory.js'), 'utf8');
 
 function traverseBoundedSource(rows, presentationFilter = () => true, pageSize = 50) {
@@ -79,10 +81,38 @@ test('candidate RPC exposes an exact bounded stride and raw lookahead hasMore co
 });
 
 test('broad later-brand API trusts candidate metadata instead of rendered row count', () => {
-  assert.match(inventorySource, /qnsa_later_brand_candidate_page/);
-  assert.match(inventorySource, /p_scan_limit: 500/);
+  assert.match(inventorySource, /qnsa_later_brand_candidate_stride_page/);
+  assert.doesNotMatch(inventorySource, /p_scan_limit:\s*500/);
   assert.match(inventorySource, /qnsaCandidateCursorMeta\.hasMore/);
   assert.match(inventorySource, /qnsaCandidateCursorMeta\.nextOffset/);
   assert.match(inventorySource, /qnsa_later_brand_page_rows_strict/,
     'the prior publication-safe RPC remains a deploy-order fallback');
+});
+
+test('forward wrapper clamps expensive candidate evaluation to one 50-row stride', () => {
+  assert.match(strideMigration,
+    /qnsa_later_brand_candidate_page\([\s\S]*p_brand,[\s\S]*50,[\s\S]*p_listing_type/);
+  assert.doesNotMatch(strideMigration,
+    /qnsa_later_brand_candidate_page\([\s\S]*?,\s*500\s*,\s*p_listing_type/);
+  assert.doesNotMatch(strideMigration,
+    /CREATE\s+(?:UNIQUE\s+)?INDEX|INSERT\s+INTO\s+staging\.listings|UPDATE\s+staging\.listings|DELETE\s+FROM\s+staging\.listings/i);
+});
+
+test('an empty bounded stride advances by its envelope instead of entering the legacy magic-offset fallback', () => {
+  assert.match(inventorySource,
+    /laterReviewedBrand\s*&&\s*pageRows\.length === 0\s*&&\s*!candidateEnvelope/);
+});
+
+test('candidate RPC retries the prior strict RPC on deploy gaps and transient failures', () => {
+  for (const status of [400, 404, 408, 500, 502, 503, 504, 599]) {
+    assert.equal(inventory.shouldFallbackLaterBrandCandidate(status), true, `status ${status}`);
+  }
+
+  for (const status of [200, 401, 403, 409, 422, 429]) {
+    assert.equal(inventory.shouldFallbackLaterBrandCandidate(status), false, `status ${status}`);
+  }
+
+  assert.match(inventorySource,
+    /laterReviewedBrand\s*&&\s*shouldFallbackLaterBrandCandidate\(pageRowsRes\.status\)/);
+  assert.match(inventorySource, /rpc\/qnsa_later_brand_page_rows_strict/);
 });

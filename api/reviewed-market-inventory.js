@@ -875,6 +875,12 @@ function sourceCursorAdvance(rawRows, directRecordCount = 0, displayedSourceCoun
     : (Array.isArray(rawRows) ? rawRows.length : 0);
 }
 
+function shouldFallbackLaterBrandCandidate(status) {
+  const statusCode = Number(status);
+  return [400, 404, 408].includes(statusCode)
+    || (statusCode >= 500 && statusCode <= 599);
+}
+
 function isLegacyReviewedInventoryRecord(record) {
   const storedConfidence = Number(record?.confidence);
   const confidence = storedConfidence >= 0 && storedConfidence <= 1
@@ -1229,13 +1235,13 @@ module.exports = async function handler(req, res) {
       // brand pages. Keep it for non-watch categories only.
       const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
       let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
-        ? (laterReviewedBrand ? 'qnsa_later_brand_candidate_page' : 'qnsa_trading_floor_page_rows')
+        ? (laterReviewedBrand ? 'qnsa_later_brand_candidate_stride_page' : 'qnsa_trading_floor_page_rows')
         : 'qnsa_market_feed_page_rows'}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(watchFeed
           ? (laterReviewedBrand
-            ? { p_brand: brand || null, p_limit: pageSize, p_scan_limit: 500,
+            ? { p_brand: brand || null, p_limit: pageSize,
                 p_offset: requestedOffset, p_listing_type: listingType || null }
             : { p_brand: brand || null, p_limit: qnsaBrandScanLimit,
                 p_offset: requestedOffset, p_listing_type: listingType || null })
@@ -1250,10 +1256,12 @@ module.exports = async function handler(req, res) {
               p_posted_after: postedAfter,
             }),
       });
-      if (!pageRowsRes.ok && laterReviewedBrand && [404, 400].includes(pageRowsRes.status)) {
+      if (!pageRowsRes.ok && laterReviewedBrand
+        && shouldFallbackLaterBrandCandidate(pageRowsRes.status)) {
         // Application and forward migration can deploy independently. During
-        // that narrow window retain the previous bounded wrapper; it may expose
-        // a short page but remains publication-safe.
+        // that narrow window, or if the candidate RPC times out/transiently
+        // fails, retain the previous bounded wrapper. It may expose a short page
+        // but remains publication-safe.
         pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows_strict`, {
           method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
@@ -1278,8 +1286,8 @@ module.exports = async function handler(req, res) {
       const pageRowsPayload = await pageRowsRes.json();
       const unwrappedCandidatePayload = Array.isArray(pageRowsPayload)
         && pageRowsPayload.length === 1
-        && pageRowsPayload[0]?.qnsa_later_brand_candidate_page
-        ? pageRowsPayload[0].qnsa_later_brand_candidate_page
+        && pageRowsPayload[0]?.qnsa_later_brand_candidate_stride_page
+        ? pageRowsPayload[0].qnsa_later_brand_candidate_stride_page
         : pageRowsPayload;
       const candidateEnvelope = laterReviewedBrand && unwrappedCandidatePayload
         && !Array.isArray(unwrappedCandidatePayload) && Array.isArray(unwrappedCandidatePayload.rows)
@@ -1294,7 +1302,7 @@ module.exports = async function handler(req, res) {
       }
       let pageRows = (candidateEnvelope ? candidateEnvelope.rows : pageRowsPayload)
         .map(row => row.row_data || row).filter(Boolean);
-      if (laterReviewedBrand && pageRows.length === 0) {
+      if (laterReviewedBrand && pageRows.length === 0 && !candidateEnvelope) {
         const fallbackRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
@@ -1677,4 +1685,5 @@ module.exports.encodeInventoryCursor = encodeInventoryCursor;
 module.exports.publicationBrandsFromSummary = publicationBrandsFromSummary;
 module.exports.boundedPage = boundedPage;
 module.exports.sourceCursorAdvance = sourceCursorAdvance;
+module.exports.shouldFallbackLaterBrandCandidate = shouldFallbackLaterBrandCandidate;
 module.exports.buildLegacyMarketQueryParams = buildLegacyMarketQueryParams;
