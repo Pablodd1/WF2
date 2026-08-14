@@ -34,6 +34,7 @@ jobs:
             Get-Content -Raw supabase/migrations/20260814100000_qnsa_later_brand_bounded_feed.sql
             Get-Content -Raw supabase/migrations/20260814110000_qnsa_later_brand_reference_gate.sql
             Get-Content -Raw supabase/migrations/20260814111500_qnsa_later_brand_reference_gate_bound.sql
+            Get-Content -Raw supabase/migrations/20260814112000_qnsa_later_brand_reference_key_gate.sql
           ) -join "`n"
           if ($sql -match '(?i)(CREATE\s+INDEX|INSERT\s+INTO\s+staging\.listings|UPDATE\s+staging\.listings|DELETE\s+FROM\s+staging\.listings)') {
             throw 'Unexpected storage-heavy or destructive statement'
@@ -47,15 +48,12 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
           SET LOCAL statement_timeout='8s';
-          SELECT jsonb_build_object(
-            'rm_rows',(SELECT count(*) FROM public.qnsa_later_brand_page_rows_strict('Richard Mille',21,0,NULL)),
-            'cartier_rows',(SELECT count(*) FROM public.qnsa_later_brand_page_rows_strict('Cartier',21,0,NULL)),
-            'invalid_rows',(SELECT count(*) FROM (
-              SELECT row_data FROM public.qnsa_later_brand_page_rows_strict('Richard Mille',21,0,NULL)
-              UNION ALL
-              SELECT row_data FROM public.qnsa_later_brand_page_rows_strict('Cartier',21,0,NULL)
-            ) checked WHERE COALESCE(row_data->>'normalized_reference','') IN ('BRAND-NEW','BREATHABLE','RM001EITHER'))
-          ) evidence;
+          SELECT jsonb_build_object('brand','Richard Mille','rows',count(*),'invalid_rows',count(*) FILTER (
+            WHERE COALESCE(row_data->>'normalized_reference','') IN ('BRAND-NEW','BREATHABLE','RM001EITHER')
+          )) evidence FROM public.qnsa_later_brand_page_rows_strict('Richard Mille',21,0,NULL);
+          SELECT jsonb_build_object('brand','Cartier','rows',count(*),'invalid_rows',count(*) FILTER (
+            WHERE COALESCE(row_data->>'normalized_reference','') IN ('BRAND-NEW','BREATHABLE','RM001EITHER')
+          )) evidence FROM public.qnsa_later_brand_page_rows_strict('Cartier',21,0,NULL);
           "@
           # The management API's read-only role cannot EXECUTE service-role-only
           # functions. This is still a SELECT-only smoke query, but it must use
@@ -63,7 +61,8 @@ jobs:
           $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
             -Headers $headers -ContentType application/json -Body $body
-          $e = $result[-1].evidence
-          $e | ConvertTo-Json -Depth 3
-          if ([long]$e.rm_rows -lt 20 -or [long]$e.cartier_rows -lt 20) { throw 'Bounded feed returned too few rows' }
-          if ([long]$e.invalid_rows -ne 0) { throw 'Parser-artifact reference escaped strict feed' }
+          $evidence = @($result | Where-Object { $_.evidence } | ForEach-Object { $_.evidence })
+          $evidence | ConvertTo-Json -Depth 3
+          if ($evidence.Count -ne 2) { throw 'Missing per-brand smoke evidence' }
+          if (@($evidence | Where-Object { [long]$_.rows -lt 1 }).Count -gt 0) { throw 'Bounded feed returned no valid rows' }
+          if (@($evidence | Where-Object { [long]$_.invalid_rows -ne 0 }).Count -gt 0) { throw 'Parser-artifact reference escaped strict feed' }

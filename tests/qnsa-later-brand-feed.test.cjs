@@ -13,6 +13,8 @@ const strictMigration = fs.readFileSync(path.join(root,
   'supabase/migrations/20260814110000_qnsa_later_brand_reference_gate.sql'), 'utf8');
 const strictBoundMigration = fs.readFileSync(path.join(root,
   'supabase/migrations/20260814111500_qnsa_later_brand_reference_gate_bound.sql'), 'utf8');
+const strictKeyMigration = fs.readFileSync(path.join(root,
+  'supabase/migrations/20260814112000_qnsa_later_brand_reference_key_gate.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(root,
   '.github/workflows/qnsa-later-brand-feed-hotfix.yml'), 'utf8');
 
@@ -47,6 +49,13 @@ test('strict later-brand wrapper stays inside the proven 51-row latency bound', 
   assert.match(strictBoundMigration, /LEAST\(GREATEST\(COALESCE\(p_limit, 51\), 1\), 51\)/);
   assert.doesNotMatch(strictBoundMigration, /CREATE INDEX|INSERT INTO staging\.listings|UPDATE staging\.listings/);
   assert.match(workflow, /20260814111500_qnsa_later_brand_reference_gate_bound\.sql/);
+});
+
+test('strict later-brand gate normalizes punctuation without changing source references', () => {
+  assert.match(strictKeyMigration, /regexp_replace\(/);
+  assert.match(strictKeyMigration, /\^RM\[0-9\]\{3,6\}\[A-Z\]\{0,3\}\$/);
+  assert.match(strictKeyMigration, /\^W\[A-Z0-9\]\{5,18\}\$/);
+  assert.match(workflow, /20260814112000_qnsa_later_brand_reference_key_gate\.sql/);
 });
 
 test('later-brand feed preserves immutable lineage and publication safety gates', () => {
