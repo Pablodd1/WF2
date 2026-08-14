@@ -1171,7 +1171,7 @@ module.exports = async function handler(req, res) {
       const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
       const laterReviewedBrand = ['Richard Mille', 'Cartier'].includes(brand);
       let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
-        ? (laterReviewedBrand ? 'qnsa_later_brand_page_rows_strict' : 'qnsa_trading_floor_page_rows')
+        ? (laterReviewedBrand ? 'qnsa_later_brand_page_rows' : 'qnsa_trading_floor_page_rows')
         : 'qnsa_market_feed_page_rows'}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
@@ -1189,17 +1189,6 @@ module.exports = async function handler(req, res) {
               p_posted_after: postedAfter,
             }),
       });
-      if (laterReviewedBrand && !pageRowsRes.ok) {
-        // The narrow strict wrapper can cross the hosted timeout on a cold RM
-        // page. Fall back immediately to the same bounded, lineage-safe base
-        // feed; parser artifacts are removed below before mapping.
-        pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows`, {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
-            p_offset: requestedOffset, p_listing_type: listingType || null }),
-        });
-      }
       if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
         // The application can deploy before the forward database migration.
         // Preserve the proven two-brand watch feed during that short window;
@@ -1216,25 +1205,11 @@ module.exports = async function handler(req, res) {
         throw new Error(`QNSA page rows failed: ${pageRowsRes.status} ${pageRowsError.slice(0, 200)}`);
       }
       let pageRows = (await pageRowsRes.json()).map(row => row.row_data || row).filter(Boolean);
-      // Some historical RM reference tokens are valid but not yet represented
-      // by the narrow database regex. If the strict lane returns an empty page,
-      // recover one bounded page from the same lineage-safe base function and
-      // reject only fail-visible parser artifacts in application memory.
-      if (laterReviewedBrand && pageRows.length === 0) {
-        const fallbackRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows`, {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
-            p_offset: requestedOffset, p_listing_type: listingType || null }),
-        });
-        if (fallbackRes.ok) {
-          pageRows = (await fallbackRes.json())
-            .map(row => row.row_data || row)
-            .filter(row => row && isPlausibleLaterBrandReference(
-              brand,
-              row.normalized_reference || row.catalog_reference || row.raw_reference,
-            ));
-        }
+      if (laterReviewedBrand) {
+        pageRows = pageRows.filter(row => isPlausibleLaterBrandReference(
+          brand,
+          row.normalized_reference || row.catalog_reference || row.raw_reference,
+        ));
       }
       const directResponse = new Response(JSON.stringify(pageRows), {
         status: 200,
