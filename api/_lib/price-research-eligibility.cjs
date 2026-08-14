@@ -37,7 +37,7 @@ function isHumanReviewAnalyticsCandidate(row) {
   ].map(normalizedStatus).filter(Boolean);
   return Boolean(
     row
-    && ['ROLEX', 'PATEK PHILIPPE', 'AUDEMARS PIGUET', 'RICHARD MILLE', 'CARTIER'].includes(brand)
+    && ['ROLEX', 'PATEK PHILIPPE', 'AUDEMARS PIGUET', 'RICHARD MILLE', 'CARTIER', 'ZENITH'].includes(brand)
     && HUMAN_REVIEW_VERDICTS.has(normalizedStatus(row.verdict))
     && normalizedStatus(row.listing_type) === 'WTS'
     && !statuses.some(status => ANALYTICS_BLOCKED_STATUSES.has(status))

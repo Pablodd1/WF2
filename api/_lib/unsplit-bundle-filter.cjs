@@ -12,6 +12,7 @@ const REVIEWED_BRAND_PATTERNS = [
   [/\b(?:audemars(?:\s+piguet)?|AP)\b/i, 'Audemars Piguet'],
   [/\b(?:richard\s+mille|RM(?=\s*\d))\b/i, 'Richard Mille'],
   [/\bcartier\b/i, 'Cartier'],
+  [/\bzenith\b/i, 'Zenith'],
 ];
 
 const EXPLICIT_MULTI_ITEM = /\b(?:bundle|multi[\s-]?listing|multiple\s+watches|several\s+watches|two\s+watches|both\s+watches|pair\s+of\s+watches|set\s+of\s+watches|lot\s+of\s+watches|watch\s+lot|stock\s+list|package\s+deal|combo\s+deal)\b/i;
@@ -22,8 +23,8 @@ const LIST_SEPARATOR = /(?:[,;]|\s*\/\s*|\s+or\s+|\s+and\s+)/i;
 function messageClauses(rawMessage) {
   return String(rawMessage || '')
     .replace(/_x000D_/gi, '\n')
-    .split(/\r?\n|[;•▪◦]|,(?=\s*(?:RM\s*\d|[A-Za-z]*\s*\d{4,6}))/i)
-    .flatMap(part => part.split(/\s+\/(?=\s*RM\s*\d)|\s+(?:and|or|plus)\s+(?=(?:Rolex|Patek|PP|AP|Audemars|Richard|RM\s*\d|Cartier)\b)/i))
+    .split(/\r?\n|[;•▪◦]|,(?=\s*(?:RM\s*\d|Zenith\s+\d{2}\.|[A-Za-z]*\s*\d{4,6}))/i)
+    .flatMap(part => part.split(/\s+\/(?=\s*RM\s*\d)|\s+(?:and|or|plus)\s+(?=(?:Rolex|Patek|PP|AP|Audemars|Richard|RM\s*\d|Cartier|Zenith)\b)/i))
     .map(part => part.trim())
     .filter(Boolean);
 }
@@ -41,6 +42,7 @@ function distinctReferences(rawMessage) {
     }
   };
   for (const match of String(rawMessage || '').matchAll(/\bRM\s*\d{2,3}(?:-\d{2})?(?:-[A-Z0-9]{1,4})?\b/gi)) add(match[0]);
+  for (const match of String(rawMessage || '').matchAll(/\b\d{2}\.\d{4}\.\d{3,4}\/[0-9A-Z]+(?:\.[0-9A-Z]+)*\b/gi)) add(match[0]);
   for (const clause of messageClauses(rawMessage)) add(extractReference(clause));
   return references;
 }

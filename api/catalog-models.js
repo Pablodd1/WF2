@@ -190,14 +190,25 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(payload);
     }
     if (brand.toLowerCase() === 'zenith') {
-      const out = await loadReviewedZenithModels();
+      const catalogReferences = listCatalogReferences('Zenith');
+      const models = new Map();
+      for (const entry of catalogReferences) {
+        if (!entry.model) continue;
+        const canonicalModel = normalizeCanonicalModel(entry.model, 'Zenith');
+        if (!models.has(canonicalModel)) models.set(canonicalModel, new Set());
+        models.get(canonicalModel).add(entry.reference);
+      }
+      const out = [...models.entries()]
+        .map(([model, refs]) => ({ model, reference_count: refs.size }))
+        .sort((a, b) => b.reference_count - a.reference_count || a.model.localeCompare(b.model));
       const payload = {
         success: true,
         brand: 'Zenith',
         model_count: out.length,
-        catalog_reference_count: out.reduce((sum, item) => sum + item.reference_count, 0),
+        catalog_reference_count: catalogReferences.length,
         models: out,
-        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        sample_capped: false,
       };
       _cache.set(brand, { at: Date.now(), payload });
       return res.status(200).json(payload);

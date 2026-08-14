@@ -61,7 +61,7 @@ function isMissingRpcError(error) {
 
 async function loadQnsaPriceRpcRows(client, args) {
   const brand = String(args?.p_brand || '').trim().toLowerCase();
-  const usesBoundedReviewedSource = ['richard mille', 'cartier'].includes(brand);
+  const usesBoundedReviewedSource = ['richard mille', 'cartier', 'zenith'].includes(brand);
   // The correction sidecar is intentionally three-brand scoped. Later brands
   // use the reviewed bounded source; an empty sidecar result is not evidence
   // that their cohort is empty.
@@ -78,7 +78,7 @@ function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier'].includes(normalizedBrand)
+    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
     : null;
 }
@@ -690,7 +690,7 @@ module.exports = async function handler(req, res) {
     );
     const exactReviewedReleaseReference = isReviewedReleaseReference(brand, rawRef);
     const exactKnownReference = exactCatalogReference || exactReviewedReleaseReference;
-    const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier']
+    const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith']
       .includes(brand.toLowerCase());
     // Reviewed workbooks remain first. When an exact catalog reference has no
     // workbook cohort, query the bounded approved watch-record lane directly;
@@ -1374,7 +1374,7 @@ module.exports = async function handler(req, res) {
       },
       admission_policy: {
         verdicts: ['APPROVED', ...HUMAN_REVIEW_VERDICTS],
-        human_review_scope: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier'],
+        human_review_scope: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith'],
         human_review_is_analytics_eligible_only_after_all_evidence_gates: true,
         approved_minimum_confidence: MIN_RELEASE_CONFIDENCE,
         human_review_minimum_confidence: null,

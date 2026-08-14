@@ -3,7 +3,8 @@ import re
 BRANDS = [
     'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille',
     'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC',
-    'Hublot', 'Breitling', 'Tag Heuer', 'Panerai', 'Jaeger-LeCoultre'
+    'Hublot', 'Breitling', 'Tag Heuer', 'Panerai', 'Jaeger-LeCoultre',
+    'Zenith'
 ]
 
 AP_ALIAS_PATTERN = re.compile(r'(?<![A-Za-z0-9])(?:AP|A\.P\.)(?![A-Za-z0-9])', re.I)
@@ -46,10 +47,19 @@ def detect_multi_item_risk(raw_text):
         return True
     if len(rm_refs) >= 2 and MULTI_REQUEST.search(text) and re.search(r'[,;]|\s*/\s*|\s+or\s+|\s+and\s+', text, re.I):
         return True
+    zenith_refs = {
+        value.upper()
+        for value in re.findall(r'\b\d{2}\.\d{4}\.\d{3,4}\/[0-9A-Z]+(?:\.[0-9A-Z]+)*\b', text, re.I)
+    }
+    if len(zenith_refs) >= 2 and len(rm_price_tokens) >= 2:
+        return True
+    if len(zenith_refs) >= 2 and MULTI_REQUEST.search(text) and re.search(r'[,;]|\s+or\s+|\s+and\s+', text, re.I):
+        return True
     reviewed_brands = sum(bool(pattern.search(text)) for pattern in [
         re.compile(r'\bRolex\b', re.I), re.compile(r'\b(?:Patek(?: Philippe)?|PP)\b', re.I),
         re.compile(r'\b(?:Audemars(?: Piguet)?|AP)\b', re.I),
         re.compile(r'\b(?:Richard Mille|RM(?=\s*\d))\b', re.I), re.compile(r'\bCartier\b', re.I),
+        re.compile(r'\bZenith\b', re.I),
     ])
     return reviewed_brands >= 2
 

@@ -296,14 +296,29 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(payload);
     }
     if (brand.toLowerCase() === 'zenith') {
-      const out = await loadReviewedZenithReferences(client, model);
+      // Browse identity comes from the canonical catalog. Market counts and
+      // analytics are resolved only after an exact reference is selected, via
+      // the bounded QNSA release RPC; never reuse the retired text-ID workbook
+      // range or present catalog metadata as live market evidence.
+      const out = listCatalogReferences('Zenith', model).map(entry => ({
+        reference: entry.reference,
+        listing_count: 0,
+        eligible_observation_count: 0,
+        analytics_ready: false,
+        sample_capped: false,
+        avg_price: null,
+        dial_colors: [],
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+      }));
       const payload = {
         success: true,
         brand: 'Zenith',
         model,
         reference_count: out.length,
         references: out,
-        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+        sample_capped: false,
       };
       _cache.set(cacheKey, { at: Date.now(), payload });
       return res.status(200).json(payload);

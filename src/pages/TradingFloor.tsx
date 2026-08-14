@@ -744,7 +744,7 @@ export default function TradingFloor() {
 
           <div className="rounded-md border bg-white/35 px-4 py-3" style={{ borderColor: BORDER }}>
             <div className="mb-3 flex flex-wrap gap-2" aria-label="Complete brand inventory shortcuts">
-              {(releaseBrands.length ? releaseBrands : ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille']).map(brand => (
+              {(releaseBrands.length ? releaseBrands : ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith']).map(brand => (
                 <button
                   key={brand}
                   type="button"
