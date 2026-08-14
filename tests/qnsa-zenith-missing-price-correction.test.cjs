@@ -32,6 +32,7 @@ test('correction is exact-lineage, append-audited, and never changes raw/cardina
 
 test('workflow is QNSA pinned, bounded, and never uploads raw messages', () => {
   assert.match(workflow,/PROJECT_REF: qnsafosakvonzgfcsphh/);
+  assert.match(workflow,/npm ci --ignore-scripts/);
   assert.match(workflow,/LIMIT 250/);
   assert.match(workflow,/read_only=\$true/);
   assert.match(workflow,/Destroy private raw payloads/);
