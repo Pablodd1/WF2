@@ -34,6 +34,8 @@ test('qualified WTS range and dial-colored charts remain explicit', () => {
   assert.match(source, /\['Maximum', stats\.max, NAVY\]/);
   assert.match(source, /fill=\{dialChartColor\(dial\.dial_color\)\}/);
   assert.match(source, /stroke=\{selectedDialLine\}/);
+  assert.match(source, /Source- and review-supported dial cohorts/);
+  assert.doesNotMatch(source, /Catalog-valid dial cohorts/);
 });
 
 test('unpriced source activity is counted visibly but excluded from pricing graphics', () => {
@@ -60,7 +62,7 @@ test('listing evidence preserves raw message and seller facts while suppressing 
 test('WTB demand stays visibly separate from WTS asking-price analytics and contact actions remain', () => {
   assert.match(source, /Strictly separated from WTS asking-price averages/);
   assert.match(source, /Demand Signals \(WTB\)/);
-  assert.match(source, /Qualified WTS observations power the chart and statistics/);
+  assert.match(source, /Qualified observations power the chart and statistics/);
   assert.match(source, /Contact on WhatsApp/);
   assert.match(source, /View full listing detail/);
 });
