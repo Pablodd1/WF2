@@ -214,7 +214,8 @@ function extractPriceObservations(text, context = {}) {
     const amount = parseNumber(match[2], match[3]);
     const followedByDateSeparator = /^\s*\/\s*\d/.test(line.slice(match.index + match[0].length));
     const yearLike = !match[3] && amount >= 1900 && amount <= 2099;
-    if (followedByDateSeparator || yearLike) continue;
+    const explicitMoneySymbol = /^(?:€|£)$/.test(String(match[1] || ''));
+    if (followedByDateSeparator || (yearLike && !explicitMoneySymbol)) continue;
     add(match[0], match[2], match[3], match[1], match.index, 'explicit_line_currency', 'prefix');
   }
   for (const match of line.matchAll(rightCurrency)) {
@@ -223,7 +224,8 @@ function extractPriceObservations(text, context = {}) {
       && !match[2]
       && amount <= 31;
     const yearLike = !match[2] && amount >= 1900 && amount <= 2099;
-    if (precededByDateSeparator || yearLike) continue;
+    const explicitMoneySymbol = /^(?:€|£)$/.test(String(match[3] || ''));
+    if (precededByDateSeparator || (yearLike && !explicitMoneySymbol)) continue;
     add(match[0], match[1], match[2], match[3], match.index, 'explicit_line_currency', 'suffix');
   }
 
