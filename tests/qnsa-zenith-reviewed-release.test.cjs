@@ -18,6 +18,7 @@ const references = read('api/catalog-references.js');
 const identityMigration = read('supabase/migrations/20260814190000_qnsa_zenith_identity_reconciliation.sql');
 const identityWorkflow = read('.github/workflows/qnsa-zenith-identity-reconciliation.yml');
 const orderedFeed = read('supabase/migrations/20260814191000_qnsa_zenith_global_price_order.sql');
+const displayOrder = read('supabase/migrations/20260814192000_qnsa_zenith_source_price_display_order.sql');
 
 test('Zenith release installs disabled and never rewrites immutable data', () => {
   assert.match(migration, /'Zenith', false, false/);
@@ -105,5 +106,9 @@ test('Zenith pagination globally orders exact images and verified USD before no-
   assert.match(orderedFeed, /WHEN p_brand='Zenith'/);
   assert.match(workflow, /20260814191000_qnsa_zenith_global_price_order\.sql/);
   assert.match(workflow, /Smoke ordered Zenith customer RPC directly/);
-  assert.match(workflow, /stored_verified_prices/);
+  assert.match(workflow, /source_price_signals/);
+  assert.match(displayOrder, /qnsa_zenith_display_ordered_page/);
+  assert.match(displayOrder, /has_source_price_signal DESC/);
+  assert.match(displayOrder, /source_price_signal/);
+  assert.doesNotMatch(displayOrder, /'has_verified_usd_price',true/);
 });
