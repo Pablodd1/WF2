@@ -48,6 +48,7 @@ jobs:
           $sql = @(
             Get-Content -Raw supabase/migrations/20260814180000_qnsa_zenith_reviewed_release.sql
             Get-Content -Raw supabase/migrations/20260814184500_qnsa_zenith_customer_feed.sql
+            Get-Content -Raw supabase/migrations/20260814184600_qnsa_zenith_customer_feed_admin_grant.sql
           ) -join "`n"
           if ($sql -match '(?i)(DELETE|TRUNCATE|UPDATE)\s+(FROM\s+)?(staging\.listings|public\.raw_messages|public\.raw_message_versions)') {
             throw 'Immutable source mutation detected'
