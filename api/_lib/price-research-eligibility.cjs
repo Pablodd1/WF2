@@ -92,6 +92,7 @@ const EXPLICIT_WATCH_PART_REQUESTS = [
   /\b(?:looking\s+(?:for|to\s+buy)|need|wtb|ltb|ntq)\b[^\n.!?]{0,80}\b(?:saphir|sapphire)\s+(?:glass|crystal)\s+for\b/i,
   /\b(?:looking\s+(?:for|to\s+buy)|need|wtb|ltb|ntq)\b[^\n.!?]{0,80}\bjust\s+the\s+(?:clasp|buckle|bracelet|strap|band|bezel|crystal|glass|movement|case)\s+for\b/i,
   /\b(?:looking\s+(?:for|to\s+buy)|need|wtb|ltb|ntq)\b[^\n.!?]{0,80}\b(?:one|two|1(?:\.\d+)?|2)\s+(?:stainless\s+steel\s+)?links?\s+for\b/i,
+  /^\s*(?:looking\s+(?:for|to\s+buy)|need|wtb|ltb|ntq)\s+(?:just\s+)?(?:a\s+|one\s+|the\s+)?(?:strap|band|bracelet|clasp|buckle|bezel|crystal|glass|movement|case|part)\b(?:\s+for)?\s+[A-Z0-9]/i,
 ];
 
 function classifyDemandItemEligibility(row) {

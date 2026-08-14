@@ -1316,6 +1316,7 @@ module.exports = async function handler(req, res) {
       outliers: canReviewExcludedEvidence ? statisticalOutlierRows.map(row => row.price_usd) : [],
       outlier_rows: canReviewExcludedEvidence ? serializedOutliers.map(r => ({
         id: r.id,
+        listing_type: 'WTS',
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year, is_outlier: true, outlier_reason: r.outlier_reason,
@@ -1388,6 +1389,7 @@ module.exports = async function handler(req, res) {
       monthly, prices, forecast,
       retained_rows: serializedRetainedEvidence.map(r => ({
         id: r.id,
+        listing_type: 'WTS',
         raw_message: r.raw_message || null,
         price_usd: null,
         created_at: r.created_at,
@@ -1413,6 +1415,7 @@ module.exports = async function handler(req, res) {
       })),
       rows: serializedComparables.map(r => ({
         id: r.id,
+        listing_type: 'WTS',
         raw_message: r.raw_message || null,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,

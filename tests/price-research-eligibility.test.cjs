@@ -150,6 +150,9 @@ test('excludes explicit watch-part requests from complete-watch WTB demand', () 
     '*NEED ONE Stainless Steel Link for 5712/1A Patek*',
     'NTQ 1.5 Link for 5712/1A',
     'Need 1 or 2 links for 26240st anyone has?',
+    'Need strap RM11-03 / 65-01 Red double vented size M exact Please DM',
+    'WTB bracelet for RM11-03 please DM',
+    'Looking for a band RM11-03, black only',
   ];
   for (const raw_message of explicitParts) {
     assert.equal(classifyDemandItemEligibility({ raw_message }), 'WATCH_PART_DEMAND');
@@ -166,6 +169,9 @@ test('does not guess that whole-watch configuration language is a spare part', (
     'Looking for 5712/1A BNIB with new clasp. Pls DM me',
     'WTB retail ready 116500ln black complete full links 2021+',
     'NTQ: Audemars Piguet 26240ST blue dial only complete set',
+    'WTB RM11-03 complete set on black strap, 2024 or newer',
+    'Need RM11-03 full set with original bracelet and papers',
+    'Looking for RM11-03 watch on a red band, retail ready',
   ];
   for (const raw_message of wholeWatchRequests) {
     assert.equal(classifyDemandItemEligibility({ raw_message }), null);
