@@ -52,7 +52,10 @@ jobs:
         shell: pwsh
         run: |
           $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
-          $sql=Get-Content -Raw supabase/migrations/20260814183000_qnsa_zenith_price_correction.sql
+          $sql=@(
+            Get-Content -Raw supabase/migrations/20260814183000_qnsa_zenith_price_correction.sql
+            Get-Content -Raw supabase/migrations/20260814183500_qnsa_zenith_price_correction_schema_compatibility.sql
+          ) -join "`n"
           if($sql -match '(?i)(UPDATE|DELETE|INSERT\s+INTO)\s+(public\.)?(raw_messages|raw_message_versions)'){throw 'Immutable raw write detected'}
           if($sql -match '(?i)(INSERT\s+INTO|DELETE\s+FROM)\s+staging\.listings'){throw 'Listing cardinality mutation detected'}
           $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
