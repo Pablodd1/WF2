@@ -26,7 +26,9 @@ test('later reviewed brands use a bounded existing-index feed without copying da
   assert.match(migration, /ORDER BY l\.reference_normalized ASC NULLS LAST, l\.id ASC/);
   assert.match(migration, /LIMIT LEAST\(GREATEST\(COALESCE\(p_limit, 51\), 1\) \* 10, 1010\)/);
   assert.doesNotMatch(migration, /CREATE INDEX|INSERT INTO staging\.listings|UPDATE staging\.listings|DELETE FROM staging\.listings/);
-  assert.match(inventory, /laterReviewedBrand \? 'qnsa_later_brand_page_rows_strict'/);
+  assert.match(inventory, /laterReviewedBrand \? 'qnsa_later_brand_candidate_page'/);
+  assert.match(inventory, /qnsa_later_brand_page_rows_strict/,
+    'the previous strict RPC remains the publication-safe deploy-order fallback');
   assert.match(inventory, /isPlausibleLaterBrandReference/);
   assert.match(inventory, /qnsa_later_brand_page_rows/);
   assert.match(inventory, /laterReviewedBrand && qnsaBroadPage/);
@@ -44,7 +46,11 @@ test('hotfix workflow is pinned, bounded, and adds no storage-heavy index', () =
   assert.match(workflow, /APPLY_QNSA_LATER_BRAND_FEED/);
   assert.match(workflow, /statement_timeout='20s'/);
   assert.match(workflow, /read_only = \$false/);
-  assert.match(workflow, /qnsa_later_brand_page_rows_strict\('Richard Mille',21,0,NULL\)/);
+  assert.match(workflow, /20260814114500_qnsa_later_brand_candidate_cursor\.sql/);
+  assert.match(workflow, /qnsa_later_brand_candidate_page\(brand,0,50,500,NULL\)/);
+  assert.match(workflow, /cross_page_duplicate_ids/);
+  assert.doesNotMatch(workflow, /'Cartier',21,2650/,
+    'Cartier starts at logical candidate offset zero inside its indexed W namespace');
   assert.match(workflow, /CREATE\\s\+INDEX/);
 });
 

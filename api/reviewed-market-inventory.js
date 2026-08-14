@@ -1202,6 +1202,7 @@ module.exports = async function handler(req, res) {
       ? 'created_at.desc,id.desc'
       : 'id.desc');
     const qnsaBrandScanLimit = pageSize + 1;
+    let qnsaCandidateCursorMeta = null;
     queryParams.set('limit', String(qnsaBrandScanLimit));
     if (requestedOffset > 0) queryParams.set('offset', String(requestedOffset));
     
@@ -1228,13 +1229,16 @@ module.exports = async function handler(req, res) {
       // brand pages. Keep it for non-watch categories only.
       const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
       let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
-        ? (laterReviewedBrand ? 'qnsa_later_brand_page_rows_strict' : 'qnsa_trading_floor_page_rows')
+        ? (laterReviewedBrand ? 'qnsa_later_brand_candidate_page' : 'qnsa_trading_floor_page_rows')
         : 'qnsa_market_feed_page_rows'}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(watchFeed
-          ? { p_brand: brand || null, p_limit: qnsaBrandScanLimit,
-              p_offset: requestedOffset, p_listing_type: listingType || null }
+          ? (laterReviewedBrand
+            ? { p_brand: brand || null, p_limit: pageSize, p_scan_limit: 500,
+                p_offset: requestedOffset, p_listing_type: listingType || null }
+            : { p_brand: brand || null, p_limit: qnsaBrandScanLimit,
+                p_offset: requestedOffset, p_listing_type: listingType || null })
           : {
               p_brand: brand || null,
               p_category: itemCategory,
@@ -1246,6 +1250,16 @@ module.exports = async function handler(req, res) {
               p_posted_after: postedAfter,
             }),
       });
+      if (!pageRowsRes.ok && laterReviewedBrand && [404, 400].includes(pageRowsRes.status)) {
+        // Application and forward migration can deploy independently. During
+        // that narrow window retain the previous bounded wrapper; it may expose
+        // a short page but remains publication-safe.
+        pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows_strict`, {
+          method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset, p_listing_type: listingType || null }),
+        });
+      }
       if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
         // The application can deploy before the forward database migration.
         // Preserve the proven two-brand watch feed during that short window;
@@ -1261,7 +1275,25 @@ module.exports = async function handler(req, res) {
         const pageRowsError = await pageRowsRes.text();
         throw new Error(`QNSA page rows failed: ${pageRowsRes.status} ${pageRowsError.slice(0, 200)}`);
       }
-      let pageRows = (await pageRowsRes.json()).map(row => row.row_data || row).filter(Boolean);
+      const pageRowsPayload = await pageRowsRes.json();
+      const unwrappedCandidatePayload = Array.isArray(pageRowsPayload)
+        && pageRowsPayload.length === 1
+        && pageRowsPayload[0]?.qnsa_later_brand_candidate_page
+        ? pageRowsPayload[0].qnsa_later_brand_candidate_page
+        : pageRowsPayload;
+      const candidateEnvelope = laterReviewedBrand && unwrappedCandidatePayload
+        && !Array.isArray(unwrappedCandidatePayload) && Array.isArray(unwrappedCandidatePayload.rows)
+        ? unwrappedCandidatePayload
+        : null;
+      if (candidateEnvelope) {
+        qnsaCandidateCursorMeta = {
+          nextOffset: Number(candidateEnvelope.next_offset),
+          hasMore: candidateEnvelope.has_more === true,
+          scannedCount: Number(candidateEnvelope.scanned_count || 0),
+        };
+      }
+      let pageRows = (candidateEnvelope ? candidateEnvelope.rows : pageRowsPayload)
+        .map(row => row.row_data || row).filter(Boolean);
       if (laterReviewedBrand && pageRows.length === 0) {
         const fallbackRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows`, {
           method: 'POST',
@@ -1438,7 +1470,9 @@ module.exports = async function handler(req, res) {
     const sourceRows = data || [];
     const brandRows = sourceRows;
     let rawRows = brandRows.slice(0, pageSize);
-    let hasMore = brandRows.length > pageSize || (qnsaBroadPage && sourceRows.length >= qnsaBrandScanLimit);
+    let hasMore = qnsaCandidateCursorMeta
+      ? qnsaCandidateCursorMeta.hasMore
+      : (brandRows.length > pageSize || (qnsaBroadPage && sourceRows.length >= qnsaBrandScanLimit));
     let nextLane = requestedLane;
     const lastReturnedSourceIndex = qnsaBroadPage && rawRows.length
       ? sourceRows.indexOf(rawRows[rawRows.length - 1]) + 1
@@ -1561,7 +1595,9 @@ module.exports = async function handler(req, res) {
       }
     }
     if (pagination === 'cursor') {
-      nextOffset = requestedOffset + consumedSourceRecordCount;
+      nextOffset = qnsaCandidateCursorMeta
+        ? qnsaCandidateCursorMeta.nextOffset
+        : requestedOffset + consumedSourceRecordCount;
     }
     const nextCursor = hasMore
       ? encodeInventoryCursor({ lane: nextLane, offset: nextOffset, page: page + 1 })
