@@ -17,6 +17,7 @@ const models = read('api/catalog-models.js');
 const references = read('api/catalog-references.js');
 const identityMigration = read('supabase/migrations/20260814190000_qnsa_zenith_identity_reconciliation.sql');
 const identityWorkflow = read('.github/workflows/qnsa-zenith-identity-reconciliation.yml');
+const orderedFeed = read('supabase/migrations/20260814191000_qnsa_zenith_global_price_order.sql');
 
 test('Zenith release installs disabled and never rewrites immutable data', () => {
   assert.match(migration, /'Zenith', false, false/);
@@ -94,4 +95,13 @@ test('Zenith release verification respects the disabled control and counts null 
   assert.match(workflow, /identity_audit_safe/);
   assert.match(workflow, /identity_audit_quarantine/);
   assert.match(workflow, /candidates -ne 453/);
+});
+
+test('Zenith pagination globally orders exact images and verified USD before no-price activity', () => {
+  assert.match(orderedFeed, /qnsa_zenith_ordered_candidate_page/);
+  assert.match(orderedFeed, /identity_reconciliation_status'='RELEASE_SAFE_EXACT_SOURCE_REFERENCE'/);
+  assert.match(orderedFeed, /ORDER BY has_image DESC,has_price DESC/);
+  assert.match(orderedFeed, /qnsa_zenith_identity_reconciliation_audit/);
+  assert.match(orderedFeed, /WHEN p_brand='Zenith'/);
+  assert.match(workflow, /20260814191000_qnsa_zenith_global_price_order\.sql/);
 });
