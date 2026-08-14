@@ -147,22 +147,38 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $expectEnabled = '${{ inputs.mode }}' -eq 'enable'
           $sql = @"
-          WITH trading AS (
-            SELECT public.qnsa_zenith_candidate_page(0,50,NULL) payload
-          ), refs AS (
-            SELECT array_agg(DISTINCT reference_normalized) values
-            FROM staging.listings
-            WHERE normalization_run_key='$env:RUN_KEY' AND brand_normalized='Zenith'
-              AND NULLIF(btrim(reference_normalized),'') IS NOT NULL
+          WITH customer_rows AS MATERIALIZED (
+            SELECT l.*
+            FROM staging.listings l
+            JOIN public.raw_message_versions rv
+              ON rv.id=l.raw_message_version_id
+             AND rv.source_record_id=l.source_record_id
+             AND rv.source_hash=l.source_hash
+            WHERE l.normalization_run_key='$env:RUN_KEY'
+              AND l.brand_normalized='Zenith'
+              AND upper(COALESCE(l.category,''))='WATCH'
+              AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
+              AND l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
+              AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
+              AND NULLIF(btrim(l.reference_normalized),'') IS NOT NULL
+              AND l.source_hash ~ '^[0-9a-f]{64}$'
+              AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
+              AND lower(COALESCE(l.trading_floor_status,'')) NOT IN (
+                'bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate',
+                'withdrawn','rejected','hidden','deleted','archived')
+              AND upper(COALESCE(l.verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+              AND upper(COALESCE(l.publication_review_status,'PENDING_REVIEW')) IN (
+                'PENDING_REVIEW','APPROVED','READY_FOR_PUBLICATION_REVIEW')
           )
           SELECT jsonb_build_object(
             'control_enabled',(SELECT trading_floor_enabled AND price_research_enabled FROM public.qnsa_two_brand_release_control WHERE canonical_brand='Zenith'),
-            'trading_rows',(SELECT jsonb_array_length(payload->'rows') FROM trading),
-            'trading_has_more',(SELECT (payload->>'has_more')::boolean FROM trading),
-            'priced_wts_rows',(SELECT count(*) FROM public.qnsa_bounded_price_research_rows(
-              'Zenith',(SELECT values FROM refs),'WTS',2500)),
-            'bundle_leaks',(SELECT count(*) FROM trading,
-              jsonb_array_elements(payload->'rows') row WHERE NULLIF(row->>'parent_id','') IS NOT NULL)
+            'trading_rows',(SELECT count(*) FROM customer_rows),
+            'priced_wts_rows',(SELECT count(*) FROM customer_rows
+              WHERE upper(COALESCE(listing_type,intent,''))='WTS'
+                AND price_usd>0 AND price_normalized>0
+                AND (currency_normalized IN ('USD','USDT')
+                  OR (conversion_rate>0 AND conversion_timestamp IS NOT NULL))),
+            'bundle_leaks',(SELECT count(*) FROM customer_rows WHERE parent_id IS NOT NULL OR COALESCE(is_bundle,false))
           ) evidence;
           "@
           $body=@{query=$sql;read_only=$true}|ConvertTo-Json -Depth 3

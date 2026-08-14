@@ -47,7 +47,8 @@ test('Zenith has a bounded cursor feed and release verifies customer RPCs', () =
   assert.match(customerFeed, /WHEN p_brand = 'Zenith'/);
   assert.match(workflow, /20260814184500_qnsa_zenith_customer_feed\.sql/);
   assert.match(workflow, /20260814184600_qnsa_zenith_customer_feed_admin_grant\.sql/);
-  assert.match(workflow, /qnsa_bounded_price_research_rows/);
+  assert.match(workflow, /WITH customer_rows AS MATERIALIZED/);
+  assert.match(workflow, /price_usd>0 AND price_normalized>0/);
   assert.doesNotMatch(workflow, /qnsa_rolex_patek_trading_floor_source WHERE brand_scope='Zenith'/);
   assert.match(customerFeedGrant, /TO postgres, supabase_admin/);
 });
