@@ -15,6 +15,8 @@ const strictBoundMigration = fs.readFileSync(path.join(root,
   'supabase/migrations/20260814111500_qnsa_later_brand_reference_gate_bound.sql'), 'utf8');
 const strictKeyMigration = fs.readFileSync(path.join(root,
   'supabase/migrations/20260814112000_qnsa_later_brand_reference_key_gate.sql'), 'utf8');
+const strictWindowMigration = fs.readFileSync(path.join(root,
+  'supabase/migrations/20260814112500_qnsa_later_brand_reference_window.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(root,
   '.github/workflows/qnsa-later-brand-feed-hotfix.yml'), 'utf8');
 
@@ -31,7 +33,7 @@ test('hotfix workflow is pinned, bounded, and adds no storage-heavy index', () =
   assert.match(workflow, /qnsafosakvonzgfcsphh/);
   assert.match(workflow, /environment: production/);
   assert.match(workflow, /APPLY_QNSA_LATER_BRAND_FEED/);
-  assert.match(workflow, /statement_timeout='8s'/);
+  assert.match(workflow, /statement_timeout='20s'/);
   assert.match(workflow, /read_only = \$false/);
   assert.match(workflow, /qnsa_later_brand_page_rows_strict\('Richard Mille',21,0,NULL\)/);
   assert.match(workflow, /CREATE\\s\+INDEX/);
@@ -56,6 +58,12 @@ test('strict later-brand gate normalizes punctuation without changing source ref
   assert.match(strictKeyMigration, /\^RM\[0-9\]\{3,6\}\[A-Z\]\{0,3\}\$/);
   assert.match(strictKeyMigration, /\^W\[A-Z0-9\]\{5,18\}\$/);
   assert.match(workflow, /20260814112000_qnsa_later_brand_reference_key_gate\.sql/);
+});
+
+test('strict later-brand gate reads one bounded page before filtering legacy artifacts', () => {
+  assert.match(strictWindowMigration, /p_brand,\s*51,/);
+  assert.match(strictWindowMigration, /LIMIT LEAST\(GREATEST\(COALESCE\(p_limit, 51\), 1\), 51\)/);
+  assert.match(workflow, /20260814112500_qnsa_later_brand_reference_window\.sql/);
 });
 
 test('later-brand feed preserves immutable lineage and publication safety gates', () => {
