@@ -33,3 +33,29 @@ test('leaves existing verified prices unchanged', async () => {
   assert.equal(row.price_usd, 190000);
   assert.equal(row.runtime_price_recovery_applied, undefined);
 });
+
+test('never reintroduces a reference token that an earlier safety gate rejected as price', async () => {
+  const [row] = await recoverRecordPrices([{
+    id: 'rm-reference-token',
+    raw_message: 'NTQ/ RM 001',
+    price_usd: null,
+    price_raw: null,
+    currency: null,
+    source_price_amount: null,
+    source_currency: null,
+    price_evidence_status: 'REFERENCE_TOKEN_AS_PRICE',
+  }], {
+    snapshot: {
+      observed_at: '2026-08-13T00:00:00Z',
+      source: 'European Central Bank reference rates',
+      usd_per_unit: { MYR: 0.24 },
+    },
+  });
+
+  assert.equal(row.price_usd, null);
+  assert.equal(row.price_raw, null);
+  assert.equal(row.currency, null);
+  assert.equal(row.source_price_amount, null);
+  assert.equal(row.source_currency, null);
+  assert.equal(row.runtime_price_recovery_applied, undefined);
+});
