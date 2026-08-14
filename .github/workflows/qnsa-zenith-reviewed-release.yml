@@ -50,6 +50,7 @@ jobs:
             Get-Content -Raw supabase/migrations/20260814184500_qnsa_zenith_customer_feed.sql
             Get-Content -Raw supabase/migrations/20260814184600_qnsa_zenith_customer_feed_admin_grant.sql
             Get-Content -Raw supabase/migrations/20260814191000_qnsa_zenith_global_price_order.sql
+            Get-Content -Raw supabase/migrations/20260814192000_qnsa_zenith_source_price_display_order.sql
           ) -join "`n"
           if ($sql -match '(?i)(DELETE|TRUNCATE|UPDATE)\s+(FROM\s+)?(staging\.listings|public\.raw_messages|public\.raw_message_versions)') {
             throw 'Immutable source mutation detected'
@@ -62,7 +63,7 @@ jobs:
           $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
           $sql=@"
           WITH payload AS (
-            SELECT public.qnsa_zenith_ordered_candidate_page(0,50,NULL) value
+            SELECT public.qnsa_zenith_display_ordered_page(0,50,NULL) value
           ), rows AS (
             SELECT row_data FROM payload,
               LATERAL jsonb_array_elements(value->'rows') row_data
@@ -70,14 +71,14 @@ jobs:
           SELECT jsonb_build_object(
             'rows',count(*),
             'images',count(*) FILTER (WHERE (row_data->>'has_exact_source_image')::boolean),
-            'stored_verified_prices',count(*) FILTER (WHERE (row_data->>'has_verified_usd_price')::boolean),
+            'source_price_signals',count(*) FILTER (WHERE (row_data->>'source_price_signal')::boolean),
             'has_more',(SELECT (value->>'has_more')::boolean FROM payload)
           ) evidence FROM rows;
           "@
           $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
           $result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $e=$result[0].evidence;$e|ConvertTo-Json -Depth 5
-          if([long]$e.rows -ne 50 -or [long]$e.images -ne 50 -or [long]$e.stored_verified_prices -ne 50 -or $e.has_more -ne $true){throw 'Ordered Zenith customer RPC smoke failed'}
+          if([long]$e.rows -ne 50 -or [long]$e.images -ne 50 -or [long]$e.source_price_signals -ne 50 -or $e.has_more -ne $true){throw 'Ordered Zenith customer RPC smoke failed'}
       - name: Audit exact release cohort and enable only after gates pass
         shell: pwsh
         run: |
