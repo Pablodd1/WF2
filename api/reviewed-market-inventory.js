@@ -865,6 +865,12 @@ function boundedPage(rows, pageSize, hasLookaheadQuery) {
   };
 }
 
+function sortPageWithoutMovingLookahead(rows, pageSize, comparator) {
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const visibleRows = sourceRows.slice(0, pageSize).sort(comparator);
+  return [...visibleRows, ...sourceRows.slice(pageSize)];
+}
+
 function sourceCursorAdvance(rawRows, directRecordCount = 0, displayedSourceCount = 0) {
   // Normal database pages advance by the source window, including rows later
   // removed by presentation filters. Direct submissions are merged only on the
@@ -1433,19 +1439,22 @@ module.exports = async function handler(req, res) {
           throw new Error(`QNSA reference rows failed: ${rpcResponse.status} ${referenceRowsError.slice(0, 200)}`);
         }
       }
-      referenceRows = (referenceRows || (await Promise.all(rpcResponses.map(response => response.json())))
+      const fetchedReferenceRows = (referenceRows || (await Promise.all(rpcResponses.map(response => response.json())))
         .flat()
         .map(row => row.row_data || row)
-        .filter(Boolean))
-        .sort((left, right) => {
+        .filter(Boolean));
+      const compareReferenceRows = (left, right) => {
           const leftPriced = Number(left.verified_price_usd || left.workbook_price_usd || 0) > 0 ? 1 : 0;
           const rightPriced = Number(right.verified_price_usd || right.workbook_price_usd || 0) > 0 ? 1 : 0;
           if (leftPriced !== rightPriced) return rightPriced - leftPriced;
           const dateDelta = new Date(right.posting_date || right.imported_at || 0).getTime()
             - new Date(left.posting_date || left.imported_at || 0).getTime();
           return dateDelta || String(right.id || '').localeCompare(String(left.id || ''));
-        })
-        .slice(apExactReferences.length ? requestedOffset : 0, apExactReferences.length ? requestedOffset + qnsaBrandScanLimit : undefined);
+        };
+      referenceRows = apExactReferences.length
+        ? fetchedReferenceRows.sort(compareReferenceRows)
+          .slice(requestedOffset, requestedOffset + qnsaBrandScanLimit)
+        : sortPageWithoutMovingLookahead(fetchedReferenceRows, pageSize, compareReferenceRows);
       var preloadedQnsaResponse = new Response(JSON.stringify(referenceRows), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
@@ -1684,6 +1693,7 @@ module.exports.parseInventoryCursor = parseInventoryCursor;
 module.exports.encodeInventoryCursor = encodeInventoryCursor;
 module.exports.publicationBrandsFromSummary = publicationBrandsFromSummary;
 module.exports.boundedPage = boundedPage;
+module.exports.sortPageWithoutMovingLookahead = sortPageWithoutMovingLookahead;
 module.exports.sourceCursorAdvance = sourceCursorAdvance;
 module.exports.shouldFallbackLaterBrandCandidate = shouldFallbackLaterBrandCandidate;
 module.exports.buildLegacyMarketQueryParams = buildLegacyMarketQueryParams;
