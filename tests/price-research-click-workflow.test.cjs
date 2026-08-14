@@ -43,3 +43,10 @@ test('URL-selected brand remains visible while release-brand metadata loads', ()
   assert.match(source, /queryBrand && !pBrands\.some\(item => item\.brand === queryBrand\)/);
   assert.match(source, /<option value=\{queryBrand\}>\{queryBrand\}<\/option>/);
 });
+
+test('an exact Trading Floor deep link automatically loads its Price Research evidence', () => {
+  const source = read('src/pages/PriceResearch.tsx');
+  assert.match(source, /const loadedDeepLinkRef = useRef\(''\)/);
+  assert.match(source, /if \(!deepLinkReference \|\| !deepLinkBrand \|\| loadedDeepLinkRef\.current === deepLinkKey\) return/);
+  assert.match(source, /void fetchData\(deepLinkReference, '', deepLinkBrand\)/);
+});
