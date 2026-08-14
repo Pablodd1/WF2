@@ -44,6 +44,8 @@ jobs:
           if ('${{ inputs.confirmation }}' -cne 'APPLY_QNSA_ZENITH_PRICE') { throw 'Exact confirmation required' }
           if ($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh' -or -not $env:SUPABASE_ACCESS_TOKEN) { throw 'Pinned QNSA credentials unavailable' }
           foreach($key in @($env:NORMALIZED_RUN_KEY,$env:CORRECTION_RUN_KEY)){if($key -notmatch '^[A-Za-z0-9._:-]{1,100}$'){throw 'Invalid run key'}}
+      - name: Install locked parser dependencies
+        run: npm ci --ignore-scripts
       - name: Fetch immutable dated ECB snapshot
         run: node tools/mariadb-live/fetch-fx-snapshot.cjs
       - name: Apply forward correction contract

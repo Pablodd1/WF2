@@ -23,6 +23,7 @@ test('Zenith correction uses dated ECB rates and the approved bare-number USD po
   assert.match(migration, /WHEN 'HKD' THEN v_hkd_rate/);
   assert.match(migration, /USD_DEFAULTED_BY_POLICY/);
   assert.match(workflow, /fetch-fx-snapshot\.cjs/);
+  assert.match(workflow, /npm ci --ignore-scripts[\s\S]*fetch-fx-snapshot\.cjs/);
   assert.match(workflow, /target_rows -ne 237/);
 });
 
