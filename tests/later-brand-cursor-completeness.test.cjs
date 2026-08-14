@@ -9,6 +9,9 @@ const inventory = require('../api/reviewed-market-inventory.js');
 const root = path.resolve(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
   '20260814114000_qnsa_later_brand_stable_pagination.sql'), 'utf8');
+const candidateMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
+  '20260814114500_qnsa_later_brand_candidate_cursor.sql'), 'utf8');
+const inventorySource = fs.readFileSync(path.join(root, 'api', 'reviewed-market-inventory.js'), 'utf8');
 
 function traverseBoundedSource(rows, presentationFilter = () => true, pageSize = 50) {
   let offset = 0;
@@ -60,4 +63,26 @@ test('direct-submission merge preserves the non-skipping cursor behavior', () =>
   const rawRows = Array.from({ length: 50 }, (_, index) => ({ id: String(index) }));
   assert.equal(inventory.sourceCursorAdvance(rawRows), 50);
   assert.equal(inventory.sourceCursorAdvance(rawRows, 3, 47), 47);
+});
+
+test('candidate RPC exposes an exact bounded stride and raw lookahead hasMore contract', () => {
+  assert.match(candidateMigration, /LIMIT v_scan_limit \+ 1 OFFSET v_offset/);
+  assert.match(candidateMigration, /candidate_position <= v_scan_limit/);
+  assert.match(candidateMigration, /'next_offset', v_offset \+ CASE/);
+  assert.match(candidateMigration, /metrics\.selected_last_position/);
+  assert.match(candidateMigration, /'has_more', CASE/);
+  assert.match(candidateMigration, /metrics\.candidate_lookahead/);
+  assert.match(candidateMigration, /v_scan_limit INTEGER := LEAST\(GREATEST[\s\S]*500\)/);
+  assert.match(candidateMigration, /reference_normalized >= 'RM'[\s\S]*reference_normalized < 'RN'/);
+  assert.match(candidateMigration, /reference_normalized >= 'W'[\s\S]*reference_normalized < 'X'/);
+  assert.doesNotMatch(candidateMigration, /CREATE\s+(?:UNIQUE\s+)?INDEX/i);
+});
+
+test('broad later-brand API trusts candidate metadata instead of rendered row count', () => {
+  assert.match(inventorySource, /qnsa_later_brand_candidate_page/);
+  assert.match(inventorySource, /p_scan_limit: 500/);
+  assert.match(inventorySource, /qnsaCandidateCursorMeta\.hasMore/);
+  assert.match(inventorySource, /qnsaCandidateCursorMeta\.nextOffset/);
+  assert.match(inventorySource, /qnsa_later_brand_page_rows_strict/,
+    'the prior publication-safe RPC remains a deploy-order fallback');
 });
