@@ -1157,8 +1157,9 @@ module.exports = async function handler(req, res) {
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
       const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
+      const laterReviewedBrand = ['Richard Mille', 'Cartier'].includes(brand);
       let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
-        ? 'qnsa_trading_floor_page_rows'
+        ? (laterReviewedBrand ? 'qnsa_later_brand_page_rows' : 'qnsa_trading_floor_page_rows')
         : 'qnsa_market_feed_page_rows'}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },

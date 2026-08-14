@@ -1,0 +1,55 @@
+name: QNSA later-brand bounded feed hotfix
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_QNSA_LATER_BRAND_FEED
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  apply-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate authorization
+        shell: pwsh
+        run: |
+          if ('${{ inputs.confirmation }}' -cne 'APPLY_QNSA_LATER_BRAND_FEED') { throw 'Invalid confirmation' }
+          if ($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Wrong Supabase target' }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'Missing Supabase access token' }
+      - name: Apply forward function
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = Get-Content -Raw supabase/migrations/20260814100000_qnsa_later_brand_bounded_feed.sql
+          if ($sql -match '(?i)(CREATE\s+INDEX|INSERT\s+INTO\s+staging\.listings|UPDATE\s+staging\.listings|DELETE\s+FROM\s+staging\.listings)') {
+            throw 'Unexpected storage-heavy or destructive statement'
+          }
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType application/json -Body $body | Out-Null
+      - name: Bounded smoke test
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SET LOCAL statement_timeout='8s';
+          SELECT jsonb_build_object(
+            'rm_rows',(SELECT count(*) FROM public.qnsa_later_brand_page_rows('Richard Mille',21,0,NULL)),
+            'cartier_rows',(SELECT count(*) FROM public.qnsa_later_brand_page_rows('Cartier',21,0,NULL))
+          ) evidence;
+          "@
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType application/json -Body $body
+          $e = $result[-1].evidence
+          $e | ConvertTo-Json -Depth 3
+          if ([long]$e.rm_rows -lt 20 -or [long]$e.cartier_rows -lt 20) { throw 'Bounded feed returned too few rows' }
