@@ -116,3 +116,22 @@ test('candidate RPC retries the prior strict RPC on deploy gaps and transient fa
     /laterReviewedBrand\s*&&\s*shouldFallbackLaterBrandCandidate\(pageRowsRes\.status\)/);
   assert.match(inventorySource, /rpc\/qnsa_later_brand_page_rows_strict/);
 });
+
+test('exact-reference presentation sorting never pulls the lookahead into the visible page', () => {
+  const rows = [
+    { id: 'priced-a', price: 10 },
+    { id: 'unpriced-boundary', price: 0 },
+    { id: 'priced-lookahead', price: 20 },
+  ];
+  const sorted = inventory.sortPageWithoutMovingLookahead(
+    rows,
+    2,
+    (left, right) => right.price - left.price,
+  );
+  assert.deepEqual(sorted.map(row => row.id), [
+    'priced-a',
+    'unpriced-boundary',
+    'priced-lookahead',
+  ]);
+  assert.equal(sorted[2], rows[2], 'the source lookahead stays outside the visible page');
+});
