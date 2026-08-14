@@ -28,6 +28,8 @@ test('Zenith workflow is QNSA-pinned and fails closed on lineage, bundle provena
   assert.match(workflow, /Zenith immutable lineage failure/);
   assert.match(workflow, /Zenith multi-listing candidates require quarantine before release/);
   assert.match(workflow, /if\(\[long\]\$e\.high_confidence_multi_risk -ne 0\)/);
+  assert.match(workflow, /'source_currency_counts'/);
+  assert.match(workflow, /if \('\$\{\{ inputs\.mode \}\}' -eq 'enable' -and \[long\]\$e\.priced_wts -lt 1\)/);
 });
 
 test('Zenith uses QNSA bounded Price Research and appears in Trading discovery', () => {
