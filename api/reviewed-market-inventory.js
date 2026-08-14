@@ -2,7 +2,7 @@
 
 const { getClient } = require('./_lib/supabase');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
-const { listCatalogReferences, listEquivalentReferences } = require('./_lib/catalog');
+const { listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
@@ -623,8 +623,10 @@ function mapReviewedRecord(row) {
     ? positiveNumber(verifiedPriceUsd)
     : null;
   const brand = row.supplied_brand || row.canonical_brand || row.brand_scope;
-  const model = row.model || row.catalog_model || null;
+  const storedModel = row.model || row.catalog_model || null;
   const sourceReference = row.normalized_reference || row.raw_reference || row.catalog_reference || null;
+  const catalogIdentity = sourceReference && brand ? lookupCatalog(sourceReference, brand) : null;
+  const model = storedModel || (catalogIdentity?.found ? catalogIdentity.model : null) || null;
   const invalidReference = row.reference_is_price_token === true
     || referenceIsPriceToken(sourceReference, sourceAmount, sourceCurrency);
   const approvedReference = invalidReference ? null : (row.public_reference || sourceReference);
@@ -655,7 +657,7 @@ function mapReviewedRecord(row) {
     || referenceComparisonKey(reference)
     || null;
 
-  const locallyCompleteIdentity = [brand, model, reference, dialColor]
+  const locallyCompleteIdentity = [brand, storedModel, reference, dialColor]
     .every(evidenceValuePresent);
   const hasCompleteIdentity = locallyCompleteIdentity && !invalidReference;
   const priceEligible = hasCompleteIdentity && verifiedUsd !== null;
