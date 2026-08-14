@@ -922,3 +922,14 @@ test('bounded QNSA RPC rows reapply every customer filter before publication', (
   assert.match(source, /!requestedDial \|\| cleanExactText\(record\.dial_color/);
   assert.match(source, /!condition \|\| cleanExactText\(record\.condition/);
 });
+
+test('reconciled Zenith singles are not re-quarantined by the generic bundle splitter', () => {
+  assert.equal(api.isMultiListing(record({
+    publication_lane: 'QNSA_ZENITH_REVIEWED_V1',
+    raw_message: '12379 - Zenith - 51.2081.400/78.C810 complete set EUR 4650',
+  })), false);
+  assert.equal(api.isMultiListing(record({
+    publication_lane: 'QNSA_ZENITH_REVIEWED_V1',
+    raw_message: 'Zenith 03.A384.400/385.C855 and Breitling V13375101C1X1',
+  })), true);
+});
