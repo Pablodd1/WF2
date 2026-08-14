@@ -51,6 +51,8 @@ jobs:
           $expected=if('${{ inputs.mode }}' -eq 'apply'){'APPLY_QNSA_ZENITH_MISSING_PRICE'}else{'AUDIT_QNSA_ZENITH_MISSING_PRICE'}
           if('${{ inputs.confirmation }}' -cne $expected){throw "Confirmation must be $expected"}
           if($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh' -or -not $env:SUPABASE_ACCESS_TOKEN){throw 'Pinned QNSA credentials unavailable'}
+      - name: Install locked parser dependencies
+        run: npm ci --ignore-scripts
       - name: Fetch dated ECB snapshot
         run: node tools/mariadb-live/fetch-fx-snapshot.cjs
       - name: Read bounded exact-lineage missing-price cohort
