@@ -1517,7 +1517,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   </>
                 ) : (
                   <div style={{ fontSize: 12, color: RED, lineHeight: 1.5 }}>
-                    Analytics are withheld until at least two catalog-consistent observations exist for the same reference and dial across all listing conditions.
+                    Analytics are withheld until at least two identity- and dial-qualified observations exist for the same reference across all listing conditions.
                   </div>
                 )}
               </div>
@@ -1546,12 +1546,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             </section>
 
-            {/* Dial cohorts that satisfy catalog and minimum-sample policy. */}
+            {/* Dial cohorts that satisfy identity review and minimum-sample policy. */}
             {displayDialAnalysis.length > 0 && (
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Dial Color Analysis</h3>
                 <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
-                  Catalog-valid dial cohorts with at least two comparable observations for {displayRef}.
+                  Source- and review-supported dial cohorts with at least two comparable observations for {displayRef}.
                 </div>
                 <div role="img" aria-label={`Average comparable price by dial color for ${displayRef}`} style={{ height: 210, marginBottom: 18 }}>
                   <ResponsiveContainer width="100%" height="100%">
