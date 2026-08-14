@@ -8,6 +8,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const migration = read('supabase/migrations/20260814180000_qnsa_zenith_reviewed_release.sql');
+const customerFeed = read('supabase/migrations/20260814184500_qnsa_zenith_customer_feed.sql');
 const workflow = read('.github/workflows/qnsa-zenith-reviewed-release.yml');
 const research = read('api/price-research.js');
 const inventory = read('api/reviewed-market-inventory.js');
@@ -36,6 +37,16 @@ test('Zenith uses QNSA bounded Price Research and appears in Trading discovery',
   assert.match(research, /'richard mille', 'cartier', 'zenith'/);
   assert.match(research, /'Richard Mille', 'Cartier', 'Zenith'/);
   assert.match(inventory, /'Richard Mille', 'Cartier', 'Zenith'/);
+});
+
+test('Zenith has a bounded cursor feed and release verifies customer RPCs', () => {
+  assert.match(customerFeed, /qnsa_zenith_candidate_page/);
+  assert.match(customerFeed, /provenance_metadata->>'bundle_status' = 'SINGLE_CANDIDATE'/);
+  assert.match(customerFeed, /LIMIT v_limit \+ 1 OFFSET v_offset/);
+  assert.match(customerFeed, /WHEN p_brand = 'Zenith'/);
+  assert.match(workflow, /20260814184500_qnsa_zenith_customer_feed\.sql/);
+  assert.match(workflow, /qnsa_bounded_price_research_rows/);
+  assert.doesNotMatch(workflow, /qnsa_rolex_patek_trading_floor_source WHERE brand_scope='Zenith'/);
 });
 
 test('Zenith catalog browse no longer invokes the retired text-ID workbook range', () => {

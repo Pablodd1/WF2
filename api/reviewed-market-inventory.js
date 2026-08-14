@@ -1245,7 +1245,7 @@ module.exports = async function handler(req, res) {
         })
       : queryParams;
     let usedLegacyViewContract = legacyMarketViewContractDetected;
-    const laterReviewedBrand = ['Richard Mille', 'Cartier'].includes(brand);
+    const laterReviewedBrand = ['Richard Mille', 'Cartier', 'Zenith'].includes(brand);
     // Broad QNSA brand pages first resolve a tiny ordered ID page from the
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
