@@ -806,7 +806,7 @@ function isPlausibleLaterBrandReference(brand, value) {
   const key = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!key || ['BRANDNEW', 'BREATHABLE', 'RM001EITHER'].includes(key)) return false;
   if (brand === 'Richard Mille') return /^RM[A-Z0-9]*\d[A-Z0-9]*$/.test(key);
-  if (brand === 'Cartier') return /^[A-Z][A-Z0-9]*\d[A-Z0-9]*$/.test(key);
+  if (brand === 'Cartier') return /^W[A-Z0-9]*\d[A-Z0-9]*$/.test(key);
   return true;
 }
 
@@ -1210,7 +1210,7 @@ module.exports = async function handler(req, res) {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ p_brand: brand || null, p_limit: 51,
-            p_offset: brand === 'Cartier' ? requestedOffset + 2600 : requestedOffset,
+            p_offset: brand === 'Cartier' ? requestedOffset + 2650 : requestedOffset,
             p_listing_type: listingType || null }),
         });
         if (fallbackRes.ok) {
