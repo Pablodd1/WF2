@@ -83,6 +83,8 @@ test('Zenith identity reconciliation is bounded, lineage-locked, and fail closed
   assert.match(identityWorkflow, /PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.match(identityWorkflow, /AUDIT_QNSA_ZENITH_IDENTITY/);
   assert.match(identityWorkflow, /APPLY_QNSA_ZENITH_IDENTITY/);
+  assert.match(identityWorkflow, /audit_qnsa_zenith_identity_reconciliation/);
+  assert.match(identityWorkflow, /read_only=\$false/);
 });
 
 test('Zenith release verification respects the disabled control and counts null price correctly', () => {
