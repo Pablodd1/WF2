@@ -246,12 +246,19 @@ test('only reconciled Rolex, Patek, and Audemars Piguet pending-review singles e
 });
 
 test('reviewed QNSA release rows and source-backed ratings reach the card contract', () => {
-  assert.match(source, /'QNSA_ROLEX_PATEK_REVIEWED_V1', 'QNSA_GENERAL_MARKET_FEED_V1'/);
+  assert.match(source, /'QNSA_ROLEX_PATEK_REVIEWED_V1'/);
+  assert.match(source, /'QNSA_GENERAL_MARKET_FEED_V1'/);
+  assert.match(source, /'QNSA_REVIEWED_LATER_BRAND_V1'/);
   assert.match(source, /\['APPROVED', 'PENDING_VERIFICATION'\]\.includes\(row\?\.publication_state\)/);
   assert.match(source, /reviewedQnsaRelease \|\|/);
   assert.match(source, /seller_rating: ratingEvidenceStatus === 'SOURCE_SUPPLIED' \? directRating : null/);
   assert.match(source, /ratedDealerEvidence/);
   assert.match(source, /raw_lineage_verified,dealer_rating,review_count/);
+  assert.equal(api.isTradingFloorSourceRow({
+    item_category: 'WATCH', listing_type: 'WTS', canonical_brand: 'Richard Mille',
+    publication_lane: 'QNSA_REVIEWED_LATER_BRAND_V1', normalization_run_complete: true,
+    raw_lineage_verified: true, publication_state: 'PENDING_VERIFICATION',
+  }), true);
 });
 
 test('pending publication keeps customer copy neutral without loosening price eligibility', () => {

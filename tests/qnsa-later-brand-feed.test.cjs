@@ -37,4 +37,5 @@ test('later-brand feed preserves immutable lineage and publication safety gates'
   assert.match(migration, /bundle_status', 'SINGLE_CANDIDATE/);
   assert.match(migration, /suppressed_exact_duplicate/);
   assert.match(migration, /upper\(COALESCE\(l\.category, ''\)\) = 'WATCH'/);
+  assert.match(inventory, /'QNSA_REVIEWED_LATER_BRAND_V1'/);
 });

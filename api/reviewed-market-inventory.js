@@ -472,7 +472,11 @@ function isTradingFloorSourceRow(row) {
   })) {
     return true;
   }
-  const reviewedQnsaRelease = ['QNSA_ROLEX_PATEK_REVIEWED_V1', 'QNSA_GENERAL_MARKET_FEED_V1']
+  const reviewedQnsaRelease = [
+    'QNSA_ROLEX_PATEK_REVIEWED_V1',
+    'QNSA_GENERAL_MARKET_FEED_V1',
+    'QNSA_REVIEWED_LATER_BRAND_V1',
+  ]
     .includes(row?.publication_lane)
     && row?.normalization_run_complete === true
     && row?.raw_lineage_verified === true
