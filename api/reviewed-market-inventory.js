@@ -1189,6 +1189,17 @@ module.exports = async function handler(req, res) {
               p_posted_after: postedAfter,
             }),
       });
+      if (laterReviewedBrand && !pageRowsRes.ok) {
+        // The narrow strict wrapper can cross the hosted timeout on a cold RM
+        // page. Fall back immediately to the same bounded, lineage-safe base
+        // feed; parser artifacts are removed below before mapping.
+        pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset, p_listing_type: listingType || null }),
+        });
+      }
       if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
         // The application can deploy before the forward database migration.
         // Preserve the proven two-brand watch feed during that short window;
@@ -1452,6 +1463,22 @@ module.exports = async function handler(req, res) {
       .filter(record => ratingMatches(record, rating))
       .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory)
       .sort(compareInventoryForDisplay);
+    if (laterReviewedBrand && qnsaBroadPage && records.length === 0 && sourceRows.length > 0) {
+      // Later-brand source rows come from a dedicated WATCH-only RPC that has
+      // already enforced immutable lineage, single-item status, duplicate and
+      // release gates. Preserve those rows if generic cross-category mapping
+      // removes the entire Cartier page.
+      records = (await recoverRecordPrices(sourceRows.map(mapReviewedRecord)))
+        .filter(record => !record.multi_listing)
+        .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
+        .filter(record => !imagesOnly || record.has_images === true)
+        .filter(record => !pricedOnly || hasUsableSourcePrice(record))
+        .filter(record => !search || searchTermsMatch(record, search))
+        .filter(record => !region || locationMatches(record.location, region))
+        .filter(record => itemCategory === 'ALL' || itemCategory === 'WATCH')
+        .sort(compareInventoryForDisplay)
+        .slice(0, pageSize);
+    }
     let consumedSourceRecordCount = records.length;
     if (firstPageOfLane) {
       const { data: directRows, error: directError } = await directRowsPromise;
