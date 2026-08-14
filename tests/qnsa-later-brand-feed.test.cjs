@@ -32,6 +32,7 @@ test('later reviewed brands use a bounded existing-index feed without copying da
   assert.match(inventory, /laterReviewedBrand && qnsaBroadPage/);
   assert.match(inventory, /!hasObviousCrossBrandConflict\(row\)/);
   assert.match(inventory, /laterReviewedBrand && qnsaBroadPage && records\.length === 0/);
+  assert.match(inventory, /let usedLegacyViewContract[^]*const laterReviewedBrand/);
 });
 
 test('hotfix workflow is pinned, bounded, and adds no storage-heavy index', () => {
