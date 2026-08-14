@@ -1210,7 +1210,8 @@ module.exports = async function handler(req, res) {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ p_brand: brand || null, p_limit: 51,
-            p_offset: requestedOffset, p_listing_type: listingType || null }),
+            p_offset: brand === 'Cartier' ? requestedOffset + 2600 : requestedOffset,
+            p_listing_type: listingType || null }),
         });
         if (fallbackRes.ok) {
           pageRows = (await fallbackRes.json())
