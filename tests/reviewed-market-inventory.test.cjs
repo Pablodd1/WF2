@@ -662,7 +662,8 @@ test('endpoint is read-only and globally ranks verified source images before pag
   assert.match(source, /queryParams\.set\('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
   assert.match(source, /\? 'created_at\.desc,id\.desc'[\s\S]*: 'id\.desc'/);
   assert.match(source, /Fill the final image page from the no-image lane/);
-  assert.match(source, /pageResult\.records\.filter\(isTradingFloorSourceRow\)/);
+  assert.match(source, /pageResult\.records\.filter\(row => \{/);
+  assert.match(source, /return isTradingFloorSourceRow\(row\)/);
   assert.match(source, /usedLegacyViewContract \? isLegacyReviewedInventoryRecord\(record\) : true/);
   assert.doesNotMatch(source, /order\('workbook_price_usd'/);
   assert.doesNotMatch(source, /order\('source_price_amount'/);
