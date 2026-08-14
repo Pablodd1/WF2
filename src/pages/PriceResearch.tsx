@@ -530,6 +530,7 @@ export default function PriceResearch() {
   const [activeReferenceSuggestion, setActiveReferenceSuggestion] = useState(-1);
   const [selectedCatalogReference, setSelectedCatalogReference] = useState<CatalogSuggestion | null>(null);
   const referenceSearchBoxRef = useRef<HTMLDivElement | null>(null);
+  const loadedDeepLinkRef = useRef('');
 
   // ── Drill-down picker state (brand → model → reference) ──
   const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
@@ -746,6 +747,21 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   useEffect(() => {
     if (initialBrand && !initialReference) void loadModels(initialBrand);
   }, [initialBrand, initialReference, loadModels]);
+
+  useEffect(() => {
+    const deepLinkReference = initialReference.trim();
+    const deepLinkBrand = initialBrand.trim();
+    const deepLinkKey = `${deepLinkBrand}\u0000${deepLinkReference}`;
+    if (!deepLinkReference || !deepLinkBrand || loadedDeepLinkRef.current === deepLinkKey) return;
+    loadedDeepLinkRef.current = deepLinkKey;
+    setSelectedCatalogReference(null);
+    setQuery(deepLinkReference);
+    setQueryBrand(deepLinkBrand);
+    setPBrand(deepLinkBrand);
+    setReferenceSuggestionsOpen(false);
+    setReferenceSuggestions([]);
+    void fetchData(deepLinkReference, '', deepLinkBrand);
+  }, [fetchData, initialBrand, initialReference]);
 
   const openListing = useCallback(async (row: RowData) => {
     listingRequestRef.current.controller?.abort();
