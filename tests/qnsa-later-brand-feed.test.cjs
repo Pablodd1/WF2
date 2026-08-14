@@ -26,7 +26,7 @@ test('later reviewed brands use a bounded existing-index feed without copying da
   assert.match(migration, /ORDER BY l\.reference_normalized ASC NULLS LAST, l\.id ASC/);
   assert.match(migration, /LIMIT LEAST\(GREATEST\(COALESCE\(p_limit, 51\), 1\) \* 10, 1010\)/);
   assert.doesNotMatch(migration, /CREATE INDEX|INSERT INTO staging\.listings|UPDATE staging\.listings|DELETE FROM staging\.listings/);
-  assert.match(inventory, /laterReviewedBrand \? 'qnsa_later_brand_page_rows'/);
+  assert.match(inventory, /laterReviewedBrand \? 'qnsa_later_brand_page_rows_strict'/);
   assert.match(inventory, /isPlausibleLaterBrandReference/);
   assert.match(inventory, /qnsa_later_brand_page_rows/);
   assert.match(inventory, /laterReviewedBrand && qnsaBroadPage/);

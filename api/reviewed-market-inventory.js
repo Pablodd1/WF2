@@ -1171,7 +1171,7 @@ module.exports = async function handler(req, res) {
       // brand pages. Keep it for non-watch categories only.
       const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
       let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
-        ? (laterReviewedBrand ? 'qnsa_later_brand_page_rows' : 'qnsa_trading_floor_page_rows')
+        ? (laterReviewedBrand ? 'qnsa_later_brand_page_rows_strict' : 'qnsa_trading_floor_page_rows')
         : 'qnsa_market_feed_page_rows'}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
@@ -1205,11 +1205,21 @@ module.exports = async function handler(req, res) {
         throw new Error(`QNSA page rows failed: ${pageRowsRes.status} ${pageRowsError.slice(0, 200)}`);
       }
       let pageRows = (await pageRowsRes.json()).map(row => row.row_data || row).filter(Boolean);
-      if (laterReviewedBrand) {
-        pageRows = pageRows.filter(row => isPlausibleLaterBrandReference(
-          brand,
-          row.normalized_reference || row.catalog_reference || row.raw_reference,
-        ));
+      if (laterReviewedBrand && pageRows.length === 0) {
+        const fallbackRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset, p_listing_type: listingType || null }),
+        });
+        if (fallbackRes.ok) {
+          pageRows = (await fallbackRes.json())
+            .map(row => row.row_data || row)
+            .filter(row => row && isPlausibleLaterBrandReference(
+              brand,
+              row.normalized_reference || row.catalog_reference || row.raw_reference,
+            ));
+        }
       }
       const directResponse = new Response(JSON.stringify(pageRows), {
         status: 200,
