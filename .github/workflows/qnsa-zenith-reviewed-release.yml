@@ -100,7 +100,7 @@ jobs:
             'wtb',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTB'),
             'priced_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND price_usd>0),
             'source_priced_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND price_normalized>0),
-            'genuine_no_price_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND NOT (price_normalized>0)),
+            'genuine_no_price_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND COALESCE(price_normalized,0)<=0),
             'source_currency_counts',(SELECT COALESCE(jsonb_object_agg(currency,row_count),'{}'::jsonb) FROM (
               SELECT upper(COALESCE(currency_normalized,'UNSPECIFIED')) currency,count(*) row_count
               FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND price_normalized>0
@@ -150,6 +150,11 @@ jobs:
           WITH customer_rows AS MATERIALIZED (
             SELECT l.*
             FROM staging.listings l
+            JOIN public.qnsa_two_brand_release_control control
+              ON control.canonical_brand='Zenith'
+             AND control.enabled_run_key=l.normalization_run_key
+             AND control.trading_floor_enabled=true
+             AND control.price_research_enabled=true
             JOIN public.raw_message_versions rv
               ON rv.id=l.raw_message_version_id
              AND rv.source_record_id=l.source_record_id
@@ -159,6 +164,7 @@ jobs:
               AND upper(COALESCE(l.category,''))='WATCH'
               AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
               AND l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
+              AND l.provenance_metadata->>'identity_reconciliation_status'='RELEASE_SAFE_EXACT_SOURCE_REFERENCE'
               AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
               AND NULLIF(btrim(l.reference_normalized),'') IS NOT NULL
               AND l.source_hash ~ '^[0-9a-f]{64}$'
