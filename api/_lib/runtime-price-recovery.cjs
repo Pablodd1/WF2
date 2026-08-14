@@ -71,7 +71,15 @@ function recoverObservation(observation, snapshot = null) {
 }
 
 async function recoverRecordPrices(records, options = {}) {
-  const prepared = (records || []).map(record => ({ record, observation: explicitObservation(record?.raw_message) }));
+  const prepared = (records || []).map(record => ({
+    record,
+    // A prior identity/price collision decision is authoritative. In
+    // particular, references such as "RM 001" must never be reparsed as a
+    // Malaysian-ringgit amount by this later recovery pass.
+    observation: String(record?.price_evidence_status || '').toUpperCase() === 'REFERENCE_TOKEN_AS_PRICE'
+      ? null
+      : explicitObservation(record?.raw_message),
+  }));
   const needsFx = prepared.some(({ record, observation }) => (
     !Number(record?.price_usd)
     && observation
