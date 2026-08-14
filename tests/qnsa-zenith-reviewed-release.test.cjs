@@ -15,6 +15,8 @@ const research = read('api/price-research.js');
 const inventory = read('api/reviewed-market-inventory.js');
 const models = read('api/catalog-models.js');
 const references = read('api/catalog-references.js');
+const identityMigration = read('supabase/migrations/20260814190000_qnsa_zenith_identity_reconciliation.sql');
+const identityWorkflow = read('.github/workflows/qnsa-zenith-identity-reconciliation.yml');
 
 test('Zenith release installs disabled and never rewrites immutable data', () => {
   assert.match(migration, /'Zenith', false, false/);
@@ -67,4 +69,24 @@ test('Zenith same-line multi-watch messages are detected while a single watch re
   assert.equal(multiItemRisk('Zenith 03.3100.3600/69 USD 8000').is_multi, false);
   assert.equal(multiItemRisk('Zenith 03.3100.3600/69 USD 8000, Zenith 03.9300.3620/51.I001 USD 12000').is_multi, true);
   assert.equal(multiItemRisk('Zenith 03.3100.3600/69 USD 8000, Rolex 126500LN USD 30000').is_multi, true);
+});
+
+test('Zenith identity reconciliation is bounded, lineage-locked, and fail closed', () => {
+  assert.match(identityMigration, /qnsa_extract_zenith_references/);
+  assert.match(identityMigration, /CROSS_BRAND_OR_DAYTONA/);
+  assert.match(identityMigration, /MULTIPLE_ZENITH_REFERENCES/);
+  assert.match(identityMigration, /IDENTITY_CONFLICT_PENDING_REVIEW/);
+  assert.match(identityMigration, /v_total<>464/);
+  assert.match(identityMigration, /staging_row_delta',0,'raw_rows_mutated',0/);
+  assert.doesNotMatch(identityMigration, /(?:UPDATE|DELETE|INSERT\s+INTO)\s+(?:public\.)?(?:raw_messages|raw_message_versions)/i);
+  assert.doesNotMatch(identityMigration, /(?:INSERT\s+INTO|DELETE\s+FROM)\s+staging\.listings/i);
+  assert.match(identityWorkflow, /PROJECT_REF: qnsafosakvonzgfcsphh/);
+  assert.match(identityWorkflow, /AUDIT_QNSA_ZENITH_IDENTITY/);
+  assert.match(identityWorkflow, /APPLY_QNSA_ZENITH_IDENTITY/);
+});
+
+test('Zenith release verification respects the disabled control and counts null price correctly', () => {
+  assert.match(workflow, /control\.trading_floor_enabled=true/);
+  assert.match(workflow, /identity_reconciliation_status'='RELEASE_SAFE_EXACT_SOURCE_REFERENCE'/);
+  assert.match(workflow, /COALESCE\(price_normalized,0\)<=0/);
 });
