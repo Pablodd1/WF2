@@ -43,6 +43,16 @@ test('featured-sale rows preserve source evidence while excluded rows never alte
   assert.match(source, /row\.raw_message \?\? row\.raw_line/);
 });
 
+test('all serialized sale evidence is explicitly typed WTS', () => {
+  const api = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
+  const outlierBlock = api.split('outlier_rows: canReviewExcludedEvidence ?')[1].split('analytics_ready:')[0];
+  const retainedBlock = api.split('retained_rows:')[1].split('rows: serializedComparables')[0];
+  const comparableBlock = api.split('rows: serializedComparables')[1].split('})),')[0];
+  assert.match(outlierBlock, /listing_type: 'WTS'/);
+  assert.match(retainedBlock, /listing_type: 'WTS'/);
+  assert.match(comparableBlock, /listing_type: 'WTS'/);
+});
+
 test('charts render whenever qualified data exists and use the selected dial color', () => {
   assert.match(pageRender, /\{chartData\.length >= 1 \? \(/);
   assert.doesNotMatch(pageRender, /chartData\.length >= 1 && \(data\.monthly \|\| \[\]\)\.length >= 2/);

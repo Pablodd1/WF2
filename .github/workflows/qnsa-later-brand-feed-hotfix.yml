@@ -36,6 +36,7 @@ jobs:
             Get-Content -Raw supabase/migrations/20260814111500_qnsa_later_brand_reference_gate_bound.sql
             Get-Content -Raw supabase/migrations/20260814112000_qnsa_later_brand_reference_key_gate.sql
             Get-Content -Raw supabase/migrations/20260814112500_qnsa_later_brand_reference_window.sql
+            Get-Content -Raw supabase/migrations/20260814114000_qnsa_later_brand_stable_pagination.sql
           ) -join "`n"
           if ($sql -match '(?i)(CREATE\s+INDEX|INSERT\s+INTO\s+staging\.listings|UPDATE\s+staging\.listings|DELETE\s+FROM\s+staging\.listings)') {
             throw 'Unexpected storage-heavy or destructive statement'

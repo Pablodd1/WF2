@@ -532,6 +532,67 @@ test('fails closed when a price and currency token contaminates the reference', 
   assert.equal(mapped.evidence_coverage.price.analytics_eligible, false);
 });
 
+test('does not publish Richard Mille reference digits as a MYR price', () => {
+  for (const sample of [
+    { reference: 'RM001', amount: 1, raw: 'NTQ/ RM 001' },
+    { reference: 'RM002', amount: 2, raw: 'NTQ\nRM 002\nSold order' },
+  ]) {
+    assert.equal(api.rmReferenceIsMyrPriceArtifact(sample.reference, sample.amount, 'MYR', sample.raw), true);
+    const mapped = api.mapReviewedRecord(record({
+      raw_message: sample.raw,
+      brand_scope: 'Richard Mille',
+      supplied_brand: 'Richard Mille',
+      canonical_brand: 'Richard Mille',
+      model: 'Tourbillon',
+      raw_reference: sample.reference,
+      normalized_reference: sample.reference,
+      public_reference: sample.reference,
+      reference_search_key: sample.reference,
+      source_price_amount: String(sample.amount),
+      source_price_text: `MYR ${sample.amount}`,
+      source_currency: 'MYR',
+      workbook_price_usd: '0',
+      verified_price_usd: '0',
+      has_verified_usd_price: false,
+    }));
+    assert.equal(mapped.reference, sample.reference);
+    assert.equal(mapped.price_raw, null);
+    assert.equal(mapped.source_price_amount, null);
+    assert.equal(mapped.source_price_text, null);
+    assert.equal(mapped.currency, null);
+    assert.equal(mapped.source_currency, null);
+    assert.equal(mapped.price_evidence_status, 'REFERENCE_TOKEN_AS_PRICE');
+    assert.equal(mapped.price_research_eligible, false);
+  }
+});
+
+test('preserves a true MYR amount when the raw message directly labels the price', () => {
+  for (const raw of ['RM001 asking MYR 500,000', 'RM001 asking 500000 MYR']) {
+    assert.equal(api.rmReferenceIsMyrPriceArtifact('RM001', 500000, 'MYR', raw), false);
+    const mapped = api.mapReviewedRecord(record({
+      raw_message: raw,
+      brand_scope: 'Richard Mille',
+      supplied_brand: 'Richard Mille',
+      canonical_brand: 'Richard Mille',
+      model: 'Tourbillon',
+      raw_reference: 'RM001',
+      normalized_reference: 'RM001',
+      public_reference: 'RM001',
+      reference_search_key: 'RM001',
+      source_price_amount: '500000',
+      source_price_text: 'MYR 500000',
+      source_currency: 'MYR',
+      price_evidence_status: 'EXPLICIT_SOURCE_FX_PENDING',
+      workbook_price_usd: null,
+      verified_price_usd: null,
+      has_verified_usd_price: false,
+    }));
+    assert.equal(mapped.source_price_amount, 500000);
+    assert.equal(mapped.source_currency, 'MYR');
+    assert.equal(mapped.price_evidence_status, 'EXPLICIT_SOURCE_FX_PENDING');
+  }
+});
+
 test('verified USD remains ineligible until every identity field is present', () => {
   for (const overrides of [
     { model: null, catalog_model: null },

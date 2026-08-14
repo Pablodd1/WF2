@@ -578,13 +578,19 @@ function directSubmissionMatchesImageLane(record, lane) {
 
 function mapReviewedRecord(row) {
   row = applyEffectivePrice(row);
+  const rmMyrPriceArtifact = rmReferenceIsMyrPriceArtifact(
+    row.normalized_reference || row.raw_reference || row.catalog_reference,
+    row.source_price_amount,
+    row.source_currency,
+    row.raw_message,
+  );
   // Publish only user_image_url, the exact source upload retained by the view.
   const candidateImageUrl = row.user_image_url || null;
   const hasExactSourceImage = row.has_exact_source_image === true
     && candidateImageUrl
     && String(candidateImageUrl).trim().length > 0
     && /^https?:\/\/[^\s]+$/i.test(String(candidateImageUrl).trim());
-  const hasVerifiedUsdPrice = row.has_verified_usd_price === true
+  const hasVerifiedUsdPrice = !rmMyrPriceArtifact && row.has_verified_usd_price === true
     && row.verified_price_usd > 0;
   const verifiedPriceUsd = hasVerifiedUsdPrice ? row.verified_price_usd : null;
 
@@ -596,7 +602,8 @@ function mapReviewedRecord(row) {
     ? String(candidateImageUrl).trim()
     : null;
   const contactApproved = row.contact_publication_approved === true;
-  const sourceAmount = positiveNumber(row.source_price_amount);
+  const sourceAmount = rmMyrPriceArtifact ? null : positiveNumber(row.source_price_amount);
+  const sourceCurrency = rmMyrPriceArtifact ? null : (row.source_currency || null);
   const workbookUsd = positiveNumber(row.workbook_price_usd);
   const workbookPriceReview = workbookPriceReviewReason(row.workbook_price_usd);
   const verifiedUsd = hasVerifiedUsdPrice
@@ -606,7 +613,7 @@ function mapReviewedRecord(row) {
   const model = row.model || row.catalog_model || null;
   const sourceReference = row.normalized_reference || row.raw_reference || row.catalog_reference || null;
   const invalidReference = row.reference_is_price_token === true
-    || referenceIsPriceToken(sourceReference, sourceAmount, row.source_currency);
+    || referenceIsPriceToken(sourceReference, sourceAmount, sourceCurrency);
   const approvedReference = invalidReference ? null : (row.public_reference || sourceReference);
   const reference = !invalidReference
     && evidenceValuePresent(row.raw_reference)
@@ -663,7 +670,7 @@ function mapReviewedRecord(row) {
     contactApproved,
     exactImageUrl: publicImageUrl,
     sourceAmount,
-    sourceCurrency: row.source_currency,
+    sourceCurrency,
     hasCompleteIdentity,
     invalidReferenceReason: invalidReference ? 'PRICE_CURRENCY_TOKEN' : null,
     priceEligible,
@@ -707,13 +714,13 @@ function mapReviewedRecord(row) {
     analytics_fx_source: row.effective_fx_source || null,
     analytics_fx_date: row.effective_fx_date || null,
     price_raw: sourceAmount,
-    currency: row.source_currency || null,
+    currency: sourceCurrency,
     workbook_price_usd: workbookUsd,
     workbook_price_review_reason: workbookPriceReview,
     source_price_amount: sourceAmount,
-    source_price_text: row.source_price_text || null,
-    source_currency: row.source_currency || null,
-    price_evidence_status: row.price_evidence_status,
+    source_price_text: rmMyrPriceArtifact ? null : (row.source_price_text || null),
+    source_currency: sourceCurrency,
+    price_evidence_status: rmMyrPriceArtifact ? 'REFERENCE_TOKEN_AS_PRICE' : row.price_evidence_status,
     price_research_eligible: priceEligible,
     confidence: row.confidence == null ? null : Number(row.confidence),
     verdict: row.verdict || row.verification_status || null,
@@ -802,6 +809,21 @@ function publicationBrandsFromSummary(summary) {
     .filter(Boolean);
 }
 
+function rmReferenceIsMyrPriceArtifact(reference, sourceAmount, sourceCurrency, rawMessage) {
+  if (currencyComparisonKey(sourceCurrency) !== 'MYR') return false;
+  const referenceKey = referenceComparisonKey(reference);
+  const match = referenceKey.match(/^RM0*([1-9][0-9]{0,3})$/);
+  if (!match || positiveNumber(sourceAmount) !== Number(match[1])) return false;
+  const raw = cleanExactText(rawMessage, 10_000);
+  if (!raw) return true;
+  // Preserve genuine Malaysian-ringgit evidence only when MYR is directly
+  // attached to an amount. `RM 001` is a Richard Mille reference, not a
+  // Malaysian-ringgit price of 1.
+  const explicitMyrAmount = /\bMYR\b\s*[:=$-]?\s*\d[\d,.]*/i.test(raw)
+    || /\d[\d,.]*\s*\bMYR\b/i.test(raw);
+  return !explicitMyrAmount;
+}
+
 function isPlausibleLaterBrandReference(brand, value) {
   const key = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!key || ['BRANDNEW', 'BREATHABLE', 'RM001EITHER'].includes(key)) return false;
@@ -816,6 +838,16 @@ function boundedPage(rows, pageSize, hasLookaheadQuery) {
     records: hasLookaheadQuery ? ordered.slice(0, pageSize) : ordered,
     hasLookahead: hasLookaheadQuery && ordered.length > pageSize,
   };
+}
+
+function sourceCursorAdvance(rawRows, directRecordCount = 0, displayedSourceCount = 0) {
+  // Normal database pages advance by the source window, including rows later
+  // removed by presentation filters. Direct submissions are merged only on the
+  // first page; in that exceptional case retain the prior non-skipping rule so
+  // displaced database rows remain reachable on the next request.
+  return directRecordCount > 0
+    ? Math.max(0, Number(displayedSourceCount) || 0)
+    : (Array.isArray(rawRows) ? rawRows.length : 0);
 }
 
 function isLegacyReviewedInventoryRecord(record) {
@@ -1459,13 +1491,22 @@ module.exports = async function handler(req, res) {
         .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
         .filter(record => !imagesOnly || record.has_images === true)
         .filter(record => !pricedOnly || hasUsableSourcePrice(record))
+        .filter(record => !postedAfter || new Date(record.listing_date || record.created_at || 0).getTime() >= new Date(postedAfter).getTime())
+        .filter(record => !requestedDial || cleanExactText(record.dial_color, 40).toLowerCase() === requestedDial.toLowerCase())
+        .filter(record => !condition || cleanExactText(record.condition, 80).toLowerCase() === condition.toLowerCase())
         .filter(record => !search || searchTermsMatch(record, search))
         .filter(record => !region || locationMatches(record.location, region))
+        .filter(record => ratingMatches(record, rating))
         .filter(record => itemCategory === 'ALL' || itemCategory === 'WATCH')
         .sort(compareInventoryForDisplay)
         .slice(0, pageSize);
     }
-    let consumedSourceRecordCount = records.length;
+    // Cursor offsets belong to the ordered database source, not to the number
+    // of cards that survive Node-side presentation filters. Advancing by the
+    // rendered count re-reads filtered source rows on the next request, which
+    // repeated exact IDs across RM11-03 and WSSA0018 cursor pages. The bounded
+    // RPC returns one lookahead row, so rawRows is the exact consumed window.
+    let consumedSourceRecordCount = sourceCursorAdvance(rawRows);
     if (firstPageOfLane) {
       const { data: directRows, error: directError } = await directRowsPromise;
       if (!directError) {
@@ -1483,9 +1524,13 @@ module.exports = async function handler(req, res) {
         // The cursor advances only past database rows actually shown. Direct
         // submissions are merged on the first page and must not cause unseen
         // source rows to be skipped on the next cursor page.
-        consumedSourceRecordCount = records
-          .filter(record => !directRecordIds.has(String(record.id)))
-          .length;
+        if (directRecords.length > 0) {
+          consumedSourceRecordCount = sourceCursorAdvance(
+            rawRows,
+            directRecords.length,
+            records.filter(record => !directRecordIds.has(String(record.id))).length,
+          );
+        }
       }
     }
     if (pagination === 'cursor') {
@@ -1536,6 +1581,7 @@ module.exports.EVIDENCE_CONTRACT = EVIDENCE_CONTRACT;
 module.exports.exactHttpUrl = exactHttpUrl;
 module.exports.referenceComparisonKey = referenceComparisonKey;
 module.exports.referenceIsPriceToken = referenceIsPriceToken;
+module.exports.rmReferenceIsMyrPriceArtifact = rmReferenceIsMyrPriceArtifact;
 module.exports.recordEvidenceCoverage = recordEvidenceCoverage;
 module.exports.mapDealerSubmission = mapDealerSubmission;
 module.exports.directSubmissionMatches = directSubmissionMatches;
@@ -1566,4 +1612,5 @@ module.exports.parseInventoryCursor = parseInventoryCursor;
 module.exports.encodeInventoryCursor = encodeInventoryCursor;
 module.exports.publicationBrandsFromSummary = publicationBrandsFromSummary;
 module.exports.boundedPage = boundedPage;
+module.exports.sourceCursorAdvance = sourceCursorAdvance;
 module.exports.buildLegacyMarketQueryParams = buildLegacyMarketQueryParams;
