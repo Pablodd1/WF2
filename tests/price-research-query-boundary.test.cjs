@@ -27,11 +27,11 @@ test('high-volume Price Research uses one bounded strict-source query', () => {
   assert.match(source, /seller_name,seller_phone/);
 });
 
-test('QNSA three-brand release sources are explicit and fail closed', () => {
+test('QNSA reviewed release sources are explicit and fail closed', () => {
   assert.match(source, /const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source'/);
   assert.match(source, /const QNSA_WTB_DEMAND_SOURCE = 'qnsa_rolex_patek_wtb_demand_source'/);
   assert.match(source, /process\.env\.PRICE_RESEARCH_SOURCE_VIEW/);
-  assert.match(source, /\['rolex', 'patek philippe', 'audemars piguet'\]\.includes\(normalizedBrand\)/);
+  assert.match(source, /\['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier'\]\.includes\(normalizedBrand\)/);
   assert.match(source, /table !== QNSA_PRICE_RESEARCH_SOURCE/);
   assert.match(source, /sourceTable === QNSA_PRICE_RESEARCH_SOURCE/);
   assert.match(source, /!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationBrandAllowed/);

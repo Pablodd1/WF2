@@ -23,7 +23,8 @@ test('Trading Floor filter rail stays visible and rating badges match the filter
   assert.match(floor, /md:sticky md:top-5/);
   assert.match(floor, /md:max-h-\[calc\(100vh-40px\)\]/);
   assert.match(floor, /overflow-y-auto/);
-  assert.match(floor, /★ \{Number\(listing\.seller_rating\)\.toFixed\(1\)\} \(\{Number\(listing\.seller_review_count\)\.toLocaleString\(\)\}\)/);
+  assert.match(floor, /Number\(listing\.seller_rating\)\.toFixed\(1\)/);
+  assert.match(floor, />Not rated<\/span>/);
   assert.match(floor, /seller_rating_evidence_status === 'SOURCE_SUPPLIED'/);
 });
 

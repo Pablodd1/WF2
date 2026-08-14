@@ -721,7 +721,7 @@ export default function TradingFloor() {
 
           <div className="rounded-md border bg-white/35 px-4 py-3" style={{ borderColor: BORDER }}>
             <div className="mb-3 flex flex-wrap gap-2" aria-label="Complete brand inventory shortcuts">
-              {['Rolex', 'Patek Philippe', 'Audemars Piguet'].map(brand => (
+              {(releaseBrands.length ? releaseBrands : ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille']).map(brand => (
                 <button
                   key={brand}
                   type="button"
@@ -791,7 +791,7 @@ export default function TradingFloor() {
         <div className="mb-5 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
             {loading && listings.length === 0 ? (
-              <><strong style={{ color: INK }}>Loading Rolex, Patek Philippe, and Audemars Piguet inventory…</strong></>
+              <><strong style={{ color: INK }}>Loading released watch inventory…</strong></>
             ) : (
               <>Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong>
                 {total === null
@@ -1214,7 +1214,9 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
           {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="" className="h-8 w-8 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
           <span>
             Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer'}</span>
-            {isRatedDealer && <span className="ml-1 text-xs font-semibold" style={{ color: GOLD_BRIGHT }} aria-label={hasNumericRating ? `Dealer rating ${Number(listing.seller_rating).toFixed(1)} from ${listing.seller_review_count} reviews` : `Rated dealer with ${listing.seller_review_count} positive feedback records`}>★ {hasNumericRating ? Number(listing.seller_rating).toFixed(1) : 'Rated'} ({Number(listing.seller_review_count).toLocaleString()})</span>}
+            {isRatedDealer
+              ? <span className="ml-1 text-xs font-semibold" style={{ color: GOLD_BRIGHT }} aria-label={hasNumericRating ? `Dealer rating ${Number(listing.seller_rating).toFixed(1)} from ${listing.seller_review_count} reviews` : `Rated dealer with ${listing.seller_review_count} positive feedback records`}>★ {hasNumericRating ? Number(listing.seller_rating).toFixed(1) : 'Rated'} ({Number(listing.seller_review_count).toLocaleString()})</span>
+              : <span className="ml-1 text-xs font-medium" style={{ color: MUTED }}>Not rated</span>}
           </span>
         </div>
       )}

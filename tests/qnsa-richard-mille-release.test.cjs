@@ -23,7 +23,8 @@ test('RM production workflow audits before explicit enable', () => {
 test('RM uses the reviewed QNSA Price Research path', () => {
   assert.match(research, /'richard mille'/);
   assert.match(research, /qnsa_bounded_price_research_rows/);
-  assert.match(research, /isRichardMille/);
+  assert.match(research, /usesBoundedReviewedSource/);
+  assert.match(research, /\['richard mille', 'cartier'\]\.includes\(brand\)/);
 });
 test('RM pending reviewed singles are admitted to the Trading Floor contract', () => {
   assert.match(trading, /brand === 'RICHARD MILLE'/);

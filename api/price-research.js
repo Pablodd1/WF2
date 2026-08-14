@@ -33,6 +33,7 @@ const { buildWtsReconciliation } = require('./_lib/price-research-reconciliation
 const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
 const { loadVerifiedDemandIdentityRows } = require('./_lib/verified-demand-identity.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
+const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -59,11 +60,12 @@ function isMissingRpcError(error) {
 }
 
 async function loadQnsaPriceRpcRows(client, args) {
-  const isRichardMille = String(args?.p_brand || '').trim().toLowerCase() === 'richard mille';
-  // The correction sidecar is intentionally three-brand scoped. RM must use
-  // the reviewed bounded source until a separately audited RM correction lane
-  // exists; an empty sidecar result is not evidence that the cohort is empty.
-  let result = isRichardMille
+  const brand = String(args?.p_brand || '').trim().toLowerCase();
+  const usesBoundedReviewedSource = ['richard mille', 'cartier'].includes(brand);
+  // The correction sidecar is intentionally three-brand scoped. Later brands
+  // use the reviewed bounded source; an empty sidecar result is not evidence
+  // that their cohort is empty.
+  let result = usesBoundedReviewedSource
     ? await client.rpc('qnsa_bounded_price_research_rows', args)
     : await client.rpc('qnsa_three_brand_fx_price_research_rows', args);
   if (result.error && isMissingRpcError(result.error)) {
@@ -76,9 +78,60 @@ function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille'].includes(normalizedBrand)
+    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
     : null;
+}
+
+function qnsaReferenceRowToMarketRow(row) {
+  const source = row?.row_data || row || {};
+  return {
+    id: source.id,
+    brand: source.canonical_brand || source.brand_scope,
+    model: source.catalog_model || source.model,
+    reference: source.normalized_reference || source.catalog_reference,
+    dial_color: source.dial_color || source.catalog_dial,
+    condition: source.condition,
+    listing_type: source.listing_type,
+    verdict: source.verdict || source.verification_status,
+    confidence: source.confidence,
+    raw_message: source.raw_message,
+    dealer_id: source.dealer_id,
+    source: source.source_file || 'MARIADB_IMMUTABLE_RAW',
+    seller_name: source.seller_name,
+    seller_phone: source.seller_phone,
+    price_raw: source.source_price_amount,
+    price_usd: source.verified_price_usd || source.workbook_price_usd,
+    currency: source.source_currency,
+    source_price_amount: source.source_price_amount,
+    source_currency: source.source_currency,
+    created_at: source.posting_date || source.imported_at,
+    listing_date: source.posting_date || source.imported_at,
+    listing_status: source.trading_floor_status,
+    thumbnail_url: source.user_image_url,
+    image_urls: source.user_image_url ? [source.user_image_url] : [],
+    has_images: source.has_exact_source_image === true,
+    owner_reviewed_identity: true,
+    contact_publication_approved: source.contact_publication_approved === true,
+  };
+}
+
+async function loadRuntimePriceRecoveryRows(client, { brand, referenceVariants }) {
+  if (!['richard mille', 'cartier'].includes(String(brand || '').trim().toLowerCase())) return [];
+  const pages = await Promise.all([...new Set(referenceVariants || [])].slice(0, 8).map(reference => client.rpc(
+    'qnsa_trading_floor_reference_rows',
+    { p_brand: brand, p_reference: reference, p_family: false, p_limit: 101, p_offset: 0 },
+  )));
+  const error = pages.find(page => page.error)?.error;
+  if (error) {
+    console.warn('[price-research] runtime source-price recovery unavailable:', error.message || error);
+    return [];
+  }
+  const candidates = pages.flatMap(page => page.data || [])
+    .map(qnsaReferenceRowToMarketRow)
+    .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS');
+  return (await recoverRecordPrices(candidates))
+    .filter(row => row.runtime_price_recovery_applied === true && Number(row.price_usd) > 0);
 }
 
 function sourceAlreadySuppressesDuplicates(sourceTable) {
@@ -554,7 +607,7 @@ module.exports = async function handler(req, res) {
     );
     const exactReviewedReleaseReference = isReviewedReleaseReference(brand, rawRef);
     const exactKnownReference = exactCatalogReference || exactReviewedReleaseReference;
-    const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet', 'richard mille']
+    const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier']
       .includes(brand.toLowerCase());
     // Reviewed workbooks remain first. When an exact catalog reference has no
     // workbook cohort, query the bounded approved watch-record lane directly;
@@ -748,6 +801,13 @@ module.exports = async function handler(req, res) {
         });
       }
     }
+    if (sourceTable === QNSA_PRICE_RESEARCH_SOURCE
+      && ['richard mille', 'cartier'].includes(String(brand || '').trim().toLowerCase())) {
+      const recoveredRows = await loadRuntimePriceRecoveryRows(client, { brand, referenceVariants });
+      const rowsById = new Map((rows || []).map(row => [String(row.id), row]));
+      for (const row of recoveredRows) rowsById.set(String(row.id), row);
+      rows = [...rowsById.values()];
+    }
     // Reviewed workbooks are the customer-visible canonical inventory. When an
     // exact reference has source-explicit USD evidence there, use that same
     // evidence for analytics. Legacy watch_records remains a fallback only.
@@ -903,11 +963,15 @@ module.exports = async function handler(req, res) {
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
-        const normalized = usingReviewedWorkbook || row.price_correction_applied === true
+        const normalized = usingReviewedWorkbook || row.price_correction_applied === true || row.runtime_price_recovery_applied === true
           ? {
               ...row,
               analytics_price_usd: row.price_usd,
-              price_normalization: row.price_correction_applied ? 'QUALIFIED_SIDECAR_CORRECTION' : null,
+              price_normalization: row.price_correction_applied
+                ? 'QUALIFIED_SIDECAR_CORRECTION'
+                : row.runtime_price_recovery_applied
+                  ? 'DATED_RUNTIME_SOURCE_RECOVERY'
+                  : null,
               analytics_currency_status: 'VERIFIED',
             }
           : normalizeMarketRow(row, referenceVariants);
@@ -1219,7 +1283,7 @@ module.exports = async function handler(req, res) {
       },
       admission_policy: {
         verdicts: ['APPROVED', ...HUMAN_REVIEW_VERDICTS],
-        human_review_scope: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille'],
+        human_review_scope: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier'],
         human_review_is_analytics_eligible_only_after_all_evidence_gates: true,
         approved_minimum_confidence: MIN_RELEASE_CONFIDENCE,
         human_review_minimum_confidence: null,

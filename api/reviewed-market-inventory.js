@@ -5,6 +5,7 @@ const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { listCatalogReferences, listEquivalentReferences } = require('./_lib/catalog');
 const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
+const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -48,7 +49,7 @@ async function loadQnsaReviewedReleaseSummary(client) {
     reconciled: !error,
     count_snapshot_available: !error,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille'].map(brand => ({
+    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier'].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,
@@ -74,7 +75,7 @@ function unavailableQnsaReleaseSummary() {
     reconciled: false,
     count_snapshot_available: false,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet'].map(brand => ({
+    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier'].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,
@@ -268,7 +269,8 @@ function isPriorityHumanReviewBrand(value) {
     || brand === 'PATEK PHILIPPE'
     || brand === 'PATEK'
     || brand === 'AUDEMARS PIGUET'
-    || brand === 'RICHARD MILLE';
+    || brand === 'RICHARD MILLE'
+    || brand === 'CARTIER';
 }
 
 function searchTermsMatch(record, query) {
@@ -1396,8 +1398,8 @@ module.exports = async function handler(req, res) {
     const eligibleRows = usedLegacyViewContract
       ? pageResult.records
       : pageResult.records.filter(isTradingFloorSourceRow);
-    let records = eligibleRows
-      .map(mapReviewedRecord)
+    const recoveredMarketRecords = await recoverRecordPrices(eligibleRows.map(mapReviewedRecord));
+    let records = recoveredMarketRecords
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
       .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
       .filter(record => !imagesOnly || record.has_images === true)
@@ -1408,7 +1410,8 @@ module.exports = async function handler(req, res) {
       .filter(record => !search || searchTermsMatch(record, search))
       .filter(record => !region || locationMatches(record.location, region))
       .filter(record => ratingMatches(record, rating))
-      .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
+      .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory)
+      .sort(compareInventoryForDisplay);
     let consumedSourceRecordCount = records.length;
     if (firstPageOfLane) {
       const { data: directRows, error: directError } = await directRowsPromise;
