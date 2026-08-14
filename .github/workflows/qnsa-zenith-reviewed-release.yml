@@ -85,6 +85,7 @@ jobs:
              AND rv.source_record_id=l.source_record_id
              AND rv.source_hash=l.source_hash
             WHERE l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
+              AND l.provenance_metadata->>'identity_reconciliation_status'='RELEASE_SAFE_EXACT_SOURCE_REFERENCE'
               AND l.raw_message_version_id IS NOT NULL
               AND COALESCE(l.source_record_id,'')<>''
               AND l.source_hash ~ '^[0-9a-f]{64}$'
@@ -110,6 +111,10 @@ jobs:
             'images',(SELECT count(*) FROM candidates WHERE btrim(COALESCE(image_url,source_media_url_candidate,'')) ~* '^https?://'),
             'contacts',(SELECT count(*) FROM candidates WHERE NULLIF(btrim(COALESCE(contact_number,from_number,'')),'') IS NOT NULL),
             'candidate_gate_failures',(SELECT count(*) FROM brand_rows)-(SELECT count(*) FROM candidates),
+            'identity_audit_safe',(SELECT count(*) FROM staging.qnsa_zenith_identity_reconciliation_audit
+              WHERE reconciliation_run_key='zenith-identity-20260814-v1' AND decision='RELEASE_SAFE'),
+            'identity_audit_quarantine',(SELECT count(*) FROM staging.qnsa_zenith_identity_reconciliation_audit
+              WHERE reconciliation_run_key='zenith-identity-20260814-v1' AND decision='QUARANTINE'),
             'missing_bundle_provenance',(SELECT count(*) FROM brand_rows WHERE provenance_metadata->>'bundle_status' IS NULL),
             'lineage_failures',(SELECT count(*) FROM brand_rows l LEFT JOIN public.raw_message_versions rv
               ON rv.id=l.raw_message_version_id AND rv.source_record_id=l.source_record_id AND rv.source_hash=l.source_hash
@@ -126,7 +131,8 @@ jobs:
           $e | ConvertTo-Json -Depth 5
           if($e.checkpoint_status -ne 'NORMALIZATION_STAGED' -or [long]$e.checkpoint_errors -ne 0 -or $e.checkpoint_reconciles -ne $true){throw 'Run is not reconciled'}
           if([long]$e.candidates -lt 1 -or [long]$e.wts -lt 1 -or [long]$e.references -lt 1){throw 'Zenith candidate gate failed'}
-          if([long]$e.candidate_gate_failures -ne 0){throw 'Zenith rows failed immutable release admission'}
+          if([long]$e.identity_audit_safe -ne 453 -or [long]$e.identity_audit_quarantine -ne 11){throw 'Zenith identity audit does not reconcile 453 safe plus 11 quarantined rows'}
+          if([long]$e.candidates -ne 453 -or [long]$e.candidate_gate_failures -ne 11){throw 'Zenith release must contain exactly 453 safe identities and withhold 11 quarantined rows'}
           if([long]$e.missing_bundle_provenance -ne 0){throw 'Zenith rows lack explicit bundle provenance'}
           if([long]$e.lineage_failures -ne 0){throw 'Zenith immutable lineage failure'}
           if([long]$e.high_confidence_multi_risk -ne 0){throw 'Zenith multi-listing candidates require quarantine before release'}
