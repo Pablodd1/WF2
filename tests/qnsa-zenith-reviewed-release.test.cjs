@@ -104,4 +104,6 @@ test('Zenith pagination globally orders exact images and verified USD before no-
   assert.match(orderedFeed, /qnsa_zenith_identity_reconciliation_audit/);
   assert.match(orderedFeed, /WHEN p_brand='Zenith'/);
   assert.match(workflow, /20260814191000_qnsa_zenith_global_price_order\.sql/);
+  assert.match(workflow, /Smoke ordered Zenith customer RPC directly/);
+  assert.match(workflow, /stored_verified_prices/);
 });
