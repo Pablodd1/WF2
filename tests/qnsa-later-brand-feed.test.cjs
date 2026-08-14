@@ -11,6 +11,8 @@ const migration = fs.readFileSync(path.join(root,
 const inventory = fs.readFileSync(path.join(root, 'api/reviewed-market-inventory.js'), 'utf8');
 const strictMigration = fs.readFileSync(path.join(root,
   'supabase/migrations/20260814110000_qnsa_later_brand_reference_gate.sql'), 'utf8');
+const strictBoundMigration = fs.readFileSync(path.join(root,
+  'supabase/migrations/20260814111500_qnsa_later_brand_reference_gate_bound.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(root,
   '.github/workflows/qnsa-later-brand-feed-hotfix.yml'), 'utf8');
 
@@ -39,6 +41,12 @@ test('strict later-brand wrapper rejects parser-artifact references', () => {
   assert.match(strictMigration, /qnsa_later_brand_page_rows\(/);
   assert.doesNotMatch(strictMigration, /CREATE INDEX|INSERT INTO staging\.listings|UPDATE staging\.listings/);
   assert.match(workflow, /invalid_rows/);
+});
+
+test('strict later-brand wrapper stays inside the proven 51-row latency bound', () => {
+  assert.match(strictBoundMigration, /LEAST\(GREATEST\(COALESCE\(p_limit, 51\), 1\), 51\)/);
+  assert.doesNotMatch(strictBoundMigration, /CREATE INDEX|INSERT INTO staging\.listings|UPDATE staging\.listings/);
+  assert.match(workflow, /20260814111500_qnsa_later_brand_reference_gate_bound\.sql/);
 });
 
 test('later-brand feed preserves immutable lineage and publication safety gates', () => {
