@@ -1209,7 +1209,7 @@ module.exports = async function handler(req, res) {
         const fallbackRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
+          body: JSON.stringify({ p_brand: brand || null, p_limit: 51,
             p_offset: requestedOffset, p_listing_type: listingType || null }),
         });
         if (fallbackRes.ok) {
