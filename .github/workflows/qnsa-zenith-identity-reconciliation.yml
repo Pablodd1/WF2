@@ -61,7 +61,10 @@ jobs:
         run: |
           $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
           $sql="SELECT public.audit_qnsa_zenith_identity_reconciliation('$env:NORMALIZED_RUN_KEY') evidence;"
-          $body=@{query=$sql;read_only=$true}|ConvertTo-Json -Depth 3
+          # The Management API read-only role cannot EXECUTE security-definer
+          # functions. This function is declared STABLE and contains one SELECT;
+          # use the administrative query role without adding a write statement.
+          $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
           $result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $e=$result[0].evidence;$e|ConvertTo-Json -Depth 6|Set-Content zenith-identity-audit.json;$e|ConvertTo-Json -Depth 6
           if([long]$e.cohort_rows -ne 464){throw 'Zenith identity cohort drifted from the frozen 464-row census'}
