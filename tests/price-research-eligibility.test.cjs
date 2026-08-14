@@ -84,10 +84,12 @@ test('excludes a priced row when explicit currency evidence is absent', () => {
   );
 });
 
-test('admits Rolex, Patek, and Audemars Piguet human-review WTS candidates to evidence gates only', () => {
+test('admits enabled reviewed-brand human-review WTS candidates to evidence gates only', () => {
   assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, verdict: 'Human Review' }), true);
   assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, brand: 'Patek Philippe', verdict: 'NEEDS_REVIEW' }), true);
   assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, brand: 'Audemars Piguet', verdict: 'NEEDS_REVIEW' }), true);
+  assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, brand: 'Richard Mille', verdict: 'NEEDS_REVIEW' }), true);
+  assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, brand: 'Cartier', verdict: 'NEEDS_REVIEW' }), true);
   assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, brand: 'Omega', verdict: 'Human Review' }), false);
   assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, listing_type: 'WTB', verdict: 'Human Review' }), false);
   assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, verdict: 'Human Review', trading_floor_status: 'suppressed_exact_duplicate' }), false);
