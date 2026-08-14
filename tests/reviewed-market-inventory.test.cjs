@@ -593,6 +593,28 @@ test('preserves a true MYR amount when the raw message directly labels the price
   }
 });
 
+test('final public response boundary clears an RM reference token even after later recovery', () => {
+  const sanitized = api.suppressPublicReferenceTokenPrice({
+    reference: 'RM001',
+    raw_message: 'NTQ/ RM 001',
+    price_usd: 0,
+    price_raw: 1,
+    currency: 'MYR',
+    source_price_amount: 1,
+    source_price_text: 'RM 001',
+    source_currency: 'MYR',
+    price_evidence_status: 'PRICE_NOT_SUPPLIED',
+    price_research_eligible: true,
+  });
+  assert.equal(sanitized.price_usd, null);
+  assert.equal(sanitized.price_raw, null);
+  assert.equal(sanitized.currency, null);
+  assert.equal(sanitized.source_price_amount, null);
+  assert.equal(sanitized.source_currency, null);
+  assert.equal(sanitized.price_evidence_status, 'REFERENCE_TOKEN_AS_PRICE');
+  assert.equal(sanitized.price_research_eligible, false);
+});
+
 test('verified USD remains ineligible until every identity field is present', () => {
   for (const overrides of [
     { model: null, catalog_model: null },

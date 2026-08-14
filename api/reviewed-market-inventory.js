@@ -824,6 +824,31 @@ function rmReferenceIsMyrPriceArtifact(reference, sourceAmount, sourceCurrency, 
   return !explicitMyrAmount;
 }
 
+function suppressPublicReferenceTokenPrice(record) {
+  if (!rmReferenceIsMyrPriceArtifact(
+    record?.reference,
+    record?.source_price_amount ?? record?.price_raw,
+    record?.source_currency ?? record?.currency,
+    record?.raw_message,
+  )) return record;
+  return {
+    ...record,
+    price_usd: null,
+    price_raw: null,
+    currency: null,
+    source_price_amount: null,
+    source_price_text: null,
+    source_currency: null,
+    analytics_fx_rate: null,
+    analytics_fx_source: null,
+    analytics_fx_date: null,
+    effective_price_source: null,
+    runtime_price_recovery_applied: false,
+    price_evidence_status: 'REFERENCE_TOKEN_AS_PRICE',
+    price_research_eligible: false,
+  };
+}
+
 function isPlausibleLaterBrandReference(brand, value) {
   const key = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!key || ['BRANDNEW', 'BREATHABLE', 'RM001EITHER'].includes(key)) return false;
@@ -1467,7 +1492,8 @@ module.exports = async function handler(req, res) {
           if (laterReviewedBrand && qnsaBroadPage) return !hasObviousCrossBrandConflict(row);
           return isTradingFloorSourceRow(row);
         });
-    const recoveredMarketRecords = await recoverRecordPrices(eligibleRows.map(mapReviewedRecord));
+    const recoveredMarketRecords = (await recoverRecordPrices(eligibleRows.map(mapReviewedRecord)))
+      .map(suppressPublicReferenceTokenPrice);
     let records = recoveredMarketRecords
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
       .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
@@ -1487,6 +1513,7 @@ module.exports = async function handler(req, res) {
       // release gates. Preserve those rows if generic cross-category mapping
       // removes the entire Cartier page.
       records = (await recoverRecordPrices(sourceRows.map(mapReviewedRecord)))
+        .map(suppressPublicReferenceTokenPrice)
         .filter(record => !record.multi_listing)
         .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
         .filter(record => !imagesOnly || record.has_images === true)
@@ -1582,6 +1609,7 @@ module.exports.exactHttpUrl = exactHttpUrl;
 module.exports.referenceComparisonKey = referenceComparisonKey;
 module.exports.referenceIsPriceToken = referenceIsPriceToken;
 module.exports.rmReferenceIsMyrPriceArtifact = rmReferenceIsMyrPriceArtifact;
+module.exports.suppressPublicReferenceTokenPrice = suppressPublicReferenceTokenPrice;
 module.exports.recordEvidenceCoverage = recordEvidenceCoverage;
 module.exports.mapDealerSubmission = mapDealerSubmission;
 module.exports.directSubmissionMatches = directSubmissionMatches;
