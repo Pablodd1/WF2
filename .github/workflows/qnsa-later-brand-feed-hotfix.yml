@@ -13,6 +13,7 @@ permissions:
 jobs:
   apply-and-smoke:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 10
     env:
       PROJECT_REF: qnsafosakvonzgfcsphh
