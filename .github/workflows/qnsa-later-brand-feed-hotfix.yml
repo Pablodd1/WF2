@@ -48,7 +48,10 @@ jobs:
             'cartier_rows',(SELECT count(*) FROM public.qnsa_later_brand_page_rows('Cartier',21,0,NULL))
           ) evidence;
           "@
-          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+          # The management API's read-only role cannot EXECUTE service-role-only
+          # functions. This is still a SELECT-only smoke query, but it must use
+          # the owner execution context to exercise the exact customer RPC.
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
             -Headers $headers -ContentType application/json -Body $body
           $e = $result[-1].evidence
