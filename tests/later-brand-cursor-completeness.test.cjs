@@ -46,14 +46,13 @@ test('RM11-03 and WSSA0018 cursor pages contain no repeated IDs at the 50-row bo
   }
 });
 
-test('later-brand SQL applies identity, safety, and reference gates before LIMIT/OFFSET', () => {
-  const eligibleCte = migration.match(/WITH eligible_ids AS MATERIALIZED \(([\s\S]*?)\n  \)\n  SELECT/)?.[1] || '';
-  assert.match(eligibleCte, /JOIN public\.raw_message_versions/);
-  assert.match(eligibleCte, /bundle_child_pending_review/);
-  assert.match(eligibleCte, /suppressed_exact_duplicate/);
-  assert.match(eligibleCte, /normalized\.reference_key ~ '\^RM/);
-  assert.match(eligibleCte, /normalized\.reference_key ~ '\^W/);
-  assert.match(eligibleCte, /ORDER BY l\.reference_normalized ASC NULLS LAST, l\.id ASC[\s\S]*LIMIT[\s\S]*OFFSET/);
+test('later-brand SQL stays inside one proven bounded source window', () => {
+  assert.match(migration, /qnsa_later_brand_page_rows\(\s*p_brand,\s*51,/);
+  assert.match(migration, /normalized\.reference_key ~ '\^RM/);
+  assert.match(migration, /normalized\.reference_key ~ '\^W/);
+  assert.match(migration, /LIMIT LEAST\(GREATEST\(COALESCE\(p_limit, 51\), 1\), 51\)/);
+  assert.doesNotMatch(migration, /WITH eligible_ids AS MATERIALIZED/);
+  assert.doesNotMatch(migration, /CREATE\s+INDEX/i);
   assert.doesNotMatch(migration, /INSERT INTO staging\.listings|UPDATE staging\.listings|DELETE FROM staging\.listings/);
 });
 
