@@ -26,6 +26,7 @@ test('hotfix workflow is pinned, bounded, and adds no storage-heavy index', () =
   assert.match(workflow, /environment: production/);
   assert.match(workflow, /APPLY_QNSA_LATER_BRAND_FEED/);
   assert.match(workflow, /statement_timeout='8s'/);
+  assert.match(workflow, /read_only = \$false/);
   assert.match(workflow, /qnsa_later_brand_page_rows\('Richard Mille',21,0,NULL\)/);
   assert.match(workflow, /CREATE\\s\+INDEX/);
 });
