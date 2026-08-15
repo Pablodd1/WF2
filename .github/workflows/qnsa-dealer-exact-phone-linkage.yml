@@ -76,6 +76,7 @@ jobs:
           $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815163000_qnsa_dealer_linkage_uuid_cursor_fix.sql')
           $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815173000_qnsa_dealer_global_raw_phone_scan.sql')
           $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815174000_qnsa_dealer_global_raw_scan_timeout_repair.sql')
+          $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815175000_qnsa_dealer_raw_page_lateral_lookup.sql')
           $compileSql = $migration -replace '(?im)^\s*(BEGIN|COMMIT);\s*$', ''
           $compileBody = @{ query = "BEGIN;`n$compileSql`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post `
@@ -128,6 +129,7 @@ jobs:
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815163000_qnsa_dealer_linkage_uuid_cursor_fix.sql')
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815173000_qnsa_dealer_global_raw_phone_scan.sql')
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815174000_qnsa_dealer_global_raw_scan_timeout_repair.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815175000_qnsa_dealer_raw_page_lateral_lookup.sql')
           $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post `
             -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `

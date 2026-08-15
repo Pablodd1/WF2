@@ -83,11 +83,37 @@ async function run(options = {}) {
     EXPLAIN (FORMAT TEXT, COSTS TRUE)
     SELECT listing.id FROM staging.listings AS listing
     WHERE listing.raw_message_version_id = '00000000-0000-0000-0000-000000000000'::uuid`, true, fetchImpl);
+  const boundedJoinPlanRows = await managementQuery(config, `
+    EXPLAIN (FORMAT TEXT, COSTS TRUE)
+    WITH raw_page AS MATERIALIZED (
+      SELECT raw_version.id, raw_version.source_record_id, raw_version.source_hash
+      FROM public.raw_message_versions AS raw_version
+      WHERE raw_version.id > COALESCE(
+        NULL::uuid, '00000000-0000-0000-0000-000000000000'::uuid
+      )
+      ORDER BY raw_version.id
+      LIMIT ${pageSize}
+    )
+    SELECT listing.id
+    FROM raw_page AS page
+    JOIN LATERAL (
+      SELECT candidate_listing.id
+      FROM staging.listings AS candidate_listing
+      WHERE candidate_listing.raw_message_version_id=page.id
+        AND candidate_listing.source_record_id=page.source_record_id
+        AND candidate_listing.source_hash=page.source_hash
+      OFFSET 0
+    ) AS listing ON true`, true, fetchImpl);
   const rawPlan = (rawPlanRows || []).map(row => String(row['QUERY PLAN'] || row['query plan'] || '')).join('\n');
   const lineagePlan = (lineagePlanRows || []).map(row => String(row['QUERY PLAN'] || row['query plan'] || '')).join('\n');
+  const boundedJoinPlan = (boundedJoinPlanRows || [])
+    .map(row => String(row['QUERY PLAN'] || row['query plan'] || '')).join('\n');
   if (!/raw_message_versions_pkey/i.test(rawPlan)
-      || !/idx_staging_mariadb_raw_version/i.test(lineagePlan)) {
-    throw new Error('EXPLAIN did not select the existing raw-version lineage indexes; linkage is blocked');
+      || !/idx_staging_mariadb_raw_version/i.test(lineagePlan)
+      || !/Nested Loop/i.test(boundedJoinPlan)
+      || !/raw_message_versions_pkey/i.test(boundedJoinPlan)
+      || !/idx_staging_mariadb_raw_version/i.test(boundedJoinPlan)) {
+    throw new Error('EXPLAIN did not preserve the bounded raw-page-first lineage plan; linkage is blocked');
   }
 
   const before = await reconciliation(config, fetchImpl);
