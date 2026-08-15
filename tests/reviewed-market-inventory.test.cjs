@@ -947,3 +947,24 @@ test('reconciled Zenith singles are not re-quarantined by the generic bundle spl
     raw_message: 'Zenith 03.A384.400/385.C855 and Breitling V13375101C1X1',
   })), true);
 });
+
+test('Zenith exact Trading Floor lookups use the reconciled punctuation-preserving lane', () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, '../supabase/migrations/20260815121500_qnsa_zenith_exact_reference_rows.sql'),
+    'utf8',
+  );
+  assert.match(source, /normalizedBrand === 'zenith'[\s\S]*qnsa_zenith_reference_rows/);
+  assert.match(source, /p_reference: request\.reference/);
+  assert.match(source, /brand === 'ZENITH'/);
+  assert.match(migration, /l\.reference_normalized = btrim\(p_reference\)/);
+  assert.doesNotMatch(migration, /regexp_replace\([^\n]*p_reference|LIKE\s+p_reference/i);
+  assert.match(migration, /qnsa_zenith_identity_reconciliation_audit[\s\S]*audit\.decision = 'RELEASE_SAFE'/);
+  assert.match(migration, /identity_reconciliation_status'[\s\S]*RELEASE_SAFE_EXACT_SOURCE_REFERENCE/);
+  assert.match(migration, /JOIN public\.raw_message_versions[\s\S]*rv\.source_hash = l\.source_hash/);
+  assert.match(migration, /provenance_metadata->>'bundle_status' = 'SINGLE_CANDIDATE'/);
+  assert.match(migration, /parent_id IS NULL[\s\S]*is_bundle, false\) = false/);
+  assert.match(migration, /publication_lane', 'QNSA_ZENITH_REVIEWED_V1'/);
+  assert.match(migration, /'seller_phone', CASE WHEN COALESCE\(l\.contact_consent, false\) THEN/);
+  assert.match(migration, /'contact_publication_approved', COALESCE\(l\.contact_consent, false\)/);
+  assert.doesNotMatch(migration, /'contact_publication_approved'[\s\S]{0,300}from_number[\s\S]{0,80}IS NOT NULL/);
+});

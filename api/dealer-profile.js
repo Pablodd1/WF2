@@ -5,6 +5,7 @@ const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
 const { legacyProfilePayload, ratedProfilePayload, sourceProfilePayload } = require('./_lib/dealer-directory-source.cjs');
+const { loadCompletedDealerIds, profileWithLinkageState } = require('./_lib/dealer-linkage-state.cjs');
 
 function buildDealerStats(listings, dealer, verifiedPhone, aggregate = null) {
   const dates = listings
@@ -119,9 +120,11 @@ module.exports = async function handler(req, res) {
       p_offset: 0,
     });
     if (!canonicalError && canonicalProfile?.dealer) {
+      const completedDealerIds = await loadCompletedDealerIds(client, [canonicalProfile.dealer.id]);
+      const hasCompleteLinkage = completedDealerIds.has(canonicalProfile.dealer.id);
       return res.status(200).json({
         success: true,
-        ...canonicalProfile,
+        ...profileWithLinkageState(canonicalProfile, hasCompleteLinkage),
         raw_message_access: true,
         source_provenance: {
           source_system: 'QNSA_CANONICAL_DEALER_DIRECTORY',

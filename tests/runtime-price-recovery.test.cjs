@@ -12,6 +12,7 @@ test('recovers only explicit currency evidence and never promotes a bare dollar 
   ]);
   assert.equal(rows[0].price_usd, 153000);
   assert.equal(rows[0].source_currency, 'USDT');
+  assert.equal(rows[0].price_evidence_status, 'SOURCE_EXPLICIT_USD_MATCH');
   assert.equal(rows[1].price_usd, null);
 });
 
@@ -84,4 +85,5 @@ test('preserves a genuine MYR amount for an RM reference', async () => {
   assert.equal(row.source_price_amount, 500000);
   assert.equal(row.source_currency, 'MYR');
   assert.equal(row.runtime_price_recovery_applied, true);
+  assert.equal(row.price_evidence_status, 'EXPLICIT_SOURCE_FX_CONVERTED');
 });

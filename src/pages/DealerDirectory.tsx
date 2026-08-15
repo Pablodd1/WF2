@@ -14,6 +14,7 @@ interface DealerStats {
   posting_years: number;
   snapshot_count?: number;
   current_counts_are_dynamic?: boolean;
+  current_counts_scope?: string;
 }
 
 interface DealerSummary {
@@ -37,6 +38,7 @@ interface DealerSummary {
   trust_status?: string | null;
   source_crawled_at?: string | null;
   legacy_profile_id?: string | null;
+  listing_linkage_status?: string | null;
 }
 
 type DirectoryView = 'reference' | 'rated' | 'top-rated' | 'legacy';
@@ -112,6 +114,7 @@ export default function DealerDirectory() {
         <div className="grid gap-px bg-white/10 md:grid-cols-2 xl:grid-cols-3">
           {dealers.map(dealer => {
             const stats = dealer.stats;
+            const linkagePending = dealer.listing_linkage_status === 'PENDING_EXACT_LISTING_LINKAGE';
             const name = dealer.display_name || dealer.company_name || 'Verified dealer';
             return (
               <article key={dealer.id} className="group relative min-h-72 bg-[#101016] p-6 transition-colors hover:bg-[#15151d]">
@@ -134,10 +137,11 @@ export default function DealerDirectory() {
                   <span className="flex items-center gap-1"><CalendarDays size={13} /> {dealer.member_since || (dealer.verified_at ? `Verified ${new Date(dealer.verified_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : 'Member date unavailable')}</span>
                 </div>
                 <div className="mt-7 grid grid-cols-3 border-t border-white/10 pt-5 text-center">
-                  <Metric label={view === 'legacy' ? 'Captured WTS' : 'For sale'} value={stats?.wts_posts ?? null} />
-                  <Metric label={view === 'legacy' ? 'Captured WTB' : 'Looking for'} value={stats?.wtb_posts ?? null} />
+                  <Metric label={view === 'legacy' ? 'Captured WTS' : 'For sale'} value={stats?.wts_posts ?? null} pending={linkagePending} />
+                  <Metric label={view === 'legacy' ? 'Captured WTB' : 'Looking for'} value={stats?.wtb_posts ?? null} pending={linkagePending} />
                   <Metric label="Groups" value={dealer.whatsapp_group_count ?? null} />
                 </div>
+                {view === 'reference' && linkagePending && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Listing activity is awaiting exact verified seller linkage; zero is not inferred.</p>}
                 {view === 'legacy' && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Historical snapshot · {stats?.snapshot_count || 0} captured observations · live totals require verified listing lineage.</p>}
                 <div className="mt-5 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
                   <Link to={`/dealer/profile/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
@@ -156,6 +160,6 @@ export default function DealerDirectory() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: number | null }) {
-  return <div><div className="font-mono text-base text-white">{value == null ? '—' : Number(value).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-white/35">{label}</div></div>;
+function Metric({ label, value, pending = false }: { label: string; value: number | null; pending?: boolean }) {
+  return <div><div className="font-mono text-base text-white">{pending ? 'Pending' : value == null ? '—' : Number(value).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase tracking-wider text-white/35">{label}</div></div>;
 }

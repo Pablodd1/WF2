@@ -2,6 +2,7 @@
 
 const { getClient } = require('./_lib/supabase');
 const { legacyProfiles, ratedProfiles, topRatedProfiles, withoutPrivateProvenance } = require('./_lib/dealer-directory-source.cjs');
+const { directoryDealersWithLinkageState, loadCompletedDealerIds } = require('./_lib/dealer-linkage-state.cjs');
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value || ''), 10);
@@ -109,12 +110,14 @@ module.exports = async function handler(req, res) {
       p_offset: from,
     });
     if (!canonicalError && canonicalPage) {
+      const canonicalDealers = canonicalPage.dealers || [];
+      const completedDealerIds = await loadCompletedDealerIds(client, canonicalDealers.map(dealer => dealer.id));
       return res.status(200).json({
         success: true,
         page,
         pageSize,
         total: Number(canonicalPage.total || 0),
-        dealers: canonicalPage.dealers || [],
+        dealers: directoryDealersWithLinkageState(canonicalDealers, completedDealerIds),
         source: 'canonical-database',
       });
     }

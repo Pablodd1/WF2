@@ -20,6 +20,7 @@ export const COMMUNITY_GROUPS = [
 const MARKET_LINKS = [
   ['Trading Floor', '/trading'],
   ['Price Research', '/price-research'],
+  ['Luxury Item Research', '/luxury-research'],
   ['Dealer Directory', '/dealers'],
   ['POST IT', '/dealer/post'],
   ['Workspace', '/dealer/workspace'],

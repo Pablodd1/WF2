@@ -2,6 +2,7 @@
 
 const { extractPriceObservations, explicitIntent, parseNumber } = require('../../api/_lib/normalization-v4.cjs');
 const { classify } = require('./audit-non-watch.cjs');
+const { normalizeLuxuryIdentity } = require('../../api/_lib/luxury-item-normalization.cjs');
 
 const ACCEPTABLE_PRICE_EVIDENCE = new Set([
   'explicit_line_currency',
@@ -120,16 +121,19 @@ function normalizedPrice(candidate) {
 function nonWatchCandidate(source, category) {
   const raw = source.raw_data || {};
   const prices = extractPriceObservations(source.raw_message || '', {});
+  const identity = normalizeLuxuryIdentity(source, category);
   const candidate = {
     raw_line: source.raw_message || null,
-    brand: text(raw.brand),
+    brand: identity.brand,
     // Non-watch source rows do not have a watch model/reference contract. Keep
     // the source title as the customer-facing item identity when no structured
     // model was supplied; the immutable raw message remains the audit source.
-    model: text(raw.model) || text(raw.title),
-    reference: text(raw.reference || raw.normalized_reference),
+    model: identity.model,
+    reference: identity.reference,
     dial_color: null,
-    condition: null,
+    condition: identity.condition,
+    luxury_item_name: identity.luxury_item_name,
+    luxury_item_type: identity.luxury_item_type,
     listing_type: sourceIntent(source),
     category,
     prices,

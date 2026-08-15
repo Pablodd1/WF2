@@ -8,6 +8,7 @@ const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { deterministicCandidateCount } = require('./_lib/unsplit-bundle-filter.cjs');
 const { classifyZenithIdentityEvidence } = require('./_lib/zenith-identity-evidence.cjs');
+const { normalizeLuxuryIdentity } = require('./_lib/luxury-item-normalization.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -305,7 +306,8 @@ function isPriorityHumanReviewBrand(value) {
     || brand === 'PATEK'
     || brand === 'AUDEMARS PIGUET'
     || brand === 'RICHARD MILLE'
-    || brand === 'CARTIER';
+    || brand === 'CARTIER'
+    || brand === 'ZENITH';
 }
 
 function searchTermsMatch(record, query) {
@@ -510,6 +512,7 @@ function isTradingFloorSourceRow(row) {
   const reviewedQnsaRelease = [
     'QNSA_ROLEX_PATEK_REVIEWED_V1',
     'QNSA_GENERAL_MARKET_FEED_V1',
+    'QNSA_NON_WATCH_FEED_V1',
     'QNSA_REVIEWED_LATER_BRAND_V1',
     'QNSA_SIX_BRAND_IMAGE_LANE_V1',
   ]
@@ -544,6 +547,10 @@ function mapDealerSubmission(row) {
   const sellerPhone = cleanExactText(claimed.poster_phone, 50) || null;
   const hasCompleteIdentity = row.category !== 'WATCH' || Boolean(brand && model && reference && dialColor);
   const priceEligible = row.category === 'WATCH' && hasCompleteIdentity && priceUsd !== null;
+  const luxuryIdentity = row.category === 'WATCH' ? null : normalizeLuxuryIdentity({
+    raw_message: row.raw_message,
+    raw_data: { brand, model, title: claimed.title, reference },
+  }, row.category);
   const evidenceCoverage = recordEvidenceCoverage({
     brand, model, reference, dialColor, sellerName, sellerPhone,
     contactApproved: true, exactImageUrl: imageUrls[0] || null,
@@ -552,6 +559,8 @@ function mapDealerSubmission(row) {
   });
   return {
     id: row.id, brand, model, reference,
+    luxury_item_name: luxuryIdentity?.luxury_item_name || null,
+    luxury_item_type: luxuryIdentity?.luxury_item_type || null,
     reference_search_key: reference ? referenceComparisonKey(reference) : null,
     raw_reference: reference, normalized_reference: reference, catalog_reference: null,
     reference_invalid_reason: null, has_complete_identity: hasCompleteIdentity,
@@ -713,11 +722,18 @@ function mapReviewedRecord(row) {
     invalidReferenceReason: invalidReference ? 'PRICE_CURRENCY_TOKEN' : null,
     priceEligible,
   });
+  const itemCategory = effectiveItemCategory(row);
+  const luxuryIdentity = itemCategory === 'WATCH' ? null : normalizeLuxuryIdentity({
+    raw_message: row.raw_message,
+    raw_data: { brand, model: storedModel, title: storedModel, reference },
+  }, itemCategory);
 
   return {
     id: row.id,
     brand,
     model,
+    luxury_item_name: luxuryIdentity?.luxury_item_name || null,
+    luxury_item_type: luxuryIdentity?.luxury_item_type || null,
     reference,
     reference_search_key: invalidReference ? null : referenceSearchKey,
     raw_reference: row.raw_reference || null,
@@ -769,7 +785,7 @@ function mapReviewedRecord(row) {
     source_row_number: row.source_row_number,
     source_record_id: row.source_record_id || null,
     location: evidenceValuePresent(row.location || row.region) ? (row.location || row.region) : null,
-    item_category: effectiveItemCategory(row),
+    item_category: itemCategory,
     publication_state: row.publication_state || 'APPROVED',
     verification_label: 'Listing',
     data_quality_review_required: pendingVerification,
@@ -1431,6 +1447,12 @@ module.exports = async function handler(req, res) {
     const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
     const sixBrandBroadScope = qnsaBroadPage && watchFeed
       && (!brand || SIX_REVIEWED_WATCH_BRANDS.includes(brand));
+    if (sixBrandBroadScope && pagination !== 'cursor' && page > 1) {
+      return res.status(400).json({
+        status: 'error',
+        error: 'Six-brand Trading Floor pagination requires a cursor after the first page.',
+      });
+    }
     if (sixBrandBroadScope && pagination === 'cursor' && cursorProvided
       && page > 1 && !inventoryCursor?.brandKeysets) {
       return res.status(400).json({
@@ -1551,9 +1573,10 @@ module.exports = async function handler(req, res) {
           headers: { 'Content-Type': 'application/json' },
         });
       } else {
+      const nonWatchFeed = ['HANDBAG', 'JEWELRY', 'ACCESSORY'].includes(itemCategory);
       let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
         ? (laterReviewedBrand ? 'qnsa_later_brand_candidate_stride_page' : 'qnsa_trading_floor_page_rows')
-        : 'qnsa_market_feed_page_rows'}`, {
+        : (nonWatchFeed ? 'qnsa_non_watch_market_page_rows' : 'qnsa_market_feed_page_rows')}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(watchFeed
@@ -1563,7 +1586,6 @@ module.exports = async function handler(req, res) {
             : { p_brand: brand || null, p_limit: qnsaBrandScanLimit,
                 p_offset: requestedOffset, p_listing_type: listingType || null })
           : {
-              p_brand: brand || null,
               p_category: itemCategory,
               p_limit: qnsaBrandScanLimit,
               p_offset: requestedOffset,
@@ -1573,6 +1595,23 @@ module.exports = async function handler(req, res) {
               p_posted_after: postedAfter,
             }),
       });
+      if (!pageRowsRes.ok && nonWatchFeed && [400, 404].includes(pageRowsRes.status)) {
+        // Preserve availability during the narrow API-before-migration window.
+        pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            p_brand: brand || null,
+            p_category: itemCategory,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: listingType || null,
+            p_images_only: imagesOnly,
+            p_location: region || null,
+            p_posted_after: postedAfter,
+          }),
+        });
+      }
       if (!pageRowsRes.ok && laterReviewedBrand
         && shouldFallbackLaterBrandCandidate(pageRowsRes.status)) {
         // Application and forward migration can deploy independently. During
@@ -1732,11 +1771,19 @@ module.exports = async function handler(req, res) {
       const rpcRequests = apExactReferences.length
         ? []
         : [{ reference: rpcReference, family: Boolean(familyReference || patekBaseEquivalent) }];
+      const zenithExactReference = normalizedBrand === 'zenith' && !familyReference;
       const rpcResponses = await Promise.all(rpcRequests.map(request => fetch(
-        `${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_reference_rows`,
+        `${process.env.SUPABASE_URL}/rest/v1/rpc/${zenithExactReference
+          ? 'qnsa_zenith_reference_rows'
+          : 'qnsa_trading_floor_reference_rows'}`,
         {
           method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify(zenithExactReference ? {
+            p_reference: request.reference,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: listingType || null,
+          } : {
             p_brand: brand,
             p_reference: request.reference,
             p_family: request.family,

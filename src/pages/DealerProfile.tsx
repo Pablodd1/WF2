@@ -18,6 +18,7 @@ interface ProfilePayload {
   listing_total?: number;
   source_provenance?: { source_system: string; crawled_at: string | null; captured_listing_count?: number; captured_review_count?: number };
   dynamic_activity_status?: string;
+  listing_linkage_status?: string;
   raw_message_access: boolean;
 }
 
@@ -40,6 +41,7 @@ export default function DealerProfile() {
   const { dealer, stats, listings } = payload;
   const isPublicSourceProfile = dealer.source_system === 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT';
   const isLegacyProfile = dealer.source_system === 'WATCHFACTS_LEGACY_PROFILE_AUDIT_20260811';
+  const linkagePending = payload.listing_linkage_status === 'PENDING_EXACT_LISTING_LINKAGE';
   const name = dealer.display_name || dealer.company_name || 'Verified dealer';
   const count = (value: number | null | undefined) => value == null ? 'Not available' : Number(value).toLocaleString();
   const date = (value: string | null | undefined) => {
@@ -88,11 +90,12 @@ export default function DealerProfile() {
 
       <section className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-12">
         <div className="grid gap-px bg-white/10 sm:grid-cols-3">
-          <ProfileMetric label="For sale posts" value={count(stats?.wts_count)} />
-          <ProfileMetric label="Want to buy posts" value={count(stats?.wtb_count)} />
+          <ProfileMetric label="For sale posts" value={linkagePending ? 'Pending linkage' : count(stats?.wts_count)} />
+          <ProfileMetric label="Want to buy posts" value={linkagePending ? 'Pending linkage' : count(stats?.wtb_count)} />
           <ProfileMetric label="Common groups" value={count(stats?.group_count)} />
         </div>
         <p className="mt-5 text-xs text-white/40">First post shown: {date(stats?.first_post)} · Latest post shown: {date(stats?.latest_post)}. Import timestamps are never substituted for missing source dates.</p>
+        {linkagePending && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">WTS, WTB, listing totals, and first/latest post dates are awaiting exact verified seller-to-listing linkage. Missing linkage is not displayed as zero activity.</p>}
         {isLegacyProfile && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">{stats?.current_counts_are_dynamic ? 'WTS/WTB totals and the listing cards below are calculated dynamically from the current released Rolex, Patek Philippe, and Audemars Piguet listing lineage.' : `Captured WTS/WTB values are historical source snapshots across ${stats?.snapshot_range?.snapshot_count || 0} observations. ${payload.dynamic_activity_status === 'UNLINKED_IDENTITY_NAMESPACE' ? 'This legacy ID has no exact match in the current released listing identity namespace, so no listing ownership is inferred by name.' : 'They do not replace live totals calculated from verified listing lineage.'}`}</p>}
         {stats?.verified_contact_info?.phone && (
           <a className="mt-4 inline-flex items-center gap-2 text-sm text-[#d4b87a] hover:text-white" href={`https://wa.me/${stats.verified_contact_info.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer">

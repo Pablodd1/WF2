@@ -205,6 +205,11 @@ test('six-brand route excludes the non-paginated direct-submission overlay', () 
     /Six-brand pages use only the canonical immutable\/staging release[\s\S]*unp[\s\S]*seventh stream/);
 });
 
+test('six-brand page two requires the composite cursor instead of repeating page one', () => {
+  assert.match(source,
+    /sixBrandBroadScope && pagination !== 'cursor' && page > 1[\s\S]*requires a cursor/);
+});
+
 test('bounded refill crosses initial sparse windows and populates the same customer page', async () => {
   const boundaries = [row(300, 23), row(200, 22)];
   const eligible = { ...row(100, 21), brand_scope: 'Rolex' };

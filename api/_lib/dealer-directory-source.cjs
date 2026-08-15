@@ -251,9 +251,9 @@ function sourceProfilePayload(identity) {
     success: true,
     dealer: withoutPrivateProvenance(summary),
     stats: {
-      wts_count: nonNegativeInteger(profile.wts) || publicListings.filter(row => row.listing_type === 'WTS').length,
-      wtb_count: nonNegativeInteger(profile.wtb) || publicListings.filter(row => row.listing_type === 'WTB').length,
-      group_count: nonNegativeInteger(profile.common_groups) || 0,
+      wts_count: nonNegativeInteger(profile.wts) ?? publicListings.filter(row => row.listing_type === 'WTS').length,
+      wtb_count: nonNegativeInteger(profile.wtb) ?? publicListings.filter(row => row.listing_type === 'WTB').length,
+      group_count: nonNegativeInteger(profile.common_groups) ?? 0,
       first_post: dates[0]?.toISOString() || null,
       latest_post: dates.at(-1)?.toISOString() || null,
       verified_contact_info: null,

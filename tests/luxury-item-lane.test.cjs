@@ -1,0 +1,88 @@
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { normalizeLuxuryIdentity } = require('../api/_lib/luxury-item-normalization.cjs');
+const { buildLuxuryResearchCoverage } = require('../api/_lib/luxury-research-coverage.cjs');
+const { buildPublicationReview } = require('../tools/mariadb-live/publication-review.cjs');
+
+function source(overrides = {}) {
+  return {
+    source_record_id: 'luxury-1',
+    source_id: 1,
+    raw_sha256: 'a'.repeat(64),
+    source_created_on: '2026-08-15T00:00:00Z',
+    raw_message_source: 'description',
+    raw_message: 'WTS Hermes Birkin 30 Togo leather mint $25,000',
+    raw_data: { title: 'Hermes Birkin 30 Togo handbag', price: 25000, from_name: 'Dealer One' },
+    ...overrides,
+  };
+}
+
+test('normalizes explicit non-watch maker, item name, type, condition, and source identity', () => {
+  assert.deepEqual(normalizeLuxuryIdentity(source(), 'HANDBAG'), {
+    brand: 'Hermes', model: 'Hermes Birkin 30 Togo handbag', reference: null,
+    condition: 'Used - Like New', luxury_item_name: 'Hermes Birkin 30 Togo handbag', luxury_item_type: 'Birkin',
+  });
+});
+
+test('publication review keeps luxury identity and excludes it from watch Price Research', () => {
+  const reviewed = buildPublicationReview(source(), {
+    source_record_id: 'luxury-1', source_hash: 'a'.repeat(64), bundle_status: 'NO_CANDIDATE',
+    review_disposition: 'READY_FOR_HUMAN_APPROVAL', review_reasons: [],
+    normalization: { normalization_version: 'test', proposed_candidates: [] },
+    catalog_confirmation: { confirmed: false },
+  });
+  assert.equal(reviewed.category, 'HANDBAG');
+  assert.equal(reviewed.bundle_status, 'SINGLE_CANDIDATE');
+  assert.equal(reviewed.candidate.brand, 'Hermes');
+  assert.equal(reviewed.candidate.luxury_item_type, 'Birkin');
+  assert.equal(reviewed.price_research_status, 'INELIGIBLE_NON_WATCH');
+});
+
+test('separate luxury research totals reconcile by category, intent, price, and brand', () => {
+  const coverage = buildLuxuryResearchCoverage([
+    { category: 'HANDBAG', brand: 'Hermes', listing_type: 'WTS', supplied_price: true, row_count: 4 },
+    { category: 'HANDBAG', brand: 'Hermes', listing_type: 'WTS', supplied_price: false, row_count: 2 },
+    { category: 'HANDBAG', brand: 'Chanel', listing_type: 'WTB', supplied_price: false, row_count: 3 },
+    { category: 'JEWELRY', brand: 'Cartier', listing_type: 'WTS', supplied_price: true, row_count: 5 },
+    { category: 'WATCH', brand: 'Rolex', listing_type: 'WTS', supplied_price: true, row_count: 999 },
+  ]);
+  assert.equal(coverage.total_listing_count, 14);
+  assert.deepEqual(coverage.categories[0], {
+    category: 'HANDBAG', listing_count: 9, wts_with_price: 4, wts_without_price: 2, wtb_activity: 3,
+    brands: [{ brand: 'Hermes', listing_count: 6 }, { brand: 'Chanel', listing_count: 3 }],
+  });
+});
+
+test('Trading Floor uses a storage-light bounded non-watch RPC with safe fallback', () => {
+  const sourceText = fs.readFileSync(path.join(__dirname, '../api/reviewed-market-inventory.js'), 'utf8');
+  const migration = fs.readFileSync(path.join(__dirname, '../supabase/migrations/20260815103000_qnsa_non_watch_bounded_feed.sql'), 'utf8');
+  assert.match(sourceText, /qnsa_non_watch_market_page_rows/);
+  assert.match(sourceText, /QNSA_NON_WATCH_FEED_V1/);
+  assert.match(sourceText, /nonWatchFeed[\s\S]*\[404, 400\]/);
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.qnsa_non_watch_market_page_rows/);
+  assert.match(migration, /l\.category = v_category/);
+  assert.match(migration, /l\.provenance_metadata->>'bundle_status' = 'SINGLE_CANDIDATE'/);
+  assert.match(migration, /CASE WHEN COALESCE\(l\.contact_consent, false\)[\s\S]*THEN COALESCE[\s\S]*ELSE NULL END AS seller_phone/);
+  assert.match(migration, /COALESCE\(l\.contact_consent, false\) AS contact_publication_approved/);
+  assert.match(migration, /JOIN public\.raw_message_versions rv[\s\S]*rv\.id = l\.raw_message_version_id[\s\S]*rv\.source_record_id = l\.source_record_id[\s\S]*rv\.source_hash = l\.source_hash/);
+  assert.match(migration, /conversion_timestamp IS NOT NULL[\s\S]*conversion_source/);
+  assert.doesNotMatch(migration, /CREATE\s+(?:UNIQUE\s+)?INDEX/i);
+});
+
+test('Luxury Item Research is a separate route and watch research stays isolated', () => {
+  const app = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '../src/pages/LuxuryResearch.tsx'), 'utf8');
+  const summary = fs.readFileSync(path.join(__dirname, '../api/live-release-summary.js'), 'utf8');
+  assert.match(app, /path="\/luxury-research"/);
+  assert.match(page, /Luxury Item Research/);
+  assert.match(page, /separate from watch reference Price Research/i);
+  assert.match(page, /Item name, maker, type, and market activity/);
+  assert.match(page, /Raw source evidence/);
+  assert.match(page, /at least two verified WTS observations/);
+  assert.match(summary, /luxury_categories/);
+  assert.match(summary, /total_luxury_item_count/);
+});
