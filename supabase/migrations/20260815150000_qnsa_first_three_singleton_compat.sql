@@ -1,7 +1,9 @@
--- Storage-neutral, forward-only keyset pagination for the six reviewed watch
--- brands. Callers exhaust p_has_image=true before starting the false lane.
--- No table/index rewrite or planner-statistics refresh: this reuses the deployed
--- idx_qnsa_listing_global_image_price_order_20260813 expression index.
+-- Forward-only compatibility repair for the installed six-brand image-lane RPC.
+-- Preserve the proven legacy singleton convention for Rolex, Patek Philippe,
+-- and Audemars Piguet only; later brands still require explicit provenance.
+-- No source rows, evidence, or indexes mutate.
+-- Reuses idx_qnsa_listing_global_image_price_order_20260813.
+
 
 BEGIN;
 
@@ -21,6 +23,7 @@ STABLE
 SECURITY DEFINER
 SET search_path = public, staging, pg_catalog
 SET enable_sort = off
+SET plan_cache_mode = force_custom_plan
 AS $$
 DECLARE
   v_limit INTEGER := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 50);
@@ -66,27 +69,10 @@ BEGIN
       FROM staging.listings AS l
       WHERE l.normalization_run_key = enabled.enabled_run_key
         AND l.brand_normalized = enabled.canonical_brand
-        AND upper(COALESCE(l.category, '')) = 'WATCH'
         AND l.created_at IS NOT NULL
+        -- Exact partial-index predicates; all sparse release gates follow LIMIT.
         AND l.parent_id IS NULL
         AND COALESCE(l.is_bundle, false) = false
-        -- Fail closed: absent provenance is not a reviewed singleton.
-        AND l.provenance_metadata->>'bundle_status' = 'SINGLE_CANDIDATE'
-        AND upper(COALESCE(l.listing_type, l.intent, '')) IN ('WTS', 'WTB')
-        AND (p_listing_type IS NULL
-          OR upper(COALESCE(l.listing_type, l.intent, '')) = upper(p_listing_type))
-        AND lower(COALESCE(l.trading_floor_status, '')) NOT IN (
-          'bundle_child_pending_review', 'bundle_pending_separation',
-          'suppressed_exact_duplicate', 'withdrawn', 'rejected', 'hidden',
-          'deleted', 'archived'
-        )
-        AND upper(COALESCE(l.verdict, '')) NOT IN (
-          'WITHDRAWN', 'REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED'
-        )
-        AND lower(COALESCE(l.price_research_status, '')) <> 'suppressed_exact_duplicate'
-        AND upper(COALESCE(l.publication_review_status, 'PENDING_REVIEW')) IN (
-          'PENDING_REVIEW', 'APPROVED', 'READY_FOR_PUBLICATION_REVIEW'
-        )
         AND (btrim(COALESCE(l.image_url, l.source_media_url_candidate, ''))
           ~* '^https?://[^[:space:]]+$') = p_has_image
         AND (
@@ -135,13 +121,42 @@ BEGIN
         '[^A-Z0-9]', '', 'g') AS reference_key
     ) AS normalized
     WHERE candidate.candidate_position <= v_scan_limit
+      AND upper(COALESCE(l.category, '')) = 'WATCH'
+      AND CASE
+        -- Rolex/Patek/AP were released before bundle_status became an
+        -- explicit provenance key. Their proven release contract treats a
+        -- missing key as SINGLE_CANDIDATE, while parent_id/is_bundle still
+        -- fail closed in the bounded candidate scan above.
+        WHEN l.brand_normalized IN (
+          'Rolex', 'Patek Philippe', 'Audemars Piguet'
+        ) THEN COALESCE(
+          l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE'
+        )
+        -- Later-brand reconciliation writes an explicit singleton decision;
+        -- do not weaken that evidence requirement.
+        ELSE l.provenance_metadata->>'bundle_status'
+      END = 'SINGLE_CANDIDATE'
+      AND upper(COALESCE(l.listing_type, l.intent, '')) IN ('WTS', 'WTB')
+      AND (p_listing_type IS NULL
+        OR upper(COALESCE(l.listing_type, l.intent, '')) = upper(p_listing_type))
+      AND lower(COALESCE(l.trading_floor_status, '')) NOT IN (
+        'bundle_child_pending_review', 'bundle_pending_separation',
+        'suppressed_exact_duplicate', 'withdrawn', 'rejected', 'hidden',
+        'deleted', 'archived')
+      AND upper(COALESCE(l.verdict, '')) NOT IN (
+        'WITHDRAWN', 'REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED')
+      AND lower(COALESCE(l.price_research_status, '')) <> 'suppressed_exact_duplicate'
+      AND upper(COALESCE(l.publication_review_status, 'PENDING_REVIEW')) IN (
+        'PENDING_REVIEW', 'APPROVED', 'READY_FOR_PUBLICATION_REVIEW')
       AND l.raw_message_version_id IS NOT NULL
       AND COALESCE(l.source_record_id, '') <> ''
       AND l.source_hash ~ '^[0-9a-f]{64}$'
       AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
       AND NULLIF(btrim(l.reference_normalized), '') IS NOT NULL
       AND NOT public.reviewed_workbook_reference_is_price_token_v2(
-        l.reference_normalized, l.price_normalized, l.currency_normalized
+        l.reference_normalized::text,
+        l.price_normalized::numeric,
+        l.currency_normalized::text
       )
       AND regexp_replace(upper(COALESCE(l.raw_message_text, '')),
         '[^A-Z0-9]', '', 'g') LIKE '%' || normalized.reference_key || '%'
@@ -300,7 +315,7 @@ GRANT EXECUTE ON FUNCTION public.qnsa_six_brand_image_lane_page(
 
 COMMENT ON FUNCTION public.qnsa_six_brand_image_lane_page(
   TEXT, BOOLEAN, BOOLEAN, TIMESTAMPTZ, UUID, INTEGER, TEXT, INTEGER
-) IS 'Bounded six-brand keyset page. Exhaust true image lane before false lane; exact immutable lineage, explicit singleton, release and brand identity gates are fail closed.';
+) IS 'Bounded six-brand keyset page. Exhaust true image lane before false lane; exact immutable lineage, brand-scoped singleton compatibility, release and identity gates are fail closed.';
 
 NOTIFY pgrst, 'reload schema';
 

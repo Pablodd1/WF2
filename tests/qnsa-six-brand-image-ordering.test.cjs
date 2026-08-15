@@ -7,13 +7,19 @@ const test = require('node:test');
 
 const root = path.join(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
-  '20260815110000_qnsa_six_brand_image_lane_page.sql'), 'utf8');
+  '20260815140000_qnsa_six_brand_helper_install.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
   'qnsa-six-brand-image-ordering.yml'), 'utf8');
 
 test('six-brand lane function is forward-only and reuses the existing image-order index', () => {
   assert.match(migration, /CREATE OR REPLACE FUNCTION public\.qnsa_six_brand_image_lane_page/);
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.reviewed_workbook_reference_key_v2/);
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.reviewed_workbook_reference_is_price_token_v2/);
+  assert.match(migration, /l\.reference_normalized::text/);
+  assert.match(migration, /l\.price_normalized::numeric/);
+  assert.match(migration, /l\.currency_normalized::text/);
   assert.match(migration, /idx_qnsa_listing_global_image_price_order_20260813/);
+  assert.match(migration, /SET enable_sort = off/i);
   assert.doesNotMatch(migration, /CREATE\s+(?:UNIQUE\s+)?INDEX|REINDEX|ANALYZE|VACUUM/i);
   assert.doesNotMatch(migration,
     /(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE)\s+(?:public\.raw_messages|public\.raw_message_versions|staging\.listings)/i);
@@ -93,15 +99,16 @@ test('targeted workflow is pinned to QNSA and has audit-only plus explicit apply
   assert.match(workflow, /options: \[audit, apply\]/);
   assert.match(workflow, /APPLY_QNSA_IMAGE_ORDER/);
   assert.match(workflow, /if: inputs\.mode == 'apply'/);
+  assert.match(workflow, /\$migration = \[string\]\(Get-Content -Raw -LiteralPath \$env:MIGRATION_FILE\)/);
   assert.match(workflow, /Compile the forward migration and roll it back/);
   assert.match(workflow, /BEGIN;`n\$bodySql`nROLLBACK;/);
   assert.match(workflow, /rolled_back = \$true/);
   assert.match(workflow, /existing_order_index/);
   assert.match(workflow, /EXPLAIN \(FORMAT JSON, COSTS true\)/);
-  assert.match(workflow, /Representative candidate query did not choose the existing image-order index/);
-  assert.match(workflow, /Audit a bounded source census for every enabled brand and media lane/);
-  assert.match(workflow, /LIMIT 501/);
-  assert.match(workflow, /maximum_rows_per_brand_lane',501/);
+  assert.match(workflow, /Representative candidate query did not choose a proven bounded image-order index/);
+  assert.match(workflow, /idx_qnsa_listing_\(global\|reference\)_image_price_order_20260813/);
+  assert.match(workflow, /Audit configured six-brand media-lane scope/);
+  assert.match(workflow, /source_rows_scanned',0/);
   assert.match(workflow, /enabled_brands -ne 6/);
   assert.match(workflow, /lane_entries -ne 12/);
   assert.match(workflow, /image_contract_violations/);

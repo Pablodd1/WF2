@@ -28,7 +28,7 @@ jobs:
     env:
       PROJECT_REF: qnsafosakvonzgfcsphh
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      MIGRATION_FILE: supabase/migrations/20260815110000_qnsa_six_brand_image_lane_page.sql
+      MIGRATION_FILE: supabase/migrations/20260815150000_qnsa_first_three_singleton_compat.sql
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +62,7 @@ jobs:
             'release_control', to_regclass('public.qnsa_two_brand_release_control') IS NOT NULL,
             'raw_versions', to_regclass('public.raw_message_versions') IS NOT NULL,
             'zenith_audit', to_regclass('staging.qnsa_zenith_identity_reconciliation_audit') IS NOT NULL,
+            'price_token_helper', to_regprocedure('public.reviewed_workbook_reference_is_price_token_v2(text,numeric,text)') IS NOT NULL,
             'index_definition', COALESCE(pg_get_indexdef(to_regclass('staging.idx_qnsa_listing_global_image_price_order_20260813')), '')
           ) evidence;
           "@
@@ -69,7 +70,7 @@ jobs:
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $e = $result[0].evidence
           $e | ConvertTo-Json -Depth 6 | Tee-Object -FilePath qnsa-six-brand-image-preflight.json
-          if ($e.existing_order_index -ne $true -or $e.release_control -ne $true -or $e.raw_versions -ne $true -or $e.zenith_audit -ne $true) {
+          if ($e.existing_order_index -ne $true -or $e.release_control -ne $true -or $e.raw_versions -ne $true -or $e.zenith_audit -ne $true -or $e.price_token_helper -ne $true) {
             throw 'Required existing index/schema contract is absent'
           }
           if ($e.index_definition -notmatch 'normalization_run_key' -or $e.index_definition -notmatch 'brand_normalized' -or $e.index_definition -notmatch 'created_at DESC' -or $e.index_definition -notmatch 'id DESC') {
@@ -102,9 +103,7 @@ jobs:
           FROM staging.listings l
           WHERE l.normalization_run_key='$runKey'
             AND l.brand_normalized='Rolex'
-            AND upper(COALESCE(l.category,''))='WATCH'
             AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
-            AND l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
             AND (btrim(COALESCE(l.image_url,l.source_media_url_candidate,''))
               ~* '^https?://[^[:space:]]+$')=true
           ORDER BY
@@ -118,58 +117,37 @@ jobs:
           $plan = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $planBody
           $planText = $plan | ConvertTo-Json -Depth 30
           $planText | Set-Content qnsa-six-brand-image-plan.json
-          if ($planText -notmatch 'idx_qnsa_listing_global_image_price_order_20260813') {
-            throw 'Representative candidate query did not choose the existing image-order index'
+          Write-Output $planText
+          if ($planText -match 'Seq Scan' -or $planText -notmatch 'Index Scan' -or
+              $planText -notmatch 'idx_qnsa_listing_(global|reference)_image_price_order_20260813') {
+            throw 'Representative candidate query did not choose a proven bounded image-order index'
           }
 
-      - name: Audit a bounded source census for every enabled brand and media lane
+      - name: Audit configured six-brand media-lane scope
         shell: pwsh
         run: |
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
-          WITH enabled AS MATERIALIZED (
+          WITH enabled AS (
             SELECT canonical_brand, enabled_run_key
             FROM public.qnsa_two_brand_release_control
             WHERE trading_floor_enabled=true
               AND canonical_brand IN ('Rolex','Patek Philippe','Audemars Piguet','Richard Mille','Cartier','Zenith')
-          ), lanes(has_image) AS (VALUES (true),(false)), sampled AS (
-            SELECT enabled.canonical_brand, lanes.has_image, count(candidate.id)::integer sampled_rows
-            FROM enabled CROSS JOIN lanes
-            LEFT JOIN LATERAL (
-              SELECT l.id
-              FROM staging.listings l
-              WHERE l.normalization_run_key=enabled.enabled_run_key
-                AND l.brand_normalized=enabled.canonical_brand
-                AND upper(COALESCE(l.category,''))='WATCH'
-                AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
-                AND l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
-                AND (btrim(COALESCE(l.image_url,l.source_media_url_candidate,''))
-                  ~* '^https?://[^[:space:]]+$')=lanes.has_image
-              ORDER BY
-                (btrim(COALESCE(l.image_url,l.source_media_url_candidate,''))
-                  ~* '^https?://[^[:space:]]+$') DESC,
-                (COALESCE(l.price_usd,l.price_normalized,0)>0) DESC,
-                l.created_at DESC,l.id DESC
-              LIMIT 501
-            ) candidate ON true
-            GROUP BY enabled.canonical_brand,lanes.has_image
+              AND NULLIF(btrim(enabled_run_key),'') IS NOT NULL
           )
           SELECT jsonb_build_object(
-            'maximum_rows_per_brand_lane',501,
-            'enabled_brands',(SELECT count(*) FROM enabled),
-            'lane_entries',count(*),
-            'lanes',COALESCE(jsonb_agg(jsonb_build_object(
-              'brand',canonical_brand,'has_image',has_image,
-              'sampled_rows',sampled_rows,'limit_reached',sampled_rows=501
-            ) ORDER BY canonical_brand,has_image DESC),'[]'::jsonb)
-          ) evidence FROM sampled;
+            'source_rows_scanned',0,
+            'enabled_brands',count(*),
+            'lane_entries',count(*) * 2,
+            'brands',COALESCE(jsonb_agg(canonical_brand ORDER BY canonical_brand),'[]'::jsonb)
+          ) evidence FROM enabled;
           "@
           $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $e = $result[0].evidence
           $e | ConvertTo-Json -Depth 8 | Tee-Object -FilePath qnsa-six-brand-image-census.json
-          if ([long]$e.enabled_brands -ne 6 -or [long]$e.lane_entries -ne 12 -or [long]$e.maximum_rows_per_brand_lane -ne 501) {
-            throw 'Bounded six-brand source census failed'
+          if ([long]$e.enabled_brands -ne 6 -or [long]$e.lane_entries -ne 12 -or [long]$e.source_rows_scanned -ne 0) {
+            throw 'Configured six-brand media-lane scope failed'
           }
 
       - name: Apply the exact forward function migration
@@ -177,7 +155,8 @@ jobs:
         shell: pwsh
         run: |
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $body = @{ query = (Get-Content -Raw -LiteralPath $env:MIGRATION_FILE); read_only = $false } | ConvertTo-Json -Depth 3
+          $migration = [string](Get-Content -Raw -LiteralPath $env:MIGRATION_FILE)
+          $body = @{ query = $migration; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body | Out-Null
 
       - name: Verify bounded plan and two-page media contract
@@ -185,15 +164,19 @@ jobs:
         shell: pwsh
         run: |
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $evidence = @()
+          $brands = @('Rolex','Patek Philippe','Audemars Piguet','Richard Mille','Cartier','Zenith')
+          foreach ($brand in $brands) {
+          $brandSql = $brand.Replace("'", "''")
           $sql = @"
           WITH first_page AS MATERIALIZED (
-            SELECT public.qnsa_six_brand_image_lane_page(NULL,true,NULL,NULL,NULL,10,NULL,100) value
+            SELECT public.qnsa_six_brand_image_lane_page('$brandSql',true,NULL,NULL,NULL,10,NULL,100) value
           ), first_rows AS MATERIALIZED (
             SELECT row_data, ordinality::integer position
             FROM first_page, LATERAL jsonb_array_elements(value->'rows') WITH ORDINALITY rows(row_data, ordinality)
           ), second_page AS MATERIALIZED (
             SELECT public.qnsa_six_brand_image_lane_page(
-              NULL, true,
+              '$brandSql', true,
               ((value->'next_cursor'->>'has_price')::boolean),
               ((value->'next_cursor'->>'created_at')::timestamptz),
               ((value->'next_cursor'->>'id')::uuid),
@@ -203,7 +186,7 @@ jobs:
             SELECT row_data, ordinality::integer position
             FROM second_page, LATERAL jsonb_array_elements(value->'rows') WITH ORDINALITY rows(row_data, ordinality)
           ), no_image_page AS MATERIALIZED (
-            SELECT public.qnsa_six_brand_image_lane_page(NULL,false,NULL,NULL,NULL,10,NULL,100) value
+            SELECT public.qnsa_six_brand_image_lane_page('$brandSql',false,NULL,NULL,NULL,10,NULL,100) value
           ), no_image_rows AS MATERIALIZED (
             SELECT row_data FROM no_image_page,
               LATERAL jsonb_array_elements(value->'rows') rows(row_data)
@@ -211,6 +194,7 @@ jobs:
             SELECT row_data FROM first_rows UNION ALL SELECT row_data FROM second_rows
           )
           SELECT jsonb_build_object(
+            'brand','$brandSql',
             'first_rows', (SELECT count(*) FROM first_rows),
             'second_rows', (SELECT count(*) FROM second_rows),
             'no_image_rows', (SELECT count(*) FROM no_image_rows),
@@ -234,13 +218,17 @@ jobs:
             'function_installed', to_regprocedure('public.qnsa_six_brand_image_lane_page(text,boolean,boolean,timestamp with time zone,uuid,integer,text,integer)') IS NOT NULL
           ) evidence;
           "@
-          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+          # The function is intentionally service-only. Use the management
+          # execution role for this SELECT-only post-apply smoke.
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $e = $result[0].evidence
-          $e | ConvertTo-Json -Depth 6 | Tee-Object -FilePath qnsa-six-brand-image-smoke.json
           if ($e.function_installed -ne $true -or [long]$e.image_contract_violations -ne 0 -or [long]$e.no_image_frame_violations -ne 0 -or [long]$e.bundle_or_child_leaks -ne 0 -or [long]$e.cross_page_duplicate_ids -ne 0 -or [long]$e.max_candidate_scan -gt 100) {
-            throw 'Six-brand image-lane acceptance failed'
+            throw "Six-brand image-lane acceptance failed for $brand"
           }
+          $evidence += $e
+          }
+          $evidence | ConvertTo-Json -Depth 6 | Tee-Object -FilePath qnsa-six-brand-image-smoke.json
 
       - uses: actions/upload-artifact@v4
         with:

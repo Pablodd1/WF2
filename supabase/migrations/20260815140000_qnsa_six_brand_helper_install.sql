@@ -1,9 +1,81 @@
+-- Forward-only repair for the six-brand keyset function installed by
+-- 20260815110000. The stored reference and currency columns are varchar while
+-- reviewed_workbook_reference_is_price_token_v2 is declared with text inputs;
+-- cast those arguments explicitly so PostgreSQL resolves the helper at runtime.
 -- Storage-neutral, forward-only keyset pagination for the six reviewed watch
 -- brands. Callers exhaust p_has_image=true before starting the false lane.
 -- No table/index rewrite or planner-statistics refresh: this reuses the deployed
 -- idx_qnsa_listing_global_image_price_order_20260813 expression index.
 
 BEGIN;
+
+-- QNSA did not receive the historical evidence helper migration that exists in
+-- the legacy migration chain. Install the two immutable helpers this RPC uses
+-- in the same forward migration so runtime execution is self-contained.
+CREATE OR REPLACE FUNCTION public.reviewed_workbook_reference_key_v2(
+  p_reference text
+)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SECURITY INVOKER
+SET search_path = ''
+AS $function$
+  SELECT NULLIF(
+    regexp_replace(upper(COALESCE(p_reference, '')), '[^A-Z0-9]', '', 'g'),
+    ''
+  );
+$function$;
+
+CREATE OR REPLACE FUNCTION public.reviewed_workbook_reference_is_price_token_v2(
+  p_reference text,
+  p_source_amount numeric,
+  p_source_currency text
+)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SECURITY INVOKER
+SET search_path = ''
+AS $function$
+  WITH evidence AS (
+    SELECT
+      public.reviewed_workbook_reference_key_v2(p_reference) AS reference_key,
+      CASE
+        WHEN p_source_amount IS NULL OR p_source_amount <= 0 THEN NULL
+        WHEN scale(p_source_amount) > 0 THEN regexp_replace(
+          rtrim(rtrim(p_source_amount::text, '0'), '.'), '[^0-9]', '', 'g'
+        )
+        ELSE regexp_replace(p_source_amount::text, '[^0-9]', '', 'g')
+      END AS amount_key,
+      NULLIF(
+        regexp_replace(upper(COALESCE(p_source_currency, '')), '[^A-Z]', '', 'g'),
+        ''
+      ) AS currency_key
+  )
+  SELECT COALESCE(
+    reference_key ~ '^(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|JPY|CNY|RMB)[0-9]+$'
+    OR reference_key ~ '^[0-9]+(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|JPY|CNY|RMB)$'
+    OR (
+      amount_key IS NOT NULL
+      AND currency_key IS NOT NULL
+      AND reference_key IN (amount_key || currency_key, currency_key || amount_key)
+    ),
+    false
+  )
+  FROM evidence;
+$function$;
+
+REVOKE ALL ON FUNCTION public.reviewed_workbook_reference_key_v2(text)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reviewed_workbook_reference_is_price_token_v2(text, numeric, text)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reviewed_workbook_reference_key_v2(text)
+  TO service_role, postgres, supabase_admin;
+GRANT EXECUTE ON FUNCTION public.reviewed_workbook_reference_is_price_token_v2(text, numeric, text)
+  TO service_role, postgres, supabase_admin;
 
 CREATE OR REPLACE FUNCTION public.qnsa_six_brand_image_lane_page(
   p_brand TEXT DEFAULT NULL,
@@ -141,7 +213,9 @@ BEGIN
       AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
       AND NULLIF(btrim(l.reference_normalized), '') IS NOT NULL
       AND NOT public.reviewed_workbook_reference_is_price_token_v2(
-        l.reference_normalized, l.price_normalized, l.currency_normalized
+        l.reference_normalized::text,
+        l.price_normalized::numeric,
+        l.currency_normalized::text
       )
       AND regexp_replace(upper(COALESCE(l.raw_message_text, '')),
         '[^A-Z0-9]', '', 'g') LIKE '%' || normalized.reference_key || '%'

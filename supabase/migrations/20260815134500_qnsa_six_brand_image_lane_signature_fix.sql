@@ -1,3 +1,7 @@
+-- Forward-only repair for the six-brand keyset function installed by
+-- 20260815110000. The stored reference and currency columns are varchar while
+-- reviewed_workbook_reference_is_price_token_v2 is declared with text inputs;
+-- cast those arguments explicitly so PostgreSQL resolves the helper at runtime.
 -- Storage-neutral, forward-only keyset pagination for the six reviewed watch
 -- brands. Callers exhaust p_has_image=true before starting the false lane.
 -- No table/index rewrite or planner-statistics refresh: this reuses the deployed
@@ -141,7 +145,9 @@ BEGIN
       AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
       AND NULLIF(btrim(l.reference_normalized), '') IS NOT NULL
       AND NOT public.reviewed_workbook_reference_is_price_token_v2(
-        l.reference_normalized, l.price_normalized, l.currency_normalized
+        l.reference_normalized::text,
+        l.price_normalized::numeric,
+        l.currency_normalized::text
       )
       AND regexp_replace(upper(COALESCE(l.raw_message_text, '')),
         '[^A-Z0-9]', '', 'g') LIKE '%' || normalized.reference_key || '%'
