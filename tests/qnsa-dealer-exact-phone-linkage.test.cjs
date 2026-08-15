@@ -18,6 +18,8 @@ const globalRawScanMigration = fs.readFileSync(path.join(root, 'supabase', 'migr
   '20260815173000_qnsa_dealer_global_raw_phone_scan.sql'), 'utf8');
 const timeoutRepairMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
   '20260815174000_qnsa_dealer_global_raw_scan_timeout_repair.sql'), 'utf8');
+const lateralRepairMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
+  '20260815175000_qnsa_dealer_raw_page_lateral_lookup.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
   'qnsa-dealer-exact-phone-linkage.yml'), 'utf8');
 const runner = fs.readFileSync(path.join(root, 'tools', 'dealer-directory',
@@ -64,6 +66,28 @@ test('first-page timeout repair preserves UUID keyset completeness and removes n
   assert.match(runner, /boundedInteger\(env\.LINKAGE_PAGE_SIZE, 1000, 1, 5000/);
   assert.match(workflow, /LINKAGE_PAGE_SIZE: '1000'/);
   assert.match(workflow, /20260815174000_qnsa_dealer_global_raw_scan_timeout_repair\.sql/);
+});
+
+test('bounded raw page performs a fenced parameterized staging lineage lookup', () => {
+  const extractFragment = marker => {
+    const token = `$${marker}$`;
+    const start = lateralRepairMigration.indexOf(token) + token.length;
+    const end = lateralRepairMigration.indexOf(token, start);
+    return lateralRepairMigration.slice(start, end).replaceAll('\r\n', '\n');
+  };
+  const original = globalRawScanMigration.replaceAll('\r\n', '\n');
+  assert.ok(original.includes(extractFragment('old_page')));
+  assert.ok(original.includes(extractFragment('old_identity')));
+  assert.match(lateralRepairMigration, /JOIN LATERAL/);
+  assert.match(lateralRepairMigration,
+    /candidate_listing\.raw_message_version_id = page\.id[\s\S]*OFFSET 0/);
+  assert.match(lateralRepairMigration, /idx_staging_mariadb_raw_version/);
+  assert.match(lateralRepairMigration, /indisvalid[\s\S]*indisready/);
+  assert.doesNotMatch(lateralRepairMigration,
+    /CREATE\s+(?:UNIQUE\s+)?INDEX|INSERT\s+INTO|UPDATE\s+(?:public\.raw_message_versions|staging\.listings)|DELETE\s+FROM|TRUNCATE/i);
+  assert.match(workflow, /20260815175000_qnsa_dealer_raw_page_lateral_lookup\.sql/);
+  assert.match(runner, /Nested Loop/);
+  assert.match(runner, /bounded raw-page-first lineage plan/);
 });
 
 test('only exact verified unique phone identities may reach the private ledger', () => {
@@ -171,6 +195,9 @@ test('management-only canary globally scans and cannot exceed ten writes or comp
       database_gib: 7.898, raw_version_primary_key_valid: true, raw_version_lineage_index: true,
       raw_versions_count: 2000,
     } }]);
+    if (/EXPLAIN[\s\S]*WITH raw_page[\s\S]*JOIN LATERAL/.test(sql)) {
+      return jsonResponse([{ 'QUERY PLAN': 'Nested Loop raw_message_versions_pkey idx_staging_mariadb_raw_version' }]);
+    }
     if (/EXPLAIN[\s\S]*ORDER BY raw_version\.id/.test(sql)) {
       return jsonResponse([{ 'QUERY PLAN': 'Index Only Scan using raw_message_versions_pkey' }]);
     }
@@ -212,6 +239,9 @@ test('full mode writes COMPLETE only after the global raw cursor is exhausted', 
       database_gib: 7.898, raw_version_primary_key_valid: true, raw_version_lineage_index: true,
       raw_versions_count: 1000,
     } }]);
+    if (/EXPLAIN[\s\S]*WITH raw_page[\s\S]*JOIN LATERAL/.test(sql)) {
+      return jsonResponse([{ 'QUERY PLAN': 'Nested Loop raw_message_versions_pkey idx_staging_mariadb_raw_version' }]);
+    }
     if (/EXPLAIN[\s\S]*ORDER BY raw_version\.id/.test(sql)) return jsonResponse([{ 'QUERY PLAN': 'raw_message_versions_pkey' }]);
     if (/EXPLAIN[\s\S]*staging\.listings/.test(sql)) return jsonResponse([{ 'QUERY PLAN': 'idx_staging_mariadb_raw_version' }]);
     if (/qnsa_dealer_linkage_reconciliation/.test(sql)) {
