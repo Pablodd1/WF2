@@ -1,5 +1,7 @@
 'use strict';
 
+const { extractReference, inferBrandFromReference } = require('./normalization-v4.cjs');
+
 const LUXURY_BRANDS = [
   ['Van Cleef & Arpels', /\b(?:van\s+cleef(?:\s*&\s*arpels)?|vca)\b/i],
   ['Louis Vuitton', /\b(?:louis\s+vuitton|lv)\b/i],
@@ -88,10 +90,13 @@ function matchedLuxuryCategories(source = {}) {
 
 function hasWholeWatchEvidence(source = {}) {
   const text = sourceText(source);
-  const namedWatch = /\b(?:rolex|rlx|patek|aquanaut|nautilus|vacheron|audemars|royal\s+oak|richard\s+mille|panerai|hublot|omega|iwc|zenith|datejust|daytona|submariner|(?:pam|rm)\s*[-:]?\s*\d{2,})\b/i;
+  const namedWatch = /\b(?:rolex|rlx|patek|aquanaut|nautilus|vacheron|audemars|royal\s+oak|richard\s+mille|panerai|hublot|omega|iwc|zenith|datejust|daytona|submariner|(?:pam|rm|vc|ap)\s*[-:]?\s*\d{2,})\b/i;
   const reference = /\b(?:\d{5,6}[A-Z]{0,3}|(?:VC|AP)\s*[-:]?\s*\d{4,}[A-Z]*|\d{4}[A-Z]\/\d[A-Z])\b/i;
   const watchContext = /\b(?:watch|full\s+set|box\s*(?:and|&)\s*papers|dial|bezel|movement|quartz|crystal|steel\s+links?|deployment\s+clasp|strap|papers?\s+(?:and|&)\s+wallet|card\s+(?:and|&)\s+wallet)\b/i;
-  return namedWatch.test(text) || (reference.test(text) && watchContext.test(text));
+  const extractedReference = extractReference(text);
+  return Boolean(inferBrandFromReference(extractedReference))
+    || namedWatch.test(text)
+    || (reference.test(text) && watchContext.test(text));
 }
 
 function luxuryIdentityEligibility(source = {}, category) {
