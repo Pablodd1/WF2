@@ -46,6 +46,12 @@ test('non-watch publication withholds watch packaging terms and category-only ch
     raw_message: 'Cartier cufflinks OG000654, like new, AED 30000',
   }, 'ACCESSORY').eligible, true);
   assert.equal(luxuryIdentityEligibility({
+    raw_message: 'Panna 116520 lighter cream color $4350',
+  }, 'ACCESSORY').eligible, false);
+  assert.equal(luxuryIdentityEligibility({
+    raw_message: 'VC5500 2021Y, no steel belt, 24,800 usd',
+  }, 'ACCESSORY').eligible, false);
+  assert.equal(luxuryIdentityEligibility({
     raw_message: 'Luxury 18K white gold diamond belt cocktail ring',
   }, 'ACCESSORY').eligible, false);
 });
