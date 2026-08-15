@@ -79,6 +79,32 @@ function inferLuxuryCondition(source = {}) {
   return null;
 }
 
+function matchedLuxuryCategories(source = {}) {
+  const text = sourceText(source);
+  return Object.entries(TYPE_PATTERNS)
+    .filter(([, patterns]) => patterns.some(([, pattern]) => pattern.test(text)))
+    .map(([category]) => category);
+}
+
+function hasWholeWatchEvidence(source = {}) {
+  const text = sourceText(source);
+  const namedWatch = /\b(?:rolex|rlx|patek|aquanaut|nautilus|vacheron|audemars|royal\s+oak|richard\s+mille|panerai|hublot|omega|iwc|zenith|datejust|daytona|submariner|(?:pam|rm)\s*[-:]?\s*\d{2,})\b/i;
+  const reference = /\b(?:\d{5,6}[A-Z]{0,3}|(?:VC|AP)\s*[-:]?\s*\d{4,}[A-Z]*|\d{4}[A-Z]\/\d[A-Z])\b/i;
+  const watchContext = /\b(?:watch|full\s+set|box\s*(?:and|&)\s*papers|dial|bezel|movement|quartz|crystal|steel\s+links?|deployment\s+clasp|strap|papers?\s+(?:and|&)\s+wallet|card\s+(?:and|&)\s+wallet)\b/i;
+  return namedWatch.test(text) || (reference.test(text) && watchContext.test(text));
+}
+
+function luxuryIdentityEligibility(source = {}, category) {
+  const normalizedCategory = String(category || '').toUpperCase();
+  const itemType = inferLuxuryItemType(source, normalizedCategory);
+  const categoryMatches = matchedLuxuryCategories(source);
+  const reasons = [];
+  if (!itemType) reasons.push('MISSING_EXPLICIT_ITEM_TYPE');
+  if (categoryMatches.some(match => match !== normalizedCategory)) reasons.push('CROSS_CATEGORY_ITEM_TERMS');
+  if (hasWholeWatchEvidence(source)) reasons.push('WHOLE_WATCH_EVIDENCE');
+  return { eligible: reasons.length === 0, item_type: itemType, reasons };
+}
+
 function normalizeLuxuryIdentity(source = {}, category) {
   const raw = source.raw_data || {};
   const itemType = inferLuxuryItemType(source, category);
@@ -99,6 +125,9 @@ module.exports = {
   inferLuxuryBrand,
   inferLuxuryCondition,
   inferLuxuryItemType,
+  hasWholeWatchEvidence,
+  luxuryIdentityEligibility,
+  matchedLuxuryCategories,
   normalizeLuxuryIdentity,
   sourceText,
 };
