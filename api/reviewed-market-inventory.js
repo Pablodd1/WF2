@@ -515,6 +515,7 @@ function isTradingFloorSourceRow(row) {
     'QNSA_NON_WATCH_FEED_V1',
     'QNSA_REVIEWED_LATER_BRAND_V1',
     'QNSA_SIX_BRAND_IMAGE_LANE_V1',
+    'QNSA_ZENITH_REVIEWED_V1',
   ]
     .includes(row?.publication_lane)
     && row?.normalization_run_complete === true
