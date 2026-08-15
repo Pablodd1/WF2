@@ -4,7 +4,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { buildDealerStats } = require('../api/dealer-profile.js');
+const {
+  buildDealerStats,
+  hasAmbiguousShorthandPrice,
+  hasCrossBrandReferenceContradiction,
+  sanitizeDealerListing,
+  sanitizeDealerProfile,
+} = require('../api/dealer-profile.js');
 
 test('dealer profile exposes only approved activity metrics and verified contact', () => {
   const stats = buildDealerStats([
@@ -34,7 +40,49 @@ test('dealer profile keeps raw messages, currency, and normalized prices in its 
   assert.match(source, /price_usd,currency,raw_message/);
   assert.match(source, /raw_message_access: true/);
   assert.doesNotMatch(source, /WITHHELD_UNTIL_APPLIED_LINEAGE_AGGREGATE/);
-  assert.doesNotMatch(source, /price_usd:\s*null/);
+  assert.match(source, /price_review_required/);
+});
+
+test('dealer profile fails closed for shorthand prices misparsed as cents-free USD', () => {
+  for (const listing of [
+    { raw_message: '126711CHNR, $17,9 + label', price_usd: 179, display_price: '$179' },
+    { raw_message: '116518LN, $40,8 + label', price_usd: 408, display_price: '$408' },
+  ]) {
+    assert.equal(hasAmbiguousShorthandPrice(listing), true);
+    const safe = sanitizeDealerListing(listing);
+    assert.equal(safe.price_usd, null);
+    assert.equal(safe.display_price, null);
+    assert.equal(safe.price_review_required, true);
+    assert.equal(safe.price_review_reason, 'AMBIGUOUS_SHORTHAND_PRICE');
+  }
+  assert.equal(hasAmbiguousShorthandPrice({ raw_message: '$17,900', price_usd: 17900 }), false);
+  assert.equal(hasAmbiguousShorthandPrice({ raw_message: '$17,9', price_usd: 17900 }), false);
+});
+
+test('dealer profile fails closed for a cross-brand reference contradiction', () => {
+  const listing = {
+    brand: 'Patek Philippe', reference: '69178', dial_color: 'Tapestry', price_usd: 9300,
+    raw_message: 'Crisp 69178 Tapestry Dial naked 🔥$9300 + lbl🔥',
+  };
+  assert.equal(hasCrossBrandReferenceContradiction(listing), true);
+  const safe = sanitizeDealerListing(listing);
+  assert.equal(safe.brand, null);
+  assert.equal(safe.reference, null);
+  assert.equal(safe.dial_color, null);
+  assert.equal(safe.price_usd, null);
+  assert.equal(safe.identity_review_required, true);
+  assert.equal(safe.price_review_reason, 'IDENTITY_PENDING_REVIEW');
+  assert.equal(hasCrossBrandReferenceContradiction({ ...listing, raw_message: 'Patek Philippe 69178 $9300' }), false);
+});
+
+test('dealer profile distinguishes aggregate-only group counts from published group names', () => {
+  const countOnly = sanitizeDealerProfile({ stats: { group_count: 12 }, listings: [], groups: [] });
+  assert.equal(countOnly.group_details_status, 'COUNT_ONLY');
+  assert.deepEqual(countOnly.groups, []);
+
+  const detailed = sanitizeDealerProfile({ stats: { group_count: 1 }, listings: [], groups: [{ name: 'Published group' }] });
+  assert.equal(detailed.group_details_status, 'PUBLISHED_DETAILS');
+  assert.deepEqual(detailed.groups, [{ name: 'Published group' }]);
 });
 
 test('dealer profile separates public-source profiles from verified database dealers', () => {

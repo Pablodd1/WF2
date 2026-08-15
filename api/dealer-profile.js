@@ -7,6 +7,69 @@ const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/pub
 const { legacyProfilePayload, ratedProfilePayload, sourceProfilePayload } = require('./_lib/dealer-directory-source.cjs');
 const { loadCompletedDealerIds, profileWithLinkageState } = require('./_lib/dealer-linkage-state.cjs');
 
+const PATEK_RAW_EVIDENCE = /\b(?:patek(?:\s+philippe)?|nautilus|aquanaut|calatrava)\b/i;
+const ROLEX_ONLY_REFERENCE_FAMILY = /^69\d{3}$/;
+
+function hasAmbiguousShorthandPrice(listing) {
+  const rawMessage = String(listing?.raw_message || '');
+  const match = rawMessage.match(/(?:^|[^\d])(?:USD(?:T)?\s*|\$\s*)(\d{1,3})\s*([,.])\s*(\d{1,2})(?!\d)/i);
+  if (!match) return false;
+  const compactMisparse = Number(`${match[1]}${match[3]}`);
+  const storedPrice = Number(listing?.price_usd);
+  return storedPrice > 0 && storedPrice === compactMisparse;
+}
+
+function hasCrossBrandReferenceContradiction(listing) {
+  const brand = String(listing?.brand || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+  const reference = String(listing?.reference || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+  const rawMessage = String(listing?.raw_message || '');
+  return brand === 'PATEKPHILIPPE'
+    && ROLEX_ONLY_REFERENCE_FAMILY.test(reference)
+    && !PATEK_RAW_EVIDENCE.test(rawMessage);
+}
+
+function sanitizeDealerListing(listing) {
+  const identityReviewRequired = hasCrossBrandReferenceContradiction(listing);
+  const priceReviewRequired = identityReviewRequired || hasAmbiguousShorthandPrice(listing);
+  return {
+    ...listing,
+    ...(identityReviewRequired ? {
+      brand: null,
+      model: null,
+      reference: null,
+      dial_color: null,
+      identity_review_required: true,
+      identity_review_reason: 'CROSS_BRAND_REFERENCE_CONTRADICTION',
+    } : {}),
+    ...(priceReviewRequired ? {
+      price_usd: null,
+      price_raw: null,
+      display_price: null,
+      price_review_required: true,
+      price_review_reason: identityReviewRequired
+        ? 'IDENTITY_PENDING_REVIEW'
+        : 'AMBIGUOUS_SHORTHAND_PRICE',
+    } : {}),
+  };
+}
+
+function sanitizeDealerProfile(profile) {
+  const groups = Array.isArray(profile?.groups) ? profile.groups : [];
+  const groupCount = Number(profile?.stats?.group_count ?? profile?.dealer?.whatsapp_group_count ?? 0);
+  return {
+    ...profile,
+    listings: Array.isArray(profile?.listings)
+      ? profile.listings.map(sanitizeDealerListing)
+      : [],
+    groups,
+    group_details_status: groups.length > 0
+      ? 'PUBLISHED_DETAILS'
+      : groupCount > 0
+        ? 'COUNT_ONLY'
+        : 'NO_PUBLISHED_DETAILS',
+  };
+}
+
 function buildDealerStats(listings, dealer, verifiedPhone, aggregate = null) {
   const dates = listings
     .map(listing => listing.listing_date || listing.created_at)
@@ -95,20 +158,20 @@ module.exports = async function handler(req, res) {
   if (!identity) return res.status(400).json({ error: 'Dealer id or slug required' });
 
   const sourceProfile = sourceProfilePayload(identity);
-  if (sourceProfile) return res.status(200).json(sourceProfile);
+  if (sourceProfile) return res.status(200).json(sanitizeDealerProfile(sourceProfile));
   const ratedProfile = ratedProfilePayload(identity);
-  if (ratedProfile) return res.status(200).json(ratedProfile);
+  if (ratedProfile) return res.status(200).json(sanitizeDealerProfile(ratedProfile));
   const legacyProfile = legacyProfilePayload(identity);
   if (legacyProfile) {
     try {
       const dynamic = await loadLegacyDynamicProfile(getClient(), legacyProfile);
-      return res.status(200).json(dynamic);
+      return res.status(200).json(sanitizeDealerProfile(dynamic));
     } catch (error) {
       console.error('[dealer-profile:legacy-dynamic]', error.message);
-      return res.status(200).json({
+      return res.status(200).json(sanitizeDealerProfile({
         ...legacyProfile,
         dynamic_activity_status: 'TEMPORARILY_UNAVAILABLE',
-      });
+      }));
     }
   }
 
@@ -124,7 +187,7 @@ module.exports = async function handler(req, res) {
       const hasCompleteLinkage = completedDealerIds.has(canonicalProfile.dealer.id);
       return res.status(200).json({
         success: true,
-        ...profileWithLinkageState(canonicalProfile, hasCompleteLinkage),
+        ...profileWithLinkageState(sanitizeDealerProfile(canonicalProfile), hasCompleteLinkage),
         raw_message_access: true,
         source_provenance: {
           source_system: 'QNSA_CANONICAL_DEALER_DIRECTORY',
@@ -220,7 +283,7 @@ module.exports = async function handler(req, res) {
       success: true,
       dealer,
       stats,
-      listings: safeListings,
+      ...sanitizeDealerProfile({ listings: safeListings, stats, dealer }),
       raw_message_access: true,
     });
   } catch (error) {
@@ -234,3 +297,7 @@ module.exports = async function handler(req, res) {
 
 module.exports.buildDealerStats = buildDealerStats;
 module.exports.mapLegacyLiveListing = mapLegacyLiveListing;
+module.exports.hasAmbiguousShorthandPrice = hasAmbiguousShorthandPrice;
+module.exports.hasCrossBrandReferenceContradiction = hasCrossBrandReferenceContradiction;
+module.exports.sanitizeDealerListing = sanitizeDealerListing;
+module.exports.sanitizeDealerProfile = sanitizeDealerProfile;

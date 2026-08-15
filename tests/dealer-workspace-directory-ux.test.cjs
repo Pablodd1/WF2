@@ -34,6 +34,8 @@ test('Dealer Directory searches by name or phone and uses the profile workflow r
   const api = read('api/dealers.js');
   assert.match(directory, /Search by dealer name or phone number/);
   assert.match(directory, /setSearch\(searchInput\.trim\(\)\)/);
+  assert.doesNotMatch(directory, /setTimeout\(\(\) => \{ setLoading\(true\)/);
+  assert.match(directory, /const controller = new AbortController\(\);\s*setLoading\(true\);/);
   assert.match(directory, /`\/dealer\/profile\/\$\{dealer\.slug \|\| dealer\.id\}`/);
   assert.match(app, /path="\/dealer\/profile\/:dealerId"/);
   assert.match(api, /phoneMatchedDealerIds/);

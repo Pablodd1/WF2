@@ -55,12 +55,13 @@ export default function DealerDirectory() {
   const pageSize = view === 'top-rated' ? 25 : view === 'rated' ? 24 : 24;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { setLoading(true); setSearch(searchInput.trim()); setPage(1); }, 300);
+    const timer = window.setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 300);
     return () => window.clearTimeout(timer);
   }, [searchInput, view]);
 
   useEffect(() => {
     const controller = new AbortController();
+    setLoading(true);
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     params.set('mode', view);
     if (search) params.set('q', search);
