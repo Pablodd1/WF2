@@ -83,6 +83,8 @@ interface ListingRecord {
   source: string;
   source_type: string | null;
   item_category: 'WATCH' | 'HANDBAG' | 'JEWELRY' | 'ACCESSORY' | 'OTHER';
+  luxury_item_name?: string | null;
+  luxury_item_type?: string | null;
   listing_date: string | null;
   listing_status: string | null;
   created_at: string | null;

@@ -21,6 +21,7 @@ test('quarantines the live RM three-watch message and reference-list requests', 
 
   for (const raw of [
     'Looking for rm001, rm002,rm003',
+    '求 Looking RM001 WG RM002 WG',
     'WTB RM002 / RM003',
     'NTQ RM001 or RM002 white gold only',
   ]) {

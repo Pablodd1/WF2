@@ -147,6 +147,15 @@ async function recoverRecordPrices(records, options = {}) {
       analytics_fx_date: recovered.fx_date,
       effective_price_source: 'RUNTIME_EXPLICIT_SOURCE_EVIDENCE',
       runtime_price_recovery_applied: true,
+      // The customer UI admits USD display only from an explicit evidence
+      // status. Runtime recovery has already required an explicit currency
+      // observation; non-USD rows additionally require a dated, named FX
+      // snapshot above. Preserve that proof in the same contract consumed by
+      // Trading Floor and Price Research instead of leaving the stale
+      // PRICE_NOT_SUPPLIED label attached to a verified conversion.
+      price_evidence_status: ['USD', 'USDT'].includes(recovered.source_currency)
+        ? 'SOURCE_EXPLICIT_USD_MATCH'
+        : 'EXPLICIT_SOURCE_FX_CONVERTED',
     };
   });
 }

@@ -14,6 +14,7 @@ const {
   isReleaseListingEligible,
 } = require('./_lib/publication-references.cjs');
 const { repostSignature } = require('./_lib/repost-deduplication.cjs');
+const { buildLuxuryResearchCoverage } = require('./_lib/luxury-research-coverage.cjs');
 
 const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'];
 const QNSA_MARKET_SOURCE = 'qnsa_rolex_patek_trading_floor_source';
@@ -24,6 +25,7 @@ async function loadQnsaSummary(client) {
   const { data, error } = await client.rpc('qnsa_market_feed_counts');
   if (error) throw error;
   const watchRows = (data || []).filter(row => String(row.category || '').toUpperCase() === 'WATCH');
+  const luxuryCoverage = buildLuxuryResearchCoverage(data || []);
   const brands = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith'].map(brand => ({
     brand,
     listing_count: watchRows
@@ -36,6 +38,8 @@ async function loadQnsaSummary(client) {
     category: 'WATCH',
     brands,
     total_listing_count: brands.reduce((total, brand) => total + brand.listing_count, 0),
+    luxury_categories: luxuryCoverage.categories,
+    total_luxury_item_count: luxuryCoverage.total_listing_count,
     count_source: 'qnsa_market_feed_counts',
   };
 }

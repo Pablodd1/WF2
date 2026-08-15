@@ -8,6 +8,7 @@ const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { deterministicCandidateCount } = require('./_lib/unsplit-bundle-filter.cjs');
 const { classifyZenithIdentityEvidence } = require('./_lib/zenith-identity-evidence.cjs');
+const { normalizeLuxuryIdentity } = require('./_lib/luxury-item-normalization.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -28,6 +29,9 @@ const MARKET_SOURCE_VIEW = ALLOWED_MARKET_SOURCE_VIEWS.has(requestedMarketSource
 const MULTIPLE_LISTING_IDENTITY_VALUES = ['multiple', 'multi', 'mixed'];
 const MIN_PUBLIC_WORKBOOK_PRICE_USD = 1_000;
 const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
+const SIX_REVIEWED_WATCH_BRANDS = new Set([
+  'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith',
+]);
 let legacyMarketViewContractDetected = false;
 
 async function loadQnsaReviewedReleaseSummary(client) {
@@ -294,7 +298,8 @@ function isPriorityHumanReviewBrand(value) {
     || brand === 'PATEK'
     || brand === 'AUDEMARS PIGUET'
     || brand === 'RICHARD MILLE'
-    || brand === 'CARTIER';
+    || brand === 'CARTIER'
+    || brand === 'ZENITH';
 }
 
 function searchTermsMatch(record, query) {
@@ -499,6 +504,7 @@ function isTradingFloorSourceRow(row) {
   const reviewedQnsaRelease = [
     'QNSA_ROLEX_PATEK_REVIEWED_V1',
     'QNSA_GENERAL_MARKET_FEED_V1',
+    'QNSA_NON_WATCH_FEED_V1',
     'QNSA_REVIEWED_LATER_BRAND_V1',
   ]
     .includes(row?.publication_lane)
@@ -532,6 +538,10 @@ function mapDealerSubmission(row) {
   const sellerPhone = cleanExactText(claimed.poster_phone, 50) || null;
   const hasCompleteIdentity = row.category !== 'WATCH' || Boolean(brand && model && reference && dialColor);
   const priceEligible = row.category === 'WATCH' && hasCompleteIdentity && priceUsd !== null;
+  const luxuryIdentity = row.category === 'WATCH' ? null : normalizeLuxuryIdentity({
+    raw_message: row.raw_message,
+    raw_data: { brand, model, title: claimed.title, reference },
+  }, row.category);
   const evidenceCoverage = recordEvidenceCoverage({
     brand, model, reference, dialColor, sellerName, sellerPhone,
     contactApproved: true, exactImageUrl: imageUrls[0] || null,
@@ -540,6 +550,8 @@ function mapDealerSubmission(row) {
   });
   return {
     id: row.id, brand, model, reference,
+    luxury_item_name: luxuryIdentity?.luxury_item_name || null,
+    luxury_item_type: luxuryIdentity?.luxury_item_type || null,
     reference_search_key: reference ? referenceComparisonKey(reference) : null,
     raw_reference: reference, normalized_reference: reference, catalog_reference: null,
     reference_invalid_reason: null, has_complete_identity: hasCompleteIdentity,
@@ -701,11 +713,18 @@ function mapReviewedRecord(row) {
     invalidReferenceReason: invalidReference ? 'PRICE_CURRENCY_TOKEN' : null,
     priceEligible,
   });
+  const itemCategory = effectiveItemCategory(row);
+  const luxuryIdentity = itemCategory === 'WATCH' ? null : normalizeLuxuryIdentity({
+    raw_message: row.raw_message,
+    raw_data: { brand, model, title: model, reference },
+  }, itemCategory);
 
   return {
     id: row.id,
     brand,
     model,
+    luxury_item_name: luxuryIdentity?.luxury_item_name || null,
+    luxury_item_type: luxuryIdentity?.luxury_item_type || null,
     reference,
     reference_search_key: invalidReference ? null : referenceSearchKey,
     raw_reference: row.raw_reference || null,
@@ -757,7 +776,7 @@ function mapReviewedRecord(row) {
     source_row_number: row.source_row_number,
     source_record_id: row.source_record_id || null,
     location: evidenceValuePresent(row.location || row.region) ? (row.location || row.region) : null,
-    item_category: effectiveItemCategory(row),
+    item_category: itemCategory,
     publication_state: row.publication_state || 'APPROVED',
     verification_label: 'Listing',
     data_quality_review_required: pendingVerification,
@@ -812,19 +831,33 @@ function parseInventoryCursor(value, pageSize) {
     const page = Number(decoded?.p);
     if (!lane || !Number.isSafeInteger(offset) || offset < 0
       || !Number.isSafeInteger(page) || page < 1) return null;
-    return { lane, offset, page };
+    let keyset;
+    if (decoded?.k !== undefined) {
+      const createdAt = new Date(decoded?.k?.c || '');
+      const id = String(decoded?.k?.i || '');
+      if (typeof decoded?.k?.h !== 'boolean' || Number.isNaN(createdAt.getTime())
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+        return null;
+      }
+      keyset = { hasPrice: decoded.k.h, createdAt: createdAt.toISOString(), id };
+    }
+    return { lane, offset, page, ...(keyset ? { keyset } : {}) };
   } catch {
     return null;
   }
 }
 
-function encodeInventoryCursor({ lane, offset, page }) {
-  return Buffer.from(JSON.stringify({
+function encodeInventoryCursor({ lane, offset, page, keyset = null }) {
+  const payload = {
     v: 1,
     l: lane === 'images' ? 'i' : 'n',
     o: offset,
     p: page,
-  })).toString('base64url');
+  };
+  if (keyset) {
+    payload.k = { h: keyset.hasPrice, c: keyset.createdAt, i: keyset.id };
+  }
+  return Buffer.from(JSON.stringify(payload)).toString('base64url');
 }
 
 function publicationBrandsFromSummary(summary) {
@@ -911,6 +944,41 @@ function shouldFallbackLaterBrandCandidate(status) {
   const statusCode = Number(status);
   return [400, 404, 408].includes(statusCode)
     || (statusCode >= 500 && statusCode <= 599);
+}
+
+function parseCandidatePageEnvelope(payload, responseKeys = []) {
+  let candidate = payload;
+  if (Array.isArray(payload) && payload.length === 1) {
+    for (const key of responseKeys) {
+      if (payload[0]?.[key] !== undefined) {
+        candidate = payload[0][key];
+        break;
+      }
+    }
+  }
+  if (!candidate || Array.isArray(candidate) || !Array.isArray(candidate.rows)) return null;
+  const nextOffset = candidate.next_offset == null ? null : Number(candidate.next_offset);
+  const scannedCount = Number(candidate.scanned_count || 0);
+  const cursor = candidate.next_cursor;
+  let nextKeyset = null;
+  if (cursor != null) {
+    const createdAt = new Date(cursor.created_at || '');
+    const id = String(cursor.id || '');
+    if (typeof cursor.has_price !== 'boolean' || Number.isNaN(createdAt.getTime())
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return null;
+    nextKeyset = { hasPrice: cursor.has_price, createdAt: createdAt.toISOString(), id };
+  }
+  if ((nextOffset !== null && (!Number.isSafeInteger(nextOffset) || nextOffset < 0))
+    || (nextOffset === null && nextKeyset === null && candidate.has_more === true)
+    || !Number.isSafeInteger(scannedCount) || scannedCount < 0
+    || typeof candidate.has_more !== 'boolean') return null;
+  return {
+    rows: candidate.rows,
+    nextOffset,
+    nextKeyset,
+    hasMore: candidate.has_more,
+    scannedCount,
+  };
 }
 
 function isLegacyReviewedInventoryRecord(record) {
@@ -1150,6 +1218,8 @@ module.exports = async function handler(req, res) {
     // other brand.
     const qnsaBroadPage = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       && !reference;
+    const sixBrandKeysetScope = qnsaBroadPage && ['ALL', 'WATCH'].includes(itemCategory)
+      && (!brand || SIX_REVIEWED_WATCH_BRANDS.has(brand));
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) {
       const normalizedBrand = String(brand || '').trim().toLowerCase();
@@ -1211,7 +1281,7 @@ module.exports = async function handler(req, res) {
     // the bounded publication index and renders an image only when the row
     // supplies one.
     const qnsaUnpartitionedMedia = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
-      && !imagesOnly;
+      && !imagesOnly && !sixBrandKeysetScope;
     const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || 'images');
     const requestedOffset = pagination === 'cursor'
       ? (inventoryCursor?.offset || 0)
@@ -1266,18 +1336,40 @@ module.exports = async function handler(req, res) {
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
       const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
+      const nonWatchFeed = !watchFeed && ['HANDBAG', 'JEWELRY', 'ACCESSORY'].includes(itemCategory);
+      const genericWatchFeed = watchFeed && !brand;
+      const sixBrandKeysetFeed = watchFeed && (!brand || SIX_REVIEWED_WATCH_BRANDS.has(brand));
       let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
-        ? (laterReviewedBrand ? 'qnsa_later_brand_candidate_stride_page' : 'qnsa_trading_floor_page_rows')
-        : 'qnsa_market_feed_page_rows'}`, {
+        ? (sixBrandKeysetFeed
+            ? 'qnsa_six_brand_image_lane_page'
+            : laterReviewedBrand
+            ? 'qnsa_later_brand_candidate_stride_page'
+            : 'qnsa_trading_floor_page_rows')
+        : (nonWatchFeed ? 'qnsa_non_watch_market_page_rows' : 'qnsa_market_feed_page_rows')}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(watchFeed
-          ? (laterReviewedBrand
-            ? { p_brand: brand || null, p_limit: pageSize,
-                p_offset: requestedOffset, p_listing_type: listingType || null }
+          ? (sixBrandKeysetFeed
+              ? { p_brand: brand || null, p_has_image: requestedLane === 'images',
+                  p_after_has_price: inventoryCursor?.keyset?.hasPrice ?? null,
+                  p_after_created_at: inventoryCursor?.keyset?.createdAt ?? null,
+                  p_after_id: inventoryCursor?.keyset?.id ?? null,
+                  p_limit: pageSize, p_listing_type: listingType || null,
+                  p_scan_limit: 500 }
+            : laterReviewedBrand
+              ? { p_brand: brand || null, p_limit: pageSize,
+                  p_offset: requestedOffset, p_listing_type: listingType || null }
             : { p_brand: brand || null, p_limit: qnsaBrandScanLimit,
                 p_offset: requestedOffset, p_listing_type: listingType || null })
-          : {
+          : (nonWatchFeed ? {
+              p_category: itemCategory,
+              p_limit: qnsaBrandScanLimit,
+              p_offset: requestedOffset,
+              p_listing_type: listingType || null,
+              p_images_only: imagesOnly,
+              p_location: region || null,
+              p_posted_after: postedAfter,
+            } : {
               p_brand: brand || null,
               p_category: itemCategory,
               p_limit: qnsaBrandScanLimit,
@@ -1286,9 +1378,25 @@ module.exports = async function handler(req, res) {
               p_images_only: imagesOnly,
               p_location: region || null,
               p_posted_after: postedAfter,
-            }),
+            })),
       });
-      if (!pageRowsRes.ok && laterReviewedBrand
+      if (!pageRowsRes.ok && nonWatchFeed && [404, 400].includes(pageRowsRes.status)) {
+        pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            p_brand: brand || null,
+            p_category: itemCategory,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: listingType || null,
+            p_images_only: imagesOnly,
+            p_location: region || null,
+            p_posted_after: postedAfter,
+          }),
+        });
+      }
+      if (!pageRowsRes.ok && laterReviewedBrand && !sixBrandKeysetFeed
         && shouldFallbackLaterBrandCandidate(pageRowsRes.status)) {
         // Application and forward migration can deploy independently. During
         // that narrow window, or if the candidate RPC times out/transiently
@@ -1300,7 +1408,8 @@ module.exports = async function handler(req, res) {
             p_offset: requestedOffset, p_listing_type: listingType || null }),
         });
       }
-      if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
+      if (!pageRowsRes.ok && !sixBrandKeysetFeed
+        && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
         // The application can deploy before the forward database migration.
         // Preserve the proven two-brand watch feed during that short window;
         // non-watch categories remain empty rather than being misclassified.
@@ -1316,20 +1425,25 @@ module.exports = async function handler(req, res) {
         throw new Error(`QNSA page rows failed: ${pageRowsRes.status} ${pageRowsError.slice(0, 200)}`);
       }
       const pageRowsPayload = await pageRowsRes.json();
-      const unwrappedCandidatePayload = Array.isArray(pageRowsPayload)
-        && pageRowsPayload.length === 1
-        && pageRowsPayload[0]?.qnsa_later_brand_candidate_stride_page
-        ? pageRowsPayload[0].qnsa_later_brand_candidate_stride_page
-        : pageRowsPayload;
-      const candidateEnvelope = laterReviewedBrand && unwrappedCandidatePayload
-        && !Array.isArray(unwrappedCandidatePayload) && Array.isArray(unwrappedCandidatePayload.rows)
-        ? unwrappedCandidatePayload
+      const candidateEnvelope = (laterReviewedBrand || genericWatchFeed)
+        ? parseCandidatePageEnvelope(pageRowsPayload, [
+            'qnsa_later_brand_candidate_stride_page',
+            'qnsa_six_brand_image_lane_page',
+          ])
         : null;
+      if ((laterReviewedBrand || genericWatchFeed) && !candidateEnvelope
+        && (!Array.isArray(pageRowsPayload)
+          || (pageRowsPayload.length === 1
+            && (pageRowsPayload[0]?.qnsa_later_brand_candidate_stride_page !== undefined
+              || pageRowsPayload[0]?.qnsa_six_brand_image_lane_page !== undefined)))) {
+        throw new Error('QNSA candidate page returned an invalid cursor envelope');
+      }
       if (candidateEnvelope) {
         qnsaCandidateCursorMeta = {
-          nextOffset: Number(candidateEnvelope.next_offset),
-          hasMore: candidateEnvelope.has_more === true,
-          scannedCount: Number(candidateEnvelope.scanned_count || 0),
+          nextOffset: candidateEnvelope.nextOffset,
+          nextKeyset: candidateEnvelope.nextKeyset,
+          hasMore: candidateEnvelope.hasMore,
+          scannedCount: candidateEnvelope.scannedCount,
         };
       }
       let pageRows = (candidateEnvelope ? candidateEnvelope.rows : pageRowsPayload)
@@ -1446,11 +1560,19 @@ module.exports = async function handler(req, res) {
       const rpcRequests = apExactReferences.length
         ? []
         : [{ reference: rpcReference, family: Boolean(familyReference || patekBaseEquivalent) }];
+      const zenithExactReference = normalizedBrand === 'zenith' && !familyReference;
       const rpcResponses = await Promise.all(rpcRequests.map(request => fetch(
-        `${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_reference_rows`,
+        `${process.env.SUPABASE_URL}/rest/v1/rpc/${zenithExactReference
+          ? 'qnsa_zenith_reference_rows'
+          : 'qnsa_trading_floor_reference_rows'}`,
         {
           method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify(zenithExactReference ? {
+            p_reference: request.reference,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: listingType || null,
+          } : {
             p_brand: brand,
             p_reference: request.reference,
             p_family: request.family,
@@ -1524,7 +1646,8 @@ module.exports = async function handler(req, res) {
 
     // Fill the final image page from the no-image lane. The two equality lanes
     // preserve one global boundary without a full-view boolean sort or count.
-    if (!qnsaUnpartitionedMedia && !imagesOnly && requestedLane === 'images' && !hasMore) {
+    if (!qnsaUnpartitionedMedia && !sixBrandKeysetScope
+      && !imagesOnly && requestedLane === 'images' && !hasMore) {
       const remaining = pageSize - rawRows.length;
       nextLane = 'no-images';
       nextOffset = 0;
@@ -1639,11 +1762,21 @@ module.exports = async function handler(req, res) {
     }
     if (pagination === 'cursor') {
       nextOffset = qnsaCandidateCursorMeta
-        ? qnsaCandidateCursorMeta.nextOffset
+        ? (qnsaCandidateCursorMeta.nextOffset ?? 0)
         : requestedOffset + consumedSourceRecordCount;
     }
+    let nextKeyset = qnsaCandidateCursorMeta?.nextKeyset || null;
+    if (sixBrandKeysetScope && !imagesOnly && requestedLane === 'images' && !hasMore) {
+      // The global contract exhausts the exact-image lane before beginning the
+      // image-less lane. Carry no keyset across that boundary because each lane
+      // has an independent ordered namespace.
+      hasMore = true;
+      nextLane = 'no-images';
+      nextOffset = 0;
+      nextKeyset = null;
+    }
     const nextCursor = hasMore
-      ? encodeInventoryCursor({ lane: nextLane, offset: nextOffset, page: page + 1 })
+      ? encodeInventoryCursor({ lane: nextLane, offset: nextOffset, page: page + 1, keyset: nextKeyset })
       : null;
     const publicationBrands = publicationBrandsFromSummary(summary);
 
@@ -1722,4 +1855,5 @@ module.exports.boundedPage = boundedPage;
 module.exports.sortPageWithoutMovingLookahead = sortPageWithoutMovingLookahead;
 module.exports.sourceCursorAdvance = sourceCursorAdvance;
 module.exports.shouldFallbackLaterBrandCandidate = shouldFallbackLaterBrandCandidate;
+module.exports.parseCandidatePageEnvelope = parseCandidatePageEnvelope;
 module.exports.buildLegacyMarketQueryParams = buildLegacyMarketQueryParams;

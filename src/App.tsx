@@ -14,6 +14,7 @@ const DemoPage = lazy(() => import('@/pages/DemoPage'));
 const DemoMode = lazy(() => import('@/pages/DemoMode'));
 const AdminPage = lazy(() => import('@/pages/AdminPage'));
 const PriceResearch = lazy(() => import('@/pages/PriceResearch'));
+const LuxuryResearch = lazy(() => import('@/pages/LuxuryResearch'));
 const DemandSignals = lazy(() => import('@/pages/DemandSignals'));
 const InsightDetails = lazy(() => import('@/pages/InsightDetails'));
 const DealerLogin = lazy(() => import('@/pages/DealerLogin'));
@@ -65,6 +66,7 @@ export default function App() {
             login required"). c1f6490 re-wrapped it in DealerGate the same
             day by accident, showing the login page to every visitor. */}
         <Route path="/price-research" element={<PriceResearch />} />
+        <Route path="/luxury-research" element={<LuxuryResearch />} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
         <Route path="/info/:page" element={<PublicInfo />} />
