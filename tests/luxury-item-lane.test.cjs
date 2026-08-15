@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeLuxuryIdentity } = require('../api/_lib/luxury-item-normalization.cjs');
+const { luxuryIdentityEligibility, normalizeLuxuryIdentity } = require('../api/_lib/luxury-item-normalization.cjs');
 const { buildLuxuryResearchCoverage } = require('../api/_lib/luxury-research-coverage.cjs');
 const { buildPublicationReview } = require('../tools/mariadb-live/publication-review.cjs');
 
@@ -26,6 +26,28 @@ test('normalizes explicit non-watch maker, item name, type, condition, and sourc
     brand: 'Hermes', model: 'Hermes Birkin 30 Togo handbag', reference: null,
     condition: 'Used - Like New', luxury_item_name: 'Hermes Birkin 30 Togo handbag', luxury_item_type: 'Birkin',
   });
+});
+
+test('non-watch publication withholds watch packaging terms and category-only chatter', () => {
+  assert.deepEqual(luxuryIdentityEligibility({
+    raw_message: 'VC 7900v 2021year full set 20links No belt 32100usd',
+  }, 'ACCESSORY'), {
+    eligible: false, item_type: 'Belt', reasons: ['WHOLE_WATCH_EVIDENCE'],
+  });
+  assert.deepEqual(luxuryIdentityEligibility({
+    raw_message: 'Please welcome Courtney to our group of Jewelry addicts',
+  }, 'JEWELRY'), {
+    eligible: false, item_type: null, reasons: ['MISSING_EXPLICIT_ITEM_TYPE'],
+  });
+  assert.equal(luxuryIdentityEligibility({
+    raw_message: 'Louis Vuitton Cyclone sunglasses, brand new with box, GBP 390',
+  }, 'ACCESSORY').eligible, true);
+  assert.equal(luxuryIdentityEligibility({
+    raw_message: 'Cartier cufflinks OG000654, like new, AED 30000',
+  }, 'ACCESSORY').eligible, true);
+  assert.equal(luxuryIdentityEligibility({
+    raw_message: 'Luxury 18K white gold diamond belt cocktail ring',
+  }, 'ACCESSORY').eligible, false);
 });
 
 test('publication review keeps luxury identity and excludes it from watch Price Research', () => {
@@ -62,6 +84,7 @@ test('Trading Floor uses a storage-light bounded non-watch RPC with safe fallbac
   const migration = fs.readFileSync(path.join(__dirname, '../supabase/migrations/20260815103000_qnsa_non_watch_bounded_feed.sql'), 'utf8');
   assert.match(sourceText, /qnsa_non_watch_market_page_rows/);
   assert.match(sourceText, /QNSA_NON_WATCH_FEED_V1/);
+  assert.match(sourceText, /luxury_identity_eligible === true/);
   assert.match(sourceText, /nonWatchFeed[\s\S]*\[404, 400\]/);
   assert.match(migration, /CREATE OR REPLACE FUNCTION public\.qnsa_non_watch_market_page_rows/);
   assert.match(migration, /l\.category = v_category/);

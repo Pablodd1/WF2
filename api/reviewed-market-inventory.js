@@ -8,7 +8,7 @@ const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { deterministicCandidateCount } = require('./_lib/unsplit-bundle-filter.cjs');
 const { classifyZenithIdentityEvidence } = require('./_lib/zenith-identity-evidence.cjs');
-const { normalizeLuxuryIdentity } = require('./_lib/luxury-item-normalization.cjs');
+const { luxuryIdentityEligibility, normalizeLuxuryIdentity } = require('./_lib/luxury-item-normalization.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -551,6 +551,10 @@ function mapDealerSubmission(row) {
     raw_message: row.raw_message,
     raw_data: { brand, model, title: claimed.title, reference },
   }, row.category);
+  const luxuryEligibility = row.category === 'WATCH' ? null : luxuryIdentityEligibility({
+    raw_message: row.raw_message,
+    raw_data: { brand, model, title: claimed.title, reference },
+  }, row.category);
   const evidenceCoverage = recordEvidenceCoverage({
     brand, model, reference, dialColor, sellerName, sellerPhone,
     contactApproved: true, exactImageUrl: imageUrls[0] || null,
@@ -558,9 +562,11 @@ function mapDealerSubmission(row) {
     invalidReferenceReason: null, priceEligible,
   });
   return {
-    id: row.id, brand, model, reference,
+    id: row.id, brand: luxuryIdentity?.brand || brand, model, reference,
     luxury_item_name: luxuryIdentity?.luxury_item_name || null,
     luxury_item_type: luxuryIdentity?.luxury_item_type || null,
+    luxury_identity_eligible: luxuryEligibility?.eligible ?? true,
+    luxury_identity_review_reasons: luxuryEligibility?.reasons || [],
     reference_search_key: reference ? referenceComparisonKey(reference) : null,
     raw_reference: reference, normalized_reference: reference, catalog_reference: null,
     reference_invalid_reason: null, has_complete_identity: hasCompleteIdentity,
@@ -727,13 +733,19 @@ function mapReviewedRecord(row) {
     raw_message: row.raw_message,
     raw_data: { brand, model: storedModel, title: storedModel, reference },
   }, itemCategory);
+  const luxuryEligibility = itemCategory === 'WATCH' ? null : luxuryIdentityEligibility({
+    raw_message: row.raw_message,
+    raw_data: { brand, model: storedModel, title: storedModel, reference },
+  }, itemCategory);
 
   return {
     id: row.id,
-    brand,
+    brand: luxuryIdentity?.brand || brand,
     model,
     luxury_item_name: luxuryIdentity?.luxury_item_name || null,
     luxury_item_type: luxuryIdentity?.luxury_item_type || null,
+    luxury_identity_eligible: luxuryEligibility?.eligible ?? true,
+    luxury_identity_review_reasons: luxuryEligibility?.reasons || [],
     reference,
     reference_search_key: invalidReference ? null : referenceSearchKey,
     raw_reference: row.raw_reference || null,
@@ -1907,6 +1919,7 @@ module.exports = async function handler(req, res) {
       .map(suppressPublicReferenceTokenPrice);
     let records = recoveredMarketRecords
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
+      .filter(record => record.item_category === 'WATCH' || record.luxury_identity_eligible === true)
       .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
       .filter(record => !imagesOnly || record.has_images === true)
       .filter(record => !pricedOnly || hasUsableSourcePrice(record))
