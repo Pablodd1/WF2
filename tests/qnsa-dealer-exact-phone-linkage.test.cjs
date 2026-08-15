@@ -271,6 +271,9 @@ test('full mode writes COMPLETE only after the global raw cursor is exhausted', 
     LINKAGE_MAX_PAGES: '5000', LINKAGE_DELAY_MS: '0',
   }, fetchImpl });
   assert.equal(result.cursor_exhausted, true);
+  const runningInsert = queries.find(sql => /INSERT INTO public\.dealer_listing_linkage_checkpoints/.test(sql));
+  assert.match(runningInsert,
+    /\(\s*dealer_id, run_key, status, started_at, completed_at, updated_at, evidence\s*\)[\s\S]*SELECT DISTINCT dealer\.id,[\s\S]*'RUNNING',\s*now\(\), NULL::timestamptz, now\(\), jsonb_build_object/i);
   const pageIndex = queries.findIndex(sql => /qnsa_dealer_global_raw_phone_link_page/.test(sql));
   const completeIndex = queries.findIndex(sql => /UPDATE public\.dealer_listing_linkage_checkpoints/.test(sql));
   assert.ok(pageIndex >= 0 && completeIndex > pageIndex);

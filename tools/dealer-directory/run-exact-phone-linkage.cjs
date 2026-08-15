@@ -135,7 +135,7 @@ async function run(options = {}) {
           dealer_id, run_key, status, started_at, completed_at, updated_at, evidence
         )
         SELECT DISTINCT dealer.id, ${sqlLiteral(LINKAGE_RUN_KEY)}, 'RUNNING',
-          now(), NULL, now(), jsonb_build_object(
+          now(), NULL::timestamptz, now(), jsonb_build_object(
             'bounded_keyset', true, 'global_raw_version_scan', true
           )
         FROM public.dealers AS dealer
