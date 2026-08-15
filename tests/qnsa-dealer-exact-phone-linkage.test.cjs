@@ -16,6 +16,8 @@ const rawPhoneRepairMigration = fs.readFileSync(path.join(root, 'supabase', 'mig
   '20260815171000_qnsa_dealer_raw_version_phone_linkage.sql'), 'utf8');
 const globalRawScanMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
   '20260815173000_qnsa_dealer_global_raw_phone_scan.sql'), 'utf8');
+const timeoutRepairMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
+  '20260815174000_qnsa_dealer_global_raw_scan_timeout_repair.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
   'qnsa-dealer-exact-phone-linkage.yml'), 'utf8');
 const runner = fs.readFileSync(path.join(root, 'tools', 'dealer-directory',
@@ -48,6 +50,20 @@ test('historical indexed repair remains immutable while forward fallback uses ex
   assert.match(runner, /raw_message_versions_pkey/);
   assert.match(runner, /idx_staging_mariadb_raw_version/);
   assert.doesNotMatch(runner, /idx_qnsa_raw_versions_from_phone/);
+});
+
+test('first-page timeout repair preserves UUID keyset completeness and removes nullable OR', () => {
+  const oldPredicate = 'WHERE p_after_raw_version_id IS NULL OR raw_version.id > p_after_raw_version_id';
+  assert.ok(globalRawScanMigration.includes(oldPredicate));
+  assert.match(timeoutRepairMigration,
+    /raw_version\.id > COALESCE[\s\S]*00000000-0000-0000-0000-000000000000/);
+  assert.match(timeoutRepairMigration, /pg_get_functiondef/);
+  assert.match(timeoutRepairMigration, /cursor predicate does not match audited contract/);
+  assert.doesNotMatch(timeoutRepairMigration,
+    /CREATE\s+(?:UNIQUE\s+)?INDEX|INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM|TRUNCATE/i);
+  assert.match(runner, /boundedInteger\(env\.LINKAGE_PAGE_SIZE, 1000, 1, 5000/);
+  assert.match(workflow, /LINKAGE_PAGE_SIZE: '1000'/);
+  assert.match(workflow, /20260815174000_qnsa_dealer_global_raw_scan_timeout_repair\.sql/);
 });
 
 test('only exact verified unique phone identities may reach the private ledger', () => {
@@ -153,7 +169,7 @@ test('management-only canary globally scans and cannot exceed ten writes or comp
     const sql = request.query;
     if (/raw_version_primary_key_valid/.test(sql)) return jsonResponse([{ capacity: {
       database_gib: 7.898, raw_version_primary_key_valid: true, raw_version_lineage_index: true,
-      raw_versions_count: 10000,
+      raw_versions_count: 2000,
     } }]);
     if (/EXPLAIN[\s\S]*ORDER BY raw_version\.id/.test(sql)) {
       return jsonResponse([{ 'QUERY PLAN': 'Index Only Scan using raw_message_versions_pkey' }]);
@@ -166,7 +182,7 @@ test('management-only canary globally scans and cannot exceed ten writes or comp
       applied_links: 0,
     } }]);
     if (/qnsa_dealer_global_raw_phone_link_page/.test(sql)) return jsonResponse([{ result: {
-      scanned: 5000, eligible: 14, applied: 10, already_linked: 0,
+      scanned: 1000, eligible: 14, applied: 10, already_linked: 0,
       conflicting_links: 0, dealers_matched: 2,
       next_raw_version_id: '00000000-0000-4000-8000-000000000001', has_more: true,
     } }]);
@@ -174,8 +190,8 @@ test('management-only canary globally scans and cannot exceed ten writes or comp
   };
   const result = await run({ env: {
     SUPABASE_PROJECT_REF: 'qnsafosakvonzgfcsphh', SUPABASE_ACCESS_TOKEN: 'test',
-    LINKAGE_MODE: 'canary', LINKAGE_PAGE_SIZE: '5000', LINKAGE_CANARY_LIMIT: '10',
-    LINKAGE_MAX_PAGES: '500', LINKAGE_DELAY_MS: '0',
+    LINKAGE_MODE: 'canary', LINKAGE_PAGE_SIZE: '1000', LINKAGE_CANARY_LIMIT: '10',
+    LINKAGE_MAX_PAGES: '5000', LINKAGE_DELAY_MS: '0',
   }, fetchImpl });
   assert.equal(result.totals.applied, 10);
   assert.equal(result.cursor_exhausted, false);
@@ -194,7 +210,7 @@ test('full mode writes COMPLETE only after the global raw cursor is exhausted', 
     const sql = request.query;
     if (/raw_version_primary_key_valid/.test(sql)) return jsonResponse([{ capacity: {
       database_gib: 7.898, raw_version_primary_key_valid: true, raw_version_lineage_index: true,
-      raw_versions_count: 1200,
+      raw_versions_count: 1000,
     } }]);
     if (/EXPLAIN[\s\S]*ORDER BY raw_version\.id/.test(sql)) return jsonResponse([{ 'QUERY PLAN': 'raw_message_versions_pkey' }]);
     if (/EXPLAIN[\s\S]*staging\.listings/.test(sql)) return jsonResponse([{ 'QUERY PLAN': 'idx_staging_mariadb_raw_version' }]);
@@ -207,11 +223,11 @@ test('full mode writes COMPLETE only after the global raw cursor is exhausted', 
     }
     if (/INSERT INTO public\.dealer_listing_linkage_checkpoints/.test(sql)) return jsonResponse([]);
     if (/qnsa_dealer_global_raw_phone_link_page/.test(sql)) return jsonResponse([{ result: {
-      scanned: 1200, eligible: 3, applied: 3, already_linked: 0,
+      scanned: 1000, eligible: 3, applied: 3, already_linked: 0,
       conflicting_links: 0, dealers_matched: 2, next_raw_version_id: null, has_more: false,
     } }]);
     if (/SELECT count\(\*\)::bigint AS raw_versions_count/.test(sql)) {
-      return jsonResponse([{ raw_versions_count: 1200 }]);
+      return jsonResponse([{ raw_versions_count: 1000 }]);
     }
     if (/UPDATE public\.dealer_listing_linkage_checkpoints/.test(sql)) return jsonResponse([]);
     if (/count\(\*\) FILTER \(WHERE status='RUNNING'\)/.test(sql)) {
@@ -221,8 +237,8 @@ test('full mode writes COMPLETE only after the global raw cursor is exhausted', 
   };
   const result = await run({ env: {
     SUPABASE_PROJECT_REF: 'qnsafosakvonzgfcsphh', SUPABASE_ACCESS_TOKEN: 'test',
-    LINKAGE_MODE: 'full', LINKAGE_PAGE_SIZE: '5000', LINKAGE_CANARY_LIMIT: '10',
-    LINKAGE_MAX_PAGES: '1000', LINKAGE_DELAY_MS: '0',
+    LINKAGE_MODE: 'full', LINKAGE_PAGE_SIZE: '1000', LINKAGE_CANARY_LIMIT: '10',
+    LINKAGE_MAX_PAGES: '5000', LINKAGE_DELAY_MS: '0',
   }, fetchImpl });
   assert.equal(result.cursor_exhausted, true);
   const pageIndex = queries.findIndex(sql => /qnsa_dealer_global_raw_phone_link_page/.test(sql));
