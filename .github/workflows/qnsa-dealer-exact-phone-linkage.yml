@@ -73,6 +73,7 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $migration = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815133000_qnsa_dealer_exact_phone_linkage.sql'
           $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815160000_qnsa_dealer_linkage_completion_checkpoint.sql')
+          $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815163000_qnsa_dealer_linkage_uuid_cursor_fix.sql')
           $compileSql = $migration -replace '(?im)^\s*(BEGIN|COMMIT);\s*$', ''
           $compileBody = @{ query = "BEGIN;`n$compileSql`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post `
@@ -117,6 +118,7 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815133000_qnsa_dealer_exact_phone_linkage.sql'
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815160000_qnsa_dealer_linkage_completion_checkpoint.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815163000_qnsa_dealer_linkage_uuid_cursor_fix.sql')
           $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post `
             -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
