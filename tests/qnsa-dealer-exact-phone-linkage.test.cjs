@@ -10,6 +10,10 @@ const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
   '20260815133000_qnsa_dealer_exact_phone_linkage.sql'), 'utf8');
 const checkpointMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
   '20260815160000_qnsa_dealer_linkage_completion_checkpoint.sql'), 'utf8');
+const rawPhoneIndexMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
+  '20260815170000_qnsa_raw_version_phone_lookup_index.sql'), 'utf8');
+const rawPhoneRepairMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
+  '20260815171000_qnsa_dealer_raw_version_phone_linkage.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
   'qnsa-dealer-exact-phone-linkage.yml'), 'utf8');
 const runner = fs.readFileSync(path.join(root, 'tools', 'dealer-directory',
@@ -17,14 +21,36 @@ const runner = fs.readFileSync(path.join(root, 'tools', 'dealer-directory',
 const importer = fs.readFileSync(path.join(root, 'tools', 'dealer-directory',
   'import-canonical-snapshots.cjs'), 'utf8');
 
-test('linkage is bounded, keyset-driven, and uses the existing contact index shape', () => {
+test('linkage is bounded and keyset-driven', () => {
   assert.match(migration, /p_after_id uuid DEFAULT NULL/i);
-  assert.match(migration, /l\.contact_number = ANY/i);
   assert.match(migration, /p_after_id IS NULL OR l\.id > p_after_id/i);
   assert.match(migration, /ORDER BY l\.id[\s\S]*LIMIT v_limit \+ 1/i);
   assert.doesNotMatch(migration, /CREATE\s+(?:UNIQUE\s+)?INDEX|OFFSET/i);
-  assert.match(runner, /idx_staging_contact/);
   assert.match(runner, /EXPLAIN \(FORMAT TEXT, COSTS TRUE\)/);
+});
+
+test('forward repair discovers exact phones through indexed immutable raw lineage', () => {
+  const oldMarker = '$old$';
+  const oldStart = rawPhoneRepairMigration.indexOf(oldMarker) + oldMarker.length;
+  const oldEnd = rawPhoneRepairMigration.indexOf(oldMarker, oldStart);
+  const auditedOldFragment = rawPhoneRepairMigration.slice(oldStart, oldEnd).replaceAll('\r\n', '\n');
+  assert.ok(migration.replaceAll('\r\n', '\n').includes(auditedOldFragment),
+    'forward repair must exactly match the currently installed candidate query');
+  assert.match(rawPhoneIndexMigration,
+    /CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_qnsa_raw_versions_from_phone/i);
+  assert.match(rawPhoneIndexMigration, /raw_payload#>>'\{raw_data,from_number\}'/i);
+  assert.match(rawPhoneIndexMigration, /normalize_seller_phone_identity/i);
+  assert.doesNotMatch(rawPhoneIndexMigration, /BEGIN|COMMIT|UPDATE|DELETE|TRUNCATE/i);
+  assert.match(rawPhoneRepairMigration,
+    /FROM public\.raw_message_versions AS raw_version[\s\S]*JOIN staging\.listings AS l[\s\S]*l\.raw_message_version_id = raw_version\.id/i);
+  assert.match(rawPhoneRepairMigration,
+    /raw_version\.raw_payload#>>'\{raw_data,from_number\}'[\s\S]*= ANY \(v_phones\)/i);
+  assert.match(rawPhoneRepairMigration, /indisvalid[\s\S]*indisready/i);
+  assert.doesNotMatch(rawPhoneRepairMigration,
+    /UPDATE\s+(?:public\.raw_message_versions|staging\.listings)|DELETE\s+FROM|TRUNCATE/i);
+  assert.match(runner, /idx_qnsa_raw_versions_from_phone/);
+  assert.match(runner,
+    /FROM public\.raw_message_versions AS raw_version[\s\S]*listing\.raw_message_version_id=raw_version\.id/i);
 });
 
 test('only exact verified unique phone identities may reach the private ledger', () => {
@@ -67,6 +93,8 @@ test('workflow pins QNSA and separates audit, ten-row canary, and full modes', (
   assert.match(workflow, /CANARY_QNSA_DEALER_LINKAGE/);
   assert.match(workflow, /FULL_QNSA_DEALER_LINKAGE/);
   assert.match(workflow, /LINKAGE_CANARY_LIMIT: '10'/);
+  assert.match(workflow, /Install concurrent immutable-evidence phone lookup/);
+  assert.match(workflow, /idx_qnsa_raw_versions_from_phone/);
   assert.match(workflow, /import-canonical-snapshots\.cjs/);
   assert.match(workflow, /inputs\.mode != 'audit'/);
   assert.match(workflow, /\$compileSql = \$migration -replace/);

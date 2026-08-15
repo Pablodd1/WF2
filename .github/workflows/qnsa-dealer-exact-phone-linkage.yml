@@ -28,6 +28,7 @@ jobs:
       contents: read
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
       LINKAGE_MODE: ${{ inputs.mode }}
       LINKAGE_PAGE_SIZE: ${{ inputs.mode == 'canary' && '10' || '200' }}
@@ -82,6 +83,11 @@ jobs:
           $auditSql = @"
           SELECT jsonb_build_object(
             'contact_index', to_regclass('staging.idx_staging_contact') IS NOT NULL,
+            'raw_version_lineage_index', to_regclass('staging.idx_staging_mariadb_raw_version') IS NOT NULL,
+            'raw_versions_estimated_rows', (SELECT reltuples::bigint FROM pg_class
+              WHERE oid='public.raw_message_versions'::regclass),
+            'raw_versions_total_bytes', pg_total_relation_size('public.raw_message_versions'::regclass),
+            'database_bytes', pg_database_size(current_database()),
             'verified_dealers', (SELECT count(*) FROM public.dealers WHERE status='VERIFIED'),
             'dealers_with_verified_phone', (SELECT count(DISTINCT dealer_id)
               FROM public.dealer_source_identities WHERE verification_status='VERIFIED'
@@ -104,9 +110,52 @@ jobs:
             -Headers $headers -ContentType 'application/json' -Body $auditBody
           $evidence = $result[0].evidence
           $evidence | ConvertTo-Json -Depth 5 | Set-Content qnsa-dealer-linkage-audit.json
-          if ($evidence.contact_index -ne $true -or [long]$evidence.duplicate_verified_phones -ne 0 -or [long]$evidence.orphan_links -ne 0) {
+          if ($evidence.raw_version_lineage_index -ne $true -or [long]$evidence.duplicate_verified_phones -ne 0 -or [long]$evidence.orphan_links -ne 0) {
             throw 'Dealer linkage prerequisites failed.'
           }
+
+      - name: Install PostgreSQL client and resolve production session pooler
+        if: ${{ inputs.install_contract && inputs.mode != 'audit' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test "$SUPABASE_PROJECT_REF" = 'qnsafosakvonzgfcsphh'
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+          curl --fail-with-body --silent --show-error \
+            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/config/database/pooler" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -o "$RUNNER_TEMP/pooler.json"
+          jq -c '[.[] | select(.database_type == "PRIMARY" and .pool_mode == "session")][0] // [.[] | select(.database_type == "PRIMARY")][0]' \
+            "$RUNNER_TEMP/pooler.json" > "$RUNNER_TEMP/primary-pooler.json"
+          jq -e '.db_host and .db_port and .db_user and .db_name' "$RUNNER_TEMP/primary-pooler.json" >/dev/null
+          echo "PGHOST=$(jq -r '.db_host' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGPORT=$(jq -r '.db_port' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGUSER=$(jq -r '.db_user' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGDATABASE=$(jq -r '.db_name' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+
+      - name: Install concurrent immutable-evidence phone lookup
+        if: ${{ inputs.install_contract && inputs.mode != 'audit' }}
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          index_file='supabase/migrations/20260815170000_qnsa_raw_version_phone_lookup_index.sql'
+          grep -Eiq 'CREATE INDEX CONCURRENTLY IF NOT EXISTS[[:space:]]+idx_qnsa_raw_versions_from_phone' "$index_file"
+          ! grep -Eiq '^[[:space:]]*(BEGIN|COMMIT);' "$index_file"
+          psql -X -v ON_ERROR_STOP=1 -f "$index_file"
+          index_state="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT index_state.indisvalid::int || '|' || index_state.indisready::int
+            FROM pg_index AS index_state
+            JOIN pg_class AS index_relation ON index_relation.oid=index_state.indexrelid
+            JOIN pg_namespace AS index_namespace ON index_namespace.oid=index_relation.relnamespace
+            WHERE index_namespace.nspname='public'
+              AND index_relation.relname='idx_qnsa_raw_versions_from_phone';")"
+          test "$index_state" = '1|1'
 
       - name: Install forward-only exact-phone contract
         if: ${{ inputs.install_contract && inputs.mode != 'audit' }}
@@ -119,6 +168,7 @@ jobs:
           $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815133000_qnsa_dealer_exact_phone_linkage.sql'
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815160000_qnsa_dealer_linkage_completion_checkpoint.sql')
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815163000_qnsa_dealer_linkage_uuid_cursor_fix.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815171000_qnsa_dealer_raw_version_phone_linkage.sql')
           $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post `
             -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `

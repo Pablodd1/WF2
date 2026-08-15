@@ -54,17 +54,33 @@ async function run(options = {}) {
   const capacityRows = await managementQuery(config, `
     SELECT jsonb_build_object(
       'database_gib', round(pg_database_size(current_database())::numeric / 1073741824, 3),
-      'existing_contact_index', to_regclass('staging.idx_staging_contact') IS NOT NULL
+      'raw_phone_index_valid', EXISTS (
+        SELECT 1 FROM pg_index AS index_state
+        JOIN pg_class AS index_relation ON index_relation.oid=index_state.indexrelid
+        JOIN pg_namespace AS index_namespace ON index_namespace.oid=index_relation.relnamespace
+        WHERE index_namespace.nspname='public'
+          AND index_relation.relname='idx_qnsa_raw_versions_from_phone'
+          AND index_state.indisvalid AND index_state.indisready
+      ),
+      'raw_phone_index_mib', round(COALESCE(pg_relation_size(
+        to_regclass('public.idx_qnsa_raw_versions_from_phone')),
+        0)::numeric / 1048576, 3),
+      'raw_version_lineage_index', to_regclass('staging.idx_staging_mariadb_raw_version') IS NOT NULL
     ) AS capacity`, true, fetchImpl);
   const capacity = capacityRows?.[0]?.capacity;
-  if (!capacity?.existing_contact_index) throw new Error('Required idx_staging_contact is unavailable');
+  if (!capacity?.raw_phone_index_valid || !capacity?.raw_version_lineage_index) {
+    throw new Error('Required immutable raw-phone/lineage indexes are unavailable');
+  }
 
   const planRows = await managementQuery(config, `
     EXPLAIN (FORMAT TEXT, COSTS TRUE)
     SELECT listing.id
-    FROM staging.listings AS listing
-    WHERE listing.contact_number = (
-      SELECT identity.source_identity
+    FROM public.raw_message_versions AS raw_version
+    JOIN staging.listings AS listing ON listing.raw_message_version_id=raw_version.id
+    WHERE public.normalize_seller_phone_identity(
+        raw_version.raw_payload#>>'{raw_data,from_number}'
+      ) = (
+      SELECT public.normalize_seller_phone_identity(identity.source_identity)
       FROM public.dealer_source_identities AS identity
       WHERE identity.verification_status = 'VERIFIED'
         AND upper(identity.identity_type) IN ('PHONE','WHATSAPP')
@@ -73,8 +89,8 @@ async function run(options = {}) {
       AND listing.id > '00000000-0000-0000-0000-000000000000'::uuid
     LIMIT ${pageSize + 1}`, true, fetchImpl);
   const plan = (planRows || []).map(row => String(row['QUERY PLAN'] || row['query plan'] || '')).join('\n');
-  if (!/idx_staging_contact/i.test(plan)) {
-    throw new Error('EXPLAIN did not select idx_staging_contact; linkage is blocked');
+  if (!/idx_qnsa_raw_versions_from_phone/i.test(plan)) {
+    throw new Error('EXPLAIN did not select the immutable raw-phone index; linkage is blocked');
   }
 
   const before = await reconciliation(config, fetchImpl);
@@ -174,7 +190,7 @@ async function run(options = {}) {
     mode,
     project_ref: EXPECTED_PROJECT,
     capacity,
-    explain: { required_index: 'idx_staging_contact', index_scan_verified: true },
+    explain: { required_index: 'idx_qnsa_raw_versions_from_phone', index_scan_verified: true },
     before,
     totals,
     after,
