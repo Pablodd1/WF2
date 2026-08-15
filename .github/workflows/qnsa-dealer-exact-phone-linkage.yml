@@ -30,10 +30,10 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
       LINKAGE_MODE: ${{ inputs.mode }}
-      LINKAGE_PAGE_SIZE: '5000'
+      LINKAGE_PAGE_SIZE: '1000'
       LINKAGE_CANARY_LIMIT: '10'
-      LINKAGE_MAX_PAGES: ${{ inputs.mode == 'full' && '1000' || '500' }}
-      LINKAGE_DELAY_MS: ${{ inputs.mode == 'full' && '100' || '0' }}
+      LINKAGE_MAX_PAGES: '5000'
+      LINKAGE_DELAY_MS: ${{ inputs.mode == 'full' && '50' || '0' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -75,6 +75,7 @@ jobs:
           $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815160000_qnsa_dealer_linkage_completion_checkpoint.sql')
           $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815163000_qnsa_dealer_linkage_uuid_cursor_fix.sql')
           $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815173000_qnsa_dealer_global_raw_phone_scan.sql')
+          $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815174000_qnsa_dealer_global_raw_scan_timeout_repair.sql')
           $compileSql = $migration -replace '(?im)^\s*(BEGIN|COMMIT);\s*$', ''
           $compileBody = @{ query = "BEGIN;`n$compileSql`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post `
@@ -126,6 +127,7 @@ jobs:
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815160000_qnsa_dealer_linkage_completion_checkpoint.sql')
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815163000_qnsa_dealer_linkage_uuid_cursor_fix.sql')
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815173000_qnsa_dealer_global_raw_phone_scan.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815174000_qnsa_dealer_global_raw_scan_timeout_repair.sql')
           $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post `
             -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `

@@ -41,10 +41,10 @@ async function run(options = {}) {
     accessToken: env.SUPABASE_ACCESS_TOKEN,
   };
   const mode = String(env.LINKAGE_MODE || 'audit').toLowerCase();
-  const pageSize = boundedInteger(env.LINKAGE_PAGE_SIZE, 5000, 1, 5000, 'LINKAGE_PAGE_SIZE');
+  const pageSize = boundedInteger(env.LINKAGE_PAGE_SIZE, 1000, 1, 5000, 'LINKAGE_PAGE_SIZE');
   const canaryLimit = boundedInteger(env.LINKAGE_CANARY_LIMIT, 10, 1, 10, 'LINKAGE_CANARY_LIMIT');
-  const maxPages = boundedInteger(env.LINKAGE_MAX_PAGES, mode === 'full' ? 1000 : 500, 1, 10000, 'LINKAGE_MAX_PAGES');
-  const delayMs = boundedInteger(env.LINKAGE_DELAY_MS, mode === 'full' ? 100 : 0, 0, 5000, 'LINKAGE_DELAY_MS');
+  const maxPages = boundedInteger(env.LINKAGE_MAX_PAGES, 5000, 1, 10000, 'LINKAGE_MAX_PAGES');
+  const delayMs = boundedInteger(env.LINKAGE_DELAY_MS, mode === 'full' ? 50 : 0, 0, 5000, 'LINKAGE_DELAY_MS');
 
   if (!MODES.has(mode)) throw new Error('LINKAGE_MODE must be audit, canary, or full');
   if (config.projectRef !== EXPECTED_PROJECT || !config.accessToken) {
@@ -74,7 +74,9 @@ async function run(options = {}) {
     EXPLAIN (FORMAT TEXT, COSTS TRUE)
     SELECT raw_version.id
     FROM public.raw_message_versions AS raw_version
-    WHERE raw_version.id > '00000000-0000-0000-0000-000000000000'::uuid
+    WHERE raw_version.id > COALESCE(
+      NULL::uuid, '00000000-0000-0000-0000-000000000000'::uuid
+    )
     ORDER BY raw_version.id
     LIMIT ${pageSize + 1}`, true, fetchImpl);
   const lineagePlanRows = await managementQuery(config, `
