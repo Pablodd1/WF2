@@ -76,6 +76,7 @@ test('workflow pins QNSA and separates audit, ten-row canary, and full modes', (
   assert.match(runner, /totals\.applied > canaryLimit/);
   assert.match(runner, /duplicate_verified_phones/);
   assert.match(runner, /orphan_links/);
+  assert.match(runner, /qnsa_dealer_linkage_reconciliation\(\) AS result', false, fetchImpl/);
   assert.match(runner, /pii_logged: false/);
 });
 

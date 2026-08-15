@@ -24,7 +24,10 @@ function safeUuid(value) {
 
 async function reconciliation(config, fetchImpl) {
   const rows = await managementQuery(config,
-    'SELECT public.qnsa_dealer_linkage_reconciliation() AS result', true, fetchImpl);
+    // The function is intentionally service-only. The Management API's
+    // read-only execution role has no EXECUTE grant, so run the SELECT through
+    // its privileged execution role; the SQL itself remains non-mutating.
+    'SELECT public.qnsa_dealer_linkage_reconciliation() AS result', false, fetchImpl);
   const result = rows?.[0]?.result;
   if (!result) throw new Error('Dealer linkage reconciliation is unavailable');
   return result;
