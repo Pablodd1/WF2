@@ -3,19 +3,23 @@
 const PENDING_LINKAGE = 'PENDING_EXACT_LISTING_LINKAGE';
 const LINKED_OR_EMPTY = 'LINKED_OR_NO_RELEASED_ACTIVITY';
 
-async function loadAppliedDealerIds(client, dealerIds) {
+async function loadCompletedDealerIds(client, dealerIds) {
   const ids = [...new Set((dealerIds || []).filter(Boolean))];
-  const checks = await Promise.all(ids.map(async dealerId => {
-    const { data, error } = await client
-      .from('dealer_listing_links')
-      .select('dealer_id')
-      .eq('dealer_id', dealerId)
-      .eq('link_status', 'APPLIED')
-      .limit(1);
-    if (error) throw error;
-    return Array.isArray(data) && data.length > 0 ? dealerId : null;
-  }));
-  return new Set(checks.filter(Boolean));
+  if (!ids.length) return new Set();
+  const { data, error } = await client
+    .from('dealer_listing_linkage_checkpoints')
+    .select('dealer_id')
+    .in('dealer_id', ids)
+    .eq('status', 'COMPLETE')
+    .eq('conflicting_count', 0);
+  // Until the forward checkpoint contract is installed, every dealer remains
+  // explicitly pending. A partial canary must never turn one applied link into
+  // a complete activity history.
+  if (error && /does not exist|schema cache|could not find/i.test(error.message || '')) {
+    return new Set();
+  }
+  if (error) throw error;
+  return new Set((data || []).map(row => row.dealer_id).filter(Boolean));
 }
 
 function directoryDealersWithLinkageState(dealers, appliedDealerIds) {
@@ -66,6 +70,6 @@ module.exports = {
   LINKED_OR_EMPTY,
   PENDING_LINKAGE,
   directoryDealersWithLinkageState,
-  loadAppliedDealerIds,
+  loadCompletedDealerIds,
   profileWithLinkageState,
 };

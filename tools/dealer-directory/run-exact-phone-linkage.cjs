@@ -4,6 +4,7 @@ const { managementQuery, sqlLiteral } = require('../mariadb-live/run-two-brand-p
 
 const EXPECTED_PROJECT = 'qnsafosakvonzgfcsphh';
 const MODES = new Set(['audit', 'canary', 'full']);
+const LINKAGE_RUN_KEY = 'qnsa-six-brand-exact-phone-v1';
 
 function boundedInteger(value, fallback, minimum, maximum, name) {
   const parsed = value === undefined || value === '' ? fallback : Number(value);
@@ -98,6 +99,19 @@ async function run(options = {}) {
     if (stop) break;
     const dealerId = safeUuid(row.dealer_id);
     let cursor = null;
+    const dealerTotals = { scanned: 0, eligible: 0, applied: 0, conflicting_links: 0 };
+    if (mode === 'full') {
+      await managementQuery(config, `
+        INSERT INTO public.dealer_listing_linkage_checkpoints (
+          dealer_id, run_key, status, started_at, completed_at, updated_at, evidence
+        ) VALUES (
+          ${sqlLiteral(dealerId)}::uuid, ${sqlLiteral(LINKAGE_RUN_KEY)}, 'RUNNING',
+          now(), NULL, now(), jsonb_build_object('bounded_keyset', true)
+        )
+        ON CONFLICT (dealer_id) DO UPDATE SET
+          run_key = EXCLUDED.run_key, status = 'RUNNING', completed_at = NULL,
+          updated_at = now(), evidence = EXCLUDED.evidence`, false, fetchImpl);
+    }
     totals.dealers_scanned += 1;
     do {
       if (totals.pages >= maxPages) throw new Error('LINKAGE_MAX_PAGES reached before reconciliation completed');
@@ -117,6 +131,9 @@ async function run(options = {}) {
       for (const field of ['scanned', 'eligible', 'applied', 'already_linked', 'conflicting_links']) {
         totals[field] += Number(result[field] || 0);
       }
+      for (const field of ['scanned', 'eligible', 'applied', 'conflicting_links']) {
+        dealerTotals[field] += Number(result[field] || 0);
+      }
       if (result.status === 'NO_VERIFIED_PHONE') totals.no_verified_phone += 1;
       if (Number(result.conflicting_links || 0) !== 0) throw new Error('Conflicting dealer/listing link detected');
       if (!result.has_more) break;
@@ -126,6 +143,19 @@ async function run(options = {}) {
       if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
       if (mode === 'audit') break;
     } while (true);
+    if (mode === 'full' && !stop) {
+      await managementQuery(config, `
+        UPDATE public.dealer_listing_linkage_checkpoints SET
+          status = 'COMPLETE', scanned_count = ${dealerTotals.scanned},
+          eligible_count = ${dealerTotals.eligible}, applied_count = ${dealerTotals.applied},
+          conflicting_count = ${dealerTotals.conflicting_links},
+          completed_at = now(), updated_at = now(),
+          evidence = evidence || jsonb_build_object(
+            'cursor_exhausted', true, 'immutable_release_gate', 'QNSA_SIX_BRAND_EXACT_V1'
+          )
+        WHERE dealer_id = ${sqlLiteral(dealerId)}::uuid
+          AND run_key = ${sqlLiteral(LINKAGE_RUN_KEY)}`, false, fetchImpl);
+    }
   }
 
   const after = await reconciliation(config, fetchImpl);
@@ -162,4 +192,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { EXPECTED_PROJECT, boundedInteger, run, safeUuid };
+module.exports = { EXPECTED_PROJECT, LINKAGE_RUN_KEY, boundedInteger, run, safeUuid };

@@ -8,6 +8,8 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
   '20260815133000_qnsa_dealer_exact_phone_linkage.sql'), 'utf8');
+const checkpointMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
+  '20260815160000_qnsa_dealer_linkage_completion_checkpoint.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
   'qnsa-dealer-exact-phone-linkage.yml'), 'utf8');
 const runner = fs.readFileSync(path.join(root, 'tools', 'dealer-directory',
@@ -67,13 +69,25 @@ test('workflow pins QNSA and separates audit, ten-row canary, and full modes', (
   assert.match(workflow, /LINKAGE_CANARY_LIMIT: '10'/);
   assert.match(workflow, /import-canonical-snapshots\.cjs/);
   assert.match(workflow, /inputs\.mode != 'audit'/);
-  assert.match(workflow, /BEGIN;`n\$migration`nROLLBACK;/);
+  assert.match(workflow, /\$compileSql = \$migration -replace/);
+  assert.match(workflow, /BEGIN;`n\$compileSql`nROLLBACK;/);
   assert.match(workflow, /read_only = \$true/);
   assert.match(runner, /mode === 'audit'.*applied_links/s);
   assert.match(runner, /totals\.applied > canaryLimit/);
   assert.match(runner, /duplicate_verified_phones/);
   assert.match(runner, /orphan_links/);
   assert.match(runner, /pii_logged: false/);
+});
+
+test('only a fully exhausted per-dealer scan can publish completed linkage', () => {
+  assert.match(checkpointMigration, /dealer_listing_linkage_checkpoints/);
+  assert.match(checkpointMigration, /status IN \('RUNNING', 'COMPLETE', 'FAILED'\)/);
+  assert.match(checkpointMigration, /status = 'COMPLETE' AND completed_at IS NOT NULL/);
+  assert.match(checkpointMigration, /REVOKE ALL ON TABLE[\s\S]*FROM PUBLIC, anon, authenticated/);
+  assert.match(runner, /mode === 'full'[\s\S]*status = 'RUNNING'/);
+  assert.match(runner, /mode === 'full' && !stop[\s\S]*status = 'COMPLETE'/);
+  assert.match(runner, /'cursor_exhausted', true/);
+  assert.doesNotMatch(runner, /mode === 'canary'[\s\S]{0,300}status = 'COMPLETE'/);
 });
 
 test('private canonical identity import is idempotent, reconciled, and never runs the retired bucket linker', () => {

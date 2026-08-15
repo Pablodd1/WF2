@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
   directoryDealersWithLinkageState,
-  loadAppliedDealerIds,
+  loadCompletedDealerIds,
   profileWithLinkageState,
 } = require('../api/_lib/dealer-linkage-state.cjs');
 const {
@@ -49,7 +49,7 @@ test('completed linkage preserves genuine zero released activity', () => {
   assert.equal(dealer.stats.wtb_posts, 0);
 });
 
-test('linkage readiness uses bounded per-dealer existence lookups', async () => {
+test('linkage readiness requires one durable completion checkpoint query', async () => {
   const calls = [];
   const client = {
     from(table) {
@@ -58,16 +58,15 @@ test('linkage readiness uses bounded per-dealer existence lookups', async () => 
         select(columns) {
           calls.push(['select', columns]);
           return {
-            eq(column, value) {
-              calls.push(['eq', column, value]);
+            in(column, values) {
+              calls.push(['in', column, values]);
               return {
-                eq(secondColumn, secondValue) {
-                  calls.push(['eq', secondColumn, secondValue]);
+                eq(statusColumn, statusValue) {
+                  calls.push(['eq', statusColumn, statusValue]);
                   return {
-                    async limit(limitValue) {
-                      calls.push(['limit', limitValue]);
-                      const dealerId = calls.findLast(call => call[0] === 'eq' && call[1] === 'dealer_id')?.[2];
-                      return { data: dealerId === 'linked' ? [{ dealer_id: dealerId }] : [], error: null };
+                    async eq(conflictColumn, conflictValue) {
+                      calls.push(['eq', conflictColumn, conflictValue]);
+                      return { data: [{ dealer_id: 'complete' }], error: null };
                     },
                   };
                 },
@@ -78,10 +77,22 @@ test('linkage readiness uses bounded per-dealer existence lookups', async () => 
       };
     },
   };
-  const linked = await loadAppliedDealerIds(client, ['linked', 'unlinked']);
-  assert.deepEqual([...linked], ['linked']);
-  assert.deepEqual(calls.at(-1), ['limit', 1]);
-  assert.equal(JSON.stringify(calls).includes('count'), false);
+  const linked = await loadCompletedDealerIds(client, ['complete', 'partial']);
+  assert.deepEqual([...linked], ['complete']);
+  assert.equal(calls.filter(call => call[0] === 'from').length, 1);
+  assert.deepEqual(calls[0], ['from', 'dealer_listing_linkage_checkpoints']);
+  assert.equal(JSON.stringify(calls).includes('dealer_listing_links'), false);
+});
+
+test('missing checkpoint contract fails safely to pending linkage', async () => {
+  const client = {
+    from() {
+      return { select: () => ({ in: () => ({ eq: () => ({
+        eq: async () => ({ data: null, error: { message: 'relation does not exist' } }),
+      }) }) }) };
+    },
+  };
+  assert.equal((await loadCompletedDealerIds(client, ['partial'])).size, 0);
 });
 
 test('mixed directory results preserve zero only for the individually linked dealer', () => {
