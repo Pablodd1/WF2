@@ -179,10 +179,10 @@ test('footer provides the complete social media watch dealer glossary in an acce
   }
 });
 
-test('dealer directory separates verified Reference Check from provenance-backed Top Rated profiles', () => {
+test('dealer directory separates the verified Live Directory from provenance-backed Top Rated profiles', () => {
   const directory = read('src/pages/DealerDirectory.tsx');
 
-  assert.match(directory, /Reference Check/);
+  assert.match(directory, /Live Directory/);
   assert.match(directory, /Top Rated Dealers/);
   assert.match(directory, /review_count\.toLocaleString\(\).*reviews/);
   assert.match(directory, /member_since/);
