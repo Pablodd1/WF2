@@ -52,15 +52,18 @@ async function publish(options) {
   let reconciledRows = 0;
   for (let offset = 0; offset < cohort.rows.length; offset += options.batchSize) {
     const batch = cohort.rows.slice(offset, offset + options.batchSize);
+    const final = offset + batch.length === cohort.rows.length;
     const response = await fetch(options.endpoint, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ brand: options.brand, source_file_sha256: cohort.fileSha256, rows: batch }),
+      body: JSON.stringify({ brand: options.brand, source_file_sha256: cohort.fileSha256, rows: batch, final }),
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(`batch ${offset} failed: ${response.status} ${body.error || 'unknown error'}`);
     accepted += Number(body.accepted || 0);
-    reconciledRows = Number(body.reconciled_rows || 0);
+    if (body.reconciled_rows !== null && body.reconciled_rows !== undefined) {
+      reconciledRows = Number(body.reconciled_rows);
+    }
   }
   if (accepted !== cohort.rows.length || reconciledRows !== cohort.rows.length) {
     throw new Error(`reconciliation failed: ${accepted}/${reconciledRows}/${cohort.rows.length}`);

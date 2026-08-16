@@ -39,3 +39,12 @@ test('import endpoint is disabled when its temporary token is absent', async () 
   assert.equal(response.payload.error, 'Import disabled');
   if (previous !== undefined) process.env.ADMISSION_IMPORT_TOKEN = previous;
 });
+
+test('publisher marks only the last bounded batch for exact reconciliation', () => {
+  const source = require('node:fs').readFileSync(require('node:path').join(
+    __dirname, '..', 'tools', 'intake', 'publish-unbundled-admission.cjs',
+  ), 'utf8');
+  assert.match(source, /const final = offset \+ batch\.length === cohort\.rows\.length/);
+  assert.match(source, /rows: batch, final/);
+  assert.doesNotMatch(source, /count: 'exact'/);
+});

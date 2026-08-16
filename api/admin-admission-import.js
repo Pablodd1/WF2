@@ -60,14 +60,18 @@ module.exports = async function handler(req, res) {
     const client = getClient();
     const { error } = await client.from(TABLE).upsert(rows, { onConflict: 'id' });
     if (error) throw error;
-    const { count, error: countError } = await client
-      .from(TABLE)
-      .select('id', { count: 'exact', head: true })
-      .eq('brand_scope', brand)
-      .eq('source_file_sha256', sourceFileSha256)
-      .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE');
-    if (countError) throw countError;
-    return res.status(200).json({ status: 'ok', accepted: rows.length, reconciled_rows: Number(count || 0) });
+    let reconciledRows = null;
+    if (req.body?.final === true) {
+      const { count, error: countError } = await client
+        .from(TABLE)
+        .select('id', { count: 'exact', head: true })
+        .eq('brand_scope', brand)
+        .eq('source_file_sha256', sourceFileSha256)
+        .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE');
+      if (countError) throw countError;
+      reconciledRows = Number(count || 0);
+    }
+    return res.status(200).json({ status: 'ok', accepted: rows.length, reconciled_rows: reconciledRows });
   } catch (error) {
     console.error('[admin-admission-import] bounded import failed:', error.message);
     return res.status(503).json({ error: 'Bounded admission import failed' });
