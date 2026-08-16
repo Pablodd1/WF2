@@ -159,7 +159,7 @@ test('broad six-brand requests fan out in parallel with bounded scans and fail c
   const start = source.indexOf('if (sixBrandBroadScope)');
   const end = source.indexOf('} else {', start);
   const block = source.slice(start, end);
-  assert.match(block, /Promise\.all\(requestedBrands\.map/);
+  assert.match(block, /Promise\.all\(streamBrands\.map/);
   assert.match(block, /p_brand: brandName/);
   assert.match(block, /p_scan_limit: 500/);
   assert.match(block, /if \(!response\.ok\)[\s\S]*throw new Error/);
@@ -170,8 +170,17 @@ test('broad six-brand requests fan out in parallel with bounded scans and fail c
 test('six-brand media lanes do not use REST boundary fill', () => {
   assert.match(source, /if \(!sixBrandBroadScope && !qnsaUnpartitionedMedia/);
   assert.match(source,
-    /if \(sixBrandBroadScope && !imagesOnly && requestedLane === 'images' && !hasMore\)/);
+    /if \(sixBrandBroadScope && qnsaCandidateCursorMeta[\s\S]*?requestedLane === 'images' && !hasMore\)/);
   assert.match(source, /nextLane = 'no-images'[\s\S]*nextBrandKeysets = \{\}[\s\S]*hasMore = true/);
+});
+
+test('legacy schema fallback is request-local and cannot poison warm inventory instances', () => {
+  assert.doesNotMatch(source, /^let legacyMarketViewContractDetected = false;/m);
+  const handlerStart = source.indexOf('module.exports = async function handler');
+  const localFallback = source.indexOf('let legacyMarketViewContractDetected = false;', handlerStart);
+  assert.ok(localFallback > handlerStart);
+  assert.match(source,
+    /let legacyMarketViewContractDetected = false;[\s\S]*if \(!restRes\.ok && restRes\.status === 400/);
 });
 
 test('malformed or non-progressing envelopes fail closed', () => {

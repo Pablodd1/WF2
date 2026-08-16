@@ -297,7 +297,7 @@ export default function TradingFloor() {
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 50);
+  const [pageSize, setPageSize] = useState(24);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
@@ -386,7 +386,7 @@ export default function TradingFloor() {
   useEffect(() => {
     const media = window.matchMedia('(max-width: 640px)');
     const updatePageSize = () => {
-      setPageSize(media.matches ? 24 : 50);
+      setPageSize(24);
       resetResults();
     };
     updatePageSize();
