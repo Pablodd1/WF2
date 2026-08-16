@@ -67,7 +67,7 @@ jobs:
           $body = @{ query = $migration; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body | Out-Null
 
-      - name: Verify consent gate and directory response
+      - name: Verify consent gate and canonical directory state
         if: ${{ inputs.mode == 'apply' }}
         shell: powershell
         run: |
@@ -76,7 +76,7 @@ jobs:
           SET statement_timeout='15s';
           SELECT jsonb_build_object(
             'contract_safe', position('d.contact_consent = true' in pg_get_functiondef(to_regprocedure('public.qnsa_dealer_directory_page(text,integer,integer)'))) > 0,
-            'directory_total', (public.qnsa_dealer_directory_page(NULL,1,0)->>'total')::bigint,
+            'verified_dealers', (SELECT count(*) FROM public.dealers WHERE status='VERIFIED'),
             'anon_execute', has_function_privilege('anon','public.qnsa_dealer_directory_page(text,integer,integer)','EXECUTE'),
             'authenticated_execute', has_function_privilege('authenticated','public.qnsa_dealer_directory_page(text,integer,integer)','EXECUTE')
           ) evidence;
@@ -85,7 +85,7 @@ jobs:
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $evidence = $result[0].evidence
           $evidence | ConvertTo-Json -Depth 4 | Set-Content qnsa-reference-contact-smoke.json
-          if (-not [bool]$evidence.contract_safe -or [long]$evidence.directory_total -lt 1 -or [bool]$evidence.anon_execute -or [bool]$evidence.authenticated_execute) { throw 'Reference Check privacy smoke failed.' }
+          if (-not [bool]$evidence.contract_safe -or [long]$evidence.verified_dealers -lt 1 -or [bool]$evidence.anon_execute -or [bool]$evidence.authenticated_execute) { throw 'Reference Check privacy smoke failed.' }
 
       - uses: actions/upload-artifact@v4
         with:

@@ -13,6 +13,14 @@ function digits(value) {
   return String(value || '').replace(/[^0-9]/g, '');
 }
 
+function canonicalDirectoryFallbackAllowed(error) {
+  const code = String(error?.code || '').trim();
+  const message = String(error?.message || '');
+  return code === '57014'
+    || /canceling statement due to statement timeout|statement timeout/i.test(message)
+    || /function .*qnsa_dealer_directory_page.*does not exist|schema cache/i.test(message);
+}
+
 async function loadVerifiedPhones(client, dealerIds) {
   if (!dealerIds.length) return new Map();
   const { data, error } = await client
@@ -121,7 +129,7 @@ module.exports = async function handler(req, res) {
         source: 'canonical-database',
       });
     }
-    if (canonicalError && !/function .*qnsa_dealer_directory_page.*does not exist|schema cache/i.test(canonicalError.message)) {
+    if (canonicalError && !canonicalDirectoryFallbackAllowed(canonicalError)) {
       throw canonicalError;
     }
     const phoneIds = mode === 'top-rated' ? null : await phoneMatchedDealerIds(client, search);
@@ -156,7 +164,9 @@ module.exports = async function handler(req, res) {
       ids.length
         ? client.from('dealer_profile_stats').select('*').in('dealer_id', ids)
         : Promise.resolve({ data: [], error: null }),
-      loadVerifiedPhones(client, ids),
+      loadVerifiedPhones(client, (dealers || [])
+        .filter(dealer => dealer.contact_consent === true)
+        .map(dealer => dealer.id)),
     ]);
     if (statsError) throw statsError;
     const statsById = new Map((stats || []).map(item => [item.dealer_id, item]));
@@ -187,3 +197,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.publicDealer = publicDealer;
+module.exports.canonicalDirectoryFallbackAllowed = canonicalDirectoryFallbackAllowed;

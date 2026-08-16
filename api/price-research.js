@@ -109,7 +109,9 @@ function qnsaReferenceRowToMarketRow(row) {
     seller_name: source.seller_name,
     seller_phone: contactApproved ? (source.seller_phone || null) : null,
     price_raw: source.source_price_amount,
-    price_usd: source.verified_price_usd || source.workbook_price_usd,
+    price_usd: source.has_verified_usd_price === true
+      ? (source.verified_price_usd || source.workbook_price_usd)
+      : null,
     currency: source.source_currency,
     source_price_amount: source.source_price_amount,
     source_currency: source.source_currency,
@@ -175,6 +177,71 @@ async function loadZenithReviewedTradingRows(client, { referenceVariants, limit 
     offset = nextOffset;
   }
   return [...new Map(recovered.map(row => [String(row.id), row])).values()];
+}
+
+const exactReleasedEvidenceCache = new Map();
+const EXACT_EVIDENCE_CACHE_TTL_MS = 30_000;
+const EXACT_REFERENCE_RPC_PAGE_SIZE = 101;
+
+async function loadQnsaExactReleasedEvidence(client, { brand, referenceVariants, limit = 1000 }) {
+  const boundedLimit = Math.min(1000, Math.max(1, Number(limit) || 1000));
+  const references = [...new Set(referenceVariants || [])].filter(Boolean).slice(0, 8);
+  const normalizedBrand = String(brand || '').trim().toLowerCase();
+  const cacheKey = `${normalizedBrand}|${references.slice().sort().join('|')}|${boundedLimit}`;
+  const now = Date.now();
+  const cached = exactReleasedEvidenceCache.get(cacheKey);
+  if (cached && now - cached.createdAt < EXACT_EVIDENCE_CACHE_TTL_MS) return cached.value;
+
+  const promise = (async () => {
+    const recovered = new Map();
+    let capped = false;
+    for (const reference of references) {
+      let offset = 0;
+      const maximumPages = Math.ceil(boundedLimit / EXACT_REFERENCE_RPC_PAGE_SIZE) + 1;
+      for (let page = 0; page < maximumPages; page += 1) {
+        const zenith = normalizedBrand === 'zenith';
+        const { data, error } = await client.rpc(
+          zenith ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows',
+          zenith ? {
+            p_reference: reference,
+            p_limit: EXACT_REFERENCE_RPC_PAGE_SIZE,
+            p_offset: offset,
+            p_listing_type: null,
+          } : {
+            p_brand: brand,
+            p_reference: reference,
+            p_family: false,
+            p_limit: EXACT_REFERENCE_RPC_PAGE_SIZE,
+            p_offset: offset,
+          },
+        );
+        if (error) throw error;
+        const pageRows = (data || []).map(qnsaReferenceRowToMarketRow).filter(row => row.id);
+        for (const row of pageRows) {
+          recovered.set(String(row.id), row);
+          if (recovered.size >= boundedLimit) {
+            capped = true;
+            break;
+          }
+        }
+        if (capped || pageRows.length < EXACT_REFERENCE_RPC_PAGE_SIZE) break;
+        offset += pageRows.length;
+      }
+      if (capped) break;
+    }
+    return { rows: [...recovered.values()], capped };
+  })();
+  exactReleasedEvidenceCache.set(cacheKey, { createdAt: now, value: promise });
+  if (exactReleasedEvidenceCache.size > 50) {
+    const oldestKey = exactReleasedEvidenceCache.keys().next().value;
+    exactReleasedEvidenceCache.delete(oldestKey);
+  }
+  try {
+    return await promise;
+  } catch (error) {
+    exactReleasedEvidenceCache.delete(cacheKey);
+    throw error;
+  }
 }
 
 function directSubmissionToMarketRow(row) {
@@ -260,17 +327,16 @@ async function loadApprovedDirectSubmissionRows(client, { brand, referenceVarian
 
 async function loadRuntimePriceRecoveryRows(client, { brand, referenceVariants }) {
   if (!['richard mille', 'cartier'].includes(String(brand || '').trim().toLowerCase())) return [];
-  const pages = await Promise.all([...new Set(referenceVariants || [])].slice(0, 8).map(reference => client.rpc(
-    'qnsa_trading_floor_reference_rows',
-    { p_brand: brand, p_reference: reference, p_family: false, p_limit: 101, p_offset: 0 },
-  )));
-  const error = pages.find(page => page.error)?.error;
-  if (error) {
+  let exactEvidence;
+  try {
+    exactEvidence = await loadQnsaExactReleasedEvidence(client, {
+      brand, referenceVariants, limit: 1000,
+    });
+  } catch (error) {
     console.warn('[price-research] runtime source-price recovery unavailable:', error.message || error);
     return [];
   }
-  const candidates = pages.flatMap(page => page.data || [])
-    .map(qnsaReferenceRowToMarketRow)
+  const candidates = exactEvidence.rows
     .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS');
   return (await recoverRecordPrices(candidates))
     .filter(row => row.runtime_price_recovery_applied === true && Number(row.price_usd) > 0);
@@ -296,6 +362,7 @@ async function loadQnsaVerifiedTradingPrices(client, {
   limit,
 }) {
   let rpcMarketRows = [];
+  let exactReleasedRows = [];
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
@@ -309,31 +376,21 @@ async function loadQnsaVerifiedTradingPrices(client, {
         ? { ...effective, price_usd: effective.verified_price_usd }
         : row;
     });
-    // Zenith's reviewed Trading release intentionally retains genuine no-price
-    // WTS activity. The priced-only analytics RPC can therefore return an empty
-    // set for a released exact reference. Recover that bounded public cohort so
-    // downstream eligibility accounts for unpriced evidence without allowing it
-    // into averages. Never use this fallback for an RPC error.
-    if (!rpcError && rpcMarketRows.length === 0 && String(brand || '').trim().toLowerCase() === 'zenith') {
-      const recovered = [];
-      for (const reference of [...new Set(referenceVariants || [])].slice(0, 8)) {
-        const { data, error } = await client.rpc('qnsa_trading_floor_reference_rows', {
-          p_brand: brand,
-          p_reference: reference,
-          p_family: false,
-          p_limit: Math.min(1000, Math.max(1, Number(limit) || 1000)),
-          p_offset: 0,
-        });
-        if (error) {
-          console.warn('[price-research] Zenith Trading evidence fallback unavailable:', error.message || error);
-          return [];
-        }
-        recovered.push(...(data || []).map(qnsaReferenceRowToMarketRow)
-          .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS'));
-      }
-      if (recovered.length) return [...new Map(recovered.map(row => [String(row.id), row])).values()];
+    // Reconcile Price Research to the same released exact-reference cohort shown
+    // on the Trading Floor. The priced RPC is intentionally narrower; retained
+    // no-price or incomplete evidence remains visible but is rejected by the
+    // downstream analytics eligibility gate.
+    try {
+      const exactEvidence = await loadQnsaExactReleasedEvidence(client, { brand, referenceVariants, limit });
+      exactReleasedRows = exactEvidence.rows
+        .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS')
+        .map(row => ({ ...row, exact_evidence_recovery_capped: exactEvidence.capped }));
+    } catch (error) {
+      console.warn('[price-research] exact Trading evidence recovery unavailable:', error.message || error);
+    }
+    if (!rpcError && exactReleasedRows.length === 0 && String(brand || '').trim().toLowerCase() === 'zenith') {
       const scannedRows = await loadZenithReviewedTradingRows(client, { referenceVariants, limit });
-      if (scannedRows.length) return scannedRows;
+      if (scannedRows.length) exactReleasedRows = scannedRows;
     }
     if (rpcError) {
       console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
@@ -416,8 +473,9 @@ async function loadQnsaVerifiedTradingPrices(client, {
     thumbnail_url: row.user_image_url,
     image_urls: row.user_image_url ? [row.user_image_url] : [],
     has_images: row.has_exact_source_image === true,
-    }));
+  }));
   const mergedRows = new Map(releasedRows.map(row => [String(row.id), row]));
+  for (const row of exactReleasedRows) mergedRows.set(String(row.id), row);
   for (const row of rpcMarketRows) mergedRows.set(String(row.id), row);
   return [...mergedRows.values()];
 }
@@ -428,6 +486,7 @@ async function loadQnsaTradingDemand(client, {
   familyPrefix,
   limit,
 }) {
+  let rpcDemandRows = [];
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
@@ -435,8 +494,22 @@ async function loadQnsaTradingDemand(client, {
       p_listing_type: 'WTB',
       p_limit: limit,
     });
-    if (!rpcError) return rpcRows || [];
-    console.warn('[price-research] bounded QNSA WTB RPC unavailable; using release fallback:', rpcError.message || rpcError);
+    if (!rpcError) rpcDemandRows = rpcRows || [];
+    else console.warn('[price-research] bounded QNSA WTB RPC unavailable; using release fallback:', rpcError.message || rpcError);
+    let recovered = [];
+    try {
+      const exactEvidence = await loadQnsaExactReleasedEvidence(client, { brand, referenceVariants, limit });
+      recovered = exactEvidence.rows
+        .filter(row => String(row.listing_type || '').toUpperCase() === 'WTB')
+        .map(row => ({ ...row, exact_evidence_recovery_capped: exactEvidence.capped }));
+    } catch (error) {
+      console.warn('[price-research] exact Trading demand recovery unavailable:', error.message || error);
+    }
+    if (recovered.length || rpcDemandRows.length) {
+      const merged = new Map(recovered.map(row => [String(row.id), row]));
+      for (const row of rpcDemandRows) merged.set(String(row.id), row);
+      return [...merged.values()];
+    }
   }
   const columns = [
     'id,canonical_brand,catalog_model,normalized_reference,source_price_amount',
@@ -1050,9 +1123,11 @@ module.exports = async function handler(req, res) {
       rows = [...rowsById.values()];
     }
     const baseSampleCount = rows.length;
-    const sourceSampleCapped = usingReviewedWorkbook
+    const exactEvidenceRecoveryCapped = (rows || [])
+      .some(row => row.exact_evidence_recovery_capped === true);
+    const sourceSampleCapped = exactEvidenceRecoveryCapped || (usingReviewedWorkbook
       ? baseSampleCount >= sampleLimit
-      : baseSampleCount >= pageSize;
+      : baseSampleCount >= pageSize);
 
     if (!rows || rows.length === 0) {
       const emptyReconciliation = {
@@ -1687,5 +1762,6 @@ module.exports.directSubmissionToMarketRow = directSubmissionToMarketRow;
 module.exports.qnsaReferenceRowToMarketRow = qnsaReferenceRowToMarketRow;
 module.exports.loadApprovedDirectSubmissionRows = loadApprovedDirectSubmissionRows;
 module.exports.loadZenithReviewedTradingRows = loadZenithReviewedTradingRows;
+module.exports.loadQnsaExactReleasedEvidence = loadQnsaExactReleasedEvidence;
 module.exports.isPendingQnsaBrandRelease = isPendingQnsaBrandRelease;
 module.exports.consentApprovedPhone = consentApprovedPhone;
