@@ -40,7 +40,7 @@ def main():
     digest = hashlib.sha256(source_path.read_bytes()).hexdigest()
     workbook = openpyxl.load_workbook(source_path, read_only=True, data_only=True)
     decision_sheet_name = next(
-        (name for name in workbook.sheetnames if name.lower().endswith(" admission decisions")),
+        (name for name in workbook.sheetnames if name != SOURCE_SHEET and "admission" in name.lower()),
         LEGACY_DECISION_SHEET,
     )
     if SOURCE_SHEET not in workbook.sheetnames or decision_sheet_name not in workbook.sheetnames:

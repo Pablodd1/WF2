@@ -52,7 +52,7 @@ function readWorkbook(filePath) {
   const buffer = fs.readFileSync(filePath);
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   const sourceSheet = workbook.Sheets[SOURCE_SHEET];
-  const decisionSheetName = workbook.SheetNames.find(name => / Admission Decisions$/i.test(name))
+  const decisionSheetName = workbook.SheetNames.find(name => name !== SOURCE_SHEET && /admission/i.test(name))
     || LEGACY_DECISION_SHEET;
   const decisionSheet = workbook.Sheets[decisionSheetName];
   if (!sourceSheet || !decisionSheet) {
