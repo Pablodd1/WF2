@@ -5,18 +5,24 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
-const { loadZenithReviewedTradingRows } = require('../api/price-research.js');
+const {
+  loadQnsaExactReleasedEvidence,
+  loadZenithReviewedTradingRows,
+} = require('../api/price-research.js');
 
 const source = fs.readFileSync(
   path.join(__dirname, '..', 'api', 'price-research.js'),
   'utf8',
 );
 
-test('Zenith recovers released no-price WTS evidence without promoting it into averages', () => {
-  assert.match(source, /String\(brand \|\| ''\)\.trim\(\)\.toLowerCase\(\) === 'zenith'/);
+test('released exact-reference evidence is reconciled without promoting no-price rows into averages', () => {
+  assert.match(source, /normalizedBrand === 'zenith'/);
+  assert.match(source, /qnsa_zenith_reference_rows/);
   assert.match(source, /qnsa_trading_floor_reference_rows/);
   assert.match(source, /filter\(row => String\(row\.listing_type \|\| ''\)\.toUpperCase\(\) === 'WTS'\)/);
-  assert.match(source, /unpriced evidence without allowing it[\s\S]*into averages/);
+  assert.match(source, /retained[\s\S]*no-price or incomplete evidence remains visible/);
+  assert.match(source, /filter\(row => String\(row\.listing_type \|\| ''\)\.toUpperCase\(\) === 'WTB'\)/);
+  assert.match(source, /source\.has_verified_usd_price === true[\s\S]*source\.verified_price_usd/);
   assert.match(source, /qnsa_later_brand_candidate_stride_page/);
   assert.match(source, /maximumPages = 10/);
   assert.match(source, /referenceKeys\.has\(normRef\(row\.reference\)\)/);
@@ -58,13 +64,74 @@ test('Zenith bounded release scan finds an exact dotted reference across pages',
   assert.equal(calls[1].args.p_offset, 50);
 });
 
+test('exact released evidence follows the 101-row RPC boundary and caches WTS/WTB partition input', async () => {
+  const rows = Array.from({ length: 150 }, (_, index) => ({
+    id: `cartier-${index}`,
+    canonical_brand: 'Cartier',
+    normalized_reference: 'TEST-150',
+    listing_type: index < 120 ? 'WTS' : 'WTB',
+    has_verified_usd_price: index % 3 !== 0,
+    verified_price_usd: 5000 + index,
+  }));
+  const calls = [];
+  const client = {
+    rpc: async (name, args) => {
+      calls.push({ name, args });
+      return { data: rows.slice(args.p_offset, args.p_offset + args.p_limit), error: null };
+    },
+  };
+
+  const first = await loadQnsaExactReleasedEvidence(client, {
+    brand: 'Cartier', referenceVariants: ['TEST-150'], limit: 1000,
+  });
+  const second = await loadQnsaExactReleasedEvidence(client, {
+    brand: 'Cartier', referenceVariants: ['TEST-150'], limit: 1000,
+  });
+
+  assert.equal(first.rows.length, 150);
+  assert.equal(first.capped, false);
+  assert.equal(first.rows.filter(row => row.listing_type === 'WTS').length, 120);
+  assert.equal(first.rows.filter(row => row.listing_type === 'WTB').length, 30);
+  assert.equal(first.rows[0].price_usd, null);
+  assert.equal(first.rows[1].price_usd, 5001);
+  assert.deepEqual(calls.map(call => call.args.p_offset), [0, 101]);
+  assert.ok(calls.every(call => call.args.p_limit === 101));
+  assert.equal(second.rows.length, 150);
+  assert.equal(calls.length, 2);
+});
+
+test('exact released evidence discloses its hard 1000-row bound', async () => {
+  let calls = 0;
+  const client = {
+    rpc: async (_name, args) => {
+      calls += 1;
+      return {
+        data: Array.from({ length: args.p_limit }, (_, index) => ({
+          id: `cap-${args.p_offset + index}`,
+          canonical_brand: 'Cartier',
+          normalized_reference: 'TEST-CAP',
+          listing_type: 'WTS',
+          has_verified_usd_price: false,
+        })),
+        error: null,
+      };
+    },
+  };
+  const result = await loadQnsaExactReleasedEvidence(client, {
+    brand: 'Cartier', referenceVariants: ['TEST-CAP'], limit: 1000,
+  });
+  assert.equal(result.rows.length, 1000);
+  assert.equal(result.capped, true);
+  assert.equal(calls, 10);
+});
+
 test('high-volume Price Research uses one bounded strict-source query', () => {
   assert.match(source, /let sourceTable = configuredSourceTable \|\| \(!exactReviewedWorkbookRelease/);
   assert.match(source, /\? 'watch_records'\s*: 'price_research_verified_source'/);
   assert.match(source, /const buildRowsQuery = table => \{/);
   assert.match(source, /let query = client\s*\.from\(table\)/);
   assert.match(source, /\.limit\(pageSize\)/);
-  assert.match(source, /const sourceSampleCapped = usingReviewedWorkbook/);
+  assert.match(source, /const sourceSampleCapped = exactEvidenceRecoveryCapped \|\| \(usingReviewedWorkbook/);
   assert.match(source, /sampleCapped: sourceSampleCapped/);
   assert.doesNotMatch(source, /Array\.from\(\{ length: sampleLimit \/ pageSize \}/);
   assert.doesNotMatch(source, /buildRowsQuery\(from, from \+ pageSize - 1\)/);
