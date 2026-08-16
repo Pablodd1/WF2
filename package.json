@@ -70,6 +70,7 @@
     "audit:three-brand-workbooks": "node tools/intake/audit-three-brand-workbooks.cjs",
     "canary:three-brand-workbooks": "node tools/intake/build-three-brand-shadow-canary.cjs",
     "import:reviewed-workbook-inventory": "node tools/intake/import-reviewed-workbook-inventory.cjs",
+    "import:approved-admission-workbook": "node tools/intake/import-approved-admission-workbook.cjs",
     "prepare:tag-heuer-admission": "node tools/intake/prepare-tag-heuer-admission.cjs",
     "prepare:franck-muller-admission": "node tools/intake/prepare-franck-muller-admission.cjs",
     "prepare:brand-admission": "node tools/intake/prepare-franck-muller-admission.cjs",
