@@ -9,7 +9,7 @@ const path = require('node:path');
 const XLSX = require('xlsx');
 
 const SOURCE_SHEET = 'Trading Floor & Price Research';
-const DECISION_SHEET = 'TAG Admission Decisions';
+const LEGACY_DECISION_SHEET = 'TAG Admission Decisions';
 const SOURCE_HEADERS = [
   'listing_id', 'source_platform', 'source_group_id', 'source_message_id',
   'source_posted_at', 'ingested_at', 'raw_message', 'intent', 'category',
@@ -52,14 +52,18 @@ function readWorkbook(filePath) {
   const buffer = fs.readFileSync(filePath);
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   const sourceSheet = workbook.Sheets[SOURCE_SHEET];
-  const decisionSheet = workbook.Sheets[DECISION_SHEET];
-  if (!sourceSheet || !decisionSheet) throw new Error('Franck Muller workbook must contain both source and decision worksheets');
+  const decisionSheetName = workbook.SheetNames.find(name => / Admission Decisions$/i.test(name))
+    || LEGACY_DECISION_SHEET;
+  const decisionSheet = workbook.Sheets[decisionSheetName];
+  if (!sourceSheet || !decisionSheet) {
+    throw new Error(`admission workbook must contain both source and decision worksheets; found: ${workbook.SheetNames.join(', ') || '(none)'}`);
+  }
   const sourceRows = XLSX.utils.sheet_to_json(sourceSheet, { defval: null, raw: true })
     .filter(row => Object.values(row).some(value => text(value)));
   const decisionRows = XLSX.utils.sheet_to_json(decisionSheet, { defval: null, raw: true })
     .filter(row => Object.values(row).some(value => text(value)));
   requireHeaders(sourceRows, SOURCE_HEADERS, SOURCE_SHEET);
-  requireHeaders(decisionRows, DECISION_HEADERS, DECISION_SHEET);
+  requireHeaders(decisionRows, DECISION_HEADERS, decisionSheetName);
   const decisions = new Map();
   for (const decision of decisionRows) {
     const listingId = text(decision.listing_id);
@@ -69,7 +73,7 @@ function readWorkbook(filePath) {
   return { fileSha256: sha256(buffer), sourceRows, decisions, decisionRows };
 }
 
-function classifyRow(source, decision) {
+function classifyRow(source, decision, expectedBrand = 'Franck Muller') {
   const reasons = [];
   const finalBrand = text(decision.final_brand);
   const category = text(source.category).toUpperCase();
@@ -77,7 +81,7 @@ function classifyRow(source, decision) {
   const reference = normalizeReference(decision.final_reference);
   const requestedPublish = text(decision.trading_floor_status).toUpperCase() === 'PUBLISH';
 
-  if (finalBrand !== 'Franck Muller') reasons.push('NOT_FRANCK_MULLER_SCOPE');
+  if (finalBrand !== expectedBrand) reasons.push('BRAND_SCOPE_MISMATCH');
   if (category !== 'WATCH') reasons.push('NON_WATCH_ROUTE_LUXURY_RESEARCH');
   if (text(decision.identity_status) !== 'VERIFIED') reasons.push('IDENTITY_REVIEW_REQUIRED');
   if (text(decision.bundle_status) !== 'SINGLE_CANDIDATE') reasons.push('BUNDLE_PENDING_SEPARATION');
@@ -110,8 +114,8 @@ function classifyRow(source, decision) {
   };
 }
 
-function decisionRow(source, decision, rowNumber) {
-  const admission = classifyRow(source, decision || {});
+function decisionRow(source, decision, rowNumber, expectedBrand = 'Franck Muller') {
+  const admission = classifyRow(source, decision || {}, expectedBrand);
   return {
     source_row_number: rowNumber,
     listing_id: text(source.listing_id) || null,
@@ -149,13 +153,19 @@ function parseArgs(argv) {
   return {
     input: path.resolve(options.input),
     outputDir: path.resolve(options['output-dir'] || path.join('audit-output', `franck-muller-admission-${Date.now()}`)),
+    brand: text(options.brand) || 'Franck Muller',
   };
 }
 
 function run() {
   const options = parseArgs(process.argv.slice(2));
   const input = readWorkbook(options.input);
-  const rows = input.sourceRows.map((source, index) => decisionRow(source, input.decisions.get(text(source.listing_id)), index + 2));
+  const rows = input.sourceRows.map((source, index) => decisionRow(
+    source,
+    input.decisions.get(text(source.listing_id)),
+    index + 2,
+    options.brand,
+  ));
   const missingDecisionCount = rows.filter(row => !input.decisions.has(text(row.listing_id))).length;
   const extraDecisionCount = [...input.decisions.keys()].filter(id => !input.sourceRows.some(row => text(row.listing_id) === id)).length;
   const counts = rows.reduce((totals, row) => {
@@ -173,6 +183,7 @@ function run() {
     forbidden_targets: ['watch_records', 'staging.listings', 'public release views'],
     source_file: path.basename(options.input),
     source_sha256: input.fileSha256,
+    expected_brand: options.brand,
     input_rows: input.sourceRows.length,
     decision_rows: input.decisionRows.length,
     missing_decisions: missingDecisionCount,

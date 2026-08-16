@@ -44,5 +44,14 @@ test('Franck Muller intake never treats a currency token as a reference', () => 
 test('Franck Muller intake holds foreign brand rows even if the decision ledger says publish', () => {
   const result = intake.classifyRow(source({ source_brand_text: 'Rolex' }), decision({ final_brand: 'Rolex' }));
   assert.equal(result.trading_floor_candidate, false);
-  assert.match(result.reasons.join('|'), /NOT_FRANCK_MULLER_SCOPE/);
+  assert.match(result.reasons.join('|'), /BRAND_SCOPE_MISMATCH/);
+});
+
+test('shared admission contract accepts another explicitly selected brand only', () => {
+  const tagDecision = decision({ final_brand: 'TAG Heuer', final_model: 'Carrera', final_reference: 'CBL2111' });
+  const accepted = intake.classifyRow(source({ source_brand_text: 'TAG Heuer' }), tagDecision, 'TAG Heuer');
+  const rejected = intake.classifyRow(source({ source_brand_text: 'TAG Heuer' }), tagDecision, 'Breguet');
+  assert.equal(accepted.trading_floor_candidate, true);
+  assert.equal(rejected.trading_floor_candidate, false);
+  assert.match(rejected.reasons.join('|'), /BRAND_SCOPE_MISMATCH/);
 });
