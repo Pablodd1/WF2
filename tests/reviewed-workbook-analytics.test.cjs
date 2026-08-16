@@ -62,7 +62,8 @@ test('never promotes an unverified workbook amount into USD analytics', () => {
   assert.equal(row.price_usd, null);
   assert.equal(row.analytics_currency_status, 'CURRENCY_UNVERIFIED');
   assert.equal(row.seller_name, 'Legacy Seller');
-  assert.equal(row.seller_phone, '+15551234567');
+  assert.equal(row.seller_phone, null);
+  assert.equal(row.contact_publication_approved, false);
 });
 
 test('requires the verified-price flag even when a USD value is populated', () => {
@@ -114,7 +115,9 @@ test('reviewed workbook loader requires complete identity and explicit verified 
   assert.match(source, /eq\('has_complete_identity', true\)/);
   assert.match(source, /eq\('has_verified_usd_price', true\)/);
   assert.match(source, /eq\('listing_type', 'WTS'\)/);
-  assert.doesNotMatch(source, /workbook_price_usd/);
+  const legacyColumns = source.slice(source.indexOf('const WORKBOOK_COLUMNS'), source.indexOf('const ADMISSION_WORKBOOK_COLUMNS'));
+  assert.doesNotMatch(legacyColumns, /workbook_price_usd/);
+  assert.match(source, /ADMISSION_WORKBOOK_COLUMNS[\s\S]*workbook_price_usd/);
   assert.match(source, /LEGACY_WORKBOOK_COLUMNS/);
   assert.match(source, /posted_by,phone_number/);
 });

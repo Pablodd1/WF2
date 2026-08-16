@@ -12,6 +12,7 @@ const { getClient } = require('./_lib/supabase');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   loadReviewedWorkbookBrandRows,
+  isReviewedWorkbookBrowseBrand,
   summarizeReviewedWorkbookModels,
 } = require('./_lib/reviewed-workbook-browse.cjs');
 const {
@@ -129,6 +130,24 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    if (isReviewedWorkbookBrowseBrand(brand)) {
+      const { rows, truncated } = await loadReviewedWorkbookBrandRows(getClient(), brand);
+      if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe model browsing' });
+      const out = summarizeReviewedWorkbookModels(rows);
+      const payload = {
+        success: true,
+        brand,
+        model_count: out.length,
+        catalog_reference_count: out.reduce((sum, item) => sum + item.reference_count, 0),
+        observed_listing_count: out.reduce((sum, item) => sum + item.listing_count, 0),
+        models: out,
+        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        sample_capped: false,
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (!isPublicationBrandAllowed(brand)) {
       // ponytail: prefer the preaggregated in-memory catalog index. The
       // per-request reviewed-workbook row scan times out on large brands

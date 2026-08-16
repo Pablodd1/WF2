@@ -10,6 +10,7 @@ const { listCanonicalCatalogReferences, listEquivalentReferences, lookupCatalog 
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   loadReviewedWorkbookBrandRows,
+  isReviewedWorkbookBrowseBrand,
   summarizeReviewedWorkbookReferences,
 } = require('./_lib/reviewed-workbook-browse.cjs');
 const {
@@ -265,6 +266,26 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    if (isReviewedWorkbookBrowseBrand(brand)) {
+      const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
+      if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe reference browsing' });
+      const out = summarizeReviewedWorkbookReferences(rows, model, false);
+      const payload = {
+        success: true,
+        brand,
+        model,
+        reference_count: out.length,
+        observed_listing_count: out.reduce((sum, item) => sum + item.listing_count, 0),
+        eligible_observation_count: out.reduce((sum, item) => sum + item.eligible_observation_count, 0),
+        references: out,
+        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+        sample_capped: false,
+      };
+      _cache.set(cacheKey, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (!isPublicationBrandAllowed(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
       if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });

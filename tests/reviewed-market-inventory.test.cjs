@@ -100,7 +100,7 @@ test('Trading Floor source view is allowlisted and defaults to the legacy source
   assert.match(sourceText, /TRADING_FLOOR_SOURCE_VIEW/);
   assert.match(sourceText, /qnsa_rolex_patek_trading_floor_source/);
   assert.match(sourceText, /ALLOWED_MARKET_SOURCE_VIEWS\.has\(requestedMarketSourceView\)/);
-  assert.match(sourceText, /rest\/v1\/\$\{MARKET_SOURCE_VIEW\}/);
+  assert.match(sourceText, /rest\/v1\/\$\{activeMarketSourceView\}/);
 });
 
 test('authenticated form submissions map into the Trading Floor contract', () => {
@@ -865,7 +865,7 @@ test('scoped pages use one lookahead row instead of trusting estimated totals', 
 
 test('cursor inventory honors the 50-card marketplace page and overlaps independent database reads', () => {
   assert.match(source, /const pageSizeLimit = pagination === 'cursor' \? 50 : MAX_PAGE_SIZE/);
-  assert.match(source, /const summaryPromise = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
+  assert.match(source, /const summaryPromise = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'/);
   assert.match(source, /\? Promise\.resolve\(unavailableQnsaReleaseSummary\(\)\)/);
   assert.match(source, /: loadSummary\(client\)/);
   assert.match(source, /directRowsPromise = Promise\.resolve\(directQuery\)/);
@@ -900,18 +900,18 @@ test('public brand filters preserve punctuation and use only supported exact sna
 });
 
 test('endpoint is read-only and globally ranks verified source images before pagination', () => {
-  assert.match(source, /rest\/v1\/\$\{MARKET_SOURCE_VIEW\}/);
+  assert.match(source, /rest\/v1\/\$\{activeMarketSourceView\}/);
   assert.match(source, /: 'reviewed_workbook_market_source_v2'/);
   assert.doesNotMatch(source, /\.from\(['"]watch_records['"]\)/);
   assert.doesNotMatch(source, /\.(?:insert|upsert|update|delete)\s*\(/);
   assert.match(source, /has_complete_identity/);
   assert.match(source, /MULTIPLE_LISTING_IDENTITY_VALUES/);
-  assert.match(source, /MARKET_SOURCE_VIEW !== 'qnsa_rolex_patek_trading_floor_source'[\s\S]*trading_floor_status', 'not\.in\.\(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate\)'/);
+  assert.match(source, /activeMarketSourceView !== 'qnsa_rolex_patek_trading_floor_source'[\s\S]*trading_floor_status', 'not\.in\.\(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate\)'/);
   // ponytail: images-first ORDER BY was reverted — it causes a Postgres
   // statement timeout on the unindexed view. Assert the proven indexed order:
   // price evidence primary, images as tiebreaker, newest last.
   assert.match(source, /queryParams\.set\('has_exact_source_image', requestedLane === 'images' \? 'eq\.true' : 'eq\.false'\)/);
-  assert.match(source, /queryParams\.set\('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
+  assert.match(source, /queryParams\.set\('order', activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'/);
   assert.match(source, /\? 'created_at\.desc,id\.desc'[\s\S]*: 'id\.desc'/);
   assert.match(source, /Fill the final image page from the no-image lane/);
   assert.match(source, /pageResult\.records\.filter\(row => \{/);

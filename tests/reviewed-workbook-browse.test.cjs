@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const {
+  isReviewedWorkbookBrowseBrand,
   summarizeReviewedWorkbookModels,
   summarizeReviewedWorkbookReferences,
 } = require('../api/_lib/reviewed-workbook-browse.cjs');
@@ -54,11 +55,75 @@ test('Price Research opens a supplied brand and Trading Floor hides internal evi
   assert.doesNotMatch(floor, /aria-label="Listing evidence"|EvidenceIndicators|Source contact supplied|Source-supplied listing image/);
 });
 
+test('new admission brands use observed workbook evidence for browse counts', () => {
+  for (const brand of ['TAG Heuer', 'Breguet', 'Franck Muller']) {
+    assert.equal(isReviewedWorkbookBrowseBrand(brand), true);
+  }
+  assert.equal(isReviewedWorkbookBrowseBrand('Rolex'), false);
+
+  const modelsApi = fs.readFileSync(path.join(__dirname, '..', 'api', 'catalog-models.js'), 'utf8');
+  const referencesApi = fs.readFileSync(path.join(__dirname, '..', 'api', 'catalog-references.js'), 'utf8');
+  for (const source of [modelsApi, referencesApi]) {
+    assert.match(source, /if \(isReviewedWorkbookBrowseBrand\(brand\)\)/);
+    assert.match(source, /observed_listing_count/);
+    assert.match(source, /OWNER_REVIEWED_WORKBOOK/);
+  }
+  assert.match(referencesApi, /eligible_observation_count/);
+  assert.match(referencesApi, /EXACT_REFERENCE_ON_SELECTION/);
+});
+
+test('Trading Floor reads admitted brands from approved inventory instead of the overwritten market view', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'reviewed-market-inventory.js'), 'utf8');
+  assert.match(source, /REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set\(\[\s*'Breguet', 'Franck Muller', 'TAG Heuer'/);
+  assert.match(source, /if \(brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS\.has\(brand\)\)/);
+  assert.match(source, /\.from\('reviewed_workbook_inventory'\)/);
+  assert.match(source, /\.eq\('verification_status', 'APPROVED_SINGLE_CANDIDATE'\)/);
+  assert.match(source, /totalStatus: 'available_from_approved_admission_inventory'/);
+});
+
+test('reviewed model calculations keep WTB separate and use only verified WTS prices', () => {
+  const { workbookModelStats } = require('../api/model-stats.js');
+  const summary = workbookModelStats([
+    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'A', listing_type: 'WTS', has_verified_usd_price: true, verified_price_usd: 5000, posting_date: '2026-01-01' },
+    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'B', listing_type: 'WTS', price_evidence_status: 'EXPLICIT_SOURCE_FX_CONVERTED', verified_price_usd: 7000, posting_date: '2026-02-01' },
+    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'C', listing_type: 'WTB', has_verified_usd_price: true, verified_price_usd: 9000, posting_date: '2026-03-01' },
+    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'D', listing_type: 'WTS', verified_price_usd: 11000, posting_date: '2026-04-01' },
+  ], 'Carrera');
+  assert.equal(summary.total, 4);
+  assert.equal(summary.wts, 3);
+  assert.equal(summary.wtb, 1);
+  assert.equal(summary.priced_count, 2);
+  assert.deepEqual(summary.stats, { avg: 6000, median: 6000, min: 5000, max: 7000 });
+  assert.equal(summary.meta.iqr_multiplier, 3);
+});
+
+test('Price Research discovery merges released admission-brand counts', () => {
+  const releaseSummary = fs.readFileSync(path.join(__dirname, '..', 'api', 'live-release-summary.js'), 'utf8');
+  const research = fs.readFileSync(path.join(__dirname, '..', 'src/pages/PriceResearch.tsx'), 'utf8');
+  assert.match(releaseSummary, /\['Breguet', 'Franck Muller', 'TAG Heuer'\]/);
+  assert.match(releaseSummary, /loadReviewedWorkbookBrandRows\(client, brand\)/);
+  assert.match(releaseSummary, /listing_count: rows\.length/);
+  assert.match(releaseSummary, /filter\(item => item\.listing_count > 0\)/);
+  assert.match(research, /fetch\('\/api\/live-release-summary'/);
+  assert.match(research, /const brandsByName = new Map<string, unknown>\(\)/);
+});
+
+test('admission Price Research reads only explicit-USD rows from approved inventory', () => {
+  const analytics = fs.readFileSync(path.join(__dirname, '..', 'api', '_lib', 'reviewed-workbook-analytics.cjs'), 'utf8');
+  assert.match(analytics, /\.from\('reviewed_workbook_inventory'\)/);
+  assert.match(analytics, /\.eq\('verification_status', 'APPROVED_SINGLE_CANDIDATE'\)/);
+  assert.match(analytics, /\.eq\('price_evidence_status', 'SOURCE_EXPLICIT_USD_MATCH'\)/);
+  assert.match(analytics, /seller_phone: contactApproved \?/);
+  assert.doesNotMatch(analytics, /DATED_FX_PROVENANCE_REQUIRES_EXISTING_SIDECAR'[\s\S]*price_usd:/);
+});
+
 test('Price Research presents uncategorized catalog identities as individually browsable exact references', () => {
   const research = fs.readFileSync(path.join(__dirname, '..', 'src/pages/PriceResearch.tsx'), 'utf8');
   assert.match(research, /REFERENCE_ONLY_MODEL = 'Reference-only listings'/);
   assert.match(research, /Other exact references/);
-  assert.match(research, /exact references · click to browse individually/);
+  assert.match(research, /'exact references'/);
+  assert.match(research, /' · click to browse individually'/);
+  assert.match(research, /observed listings/);
   assert.match(research, /loadRefs\(pBrand, m\.model\)/);
   assert.match(research, /Search references for \{pBrand\} \{displayCatalogModel\(pModel\)\}/);
   assert.match(research, /Search all \$\{pRefs\.length\} exact references/);

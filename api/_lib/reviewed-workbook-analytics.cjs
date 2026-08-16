@@ -1,6 +1,7 @@
 'use strict';
 
 const { applyEffectivePrice } = require('./corrected-price-source.cjs');
+const { isReviewedWorkbookBrowseBrand } = require('./reviewed-workbook-browse.cjs');
 
 const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
 
@@ -15,8 +16,12 @@ function mapWorkbookAnalyticsRow(row) {
   const imageCandidate = clean(row.final_image_url) || clean(row.user_image_url);
   const exactImage = !isBundle && (row.has_exact_source_image === true || Boolean(imageCandidate)) ? imageCandidate : null;
   const contactApproved = row.contact_publication_approved === true;
-  const verifiedUsd = row.verified_price_usd == null ? null : Number(row.verified_price_usd);
-  const hasVerifiedUsd = row.has_verified_usd_price === true
+  const explicitAdmissionUsd = row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
+    ? Number(row.workbook_price_usd)
+    : null;
+  const verifiedUsd = row.verified_price_usd == null ? explicitAdmissionUsd : Number(row.verified_price_usd);
+  const hasVerifiedUsd = (row.has_verified_usd_price === true
+    || (row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH' && Number(row.workbook_price_usd) > 0))
     && Number.isFinite(verifiedUsd)
     && verifiedUsd > 0;
   const priceUsd = hasVerifiedUsd ? verifiedUsd : null;
@@ -60,7 +65,7 @@ function mapWorkbookAnalyticsRow(row) {
     image_urls: exactImage ? [exactImage] : [],
     has_images: Boolean(exactImage),
     seller_name: clean(row.seller_name) || clean(row.posted_by),
-    seller_phone: clean(row.seller_phone) || clean(row.phone_number),
+    seller_phone: contactApproved ? (clean(row.seller_phone) || clean(row.phone_number)) : null,
     contact_publication_approved: contactApproved,
     verdict: clean(row.verdict) || clean(row.verification_status) || 'APPROVED',
     confidence: row.confidence == null ? 100 : Number(row.confidence),
@@ -85,6 +90,15 @@ const LEGACY_WORKBOOK_COLUMNS = WORKBOOK_COLUMNS
   .replace(/,corrected_price_usd,corrected_source_amount,corrected_source_currency,corrected_fx_rate,corrected_fx_source,corrected_fx_date,price_correction_status,price_correction_id,price_correction_key/, '')
   .replace('seller_name,seller_phone,', 'posted_by,phone_number,')
   .replace(',verdict,listing_status', '');
+
+const ADMISSION_WORKBOOK_COLUMNS = [
+  'id,source_file,source_row_number,source_record_id,posting_date,raw_message,listing_type',
+  'brand_scope,supplied_brand,canonical_brand,model,catalog_model,raw_reference',
+  'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
+  'source_price_amount,source_currency,price_evidence_status,confidence,verification_status',
+  'user_image_url,workbook_price_usd,imported_at,seller_name:posted_by,phone_number',
+  'contact_publication_approved',
+].join(',');
 
 function isMissingColumnError(error) {
   const code = String(error?.code || '');
@@ -121,6 +135,24 @@ async function loadReviewedWorkbookAnalyticsRows(client, { brand, references, li
   const indexedReferences = [...new Set((references || []).map(clean).filter(Boolean))];
   if (!clean(brand) || !indexedReferences.length) return [];
 
+  if (isReviewedWorkbookBrowseBrand(brand)) {
+    const { data, error } = await client
+      .from('reviewed_workbook_inventory')
+      .select(ADMISSION_WORKBOOK_COLUMNS)
+      .eq('brand_scope', clean(brand))
+      .in('normalized_reference', indexedReferences)
+      .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
+      .eq('confidence', 100)
+      .eq('price_evidence_status', 'SOURCE_EXPLICIT_USD_MATCH')
+      .eq('listing_type', 'WTS')
+      .gt('workbook_price_usd', 0)
+      .order('posting_date', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })
+      .limit(Math.min(10000, Math.max(1, Number(limit) || 10000)));
+    if (error) throw error;
+    return (data || []).map(mapWorkbookAnalyticsRow);
+  }
+
   let { data, error } = await executeAnalyticsQuery(client, WORKBOOK_COLUMNS, {
     brand, references: indexedReferences, limit,
   });
@@ -135,6 +167,20 @@ async function loadReviewedWorkbookAnalyticsRows(client, { brand, references, li
 }
 
 async function loadReviewedWorkbookListing(client, id) {
+  if (String(id || '').startsWith('admission_')) {
+    const { data, error } = await client
+      .from('reviewed_workbook_inventory')
+      .select(ADMISSION_WORKBOOK_COLUMNS)
+      .eq('id', id)
+      .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
+      .eq('confidence', 100)
+      .eq('price_evidence_status', 'SOURCE_EXPLICIT_USD_MATCH')
+      .eq('listing_type', 'WTS')
+      .gt('workbook_price_usd', 0)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? mapWorkbookAnalyticsRow(data) : null;
+  }
   const executeListingQuery = columns => client
     .from(MARKET_SOURCE_VIEW)
     .select(columns)
@@ -155,6 +201,7 @@ module.exports = {
   MARKET_SOURCE_VIEW,
   WORKBOOK_COLUMNS,
   LEGACY_WORKBOOK_COLUMNS,
+  ADMISSION_WORKBOOK_COLUMNS,
   isMissingColumnError,
   loadReviewedWorkbookAnalyticsRows,
   loadReviewedWorkbookListing,
