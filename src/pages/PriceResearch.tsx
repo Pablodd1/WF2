@@ -12,6 +12,8 @@ import { DealerRatingBadge, ListingDealerEvidence, type DealerRatingEvidenceStat
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
   id: string;
+  brand?: string | null;
+  reference?: string | null;
   price_usd: number | null;
   created_at: string;
   listing_date?: string | null;
@@ -807,7 +809,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       const workbookListing = REVIEWED_WORKBOOK_ID.test(row.id);
       const contactEndpoint = workbookListing
         ? `/api/reviewed-seller-summary?id=${encodeURIComponent(row.id)}`
-        : `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research`;
+        : `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research&brand=${encodeURIComponent(String(row.brand || queryBrand || data?.brand || ''))}&reference=${encodeURIComponent(String(row.reference || data?.reference || query || ''))}`;
       void fetch(contactEndpoint, { signal: controller.signal })
         .then(async contactResponse => contactResponse.ok ? contactResponse.json().catch(() => null) : null)
         .then(contactPayload => {
@@ -819,7 +821,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               contact_available: Boolean(contactPayload.contact_available),
               dealer_name: contactPayload.seller?.name || undefined,
               contact_channels: contactPayload.contact_available
-                ? { whatsapp: `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research&channel=whatsapp` }
+                ? { whatsapp: `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research&brand=${encodeURIComponent(String(row.brand || queryBrand || data?.brand || ''))}&reference=${encodeURIComponent(String(row.reference || data?.reference || query || ''))}&channel=whatsapp` }
                 : {},
               contact_source: 'OWNER_APPROVED_WORKBOOK',
               dealer_country: reputation?.country || null,
@@ -892,7 +894,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     } finally {
       if (listingRequestRef.current.sequence === sequence) setDetailLoading(false);
     }
-  }, []);
+  }, [data?.brand, data?.model, data?.reference, query, queryBrand]);
 
   const closeListing = useCallback(() => {
     listingRequestRef.current.controller?.abort();

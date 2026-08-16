@@ -61,9 +61,30 @@ test('contact JSON uses opaque same-site actions and resolves the external chann
 test('QNSA released listings resolve contact only through an applied dealer link', () => {
   assert.equal(api.optionalLegacyPublicListingUnavailable({ code: '57014' }), true);
   assert.equal(api.optionalLegacyPublicListingUnavailable({ message: 'permission denied' }), false);
-  assert.match(source, /from\('qnsa_rolex_patek_trading_floor_source'\)/);
+  assert.match(source, /findQnsaReleasedListing\(client/);
+  assert.match(source, /qnsa_zenith_reference_rows/);
+  assert.match(source, /qnsa_trading_floor_reference_rows/);
   assert.match(source, /from\('dealer_listing_links'\)[\s\S]*\.eq\('listing_id', id\)[\s\S]*\.eq\('link_status', 'APPLIED'\)/);
   assert.match(source, /dealer_id: qnsaDealerLink\?\.dealer_id \|\| null/);
   assert.match(source, /!qnsaReleaseListing && !isReleaseListingEligible/);
   assert.match(source, /if \(!qnsaReleaseListing\) \{[\s\S]*seller_listing_lineage_staging/);
+});
+
+test('QNSA contact proof follows exact-reference pages until the listing id is found', async () => {
+  const calls = [];
+  const client = {
+    rpc: async (name, args) => {
+      calls.push({ name, args });
+      const rows = args.p_offset === 0
+        ? Array.from({ length: 101 }, (_, index) => ({ id: `other-${index}` }))
+        : [{ id: 'target', canonical_brand: 'Cartier', normalized_reference: 'WSSA0032' }];
+      return { data: rows, error: null };
+    },
+  };
+  const match = await api.findQnsaReleasedListing(client, {
+    id: 'target', brand: 'Cartier', reference: 'WSSA0032',
+  });
+  assert.equal(match.id, 'target');
+  assert.deepEqual(calls.map(call => call.args.p_offset), [0, 101]);
+  assert.ok(calls.every(call => call.args.p_limit === 101));
 });

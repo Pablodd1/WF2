@@ -482,7 +482,7 @@ export default function TradingFloor() {
 
   useEffect(() => {
     const controller = new AbortController();
-
+    
     async function load() {
       setLoading(true);
       setError('');
@@ -1341,6 +1341,17 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
   useEffect(() => {
     const controller = new AbortController();
+
+    const contactParams = new URLSearchParams({
+      id: String(listing.id),
+      surface: 'trading-floor',
+      brand: String(listing.brand || ''),
+      reference: String(listing.reference || ''),
+    });
+    fetch(`/api/listing-contact?${contactParams.toString()}`, { signal: controller.signal })
+      .then(async response => response.ok ? response.json() as Promise<ListingContact> : null)
+      .then(payload => { if (payload) setContact(payload); })
+      .catch(error => { if (error?.name !== 'AbortError') setContact(sourcePosterContact(listing)); });
     
     // Fetch seller analytics from the approved reviewed-workbook contract.
     fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
@@ -1631,7 +1642,7 @@ function sourcePosterContact(listing: ListingRecord): ListingContact | null {
     dealer_name: name || undefined,
     contact_source: 'OWNER_APPROVED_WORKBOOK',
     contact_channels: phone ? {
-      whatsapp: `/api/listing-contact?id=${encodeURIComponent(listing.id)}&surface=trading-floor&channel=whatsapp`,
+      whatsapp: `/api/listing-contact?id=${encodeURIComponent(listing.id)}&surface=trading-floor&brand=${encodeURIComponent(String(listing.brand || ''))}&reference=${encodeURIComponent(String(listing.reference || ''))}&channel=whatsapp`,
     } : {},
     reason: undefined,
   };

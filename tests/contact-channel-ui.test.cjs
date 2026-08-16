@@ -14,12 +14,13 @@ test('listing surfaces show verified channel actions without rendering contact n
 
   assert.match(trading, /contact_channels\?\.whatsapp/);
   assert.match(trading, /contact_channels\?\.telegram/);
-  assert.match(trading, /surface=trading-floor&channel=whatsapp/);
+  assert.match(trading, /surface=trading-floor[^`]*channel=whatsapp/);
+  assert.match(trading, /fetch\(`\/api\/listing-contact\?\$\{contactParams\.toString\(\)\}`/);
   assert.match(trading, /Continue on Telegram/);
   assert.doesNotMatch(trading, /\{contact\?\.phone_display/);
   assert.doesNotMatch(trading, /Contact:\s*\{publishedPhone\}/);
   assert.match(research, /seller\?\.contact_channels\?\.whatsapp/);
-  assert.match(research, /surface=price-research&channel=whatsapp/);
+  assert.match(research, /surface=price-research[^`]*channel=whatsapp/);
   assert.doesNotMatch(research, /seller\?\.phone_display/);
   assert.doesNotMatch(evidence, /Contact:\s*\{publishedPhone\}/);
 });
