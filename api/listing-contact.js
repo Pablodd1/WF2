@@ -36,6 +36,35 @@ function optionalLegacyPublicListingUnavailable(error) {
       .test(`${error.message || error}`);
 }
 
+async function findQnsaReleasedListing(client, { id, brand, reference, maximumPages = 20 }) {
+  const zenith = String(brand || '').trim().toLowerCase() === 'zenith';
+  let offset = 0;
+  for (let page = 0; page < maximumPages; page += 1) {
+    const { data, error } = await client.rpc(
+      zenith ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows',
+      zenith ? {
+        p_reference: reference,
+        p_limit: 101,
+        p_offset: offset,
+        p_listing_type: null,
+      } : {
+        p_brand: brand,
+        p_reference: reference,
+        p_family: false,
+        p_limit: 101,
+        p_offset: offset,
+      },
+    );
+    if (error) throw error;
+    const rows = (data || []).map(row => row?.row_data || row).filter(Boolean);
+    const match = rows.find(row => String(row.id) === String(id));
+    if (match) return match;
+    if (rows.length < 101) return null;
+    offset += rows.length;
+  }
+  return null;
+}
+
 function whatsappUrl(phone, listing) {
   const item = [listing.brand, listing.reference].filter(Boolean).join(' ');
   const isBuyerRequest = ['WTB', 'NTQ'].includes(String(listing.listing_type || '').toUpperCase());
@@ -51,16 +80,19 @@ function telegramUrl(username, listing) {
   return `https://t.me/${username}?text=${message}`;
 }
 
-function sendContactResult(res, { payload, externalChannels, id, surface, requestedChannel }) {
+function sendContactResult(res, {
+  payload, externalChannels, id, surface, requestedChannel, brand, reference,
+}) {
   if (requestedChannel) {
     const destination = externalChannels[requestedChannel];
     if (!destination) return res.status(404).json({ error: 'Requested contact channel unavailable' });
     res.setHeader('Location', destination);
     return res.status(302).end();
   }
+  const context = `${brand ? `&brand=${encodeURIComponent(brand)}` : ''}${reference ? `&reference=${encodeURIComponent(reference)}` : ''}`;
   const contactChannels = Object.fromEntries(Object.keys(externalChannels).map(channel => [
     channel,
-    `/api/listing-contact?id=${encodeURIComponent(id)}&surface=${encodeURIComponent(surface)}&channel=${channel}`,
+    `/api/listing-contact?id=${encodeURIComponent(id)}&surface=${encodeURIComponent(surface)}${context}&channel=${channel}`,
   ]));
   return res.status(200).json({ ...payload, contact_channels: contactChannels });
 }
@@ -128,6 +160,8 @@ module.exports = async function handler(req, res) {
   if (requestedChannel && !['whatsapp', 'telegram'].includes(requestedChannel)) {
     return res.status(400).json({ error: 'Valid contact channel required' });
   }
+  const requestedBrand = String(req.query?.brand || '').trim().slice(0, 80);
+  const requestedReference = String(req.query?.reference || '').trim().slice(0, 120);
 
   try {
     const client = getClient();
@@ -140,19 +174,15 @@ module.exports = async function handler(req, res) {
     let publicListing = strictPublicListing;
     let qnsaReleaseListing = null;
     let qnsaDealerLink = null;
-    if (!publicListing && surface === 'trading-floor') {
-      const qnsaResult = await client
-        .from('qnsa_rolex_patek_trading_floor_source')
-        .select('id,canonical_brand,normalized_reference,listing_type,seller_name')
-        .eq('id', id)
-        .maybeSingle();
-      if (qnsaResult.error) throw qnsaResult.error;
-      if (qnsaResult.data) {
-        qnsaReleaseListing = qnsaResult.data;
+    if (!publicListing && requestedBrand && requestedReference) {
+      qnsaReleaseListing = await findQnsaReleasedListing(client, {
+        id, brand: requestedBrand, reference: requestedReference,
+      });
+      if (qnsaReleaseListing) {
         publicListing = {
           id: qnsaReleaseListing.id,
-          brand: qnsaReleaseListing.canonical_brand,
-          reference: qnsaReleaseListing.normalized_reference,
+          brand: qnsaReleaseListing.canonical_brand || qnsaReleaseListing.brand_scope,
+          reference: qnsaReleaseListing.normalized_reference || qnsaReleaseListing.catalog_reference,
         };
         const linkResult = await client
           .from('dealer_listing_links')
@@ -218,8 +248,8 @@ module.exports = async function handler(req, res) {
     if (!listing && qnsaReleaseListing) {
       listing = {
         id: qnsaReleaseListing.id,
-        brand: qnsaReleaseListing.canonical_brand,
-        reference: qnsaReleaseListing.normalized_reference,
+        brand: qnsaReleaseListing.canonical_brand || qnsaReleaseListing.brand_scope,
+        reference: qnsaReleaseListing.normalized_reference || qnsaReleaseListing.catalog_reference,
         listing_type: qnsaReleaseListing.listing_type,
         seller_name: qnsaReleaseListing.seller_name || null,
         seller_phone: null,
@@ -258,6 +288,8 @@ module.exports = async function handler(req, res) {
         id,
         surface,
         requestedChannel,
+        brand: resolvedListing.brand,
+        reference: resolvedListing.reference,
       });
     }
     if (!listing.dealer_id) return res.status(200).json({ success: true, contact_available: false, reason: 'DEALER_UNRESOLVED' });
@@ -327,6 +359,8 @@ module.exports = async function handler(req, res) {
       id,
       surface,
       requestedChannel,
+      brand: resolvedListing.brand,
+      reference: resolvedListing.reference,
     });
   } catch (error) {
     console.error('[listing-contact]', error.message);
@@ -336,5 +370,6 @@ module.exports = async function handler(req, res) {
 
 module.exports.hasApprovedPublicContact = hasApprovedPublicContact;
 module.exports.optionalLegacyPublicListingUnavailable = optionalLegacyPublicListingUnavailable;
+module.exports.findQnsaReleasedListing = findQnsaReleasedListing;
 module.exports.normalizeTelegramUsername = normalizeTelegramUsername;
 module.exports.sendContactResult = sendContactResult;
