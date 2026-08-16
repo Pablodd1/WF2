@@ -31,15 +31,22 @@ const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 const FOREIGN_BRAND_NAMES = [
   'Audemars Piguet',
   'Breguet',
+  'Bulgari',
   'Cartier',
   'Franck Muller',
+  'Girard-Perregaux',
+  'Glashütte Original',
+  'Grand Seiko',
+  'H. Moser & Cie',
   'IWC',
+  'Jacob & Co',
   'Omega',
   'Patek Philippe',
   'Piaget',
   'Rolex',
   'TAG Heuer',
   'Tudor',
+  'Ulysse Nardin',
   'Vacheron Constantin',
 ];
 

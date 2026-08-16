@@ -117,6 +117,92 @@ test('non-USD FX remains review evidence but is excluded from current analytics'
   assert.equal(evidence.status, 'DATED_FX_PROVENANCE_REQUIRES_EXISTING_SIDECAR');
 });
 
+test('owner-reviewed unbundled children publish without inherited media and use exact child USD', () => {
+  const row = intake.rowForImport({
+    source: source({
+      listing_id: 'moser-child-1',
+      source_message_id: 'moser-message-1_item_1',
+      raw_message: 'H. Moser Streamliner 6200-1200 available $13,500',
+      intent: 'WTS',
+      image_urls_source: 'https://example.test/parent-bundle.jpg',
+      normalized_price_usd: 13,
+    }),
+    decision: decision({
+      listing_id: 'moser-child-1',
+      final_brand: 'H. Moser & Cie',
+      final_model: 'Streamliner',
+      final_reference: 'MOSER',
+      review_reason: 'UNBUNDLED_STANDALONE_PASSED',
+    }),
+    expectedBrand: 'H. Moser & Cie',
+    fileName: 'H_Moser_Unbundled_Admission_Master.xlsx',
+    fileSha256: 'd'.repeat(64),
+    rowNumber: 2,
+    runId: 'test',
+    ownerUnbundled: true,
+  });
+  assert.ok(row);
+  assert.equal(row.normalized_reference, '62001200');
+  assert.equal(row.workbook_price_usd, 13500);
+  assert.equal(row.price_evidence_status, 'SOURCE_EXPLICIT_USD_MATCH');
+  assert.equal(row.final_image_url, null);
+  assert.equal(row.image_evidence_type, null);
+  assert.ok(row.review_reasons.includes('UNBUNDLED_CHILD_NO_IMAGE_APPROVED'));
+  assert.ok(row.review_reasons.includes('RAW_USD_REEXTRACTED_OVERRIDES_WORKBOOK_VALUE'));
+});
+
+test('owner-reviewed unbundled WTB remains demand and never becomes priced inventory', () => {
+  const row = intake.rowForImport({
+    source: source({
+      listing_id: 'zenith-child-1',
+      source_message_id: 'zenith-message-1_item_1',
+      raw_message: 'Looking for Zenith 03.3100.3600/69.M3100 budget $12,000',
+      intent: 'WTS',
+      image_urls_source: '',
+    }),
+    decision: decision({
+      listing_id: 'zenith-child-1',
+      final_brand: 'Zenith',
+      final_model: 'Defy',
+      final_reference: 'ZENITH',
+      review_reason: 'UNBUNDLED_STANDALONE_PASSED',
+    }),
+    expectedBrand: 'Zenith', fileName: 'Zenith.xlsx', fileSha256: 'e'.repeat(64),
+    rowNumber: 2, runId: 'test', ownerUnbundled: true,
+  });
+  assert.ok(row);
+  assert.equal(row.listing_type, 'WTB');
+  assert.equal(row.workbook_price_usd, null);
+  assert.equal(row.price_evidence_status, 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE');
+});
+
+test('unbundled rows without an exact child reference remain visible but out of Price Research', () => {
+  const row = intake.rowForImport({
+    source: source({
+      listing_id: 'blancpain-child-1', source_message_id: 'bp-message-1_item_1',
+      raw_message: 'Blancpain Fifty Fathoms available USD 18000', image_urls_source: '',
+    }),
+    decision: decision({
+      listing_id: 'blancpain-child-1', final_brand: 'Blancpain', final_model: 'Fifty Fathoms',
+      final_reference: 'BLANCPAIN', review_reason: 'UNBUNDLED_STANDALONE_PASSED',
+    }),
+    expectedBrand: 'Blancpain', fileName: 'Blancpain.xlsx', fileSha256: 'f'.repeat(64),
+    rowNumber: 2, runId: 'test', ownerUnbundled: true,
+  });
+  assert.ok(row);
+  assert.equal(row.normalized_reference, null);
+  assert.equal(row.workbook_price_usd, 18000);
+  assert.equal(row.price_evidence_status, 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE');
+  assert.ok(row.review_reasons.includes('EXACT_REFERENCE_NOT_RECOVERED_FROM_CHILD_RAW'));
+});
+
+test('owner unbundle mode is fail-closed to the reviewed brand allowlist', async () => {
+  await assert.rejects(
+    intake.run(['--input', 'not-opened.xlsx', '--brand', 'Rolex', '--unbundled-no-image', 'true']),
+    /not allowlisted/,
+  );
+});
+
 test('dry-run emits reconciled aggregate canary with zero database writes', async () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'admission-import-'));
   const file = path.join(temp, 'TAG_Heuer_Trading_Floor_Admission_Master.xlsx');

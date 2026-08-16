@@ -34,7 +34,11 @@ async function loadQnsaSummary(client) {
       .reduce((sum, row) => sum + Number(row.row_count || 0), 0),
   }));
   const admittedWorkbookBrands = await Promise.all(
-    ['Breguet', 'Franck Muller', 'TAG Heuer'].map(async brand => {
+    [
+      'Blancpain', 'Breguet', 'Bulgari', 'Chopard', 'Franck Muller',
+      'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
+      'Jacob & Co', 'TAG Heuer', 'Ulysse Nardin',
+    ].map(async brand => {
       try {
         const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
         return {

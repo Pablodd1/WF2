@@ -53,10 +53,16 @@ test('Price Research opens a supplied brand and Trading Floor hides internal evi
   assert.match(research, /if \(initialBrand && !initialReference\) void loadModels\(initialBrand\)/);
   assert.match(research, /onChange=\{event => void loadModels\(event\.target\.value\)\}/);
   assert.doesNotMatch(floor, /aria-label="Listing evidence"|EvidenceIndicators|Source contact supplied|Source-supplied listing image/);
+  assert.match(floor, /cardHasImage \? 'min-h-\[620px\]' : 'min-h-\[320px\]'/);
+  assert.match(floor, /\{cardHasImage && \(/);
 });
 
 test('new admission brands use observed workbook evidence for browse counts', () => {
-  for (const brand of ['TAG Heuer', 'Breguet', 'Franck Muller']) {
+  for (const brand of [
+    'Blancpain', 'Breguet', 'Bulgari', 'Chopard', 'Franck Muller',
+    'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
+    'Jacob & Co', 'TAG Heuer', 'Ulysse Nardin',
+  ]) {
     assert.equal(isReviewedWorkbookBrowseBrand(brand), true);
   }
   assert.equal(isReviewedWorkbookBrowseBrand('Rolex'), false);
@@ -74,7 +80,9 @@ test('new admission brands use observed workbook evidence for browse counts', ()
 
 test('Trading Floor reads admitted brands from approved inventory instead of the overwritten market view', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'reviewed-market-inventory.js'), 'utf8');
-  assert.match(source, /REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set\(\[\s*'Breguet', 'Franck Muller', 'TAG Heuer'/);
+  assert.match(source, /REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set/);
+  assert.match(source, /'Glashütte Original'/);
+  assert.match(source, /'Ulysse Nardin'/);
   assert.match(source, /if \(brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS\.has\(brand\)\)/);
   assert.match(source, /\.from\('reviewed_workbook_inventory'\)/);
   assert.match(source, /\.eq\('verification_status', 'APPROVED_SINGLE_CANDIDATE'\)/);
@@ -100,7 +108,8 @@ test('reviewed model calculations keep WTB separate and use only verified WTS pr
 test('Price Research discovery merges released admission-brand counts', () => {
   const releaseSummary = fs.readFileSync(path.join(__dirname, '..', 'api', 'live-release-summary.js'), 'utf8');
   const research = fs.readFileSync(path.join(__dirname, '..', 'src/pages/PriceResearch.tsx'), 'utf8');
-  assert.match(releaseSummary, /\['Breguet', 'Franck Muller', 'TAG Heuer'\]/);
+  assert.match(releaseSummary, /'Blancpain', 'Breguet', 'Bulgari', 'Chopard', 'Franck Muller'/);
+  assert.match(releaseSummary, /'Jacob & Co', 'TAG Heuer', 'Ulysse Nardin'/);
   assert.match(releaseSummary, /loadReviewedWorkbookBrandRows\(client, brand\)/);
   assert.match(releaseSummary, /listing_count: rows\.length/);
   assert.match(releaseSummary, /filter\(item => item\.listing_count > 0\)/);

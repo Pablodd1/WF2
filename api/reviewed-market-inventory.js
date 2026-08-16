@@ -43,7 +43,9 @@ const SIX_REVIEWED_BRAND_CURSOR_CODES = Object.freeze({
   Zenith: 'z',
 });
 const REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set([
-  'Breguet', 'Franck Muller', 'TAG Heuer',
+  'Blancpain', 'Breguet', 'Bulgari', 'Chopard', 'Franck Muller',
+  'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
+  'Jacob & Co', 'TAG Heuer', 'Ulysse Nardin',
 ]);
 
 async function loadQnsaReviewedReleaseSummary(client) {

@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const XLSX = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
-const { extractPriceObservations } = require('../../api/_lib/normalization-v4.cjs');
+const { explicitIntent, extractPriceObservations } = require('../../api/_lib/normalization-v4.cjs');
 const {
   SOURCE_HEADERS,
   DECISION_HEADERS,
@@ -20,6 +20,18 @@ const {
 const INVENTORY_TABLE = 'reviewed_workbook_inventory';
 const CHECKPOINT_TABLE = 'reviewed_workbook_import_checkpoints';
 const SOURCE_SHEET = 'Trading Floor & Price Research';
+const OWNER_UNBUNDLED_BRANDS = new Set([
+  'Blancpain',
+  'Bulgari',
+  'Chopard',
+  'Girard-Perregaux',
+  'Glashütte Original',
+  'Grand Seiko',
+  'H. Moser & Cie',
+  'Jacob & Co',
+  'Ulysse Nardin',
+  'Zenith',
+]);
 
 function text(value) {
   return value === null || value === undefined ? '' : String(value).trim();
@@ -84,7 +96,7 @@ function firstExactImage(value) {
   return candidates.find(item => /^https?:\/\/[^\s]+$/i.test(item)) || null;
 }
 
-function sourcePriceEvidence(source) {
+function sourcePriceEvidence(source, options = {}) {
   const currency = text(source.source_currency).toUpperCase() || null;
   const normalizedUsd = Number(source.normalized_price_usd);
   const observations = extractPriceObservations(text(source.raw_message), {});
@@ -93,6 +105,35 @@ function sourcePriceEvidence(source) {
     ? Number(primary.amount_original)
     : null;
   const sourceText = text(source.asking_price_raw) || primary?.raw_price_text || null;
+  if (options.rawExplicitUsdOnly) {
+    const explicitUsd = observations.find(item => (
+      ['USD', 'USDT'].includes(String(item.currency_original || '').toUpperCase())
+      && Number(item.amount_original) > 0
+      && item.currency_evidence === 'explicit_line_currency'
+    )) || observations.find(item => (
+      String(item.currency_original || '').toUpperCase() === 'USD'
+      && Number(item.amount_original) > 0
+      && item.currency_evidence === 'usd_defaulted_by_policy'
+    ));
+    if (explicitUsd) {
+      return {
+        workbookPriceUsd: Number(explicitUsd.amount_original),
+        sourceAmount: Number(explicitUsd.amount_original),
+        sourceText: explicitUsd.raw_price_text || null,
+        currency: String(explicitUsd.currency_original).toUpperCase(),
+        status: 'SOURCE_EXPLICIT_USD_MATCH',
+        reextractedFromRaw: Number(normalizedUsd) !== Number(explicitUsd.amount_original),
+      };
+    }
+    return {
+      workbookPriceUsd: null,
+      sourceAmount: null,
+      sourceText: null,
+      currency: null,
+      status: 'PRICE_NOT_SUPPLIED',
+      reextractedFromRaw: false,
+    };
+  }
   if (
     ['USD', 'USDT'].includes(currency)
     && sourceAmount !== null
@@ -136,10 +177,10 @@ function sourcePriceEvidence(source) {
   };
 }
 
-function additionalImportReasons(source) {
+function additionalImportReasons(source, options = {}) {
   const reasons = [];
   if (!isoDate(source.source_posted_at)) reasons.push('SOURCE_POSTING_TIME_INVALID');
-  if (!firstExactImage(source.image_urls_source)) reasons.push('EXACT_SOURCE_IMAGE_URL_MISSING');
+  if (!options.allowNoImage && !firstExactImage(source.image_urls_source)) reasons.push('EXACT_SOURCE_IMAGE_URL_MISSING');
   return reasons;
 }
 
@@ -148,17 +189,78 @@ function listingType(value) {
   return ['WTS', 'WTB'].includes(normalized) ? normalized : 'OTHER';
 }
 
-function rowForImport({ source, decision, expectedBrand, fileName, fileSha256, rowNumber, runId }) {
-  const admission = classifyRow(source, decision, expectedBrand);
-  if (!admission.trading_floor_candidate || additionalImportReasons(source).length) return null;
+function strictReferenceFromRaw(rawMessage, brand) {
+  const raw = text(rawMessage);
+  const patterns = {
+    'Glashütte Original': /\b(?:\d-)?\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\b/i,
+    'H. Moser & Cie': /\b\d{4}-\d{4}\b/i,
+    'Girard-Perregaux': /\b\d{5}-[A-Z0-9]+(?:-[A-Z0-9]+){1,3}\b/i,
+    'Ulysse Nardin': /\b\d{3,4}-\d{2,4}(?:[-/][A-Z0-9]+){1,4}\b/i,
+    Blancpain: /\b\d{4}(?:[- ][A-Z0-9]{2,6}){2,4}\b/i,
+    Zenith: /\b\d{2}\.\d{4}\.\d{3,4}\/[0-9A-Z]+(?:\.[0-9A-Z]+)*\b/i,
+    Bulgari: /\b10\d{4}\b/i,
+    'Grand Seiko': /\b(?:SBGA|SBGC|SBGE|SBGH|SBGJ|SBGM|SBGP|SBGW|SLGA|SLGC|SLGH|STGF)[A-Z0-9]{2,6}\b/i,
+    Chopard: /\b(?:16|17|20|27|83)\d{2,4}(?:-[A-Z0-9]+){0,3}\b/i,
+    'Jacob & Co': /\b[A-Z]{1,4}\d{2,4}(?:\.[A-Z0-9]+){2,6}\b/i,
+  };
+  const match = raw.match(patterns[brand]);
+  return match ? normalizeReference(match[0]) : null;
+}
+
+function classifyOwnerUnbundledRow(source, decision, expectedBrand) {
+  const reasons = [];
+  if (text(decision.final_brand) !== expectedBrand) reasons.push('BRAND_SCOPE_MISMATCH');
+  if (text(source.category).toUpperCase() !== 'WATCH') reasons.push('NON_WATCH_ROUTE_LUXURY_RESEARCH');
+  if (text(decision.identity_status) !== 'VERIFIED') reasons.push('IDENTITY_REVIEW_REQUIRED');
+  if (text(decision.bundle_status) !== 'SINGLE_CANDIDATE') reasons.push('BUNDLE_PENDING_SEPARATION');
+  if (text(decision.duplicate_decision) !== 'COUNT') reasons.push('REPOST_OR_DUPLICATE_EXCLUDED');
+  if (text(decision.trading_floor_status).toUpperCase() !== 'PUBLISH') reasons.push('NOT_APPROVED_FOR_TRADING_FLOOR');
+  if (!/\bUNBUNDLED_STANDALONE_PASSED\b/.test(text(decision.review_reason))) reasons.push('OWNER_UNBUNDLE_REVIEW_MISSING');
+  if (!text(decision.final_model)) reasons.push('MODEL_UNRESOLVED');
+  if (!text(source.listing_id) || !text(source.source_message_id) || !text(source.raw_message)) reasons.push('IMMUTABLE_SOURCE_LINEAGE_MISSING');
+  if (!isoDate(source.source_posted_at)) reasons.push('SOURCE_POSTING_TIME_INVALID');
+  if (!text(source.seller_source_id) || !text(source.seller_name_source)) reasons.push('SELLER_IDENTITY_MISSING');
+  return { trading_floor_candidate: reasons.length === 0, price_research_candidate: false, reasons };
+}
+
+function resolvedListingType(source, ownerUnbundled) {
+  if (ownerUnbundled) {
+    const rawIntent = explicitIntent(text(source.raw_message));
+    if (rawIntent === 'WTS' || rawIntent === 'WTB') return rawIntent;
+    if (/\b(?:ISO|LTB|looking\s+for|want(?:ed)?|need)\b/i.test(text(source.raw_message))) return 'WTB';
+  }
+  return listingType(source.intent);
+}
+
+function rowForImport({ source, decision, expectedBrand, fileName, fileSha256, rowNumber, runId, ownerUnbundled = false }) {
+  const admission = ownerUnbundled
+    ? classifyOwnerUnbundledRow(source, decision, expectedBrand)
+    : classifyRow(source, decision, expectedBrand);
+  if (!admission.trading_floor_candidate
+    || additionalImportReasons(source, { allowNoImage: ownerUnbundled }).length) return null;
   const rawMessage = text(source.raw_message);
   const listingId = text(source.listing_id);
   const sourceMessageId = text(source.source_message_id);
-  const reference = normalizeReference(decision.final_reference);
-  const image = firstExactImage(source.image_urls_source);
-  const extractedPrice = sourcePriceEvidence(source);
-  const price = admission.price_research_candidate
+  const reference = ownerUnbundled
+    ? strictReferenceFromRaw(rawMessage, expectedBrand)
+    : normalizeReference(decision.final_reference);
+  const image = ownerUnbundled ? null : firstExactImage(source.image_urls_source);
+  const resolvedType = resolvedListingType(source, ownerUnbundled);
+  const extractedPrice = sourcePriceEvidence(source, { rawExplicitUsdOnly: ownerUnbundled });
+  const priceResearchCandidate = ownerUnbundled
+    ? resolvedType === 'WTS' && extractedPrice.status === 'SOURCE_EXPLICIT_USD_MATCH' && Boolean(reference)
+    : admission.price_research_candidate;
+  const price = priceResearchCandidate
     ? extractedPrice
+    : resolvedType !== 'WTS'
+      ? {
+        workbookPriceUsd: null,
+        sourceAmount: null,
+        sourceText: null,
+        currency: null,
+        status: 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE',
+        reextractedFromRaw: false,
+      }
     : {
       ...extractedPrice,
       status: extractedPrice.status === 'PRICE_NOT_SUPPLIED'
@@ -186,7 +288,7 @@ function rowForImport({ source, decision, expectedBrand, fileName, fileSha256, r
     posted_by: text(source.seller_name_source) || null,
     phone_number: null,
     raw_message: rawMessage,
-    listing_type: listingType(source.intent),
+    listing_type: resolvedType,
     brand_scope: expectedBrand,
     supplied_brand: expectedBrand,
     canonical_brand: expectedBrand,
@@ -195,25 +297,28 @@ function rowForImport({ source, decision, expectedBrand, fileName, fileSha256, r
     normalized_reference: reference,
     catalog_reference: reference,
     catalog_model: text(decision.final_model),
-    dial_color: text(decision.dial_normalized),
-    catalog_dial: text(decision.dial_normalized),
+    dial_color: text(decision.dial_normalized) || null,
+    catalog_dial: text(decision.dial_normalized) || null,
     condition: text(source.source_condition_text) || null,
     workbook_price_usd: price.workbookPriceUsd,
     source_price_amount: price.sourceAmount,
     source_price_text: price.sourceText,
     source_currency: price.currency,
     price_evidence_status: price.status,
-    verification_tier: 'OWNER_ADMISSION_LEDGER',
+    verification_tier: ownerUnbundled ? 'OWNER_UNBUNDLED_ADMISSION_LEDGER' : 'OWNER_ADMISSION_LEDGER',
     confidence: 100,
     verification_status: 'APPROVED_SINGLE_CANDIDATE',
     user_image_url: image,
     catalog_image_url: null,
     final_image_url: image,
     display_image_url: image,
-    image_evidence_type: 'SELLER_LISTING_IMAGE',
-    review_reasons: price.status === 'SOURCE_EXPLICIT_USD_MATCH'
-      ? []
-      : [price.status],
+    image_evidence_type: image ? 'SELLER_LISTING_IMAGE' : null,
+    review_reasons: [
+      ...(ownerUnbundled && !image ? ['UNBUNDLED_CHILD_NO_IMAGE_APPROVED'] : []),
+      ...(ownerUnbundled && !reference ? ['EXACT_REFERENCE_NOT_RECOVERED_FROM_CHILD_RAW'] : []),
+      ...(price.status === 'SOURCE_EXPLICIT_USD_MATCH' ? [] : [price.status]),
+      ...(price.reextractedFromRaw ? ['RAW_USD_REEXTRACTED_OVERRIDES_WORKBOOK_VALUE'] : []),
+    ],
     contact_publication_approved: false,
     contact_publication_basis: null,
     updated_at: new Date().toISOString(),
@@ -242,6 +347,7 @@ function parseArgs(argv) {
     maxRows: Number.isInteger(maxRows) && maxRows > 0 ? maxRows : null,
     batchSize,
     runId: text(values['run-id']) || `approved_admission_${Date.now()}`,
+    ownerUnbundled: values['unbundled-no-image'] === 'true',
     apply: process.env.APPLY_APPROVED_ADMISSION_IMPORT === 'true',
   };
 }
@@ -257,6 +363,9 @@ async function upsertBatch(client, rows) {
 
 async function run(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
+  if (options.ownerUnbundled && !OWNER_UNBUNDLED_BRANDS.has(options.brand)) {
+    throw new Error(`--unbundled-no-image is not allowlisted for ${options.brand}`);
+  }
   const workbook = readAdmissionWorkbook(options.input);
   const fileName = path.basename(options.input);
   const candidates = [];
@@ -269,7 +378,9 @@ async function run(argv = process.argv.slice(2)) {
       missingDecisions += 1;
       return;
     }
-    const admission = classifyRow(source, decision, options.brand);
+    const admission = options.ownerUnbundled
+      ? classifyOwnerUnbundledRow(source, decision, options.brand)
+      : classifyRow(source, decision, options.brand);
     const priceOnlyReasons = admission.reasons.filter(
       reason => reason === 'PRICE_RESEARCH_EVIDENCE_INCOMPLETE',
     );
@@ -278,7 +389,7 @@ async function run(argv = process.argv.slice(2)) {
     }
     const importReasons = [
       ...admission.reasons.filter(reason => reason !== 'PRICE_RESEARCH_EVIDENCE_INCOMPLETE'),
-      ...additionalImportReasons(source),
+      ...additionalImportReasons(source, { allowNoImage: options.ownerUnbundled }),
     ];
     if (!admission.trading_floor_candidate || importReasons.length) {
       for (const reason of importReasons) heldReasons[reason] = (heldReasons[reason] || 0) + 1;
@@ -292,6 +403,7 @@ async function run(argv = process.argv.slice(2)) {
       fileSha256: workbook.fileSha256,
       rowNumber: index + 2,
       runId: options.runId,
+      ownerUnbundled: options.ownerUnbundled,
     }));
   });
   const uniqueCandidates = [...new Map(candidates.map(row => [row.id, row])).values()];
@@ -372,6 +484,10 @@ async function run(argv = process.argv.slice(2)) {
     missing_decisions: missingDecisions,
     contact_publication_approved_rows: selected.filter(row => row.contact_publication_approved).length,
     bundle_rows_selected: selected.filter(row => /BUNDLE|MULTI/i.test(row.listing_type)).length,
+    unbundled_no_image_policy: options.ownerUnbundled,
+    rows_with_images: selected.filter(row => row.final_image_url).length,
+    rows_with_exact_raw_usd: selected.filter(row => row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH').length,
+    rows_without_exact_reference: selected.filter(row => !row.normalized_reference).length,
     target_table: options.apply ? INVENTORY_TABLE : null,
     forbidden_targets: ['watch_records', 'staging.listings', 'public release views'],
     database_writes: options.apply ? inserted : 0,
@@ -396,11 +512,14 @@ if (require.main === module) {
 module.exports = {
   CHECKPOINT_TABLE,
   INVENTORY_TABLE,
+  OWNER_UNBUNDLED_BRANDS,
   firstExactImage,
   additionalImportReasons,
+  classifyOwnerUnbundledRow,
   listingType,
   readAdmissionWorkbook,
   rowForImport,
   run,
   sourcePriceEvidence,
+  strictReferenceFromRaw,
 };
