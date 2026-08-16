@@ -21,6 +21,12 @@ function canonicalDirectoryFallbackAllowed(error) {
     || /function .*qnsa_dealer_directory_page.*does not exist|schema cache/i.test(message);
 }
 
+function optionalDealerStatsUnavailable(error) {
+  if (!error) return false;
+  return /relation .*dealer_profile_stats.* does not exist|dealer_profile_stats.*schema cache/i
+    .test(`${error.code || ''} ${error.message || error}`);
+}
+
 async function loadVerifiedPhones(client, dealerIds) {
   if (!dealerIds.length) return new Map();
   const { data, error } = await client
@@ -168,7 +174,7 @@ module.exports = async function handler(req, res) {
         .filter(dealer => dealer.contact_consent === true)
         .map(dealer => dealer.id)),
     ]);
-    if (statsError) throw statsError;
+    if (statsError && !optionalDealerStatsUnavailable(statsError)) throw statsError;
     const statsById = new Map((stats || []).map(item => [item.dealer_id, item]));
     const publicDealers = (dealers || []).map((dealer, index) => publicDealer(
       dealer,
@@ -198,3 +204,4 @@ module.exports = async function handler(req, res) {
 
 module.exports.publicDealer = publicDealer;
 module.exports.canonicalDirectoryFallbackAllowed = canonicalDirectoryFallbackAllowed;
+module.exports.optionalDealerStatsUnavailable = optionalDealerStatsUnavailable;
