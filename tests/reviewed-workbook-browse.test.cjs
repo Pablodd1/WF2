@@ -67,6 +67,7 @@ test('Price Research presents uncategorized catalog identities as individually b
   assert.match(research, /REFERENCE_PICKER_PAGE_SIZE = 6/);
   assert.match(research, /aria-label="Reference pages"/);
   assert.match(research, /released \{referenceEvidence\[r\.reference\.toUpperCase\(\)\]\.count === 1 \? 'observation' : 'observations'\}/);
+  assert.match(research, /count: 0, hasMore: false, image: ''/);
   assert.match(research, /source listing/);
   assert.match(research, /EXACT_REFERENCE_ON_SELECTION/);
   assert.match(research, /Open to load exact market data/);

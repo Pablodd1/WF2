@@ -1080,7 +1080,11 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         String(record.reference || '').trim().toUpperCase() === item.reference.trim().toUpperCase()
         && !record.multi_listing,
       );
-      if (!exactRows.length) return null;
+      if (!exactRows.length) {
+        return payload.hasMore
+          ? null
+          : { reference: item.reference.toUpperCase(), count: 0, hasMore: false, image: '' };
+      }
       const image = exactRows
         .map(record => record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '')
         .find(Boolean) || '';
