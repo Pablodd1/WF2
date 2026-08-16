@@ -15,10 +15,10 @@ const SOURCE_HEADERS = [
   'source_posted_at', 'ingested_at', 'raw_message', 'intent', 'category',
   'asking_price_raw', 'source_currency', 'normalized_price_usd', 'fx_source',
   'fx_rate_date', 'image_keys', 'image_urls_source', 'image_count_source',
-  'duplicate_status_source',
+  'duplicate_status_source', 'seller_source_id', 'seller_name_source',
 ];
 const DECISION_HEADERS = [
-  'listing_id', 'final_brand', 'final_model', 'final_reference',
+  'listing_id', 'final_brand', 'final_model', 'final_reference', 'dial_normalized',
   'identity_status', 'bundle_status', 'image_status', 'duplicate_decision',
   'trading_floor_status', 'price_research_status', 'review_reason',
   'reviewed_by', 'reviewed_at',
@@ -88,7 +88,10 @@ function classifyRow(source, decision, expectedBrand = 'Franck Muller') {
   if (text(decision.image_status) !== 'VERIFIED' || Number(source.image_count_source || 0) < 1) reasons.push('IMAGE_UNVERIFIED_OR_MISSING');
   if (text(decision.duplicate_decision) !== 'COUNT') reasons.push('REPOST_OR_DUPLICATE_EXCLUDED');
   if (invalidReference(decision.final_reference)) reasons.push('REFERENCE_UNRESOLVED_OR_PRICE_TOKEN');
+  if (!text(decision.final_model) || !text(decision.dial_normalized)) reasons.push('MODEL_OR_DIAL_UNRESOLVED');
   if (!text(source.listing_id) || !text(source.source_message_id) || !text(source.raw_message)) reasons.push('IMMUTABLE_SOURCE_LINEAGE_MISSING');
+  if (!text(source.source_posted_at)) reasons.push('SOURCE_POSTING_TIME_MISSING');
+  if (!text(source.seller_source_id) || !text(source.seller_name_source)) reasons.push('SELLER_IDENTITY_MISSING');
   if (!requestedPublish) reasons.push('NOT_APPROVED_FOR_TRADING_FLOOR');
 
   const tradingFloorCandidate = reasons.length === 0;
@@ -123,6 +126,7 @@ function decisionRow(source, decision, rowNumber, expectedBrand = 'Franck Muller
     source_brand: text(source.source_brand_text) || null,
     final_brand: admission.final_brand,
     final_model: text(decision?.final_model) || null,
+    dial_normalized: text(decision?.dial_normalized) || null,
     final_reference: admission.final_reference,
     source_intent: text(source.intent) || null,
     source_category: text(source.category) || null,

@@ -29,12 +29,15 @@ const CACHE_TTL = 5 * 60 * 1000;
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 const FOREIGN_BRAND_NAMES = [
   'Audemars Piguet',
+  'Breguet',
   'Cartier',
+  'Franck Muller',
   'IWC',
   'Omega',
   'Patek Philippe',
   'Piaget',
   'Rolex',
+  'TAG Heuer',
   'Tudor',
   'Vacheron Constantin',
 ];

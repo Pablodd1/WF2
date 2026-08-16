@@ -7,6 +7,7 @@ const intake = require('../tools/intake/prepare-franck-muller-admission.cjs');
 function source(overrides = {}) {
   return {
     listing_id: 'wf-fm-001', source_message_id: 'message-001', raw_message: 'Franck Muller 8880 WTS $12,000',
+    source_posted_at: '2026-08-16T12:00:00Z', seller_source_id: 'seller-001', seller_name_source: 'Seller',
     source_brand_text: 'Franck Muller', intent: 'WTS', category: 'WATCH', source_currency: 'USD',
     normalized_price_usd: 12000, fx_source: 'SOURCE_EXPLICIT_USD', fx_rate_date: '2026-08-16', image_count_source: 1,
     ...overrides,
@@ -15,7 +16,7 @@ function source(overrides = {}) {
 
 function decision(overrides = {}) {
   return {
-    final_brand: 'Franck Muller', final_model: 'Vanguard', final_reference: 'V45', identity_status: 'VERIFIED',
+    final_brand: 'Franck Muller', final_model: 'Vanguard', final_reference: 'V45', dial_normalized: 'Black', identity_status: 'VERIFIED',
     bundle_status: 'SINGLE_CANDIDATE', image_status: 'VERIFIED', duplicate_decision: 'COUNT',
     trading_floor_status: 'PUBLISH', price_research_status: 'ELIGIBLE', ...overrides,
   };

@@ -53,11 +53,11 @@ def main():
     decision_index = {value: index for index, value in enumerate(decision_headers)}
     required_source = [
         "listing_id", "source_message_id", "raw_message", "intent", "category",
-        "source_currency", "normalized_price_usd", "fx_source", "fx_rate_date",
-        "image_count_source",
+        "source_posted_at", "source_currency", "normalized_price_usd", "fx_source", "fx_rate_date",
+        "image_count_source", "seller_source_id", "seller_name_source",
     ]
     required_decision = [
-        "listing_id", "final_brand", "final_reference", "identity_status",
+        "listing_id", "final_brand", "final_model", "final_reference", "dial_normalized", "identity_status",
         "bundle_status", "image_status", "duplicate_decision",
         "trading_floor_status", "price_research_status",
     ]
@@ -91,8 +91,14 @@ def main():
             row_reasons.append("REPOST_OR_DUPLICATE_EXCLUDED")
         if reference_invalid(decision[decision_index["final_reference"]]):
             row_reasons.append("REFERENCE_UNRESOLVED_OR_PRICE_TOKEN")
+        if not clean(decision[decision_index["final_model"]]) or not clean(decision[decision_index["dial_normalized"]]):
+            row_reasons.append("MODEL_OR_DIAL_UNRESOLVED")
         if not clean(source[source_index["listing_id"]]) or not clean(source[source_index["source_message_id"]]) or not clean(source[source_index["raw_message"]]):
             row_reasons.append("IMMUTABLE_SOURCE_LINEAGE_MISSING")
+        if not clean(source[source_index["source_posted_at"]]):
+            row_reasons.append("SOURCE_POSTING_TIME_MISSING")
+        if not clean(source[source_index["seller_source_id"]]) or not clean(source[source_index["seller_name_source"]]):
+            row_reasons.append("SELLER_IDENTITY_MISSING")
         if clean(decision[decision_index["trading_floor_status"]]).upper() != "PUBLISH":
             row_reasons.append("NOT_APPROVED_FOR_TRADING_FLOOR")
         if row_reasons:

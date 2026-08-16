@@ -8,7 +8,9 @@ const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 const KNOWN_WATCH_BRANDS = [
   'A. Lange & Söhne',
   'Audemars Piguet',
+  'Breguet',
   'Cartier',
+  'Franck Muller',
   'IWC',
   'Omega',
   'Panerai',
@@ -16,6 +18,7 @@ const KNOWN_WATCH_BRANDS = [
   'Piaget',
   'Richard Mille',
   'Rolex',
+  'TAG Heuer',
   'Tudor',
   'Vacheron Constantin',
   'Zenith',
