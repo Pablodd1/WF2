@@ -15,6 +15,7 @@ const {
 } = require('./_lib/publication-references.cjs');
 const { repostSignature } = require('./_lib/repost-deduplication.cjs');
 const { buildLuxuryResearchCoverage } = require('./_lib/luxury-research-coverage.cjs');
+const { loadReviewedWorkbookBrandRows } = require('./_lib/reviewed-workbook-browse.cjs');
 
 const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'];
 const QNSA_MARKET_SOURCE = 'qnsa_rolex_patek_trading_floor_source';
@@ -32,6 +33,25 @@ async function loadQnsaSummary(client) {
       .filter(row => String(row.brand || '').toLowerCase() === brand.toLowerCase())
       .reduce((sum, row) => sum + Number(row.row_count || 0), 0),
   }));
+  const admittedWorkbookBrands = await Promise.all(
+    [
+      'Blancpain', 'Breguet', 'Bulgari', 'Chopard', 'Franck Muller',
+      'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
+      'Jacob & Co', 'TAG Heuer', 'Ulysse Nardin',
+    ].map(async brand => {
+      try {
+        const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
+        return {
+          brand,
+          listing_count: rows.length,
+          count_status: truncated ? 'bounded_lower_bound' : 'exact',
+        };
+      } catch {
+        return { brand, listing_count: 0, count_status: 'unavailable' };
+      }
+    }),
+  );
+  brands.push(...admittedWorkbookBrands.filter(item => item.listing_count > 0));
   return {
     success: true,
     surface: 'Trading Floor',
@@ -40,7 +60,7 @@ async function loadQnsaSummary(client) {
     total_listing_count: brands.reduce((total, brand) => total + brand.listing_count, 0),
     luxury_categories: luxuryCoverage.categories,
     total_luxury_item_count: luxuryCoverage.total_listing_count,
-    count_source: 'qnsa_market_feed_counts',
+    count_source: 'qnsa_market_feed_counts_plus_reviewed_workbook_admissions',
   };
 }
 

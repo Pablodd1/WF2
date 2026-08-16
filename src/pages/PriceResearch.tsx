@@ -560,7 +560,7 @@ export default function PriceResearch() {
   // ── Drill-down picker state (brand → model → reference) ──
   const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
   const [pBrand, setPBrand] = useState(initialBrand);
-  const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
+  const [pModels, setPModels] = useState<{ model: string; reference_count: number; listing_count?: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
   const [pModel, setPModel] = useState('');
   const [pRefs, setPRefs] = useState<{
@@ -746,9 +746,11 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/reviewed-market-inventory?page=1&pageSize=12', { signal: controller.signal })
-      .then(response => response.json())
-      .then(payload => {
+    Promise.all([
+      fetch('/api/reviewed-market-inventory?page=1&pageSize=12', { signal: controller.signal }).then(response => response.json()),
+      fetch('/api/live-release-summary', { signal: controller.signal }).then(response => response.ok ? response.json() : null).catch(() => null),
+    ])
+      .then(([payload, releaseSummary]) => {
         // The checkpoint summary includes pre-publication rows, so its per-brand
         // totals are not customer-safe after the strict identity gate. Use only
         // the API's publication brand names here; exact counts are shown after
@@ -761,7 +763,22 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           if (typeof raw === 'object' && 'brand' in raw) return cleanBrandStr((raw as { brand?: unknown }).brand);
           return String(raw).replace(/^[({"'`\s]+|[)}"'`\s]+$/g, '').trim();
         };
-        const brands = payload.publicationBrands || payload.summary?.publicationBrands || [];
+        const inventoryBrands = payload.publicationBrands || payload.summary?.publicationBrands || [];
+        const releaseBrands = Array.isArray(releaseSummary?.brands) ? releaseSummary.brands : [];
+        const brandsByName = new Map<string, unknown>();
+        for (const item of [...inventoryBrands, ...releaseBrands]) {
+          const name = cleanBrandStr(item);
+          if (!name) continue;
+          const existing = brandsByName.get(name);
+          const nextCount = typeof item === 'object' && item
+            ? Number((item as Record<string, unknown>).listing_count ?? 0)
+            : 0;
+          const existingCount = typeof existing === 'object' && existing
+            ? Number((existing as Record<string, unknown>).listing_count ?? 0)
+            : 0;
+          if (!existing || nextCount > existingCount) brandsByName.set(name, item);
+        }
+        const brands = [...brandsByName.values()];
         if (Array.isArray(brands) && brands.length) {
           setPBrands(brands.map((item: unknown) => {
             if (typeof item === 'string') return { brand: cleanBrandStr(item) };
@@ -1328,7 +1345,11 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   {modelImages[m.model] && <img src={modelImages[m.model]} alt="" loading="lazy" style={{ width: 48, height: 48, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayCatalogModel(m.model)}</span>
-                    <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>{m.reference_count} {m.model === REFERENCE_ONLY_MODEL ? 'exact references · click to browse individually' : 'catalog refs'}</span>
+                    <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>
+                      {m.reference_count} {m.model === REFERENCE_ONLY_MODEL ? 'exact references' : 'references'}
+                      {m.listing_count != null ? ` · ${m.listing_count.toLocaleString()} observed listings` : ''}
+                      {m.model === REFERENCE_ONLY_MODEL ? ' · click to browse individually' : ''}
+                    </span>
                   </span>
                 </button>
               ))}

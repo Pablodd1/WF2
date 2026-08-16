@@ -42,6 +42,11 @@ const SIX_REVIEWED_BRAND_CURSOR_CODES = Object.freeze({
   Cartier: 'c',
   Zenith: 'z',
 });
+const REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set([
+  'Blancpain', 'Breguet', 'Bulgari', 'Chopard', 'Franck Muller',
+  'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
+  'Jacob & Co', 'TAG Heuer', 'Ulysse Nardin',
+]);
 
 async function loadQnsaReviewedReleaseSummary(client) {
   const { data, error } = await client.rpc('qnsa_market_feed_counts');
@@ -1482,10 +1487,19 @@ module.exports = async function handler(req, res) {
     }
 
     const client = getClient();
+    // The high-volume six-brand lane remains on the bounded QNSA feed. Newly
+    // admitted owner-reviewed brands live in the reviewed-workbook source and
+    // must not be sent to the six-brand RPC merely because production selects
+    // QNSA as its default source. This preserves strict single-item admission
+    // while making the approved cohort visible after import.
+    const activeMarketSourceView = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      && requestedBrand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(requestedBrand)
+      ? 'reviewed_workbook_market_source_v2'
+      : MARKET_SOURCE_VIEW;
     // Summary and authenticated direct-post reads are independent of the
     // reviewed market REST request. Start them without serializing three
     // remote database round trips on every page load.
-    const summaryPromise = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+    const summaryPromise = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       // Counts are metadata, not an admission gate. Never serialize the
       // customer page behind a global snapshot RPC: if that RPC is stale or
       // locked it can consume the hosted statement timeout before the bounded
@@ -1502,14 +1516,14 @@ module.exports = async function handler(req, res) {
     // RM is explicitly controlled by the production release ledger. It is
     // included in discovery only after the reviewed RM deployment exists;
     // counts remain unavailable while the optional snapshot is offline.
-    if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+    if (activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && !summary.brands.some(entry => entry.brand === 'Richard Mille')) {
       summary.brands.push({ brand: 'Richard Mille', files: 1, files_complete: 1,
         source_rows: null, canonical_listings: null, duplicate_rows_held: null });
     }
     // The snapshot is an exact census of the enabled reconciled market-feed
     // run. Totals stay withheld for predicates the snapshot does not encode.
-    const publicInventoryTotal = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source' && !multiBrandSelection
+    const publicInventoryTotal = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source' && !multiBrandSelection
       ? snapshotInventoryTotal(summary, {
           search, reference, dial: requestedDial, imagesOnly, condition, region,
           rating, postedAfter, itemCategory, brand, listingType, pricedOnly,
@@ -1535,6 +1549,105 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)) {
+      const admissionSearch = safeSearchTerm(search);
+      const admissionColumns = [
+        'id,source_file,source_row_number,source_record_id,posting_date,posted_by,phone_number',
+        'contact_publication_approved,raw_message,listing_type,brand_scope,supplied_brand,canonical_brand',
+        'model,catalog_model,raw_reference,normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
+        'workbook_price_usd,source_price_amount,source_price_text,source_currency,price_evidence_status',
+        'confidence,verification_status,user_image_url,has_image,imported_at,review_reasons,source_payload_sha256',
+      ].join(',');
+      let admissionQuery = client
+        .from('reviewed_workbook_inventory')
+        .select(admissionColumns, { count: 'exact' })
+        .eq('brand_scope', brand)
+        .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
+        .eq('confidence', 100)
+        .in('listing_type', ['WTS', 'WTB']);
+      if (listingType) admissionQuery = admissionQuery.eq('listing_type', listingType);
+      if (requestedReference) {
+        admissionQuery = admissionQuery.in('normalized_reference', listEquivalentReferences(requestedReference, brand));
+      }
+      if (requestedDial) admissionQuery = admissionQuery.ilike('dial_color', requestedDial);
+      if (imagesOnly) admissionQuery = admissionQuery.eq('has_image', true);
+      if (pricedOnly) admissionQuery = admissionQuery.gt('source_price_amount', 0);
+      if (postedAfter) admissionQuery = admissionQuery.gte('posting_date', postedAfter);
+      if (admissionSearch && !admissionSearch.includes(' ')) {
+        const pattern = `*${admissionSearch}*`;
+        admissionQuery = admissionQuery.or([
+          `model.ilike.${pattern}`,
+          `catalog_model.ilike.${pattern}`,
+          `raw_reference.ilike.${pattern}`,
+          `normalized_reference.ilike.${pattern}`,
+          `posted_by.ilike.${pattern}`,
+          `raw_message.ilike.${pattern}`,
+        ].join(','));
+      }
+      const admissionOffset = pagination === 'cursor'
+        ? (inventoryCursor?.offset || 0)
+        : pageWindow.start;
+      const { data: admissionRows, count: admissionCount, error: admissionError } = await admissionQuery
+        .order('has_image', { ascending: false })
+        .order('id', { ascending: false })
+        .range(admissionOffset, admissionOffset + pageSize);
+      if (admissionError) throw admissionError;
+      const mappedAdmissionRows = (admissionRows || []).slice(0, pageSize).map(row => mapReviewedRecord({
+        ...row,
+        parent_id: null,
+        is_bundle: false,
+        has_exact_source_image: row.has_image === true,
+        verified_price_usd: row.price_evidence_status === EXPLICIT_USD_STATUS
+          ? Number(row.workbook_price_usd) || null
+          : null,
+        has_verified_usd_price: row.price_evidence_status === EXPLICIT_USD_STATUS
+          && Number(row.workbook_price_usd) > 0,
+        has_complete_identity: Boolean(row.canonical_brand && row.model && row.normalized_reference && row.dial_color),
+        verdict: 'APPROVED',
+        trading_floor_status: 'APPROVED',
+        item_category: 'WATCH',
+        publication_state: 'APPROVED',
+        publication_lane: 'OWNER_REVIEWED_ADMISSION',
+        normalization_run_complete: true,
+        raw_lineage_verified: /^[0-9a-f]{64}$/i.test(String(row.source_payload_sha256 || '')),
+      }));
+      const records = (await enrichRecordsWithDealerDirectory(client, mappedAdmissionRows))
+        .filter(record => !record.multi_listing)
+        .filter(record => !condition || cleanExactText(record.condition, 80).toLowerCase() === condition.toLowerCase())
+        .filter(record => !region || locationMatches(record.location, region))
+        .filter(record => ratingMatches(record, rating))
+        .sort(compareInventoryForDisplay);
+      const hasMore = (admissionRows || []).length > pageSize;
+      const nextOffset = admissionOffset + Math.min(pageSize, (admissionRows || []).length);
+      return res.status(200).json({
+        status: 'ok',
+        count: records.length,
+        total: Number(admissionCount || 0),
+        page,
+        pageSize,
+        totalIsEstimate: false,
+        totalStatus: 'available_from_approved_admission_inventory',
+        hasMore,
+        nextCursor: hasMore ? encodeInventoryCursor({ lane: 'images', offset: nextOffset, page: page + 1 }) : null,
+        records,
+        summary: {
+          source: 'reviewed_workbook_inventory',
+          canonical_listings: Number(admissionCount || 0),
+          brands: [{ brand, canonical_listings: Number(admissionCount || 0) }],
+        },
+        publicationBrands: [{ brand, listing_count: Number(admissionCount || 0) }],
+        evidenceContract: EVIDENCE_CONTRACT,
+        coverage: summarizeCoverage(records),
+        displayPolicy: {
+          unpriced_listings_visible: true,
+          unpriced_listings_count_toward_activity: true,
+          unpriced_listings_excluded_from_price_analytics: true,
+          within_reference_order: 'SOURCE_IMAGE_FIRST_THEN_NEWEST',
+        },
+        viewContract: 'approved-admission-inventory',
+      });
+    }
+
     const columns = [
       'id,parent_id,source_file,source_row_number,source_record_id,posting_date,seller_name',
       'seller_phone,contact_publication_approved,raw_message,listing_type,brand_scope',
@@ -1553,7 +1666,7 @@ module.exports = async function handler(req, res) {
     // The QNSA release view already excludes every blocked status and may carry
     // a NULL source status. Applying SQL NOT IN again would also reject NULL and
     // erase otherwise eligible reviewed rows.
-    if (MARKET_SOURCE_VIEW !== 'qnsa_rolex_patek_trading_floor_source') {
+    if (activeMarketSourceView !== 'qnsa_rolex_patek_trading_floor_source') {
       queryParams.set('trading_floor_status', 'not.in.(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate)');
     }
     // Keep the brand predicate in PostgreSQL. The forward QNSA feed indexes now
@@ -1561,7 +1674,7 @@ module.exports = async function handler(req, res) {
     // unpartitioned 501-row window and filtering it in Node is both slower and
     // capable of starving one brand when the newest global rows skew toward the
     // other brand.
-    const qnsaBroadPage = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+    const qnsaBroadPage = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && !reference;
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) {
@@ -1570,7 +1683,7 @@ module.exports = async function handler(req, res) {
         || (normalizedBrand === 'patek philippe' && reference === '5712')
         ? reference
         : null;
-      if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source') {
+      if (activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source') {
         if (familyPrefix) {
           queryParams.set('normalized_reference', `like.${familyPrefix}*`);
         } else {
@@ -1651,7 +1764,7 @@ module.exports = async function handler(req, res) {
         });
       }
     }
-    const qnsaUnpartitionedMedia = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+    const qnsaUnpartitionedMedia = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && !imagesOnly && !sixBrandBroadScope;
     const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || 'images');
     const requestedOffset = pagination === 'cursor'
@@ -1679,7 +1792,7 @@ module.exports = async function handler(req, res) {
     if (!qnsaUnpartitionedMedia) {
       queryParams.set('has_exact_source_image', requestedLane === 'images' ? 'eq.true' : 'eq.false');
     }
-    queryParams.set('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+    queryParams.set('order', activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       // Match the QNSA feed indexes exactly. Ordering the joined publication
       // view by posting_date forced a full sort across the complete release and
       // timed out after the release switches were enabled.
@@ -1875,7 +1988,7 @@ module.exports = async function handler(req, res) {
       preloadedQnsaResponse = directResponse;
       }
     }
-    if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+    if (activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand && reference && !legacyMarketViewContractDetected) {
       const normalizedBrand = String(brand).trim().toLowerCase();
       const familyReference = (normalizedBrand === 'rolex' && reference === '116500')
@@ -2011,7 +2124,7 @@ module.exports = async function handler(req, res) {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
     }
-    let restUrl = `${process.env.SUPABASE_URL}/rest/v1/${MARKET_SOURCE_VIEW}?${activeQueryParams.toString()}`;
+    let restUrl = `${process.env.SUPABASE_URL}/rest/v1/${activeMarketSourceView}?${activeQueryParams.toString()}`;
     let restRes = preloadedQnsaResponse || await fetch(restUrl, {
       headers,
     });
@@ -2028,7 +2141,7 @@ module.exports = async function handler(req, res) {
         brand, requestedReference, exactDialVariants,
         listingType, imagesOnly, pricedOnly, search, postedAfter,
       });
-      restUrl = `${process.env.SUPABASE_URL}/rest/v1/${MARKET_SOURCE_VIEW}?${activeQueryParams.toString()}`;
+      restUrl = `${process.env.SUPABASE_URL}/rest/v1/${activeMarketSourceView}?${activeQueryParams.toString()}`;
       restRes = await fetch(restUrl, { headers });
       errText = restRes.ok ? '' : await restRes.text();
     }
@@ -2069,7 +2182,7 @@ module.exports = async function handler(req, res) {
           noImageParams.set('limit', String(remaining + 1));
           noImageParams.set('offset', '0');
         }
-        const noImageUrl = `${process.env.SUPABASE_URL}/rest/v1/${MARKET_SOURCE_VIEW}?${noImageParams.toString()}`;
+        const noImageUrl = `${process.env.SUPABASE_URL}/rest/v1/${activeMarketSourceView}?${noImageParams.toString()}`;
         const noImageRes = await fetch(noImageUrl, { headers });
         const noImageError = noImageRes.ok ? '' : await noImageRes.text();
         if (!noImageRes.ok) {

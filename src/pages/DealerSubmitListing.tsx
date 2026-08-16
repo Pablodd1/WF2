@@ -1,4 +1,4 @@
-import { ArrowLeft, Camera, CheckCircle2, CopyPlus, ImagePlus, Layers3, Plus, Send, ShieldCheck, Trash2, UserRound } from 'lucide-react';
+import { ArrowLeft, Camera, CheckCircle2, CopyPlus, ImagePlus, Layers3, Mic, Plus, Send, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -252,16 +252,8 @@ export default function DealerSubmitListing() {
               <p className="mt-3 max-w-3xl text-sm leading-7 text-white/45">{t('Required identity and source fields keep each item organized. Price remains optional; when omitted, the Trading Floor displays “Price not supplied.”')}</p>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-white/45">{t('You may complete and preview the form without an account. Registration is required only when you save and submit. Approved WTS items reach the Trading Floor and, when price, currency, catalog identity, and duplicate checks pass, Price Research. WTB stays separate as demand.')}</p>
 
-              <div className="mt-7 grid gap-2 sm:grid-cols-3">
-                <Choice active={mode === 'single'} onClick={() => changeMode('single')}>{t('One item')}</Choice>
-                <Choice active={mode === 'multiple'} onClick={() => changeMode('multiple')}>{t('Several separate items')}</Choice>
-                <Choice active={mode === 'bundle'} onClick={() => changeMode('bundle')}>{t('One bundle or dealer list')}</Choice>
-              </div>
-
               <div className="mt-4 border-l-2 border-[#c9a96e] bg-[#c9a96e]/[0.08] px-4 py-3 text-xs leading-5 text-white/60">
-                {mode === 'single' && t('Post one watch or luxury item with its own message and photos.')}
-                {mode === 'multiple' && t('Create one card per item. Seller credentials are stamped automatically, while every watch keeps its own reference, price, message, and photos.')}
-                {mode === 'bundle' && t('Paste the complete dealer list once and add the original group photos. We keep it intact in the deferred bundle lane; no group photo is assigned to an individual watch.')}
+                {t('Post one watch or luxury item with its own message and photos. If the message contains several items, the review pipeline detects and holds it for safe separation.')}
               </div>
 
               <form onSubmit={submit} className="mt-7 space-y-6">
@@ -371,7 +363,10 @@ function ItemEditor({ item, number, mode, canRemove, canAddSimilar, onChange, on
         {!isBundle && <><Field value={item.size} onChange={size => onChange({ size })} label={t(isWatch ? 'Case size (optional)' : 'Size (optional)')} /><Field value={item.year} onChange={year => onChange({ year })} label={t('Year (optional)')} /><Field value={item.completeness} onChange={completeness => onChange({ completeness })} label={t(isWatch ? 'Box and papers (optional)' : 'Included accessories (optional)')} /></>}
       </div>
       {item.intent === 'WTS' && <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_150px]"><Field value={item.price_amount} onChange={price_amount => onChange({ price_amount })} label={t('Asking price (optional)')} type="number" /><label className="block text-xs text-white/60">{t('Currency')}<select value={item.currency} onChange={event => onChange({ currency: event.target.value })} className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white">{CURRENCIES.map(currency => <option key={currency}>{currency}</option>)}</select></label></div>}
-      <label className="mt-4 block text-xs text-white/60">{t(isBundle ? 'Paste the complete original bundle or dealer list' : 'Original listing or request message')}<textarea value={item.raw_message} onChange={event => onChange({ raw_message: event.target.value })} required minLength={3} maxLength={10000} rows={isBundle ? 9 : 5} placeholder={isBundle ? t('Paste the full message exactly as written. Keep every watch, price, currency, and line break.') : undefined} className="mt-2 w-full resize-y border border-white/15 bg-[#111118] px-3 py-3 text-sm leading-6 text-white outline-none focus:border-[#c9a96e]" /></label>
+      <div className="mt-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/60"><span>{t(isBundle ? 'Paste the complete original bundle or dealer list' : 'Original listing or request message')}</span>{!isBundle && <DictationButton onTranscript={transcript => onChange({ raw_message: item.raw_message ? `${item.raw_message}\n${transcript}` : transcript })} />}</div>
+        <textarea value={item.raw_message} onChange={event => onChange({ raw_message: event.target.value })} required minLength={3} maxLength={10000} rows={isBundle ? 9 : 5} placeholder={isBundle ? t('Paste the full message exactly as written. Keep every watch, price, currency, and line break.') : t('Type or dictate the original listing exactly as posted. Review every field before submitting.')} className="mt-2 w-full resize-y border border-white/15 bg-[#111118] px-3 py-3 text-sm leading-6 text-white outline-none focus:border-[#c9a96e]" />
+      </div>
       <div className="mt-4">
         <div className="border border-dashed border-white/25 bg-black/20 p-4 text-center"><Camera size={22} className="mx-auto text-[#c9a96e]" /><span className="mt-2 block text-sm font-semibold">{t(isBundle ? 'Add the original group photos' : 'Add item photos')}</span><span className="mt-1 block text-xs text-white/40">1–{MAX_ITEM_PHOTOS} {t(isBundle ? 'photos · preserved with this bundle only' : 'photos · first photo is the Trading Floor cover')}</span><div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row"><label className="cursor-pointer border border-[#c9a96e] px-4 py-2 text-xs font-semibold text-[#e7cc91]">{t('Take photo')}<input className="sr-only" type="file" accept="image/*" capture="environment" required={!item.photos.length} onChange={onPhotos} /></label><label className="cursor-pointer border border-white/20 px-4 py-2 text-xs font-semibold text-white/70">{t('Choose photos')}<input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple required={!item.photos.length} onChange={onPhotos} /></label></div><p className="mt-3 text-[10px] text-white/35">{t('Your browser may request camera permission when you take a photo.')}</p></div>
         {!!item.photos.length && <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">{item.photos.map((file, index) => <div key={`${file.name}-${index}`} className="group relative aspect-square overflow-hidden border border-white/10"><FilePreview file={file} alt={`${t('Item')} ${number} photo ${index + 1}`} className="h-full w-full object-cover" />{index === 0 ? <span className="absolute bottom-1 left-1 bg-black/75 px-1.5 py-0.5 text-[9px] uppercase">{t('Cover')}</span> : <button type="button" onClick={() => onMakeCover(index)} className="absolute bottom-1 left-1 bg-black/80 px-1.5 py-0.5 text-[9px] uppercase text-white/85">{t('Make cover')}</button>}<button type="button" onClick={() => onRemovePhoto(index)} aria-label={`${t('Remove photo')} ${index + 1}`} className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/80 text-white/80 hover:text-red-300"><Trash2 size={12} /></button></div>)}</div>}
@@ -410,6 +405,48 @@ function FilePreview({ file, alt, className }: { file: File; alt: string; classN
 
 function Choice({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <button type="button" onClick={onClick} aria-pressed={active} className={`h-11 border px-3 text-sm font-semibold ${active ? 'border-[#c9a96e] bg-[#c9a96e] text-[#09090d]' : 'border-white/15 bg-[#111118] text-white/65'}`}>{children}</button>;
+}
+
+type BrowserRecognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+};
+
+function DictationButton({ onTranscript }: { onTranscript: (transcript: string) => void }) {
+  const { t } = useLanguage();
+  const [status, setStatus] = useState('');
+
+  function startDictation() {
+    const browser = window as Window & {
+      SpeechRecognition?: new () => BrowserRecognition;
+      webkitSpeechRecognition?: new () => BrowserRecognition;
+    };
+    const Recognition = browser.SpeechRecognition || browser.webkitSpeechRecognition;
+    if (!Recognition) {
+      setStatus(t('Voice dictation is not supported in this browser. You can type the original message instead.'));
+      return;
+    }
+    const recognition = new Recognition();
+    recognition.lang = navigator.language || 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = event => {
+      const transcript = Array.from(event.results).map(result => result[0]?.transcript || '').join(' ').trim();
+      if (transcript) onTranscript(transcript);
+      setStatus(transcript ? t('Dictation added. Review the message and fields before submitting.') : '');
+    };
+    recognition.onerror = () => setStatus(t('Microphone permission or dictation was unavailable. You can type the original message instead.'));
+    recognition.onend = () => undefined;
+    setStatus(t('Listening…'));
+    recognition.start();
+  }
+
+  return <div className="flex items-center gap-2"><button type="button" onClick={startDictation} className="inline-flex min-h-9 items-center gap-2 border border-[#c9a96e]/70 px-3 py-2 text-[11px] font-semibold text-[#ead6aa] hover:bg-[#c9a96e] hover:text-black"><Mic size={14} /> {t('Dictate message')}</button>{status && <span aria-live="polite" className="max-w-xs text-[10px] text-white/45">{status}</span>}</div>;
 }
 
 function Field({ value, onChange, label, required = false, type = 'text' }: { value: string; onChange: (value: string) => void; label: string; required?: boolean; type?: string }) {
