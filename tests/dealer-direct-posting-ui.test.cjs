@@ -7,16 +7,18 @@ const test = require('node:test');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'src/pages/DealerSubmitListing.tsx'), 'utf8');
 
-test('authenticated form supports item photos, a posting-user photo, and three clear posting paths', () => {
+test('authenticated form supports item photos, a posting-user photo, and a single-item posting path', () => {
   assert.match(source, /Take photo/);
   assert.match(source, /Choose photos/);
   assert.match(source, /Credentialed posting user/);
   assert.match(source, /identity fields cannot be edited here/);
   assert.match(source, /capture="environment"/);
   assert.match(source, /capture="user"/);
-  assert.match(source, /Several separate items/);
-  assert.match(source, /One bundle or dealer list/);
-  assert.match(source, /Add similar/);
+  assert.doesNotMatch(source, /<Choice active=\{mode === 'multiple'\}/);
+  assert.doesNotMatch(source, /<Choice active=\{mode === 'bundle'\}/);
+  assert.match(source, /Dictate message/);
+  assert.match(source, /SpeechRecognition/);
+  assert.match(source, /review pipeline detects and holds it for safe separation/);
   assert.match(source, /deferred bundle lane/);
   assert.match(source, /MAX_ITEMS = 20/);
   assert.match(source, /Submit \$\{items\.length === 1 \? 'item'/);
