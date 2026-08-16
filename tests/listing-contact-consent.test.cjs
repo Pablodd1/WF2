@@ -57,3 +57,13 @@ test('contact JSON uses opaque same-site actions and resolves the external chann
   assert.equal(response.statusCode, 302);
   assert.equal(response.headers.Location, 'https://wa.me/13055550100?text=hello');
 });
+
+test('QNSA released listings resolve contact only through an applied dealer link', () => {
+  assert.equal(api.optionalLegacyPublicListingUnavailable({ code: '57014' }), true);
+  assert.equal(api.optionalLegacyPublicListingUnavailable({ message: 'permission denied' }), false);
+  assert.match(source, /from\('qnsa_rolex_patek_trading_floor_source'\)/);
+  assert.match(source, /from\('dealer_listing_links'\)[\s\S]*\.eq\('listing_id', id\)[\s\S]*\.eq\('link_status', 'APPLIED'\)/);
+  assert.match(source, /dealer_id: qnsaDealerLink\?\.dealer_id \|\| null/);
+  assert.match(source, /!qnsaReleaseListing && !isReleaseListingEligible/);
+  assert.match(source, /if \(!qnsaReleaseListing\) \{[\s\S]*seller_listing_lineage_staging/);
+});
