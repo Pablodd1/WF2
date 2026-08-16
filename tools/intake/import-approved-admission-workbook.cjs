@@ -220,6 +220,7 @@ function classifyOwnerUnbundledRow(source, decision, expectedBrand) {
   if (!text(source.listing_id) || !text(source.source_message_id) || !text(source.raw_message)) reasons.push('IMMUTABLE_SOURCE_LINEAGE_MISSING');
   if (!isoDate(source.source_posted_at)) reasons.push('SOURCE_POSTING_TIME_INVALID');
   if (!text(source.seller_source_id) || !text(source.seller_name_source)) reasons.push('SELLER_IDENTITY_MISSING');
+  if (!['WTS', 'WTB'].includes(resolvedListingType(source, true))) reasons.push('LISTING_TYPE_UNRESOLVED');
   return { trading_floor_candidate: reasons.length === 0, price_research_candidate: false, reasons };
 }
 

@@ -203,6 +203,16 @@ test('owner unbundle mode is fail-closed to the reviewed brand allowlist', async
   );
 });
 
+test('unresolved trade intent is held instead of entering the WTS or WTB publication lane', () => {
+  const admission = intake.classifyOwnerUnbundledRow(
+    source({ raw_message: 'H. Moser Streamliner 6200-1200 trade considered', intent: 'OTHER' }),
+    decision({ final_brand: 'H. Moser & Cie', final_model: 'Streamliner', review_reason: 'UNBUNDLED_STANDALONE_PASSED' }),
+    'H. Moser & Cie',
+  );
+  assert.equal(admission.trading_floor_candidate, false);
+  assert.ok(admission.reasons.includes('LISTING_TYPE_UNRESOLVED'));
+});
+
 test('dry-run emits reconciled aggregate canary with zero database writes', async () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'admission-import-'));
   const file = path.join(temp, 'TAG_Heuer_Trading_Floor_Admission_Master.xlsx');
