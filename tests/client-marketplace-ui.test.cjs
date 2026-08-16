@@ -79,7 +79,8 @@ test('Trading Floor watch view does not render internal listing labels or identi
 test('Trading Floor uses the server-ranked reviewed release and fails closed on images', () => {
   const floor = read('src/pages/TradingFloor.tsx');
 
-  assert.match(floor, /media\.matches \? 24 : 50/);
+  assert.match(floor, /const \[pageSize, setPageSize\] = useState\(24\)/);
+  assert.match(floor, /setPageSize\(24\)/);
   assert.match(floor, /function hasListingImage/);
   assert.match(floor, /function isValidListingImageUrl/);
   assert.match(floor, /function listingImageUrl/);

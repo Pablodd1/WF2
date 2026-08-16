@@ -42,7 +42,6 @@ const SIX_REVIEWED_BRAND_CURSOR_CODES = Object.freeze({
   Cartier: 'c',
   Zenith: 'z',
 });
-let legacyMarketViewContractDetected = false;
 
 async function loadQnsaReviewedReleaseSummary(client) {
   const { data, error } = await client.rpc('qnsa_market_feed_counts');
@@ -1381,6 +1380,11 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
+    // Schema-compatibility fallback is request-local. A single malformed or
+    // deployment-gap request must never poison a warm serverless instance and
+    // force every later broad Trading Floor request onto the expensive joined
+    // REST view. That sticky state caused intermittent empty inventory/503s.
+    let legacyMarketViewContractDetected = false;
     const pagination = cleanExactText(req.query?.pagination, 20).toLowerCase();
     const requestedPageSize = Number.parseInt(
       String(req.query?.pageSize || DEFAULT_PAGE_SIZE),
@@ -2166,7 +2170,8 @@ module.exports = async function handler(req, res) {
         }
       }
     }
-    if (sixBrandBroadScope && !imagesOnly && requestedLane === 'images' && !hasMore) {
+    if (sixBrandBroadScope && qnsaCandidateCursorMeta
+      && !imagesOnly && requestedLane === 'images' && !hasMore) {
       // Start the no-image lane only after every independently paged image
       // stream is exhausted and no fetched row remains buffered.
       nextLane = 'no-images';
