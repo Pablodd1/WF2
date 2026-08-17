@@ -60,6 +60,20 @@ const EXPLICIT_BRAND_PATTERNS = [
   ['H. Moser & Cie', /\bmoser\b/i],
   ['Jacob & Co', /\bjacob\s*(?:&|and)\s*co\b/i],
   ['Ulysse Nardin', /\bulysse\s+nardin\b/i],
+  ['Omega', /\b(?:omega|seamaster|speedmaster)\b/i],
+  ['Panerai', /\b(?:panerai|PAM\d{3,4})\b/i],
+  ['Hublot', /\b(?:hublot|big\s+bang)\b/i],
+  ['IWC', /\b(?:IWC|IW\d{4,6})\b/i],
+  ['Breitling', /\b(?:breitling|navitimer|chronomat)\b/i],
+  ['Vacheron Constantin', /\b(?:vacheron(?:\s+constantin)?|overseas|patrimony)\b/i],
+  ['Tudor', /\btudor\b/i],
+  ['A. Lange & Söhne', /\b(?:a\.?\s*lange|lange\s*(?:&|und)\s*s[oö]hne)\b/i],
+  ['F.P. Journe', /\b(?:f\.?\s*p\.?\s*journe|fpj)\b/i],
+  ['Piaget', /\bpiaget\b/i],
+  ['Montblanc', /\bmontblanc\b/i],
+  ['Jaeger-LeCoultre', /\b(?:jaeger[- ]lecoultre|reverso)\b/i],
+  ['Bell & Ross', /\bbell\s*(?:&|and)\s*ross\b/i],
+  ['MB&F', /\bMB\s*(?:&|and)\s*F\b/i],
 ];
 
 function text(value) {
