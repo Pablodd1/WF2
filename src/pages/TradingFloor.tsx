@@ -20,6 +20,7 @@ import { buildContactWhatsAppUrl } from '../contactWhatsApp';
 import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
 import { MarketActivityTicker } from '../components/MarketActivityTicker';
 import { DealerRatingBadge, ListingDealerEvidence, sourceBackedDealerRating } from '../components/ListingDealerEvidence';
+import { loadPriceResearchBatchSummaries, priceResearchSummaryKey, type PriceResearchBatchSummary } from '../utils/priceResearchBatchSummary';
 
 const GOLD = '#9A7127';
 const GOLD_BRIGHT = '#7B5719';
@@ -291,6 +292,7 @@ export default function TradingFloor() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(24);
+  const [priceSummaries, setPriceSummaries] = useState<Record<string, PriceResearchBatchSummary>>({});
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
@@ -317,6 +319,32 @@ export default function TradingFloor() {
   // filtering here would sever keyset membership from what the user sees and
   // can create apparent skips across the image/no-image boundary.
   const visibleListings = listings;
+  const visiblePricePairs = useMemo(() => {
+    const seen = new Set<string>();
+    return visibleListings.flatMap(listing => {
+      if (listing.item_category !== 'WATCH' || !listing.brand || !listing.reference || !listing.dial_color) return [];
+      const pair = { brand: listing.brand, reference: listing.reference, dial: listing.dial_color };
+      const key = priceResearchSummaryKey(pair);
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [pair];
+    });
+  }, [visibleListings]);
+  const visiblePricePairKey = useMemo(() => visiblePricePairs.map(priceResearchSummaryKey).sort().join('\u001e'), [visiblePricePairs]);
+
+  useEffect(() => {
+    if (!visiblePricePairs.length) return;
+    let active = true;
+    void loadPriceResearchBatchSummaries(visiblePricePairs).then(summaries => {
+      if (!active) return;
+      setPriceSummaries(Object.fromEntries(summaries.map(summary => [summary.key, summary])));
+    }).catch(() => {
+      if (active) setPriceSummaries({});
+    });
+    return () => { active = false; };
+  // Serialized exact identity is stable while the visible page is unchanged.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visiblePricePairKey]);
   const unfilteredBrandTotal = brandFilter
     && categoryFilter === 'watches'
     && !intentFilter && !search && !exactReference && !imagesOnly && !pricedOnly
@@ -916,6 +944,7 @@ export default function TradingFloor() {
                   <ListingCard
                     key={listing.id}
                     listing={listing}
+                    priceSummary={priceSummaries[priceResearchSummaryKey({ brand: listing.brand, reference: listing.reference || '', dial: listing.dial_color })]}
                     selected={false}
                     onSelect={() => openListing(listing)}
                   />
@@ -1229,7 +1258,7 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
   );
 }
 
-function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
+function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: ListingRecord; priceSummary?: PriceResearchBatchSummary; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const [imageAvailable, setImageAvailable] = useState(() => hasListingImage(listing));
   const cardHasImage = imageAvailable && hasListingImage(listing);
@@ -1239,6 +1268,26 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
     ratingEvidenceStatus: listing.seller_rating_evidence_status,
   });
   const isRatedDealer = dealerRating !== null;
+  const listingIntent = String(listing.intent || listing.listing_type || '').trim().toUpperCase();
+  const canRatePrice = listing.item_category === 'WATCH'
+    && listingIntent === 'WTS'
+    && listing.price_research_eligible === true
+    && Boolean(listing.brand && listing.reference && listing.dial_color)
+    && Number.isFinite(Number(listing.price_usd))
+    && Number(listing.price_usd) > 0;
+  const comparableCount = canRatePrice && priceSummary?.analytics_ready === true
+    ? Number(priceSummary.selected_dial_qualified_count || 0)
+    : 0;
+  const displayedCardPriceRating = {
+    loading: canRatePrice && priceSummary === undefined,
+    count: comparableCount,
+    rating: rateMarketPrice(listing.price_usd, comparableCount >= 2 ? priceSummary?.stats || null : null, comparableCount),
+  };
+  const cardPriceRatingLabel = displayedCardPriceRating.loading
+    ? 'Calculating…'
+    : displayedCardPriceRating.rating.code === 'NOT_RATED'
+      ? 'Not rated'
+      : displayedCardPriceRating.rating.label;
 
   return (
     <article
@@ -1276,11 +1325,24 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-y py-3" style={{ borderColor: BORDER }}>
         <div className="font-mono text-[18px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
-        <DealerRatingBadge
-          rating={listing.seller_rating}
-          reviewCount={listing.seller_review_count}
-          ratingEvidenceStatus={listing.seller_rating_evidence_status}
-        />
+        <span
+          className="text-right text-xs font-semibold"
+          style={{ color: displayedCardPriceRating.rating.color }}
+          aria-label={displayedCardPriceRating.loading
+            ? 'Price rating is loading'
+            : `Price rating ${cardPriceRatingLabel}; ${displayedCardPriceRating.count} qualified comparable offers; ${displayedCardPriceRating.rating.reason}`}
+          title={displayedCardPriceRating.loading ? 'Loading exact-reference market evidence' : displayedCardPriceRating.rating.reason}
+        >
+          Price rating: {cardPriceRatingLabel}
+        </span>
+        <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: MUTED }}>
+          Dealer:
+          <DealerRatingBadge
+            rating={listing.seller_rating}
+            reviewCount={listing.seller_review_count}
+            ratingEvidenceStatus={listing.seller_rating_evidence_status}
+          />
+        </span>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>

@@ -303,6 +303,7 @@ function directSubmissionToMarketRow(row) {
 
 async function loadApprovedDirectSubmissionRows(client, { brand, referenceVariants, intent, limit = 1000 }) {
   try {
+    const boundedLimit = Math.min(1000, Math.max(1, Number(limit) || 1000));
     const { data, error } = await client.from('dealer_listing_submissions')
       .select('id,dealer_id,intent,category,raw_message,claimed_fields,image_urls,review_status,publication_status,created_at')
       .eq('review_status', 'APPROVED')
@@ -310,15 +311,17 @@ async function loadApprovedDirectSubmissionRows(client, { brand, referenceVarian
       .eq('category', 'WATCH')
       .eq('intent', intent)
       .order('created_at', { ascending: false })
-      .limit(Math.min(1000, Math.max(1, Number(limit) || 1000)));
+      .limit(boundedLimit);
     if (error) throw error;
     const brandKey = String(brand || '').trim().toLowerCase();
     const referenceKeys = new Set((referenceVariants || []).map(normRef));
-    return (data || [])
+    const rows = (data || [])
       .map(directSubmissionToMarketRow)
       .filter(Boolean)
       .filter(row => String(row.brand || '').trim().toLowerCase() === brandKey
         && referenceKeys.has(normRef(row.reference)));
+    rows.sampleCapped = (data || []).length >= boundedLimit;
+    return rows;
   } catch (error) {
     console.warn('[price-research] approved direct submissions unavailable:', error?.message || error);
     return [];
@@ -1763,5 +1766,10 @@ module.exports.qnsaReferenceRowToMarketRow = qnsaReferenceRowToMarketRow;
 module.exports.loadApprovedDirectSubmissionRows = loadApprovedDirectSubmissionRows;
 module.exports.loadZenithReviewedTradingRows = loadZenithReviewedTradingRows;
 module.exports.loadQnsaExactReleasedEvidence = loadQnsaExactReleasedEvidence;
+module.exports.loadQnsaVerifiedTradingPrices = loadQnsaVerifiedTradingPrices;
+module.exports.loadQnsaTradingDemand = loadQnsaTradingDemand;
+module.exports.loadRuntimePriceRecoveryRows = loadRuntimePriceRecoveryRows;
+module.exports.reviewedFamilyPrefix = reviewedFamilyPrefix;
+module.exports.configuredReviewedPriceSource = configuredReviewedPriceSource;
 module.exports.isPendingQnsaBrandRelease = isPendingQnsaBrandRelease;
 module.exports.consentApprovedPhone = consentApprovedPhone;

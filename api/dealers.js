@@ -90,11 +90,10 @@ module.exports = async function handler(req, res) {
   try {
     if (mode === 'top-rated' || mode === 'rated') {
       const normalizedSearch = search.toLocaleLowerCase();
-      const phoneNeedle = digits(search);
       const matchingProfiles = (mode === 'rated' ? ratedProfiles() : topRatedProfiles())
         .filter(profile => !normalizedSearch
-          || [profile.display_name, profile.company_name].some(value => String(value || '').toLocaleLowerCase().includes(normalizedSearch))
-          || (phoneNeedle.length >= 4 && digits(profile.verified_phone).includes(phoneNeedle)));
+          || [profile.display_name, profile.company_name]
+            .some(value => String(value || '').toLocaleLowerCase().includes(normalizedSearch)));
       const sourceProfiles = matchingProfiles.slice(from, from + pageSize).map(withoutPrivateProvenance);
       return res.status(200).json({
         success: true,
