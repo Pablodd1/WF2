@@ -228,6 +228,9 @@ function additionalImportReasons(source, options = {}) {
   if (!isoDate(source.source_posted_at)) reasons.push('SOURCE_POSTING_TIME_INVALID');
   if (!options.allowNoImage && !firstExactImage(source.image_urls_source)) reasons.push('EXACT_SOURCE_IMAGE_URL_MISSING');
   if (multiItemRisk(source.raw_message).is_multi) reasons.push('RAW_MULTI_ITEM_RISK');
+  if (!['WTS', 'WTB'].includes(resolvedListingType(source, options.ownerUnbundled === true))) {
+    reasons.push('LISTING_TYPE_UNRESOLVED');
+  }
   return reasons;
 }
 
@@ -281,8 +284,10 @@ function rowForImport({ source, decision, expectedBrand, fileName, fileSha256, r
   const admission = ownerUnbundled
     ? classifyOwnerUnbundledRow(source, decision, expectedBrand)
     : classifyRow(source, decision, expectedBrand);
-  if (!admission.trading_floor_candidate
-    || additionalImportReasons(source, { allowNoImage: ownerUnbundled }).length) return null;
+  if (!admission.trading_floor_candidate || additionalImportReasons(source, {
+    allowNoImage: ownerUnbundled,
+    ownerUnbundled,
+  }).length) return null;
   const rawMessage = text(source.raw_message);
   const listingId = text(source.listing_id);
   const sourceMessageId = text(source.source_message_id);
@@ -673,7 +678,10 @@ async function run(argv = process.argv.slice(2)) {
     }
     const importReasons = [
       ...admission.reasons.filter(reason => !PRICE_RESEARCH_ONLY_REASONS.has(reason)),
-      ...additionalImportReasons(source, { allowNoImage: options.ownerUnbundled }),
+      ...additionalImportReasons(source, {
+        allowNoImage: options.ownerUnbundled,
+        ownerUnbundled: options.ownerUnbundled,
+      }),
     ];
     if (!admission.trading_floor_candidate || importReasons.length) {
       for (const reason of importReasons) heldReasons[reason] = (heldReasons[reason] || 0) + 1;
