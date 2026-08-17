@@ -211,6 +211,7 @@ test('full plan is one atomic transaction with count and immutable-row guards', 
   assert.match(sql, /immutable source-row hash changed/);
   assert.match(sql, /post-update reconciliation count/);
   assert.match(sql, /QUARANTINE_RESIDUAL_IDENTITY_CONFLICT/);
+  assert.doesNotMatch(sql, /p\.null_price/);
   assert.doesNotMatch(sql, /DELETE|TRUNCATE|raw_message\s*=/i);
 });
 

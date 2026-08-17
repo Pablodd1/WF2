@@ -348,7 +348,7 @@ BEGIN
   WHERE (p.action IN ('QUARANTINE_IDENTITY_CONFLICT', 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT')
       AND t.verification_status = p.new_verification_status
       AND (p.new_price_status IS NULL OR (t.price_evidence_status = p.new_price_status
-        AND (NOT p.null_price OR t.workbook_price_usd IS NULL))))
+        AND (NOT p.set_price OR t.workbook_price_usd IS NOT DISTINCT FROM p.new_price))))
      OR (p.action IN ('HOLD_CURRENCY_CONFLICT_PRICE', 'RECONCILE_LEGACY_LEDGER_PRICE_EVIDENCE', 'PROMOTE_EXACT_RAW_USD_PRICE')
       AND (p.new_verification_status IS NULL OR t.verification_status = p.new_verification_status)
       AND t.price_evidence_status = p.new_price_status
