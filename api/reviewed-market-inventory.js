@@ -20,6 +20,8 @@ const {
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const EXPLICIT_USD_STATUS = 'SOURCE_EXPLICIT_USD_MATCH';
+const MULTI_PARENT_VERIFICATION_STATUS = 'APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY';
+const MULTI_PARENT_PUBLICATION_LANE = 'OWNER_MULTI_PARENT_SOURCE_LINEAGE_V1';
 const ALLOWED_MARKET_SOURCE_VIEWS = new Set([
   'reviewed_workbook_market_source_v2',
   'qnsa_rolex_patek_trading_floor_source',
@@ -131,6 +133,11 @@ const EVIDENCE_CONTRACT = Object.freeze({
   image: 'Only an exact supplied HTTP(S) source URL is image-eligible.',
   price: 'Only an exact explicit-source USD match is analytics-eligible.',
   rating: 'Rated status requires either a source-supplied score plus review count or an exact phone/profile match to public dealer feedback. Feedback counts are never converted into a five-point score.',
+  ordering: Object.freeze({
+    qnsa_database: 'Global exact-source-image lane first. Dealer rating/profile is enriched after the bounded RPC and is not globally ordered.',
+    admitted_workbook_database: 'Postgres orders has_image, WTS before WTB, controlled explicit-price evidence, verified workbook USD, then stable ID before range().',
+    returned_page: 'Within the bounded server page only: explicit released singles, exact source image, source-backed dealer evidence, verified explicit price, completeness, then recency.',
+  }),
 });
 
 function positiveNumber(value) {
@@ -414,6 +421,57 @@ function hasUsableSourcePrice(record) {
     ?? null;
 }
 
+function hasExactSourceImage(record) {
+  if (record?.multi_listing === true || record?.is_unbundled_child === true) return false;
+  const evidence = cleanExactText(record?.image_evidence_type, 40).toUpperCase();
+  const sourceBacked = ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(evidence)
+    || record?.has_exact_source_image === true;
+  const urls = [record?.thumbnail_url, ...(Array.isArray(record?.image_urls) ? record.image_urls : [])];
+  return sourceBacked && urls.some(value => exactHttpUrl(value));
+}
+
+function dealerEvidenceRank(record) {
+  const reviewCount = Number(record?.seller_review_count || 0);
+  const rating = positiveNumber(record?.seller_rating);
+  const ratingStatus = cleanExactText(record?.seller_rating_evidence_status, 40).toUpperCase();
+  if (rating !== null && reviewCount > 0
+    && ['SOURCE_SUPPLIED', 'SOURCE_FEEDBACK_COUNT'].includes(ratingStatus)) return 2;
+  if (evidenceValuePresent(record?.dealer_id) && evidenceValuePresent(record?.dealer_profile_path)) return 1;
+  return 0;
+}
+
+function hasVerifiedExplicitPrice(record) {
+  const status = cleanExactText(record?.price_evidence_status, 60).toUpperCase();
+  return record?.price_research_eligible === true
+    && ['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(status)
+    && hasUsableSourcePrice(record) !== null;
+}
+
+function listingCompletenessScore(record) {
+  return [
+    record?.brand, record?.model, record?.reference, record?.dial_color,
+    record?.condition, record?.listing_date || record?.created_at,
+    record?.seller_name, record?.location, record?.raw_message,
+  ].reduce((score, value) => score + Number(evidenceValuePresent(value)), 0);
+}
+
+function isExplicitlyReleasedMultiListing(row) {
+  const status = cleanExactText(row?.trading_floor_status || row?.listing_status, 60).toUpperCase();
+  const qnsaReleased = row?.publication_lane === 'QNSA_EXPLICIT_MULTI_RELEASE_V1'
+    && row?.publication_state === 'APPROVED'
+    && row?.normalization_run_complete === true
+    && row?.raw_lineage_verified === true
+    && ['PUBLISHED_MULTI_LISTING', 'PUBLISHED_BUNDLE'].includes(status);
+  const workbookParentReleased = row?.publication_lane === MULTI_PARENT_PUBLICATION_LANE
+    && cleanExactText(row?.verification_status || row?.verdict, 80).toUpperCase()
+      === MULTI_PARENT_VERIFICATION_STATUS
+    && cleanExactText(row?.listing_type, 30).toUpperCase() === 'MULTI'
+    && row?.publication_state === 'APPROVED'
+    && row?.raw_lineage_verified === true
+    && status === 'PUBLISHED_MULTI_LISTING';
+  return qnsaReleased || workbookParentReleased;
+}
+
 function inventoryIdentityKey(record) {
   const brand = cleanExactText(record?.brand || record?.canonical_brand || record?.supplied_brand, 80)
     .toUpperCase();
@@ -425,11 +483,23 @@ function inventoryIdentityKey(record) {
 }
 
 function compareInventoryForDisplay(left, right) {
-  const imageDifference = Number(right?.has_images === true) - Number(left?.has_images === true);
+  // This is deliberately a page-local presentation rank inside the already-bounded
+  // server page. Cursor/keyset membership and advancement remain controlled
+  // by the database source, so sparse cards are never discarded or skipped.
+  // It is not a global ordering guarantee. QNSA globally guarantees only its
+  // indexed image lanes; dealer enrichment happens after the bounded read.
+  const releasedMultiDifference = Number(left?.multi_listing_release_approved === true)
+    - Number(right?.multi_listing_release_approved === true);
+  if (releasedMultiDifference !== 0) return releasedMultiDifference;
+  const imageDifference = Number(hasExactSourceImage(right)) - Number(hasExactSourceImage(left));
   if (imageDifference !== 0) return imageDifference;
-  const priceDifference = Number(Boolean(hasUsableSourcePrice(right)))
-    - Number(Boolean(hasUsableSourcePrice(left)));
+  const dealerDifference = dealerEvidenceRank(right) - dealerEvidenceRank(left);
+  if (dealerDifference !== 0) return dealerDifference;
+  const priceDifference = Number(hasVerifiedExplicitPrice(right))
+    - Number(hasVerifiedExplicitPrice(left));
   if (priceDifference !== 0) return priceDifference;
+  const completenessDifference = listingCompletenessScore(right) - listingCompletenessScore(left);
+  if (completenessDifference !== 0) return completenessDifference;
   const rightDate = Date.parse(right?.listing_date || right?.created_at || '') || 0;
   const leftDate = Date.parse(left?.listing_date || left?.created_at || '') || 0;
   if (rightDate !== leftDate) return rightDate - leftDate;
@@ -504,9 +574,11 @@ function isTradingFloorSourceRow(row) {
   const listingType = cleanExactText(row?.listing_type, 30).toUpperCase();
   const status = cleanExactText(row?.trading_floor_status || row?.listing_status, 60).toUpperCase();
   if (!['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY'].includes(itemCategory)) return false;
+  const explicitlyReleasedMultiListing = isExplicitlyReleasedMultiListing(row);
+  if (explicitlyReleasedMultiListing) return true;
   if (!['WTS', 'WTB'].includes(listingType)) return false;
   if (hasObviousCrossBrandConflict(row)) return false;
-  if (row?.parent_id || row?.is_bundle === true) return false;
+  if ((row?.parent_id || row?.is_bundle === true) && !explicitlyReleasedMultiListing) return false;
   if (['BUNDLE_CHILD_PENDING_REVIEW', 'BUNDLE_PENDING_SEPARATION', 'SUPPRESSED_EXACT_DUPLICATE', 'HIDDEN', 'REJECTED', 'DELETED', 'ARCHIVED'].includes(status)) {
     return false;
   }
@@ -668,16 +740,47 @@ function directSubmissionMatchesImageLane(record, lane) {
 async function enrichRecordsWithDealerDirectory(client, records = []) {
   const recordsWithoutJoinHints = records.map(record => {
     const { source_dealer_id: _sourceDealerId, ...publicRecord } = record;
-    return publicRecord;
+    if (publicRecord.contact_publication_approved === true) return publicRecord;
+    return {
+      ...publicRecord,
+      seller_phone: null,
+      phone_number: null,
+      from_number: null,
+    };
   });
   const ids = [...new Set(records.map(record => String(record?.id || '').trim()).filter(Boolean))];
   if (ids.length === 0) return recordsWithoutJoinHints;
-  const { data: links, error: linkError } = await client
-    .from('dealer_listing_links')
-    .select('listing_id,dealer_id')
-    .eq('link_status', 'APPLIED')
-    .in('listing_id', ids);
-  const verifiedLinks = !linkError && Array.isArray(links) ? links : [];
+  // The admission importer owns this stable text prefix. All other IDs stay
+  // on the established listing ledger path (whose deployed schema validates
+  // its UUID type) so legacy/test adapters are not rerouted accidentally.
+  const reviewedIds = ids.filter(id => id.startsWith('admission_'));
+  const uuidIds = ids.filter(id => !id.startsWith('admission_'));
+  const verifiedLinks = [];
+  if (uuidIds.length) {
+    const { data: links, error: linkError } = await client
+      .from('dealer_listing_links')
+      .select('listing_id,dealer_id,link_method')
+      .eq('link_status', 'APPLIED')
+      .in('listing_id', uuidIds);
+    if (!linkError && Array.isArray(links)) verifiedLinks.push(...links);
+  }
+  if (reviewedIds.length) {
+    // Reviewed admission IDs are text, so they cannot enter the UUID link
+    // ledger. This private sidecar is optional/fail-closed: a missing table or
+    // lookup error leaves the listing visible without dealer evidence.
+    const { data: reviewedLinks, error: reviewedLinkError } = await client
+      .from('reviewed_workbook_dealer_links')
+      .select('reviewed_listing_id,dealer_id,link_method')
+      .eq('link_status', 'APPLIED')
+      .in('reviewed_listing_id', reviewedIds);
+    if (!reviewedLinkError && Array.isArray(reviewedLinks)) {
+      verifiedLinks.push(...reviewedLinks.map(link => ({
+        listing_id: link.reviewed_listing_id,
+        dealer_id: link.dealer_id,
+        link_method: link.link_method,
+      })));
+    }
+  }
   const sourceDealerIds = records
     .map(record => String(record?.source_dealer_id || '').trim())
     .filter(Boolean);
@@ -695,8 +798,15 @@ async function enrichRecordsWithDealerDirectory(client, records = []) {
   const dealerById = new Map(dealers.map(dealer => [String(dealer.id), dealer]));
   const dealerIdByListing = new Map(verifiedLinks
     .map(link => [String(link.listing_id), String(link.dealer_id)]));
+  const linkMethodByListing = new Map(verifiedLinks
+    .map(link => [String(link.listing_id), String(link.link_method || 'EXACT_VERIFIED_PHONE')]));
   return records.map(record => {
     const { source_dealer_id: sourceDealerId, ...publicRecord } = record;
+    if (publicRecord.contact_publication_approved !== true) {
+      publicRecord.seller_phone = null;
+      publicRecord.phone_number = null;
+      publicRecord.from_number = null;
+    }
     const dealerId = String(sourceDealerId || '').trim()
       || dealerIdByListing.get(String(record.id));
     const dealer = dealerById.get(dealerId);
@@ -721,7 +831,8 @@ async function enrichRecordsWithDealerDirectory(client, records = []) {
       seller_rating_evidence_status: ratingStatus,
       seller_group_count: Math.max(0, Number(dealer.whatsapp_group_count || 0)),
       seller_rating_source_url: null,
-      dealer_directory_link_status: 'EXACT_VERIFIED_PHONE',
+      dealer_directory_link_status: linkMethodByListing.get(String(record.id))
+        || (sourceDealerId ? 'AUTHENTICATED_SUBMISSION' : 'EXACT_VERIFIED_PHONE'),
     };
   });
 }
@@ -928,9 +1039,11 @@ function mapReviewedRecord(row) {
     item_category: itemCategory,
     watch_part_classification_reason: watchPart?.reason || null,
     publication_state: row.publication_state || 'APPROVED',
+    publication_lane: row.publication_lane || null,
     verification_label: 'Listing',
     data_quality_review_required: pendingVerification,
     multi_listing: multiListing,
+    multi_listing_release_approved: multiListing && isExplicitlyReleasedMultiListing(row),
     is_unbundled_child: isUnbundledChild,
     has_images: publicImageUrl !== null,
     thumbnail_url: publicImageUrl,
@@ -1446,7 +1559,7 @@ module.exports = async function handler(req, res) {
     const dateWindow = cleanExactText(req.query?.date, 4).toUpperCase();
     const postedAfter = dateWindowStart(dateWindow);
 
-    if (listingType && !['WTS', 'WTB', 'OTHER'].includes(listingType)) {
+    if (listingType && !['WTS', 'WTB', 'OTHER', 'MULTI'].includes(listingType)) {
       return res.status(400).json({ status: 'error', error: 'Invalid listing type' });
     }
     if (rating && !['rated', 'unrated'].includes(rating)) {
@@ -1562,9 +1675,12 @@ module.exports = async function handler(req, res) {
         .from('reviewed_workbook_inventory')
         .select(admissionColumns, { count: 'exact' })
         .eq('brand_scope', brand)
-        .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
+        .in('verification_status', [
+          'APPROVED_SINGLE_CANDIDATE',
+          MULTI_PARENT_VERIFICATION_STATUS,
+        ])
         .eq('confidence', 100)
-        .in('listing_type', ['WTS', 'WTB']);
+        .in('listing_type', ['WTS', 'WTB', 'MULTI']);
       if (listingType) admissionQuery = admissionQuery.eq('listing_type', listingType);
       if (requestedReference) {
         admissionQuery = admissionQuery.in('normalized_reference', listEquivalentReferences(requestedReference, brand));
@@ -1588,14 +1704,27 @@ module.exports = async function handler(req, res) {
         ? (inventoryCursor?.offset || 0)
         : pageWindow.start;
       const { data: admissionRows, count: admissionCount, error: admissionError } = await admissionQuery
+        // This ordering is applied by PostgREST/Postgres before range(), so it
+        // is a real admitted-brand cursor order rather than a page-local sort.
+        // The admission importer emits WTS/WTB plus a controlled price-evidence
+        // vocabulary: WTS sorts before WTB and SOURCE_EXPLICIT_USD_MATCH sorts
+        // before PRICE_* / DATED_* states. The existing brand+image index keeps
+        // the leading brand/image boundary bounded; no schema change is needed.
         .order('has_image', { ascending: false })
+        .order('verification_status', { ascending: false })
+        .order('listing_type', { ascending: false })
+        .order('price_evidence_status', { ascending: false })
+        .order('workbook_price_usd', { ascending: false, nullsFirst: false })
         .order('id', { ascending: false })
         .range(admissionOffset, admissionOffset + pageSize);
       if (admissionError) throw admissionError;
-      const mappedAdmissionRows = (admissionRows || []).slice(0, pageSize).map(row => mapReviewedRecord({
+      const mappedAdmissionRows = (admissionRows || []).slice(0, pageSize).map(row => {
+        const isApprovedMultiParent = row.verification_status === MULTI_PARENT_VERIFICATION_STATUS
+          && row.listing_type === 'MULTI';
+        return mapReviewedRecord({
         ...row,
-        parent_id: null,
-        is_bundle: false,
+        parent_id: isApprovedMultiParent ? row.source_record_id : null,
+        is_bundle: isApprovedMultiParent,
         has_exact_source_image: row.has_image === true,
         verified_price_usd: row.price_evidence_status === EXPLICIT_USD_STATUS
           ? Number(row.workbook_price_usd) || null
@@ -1603,16 +1732,19 @@ module.exports = async function handler(req, res) {
         has_verified_usd_price: row.price_evidence_status === EXPLICIT_USD_STATUS
           && Number(row.workbook_price_usd) > 0,
         has_complete_identity: Boolean(row.canonical_brand && row.model && row.normalized_reference && row.dial_color),
-        verdict: 'APPROVED',
-        trading_floor_status: 'APPROVED',
+        verdict: isApprovedMultiParent ? MULTI_PARENT_VERIFICATION_STATUS : 'APPROVED',
+        trading_floor_status: isApprovedMultiParent ? 'PUBLISHED_MULTI_LISTING' : 'APPROVED',
         item_category: 'WATCH',
         publication_state: 'APPROVED',
-        publication_lane: 'OWNER_REVIEWED_ADMISSION',
+        publication_lane: isApprovedMultiParent
+          ? MULTI_PARENT_PUBLICATION_LANE
+          : 'OWNER_REVIEWED_ADMISSION',
         normalization_run_complete: true,
         raw_lineage_verified: /^[0-9a-f]{64}$/i.test(String(row.source_payload_sha256 || '')),
-      }));
+      });
+      });
       const records = (await enrichRecordsWithDealerDirectory(client, mappedAdmissionRows))
-        .filter(record => !record.multi_listing)
+        .filter(record => !record.multi_listing || record.multi_listing_release_approved === true)
         .filter(record => !condition || cleanExactText(record.condition, 80).toLowerCase() === condition.toLowerCase())
         .filter(record => !region || locationMatches(record.location, region))
         .filter(record => ratingMatches(record, rating))
@@ -2215,7 +2347,8 @@ module.exports = async function handler(req, res) {
         .map(suppressPublicReferenceTokenPrice),
     );
     let records = recoveredMarketRecords
-      .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
+      .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true)
+        && (!record.multi_listing || record.multi_listing_release_approved === true))
       .filter(record => record.item_category === 'WATCH' || record.luxury_identity_eligible === true)
       .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
       .filter(record => !imagesOnly || record.has_images === true)
@@ -2235,7 +2368,7 @@ module.exports = async function handler(req, res) {
       // removes the entire Cartier page.
       records = (await recoverRecordPrices(sourceRows.map(mapReviewedRecord)))
         .map(suppressPublicReferenceTokenPrice)
-        .filter(record => !record.multi_listing)
+        .filter(record => !record.multi_listing || record.multi_listing_release_approved === true)
         .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
         .filter(record => !imagesOnly || record.has_images === true)
         .filter(record => !pricedOnly || hasUsableSourcePrice(record))
@@ -2344,6 +2477,8 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.EXPLICIT_USD_STATUS = EXPLICIT_USD_STATUS;
+module.exports.MULTI_PARENT_VERIFICATION_STATUS = MULTI_PARENT_VERIFICATION_STATUS;
+module.exports.MULTI_PARENT_PUBLICATION_LANE = MULTI_PARENT_PUBLICATION_LANE;
 module.exports.MARKET_SOURCE_VIEW = MARKET_SOURCE_VIEW;
 module.exports.MULTIPLE_LISTING_IDENTITY_VALUES = MULTIPLE_LISTING_IDENTITY_VALUES;
 module.exports.EVIDENCE_CONTRACT = EVIDENCE_CONTRACT;
@@ -2359,6 +2494,11 @@ module.exports.directSubmissionMatchesImageLane = directSubmissionMatchesImageLa
 module.exports.enrichRecordsWithDealerDirectory = enrichRecordsWithDealerDirectory;
 module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.hasUsableSourcePrice = hasUsableSourcePrice;
+module.exports.hasExactSourceImage = hasExactSourceImage;
+module.exports.dealerEvidenceRank = dealerEvidenceRank;
+module.exports.hasVerifiedExplicitPrice = hasVerifiedExplicitPrice;
+module.exports.listingCompletenessScore = listingCompletenessScore;
+module.exports.isExplicitlyReleasedMultiListing = isExplicitlyReleasedMultiListing;
 module.exports.inventoryIdentityKey = inventoryIdentityKey;
 module.exports.compareInventoryForDisplay = compareInventoryForDisplay;
 module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;

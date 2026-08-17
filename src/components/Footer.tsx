@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LUXFI_URL, VIRTUAL_AUTHENTICATOR_URL } from './MarketHeader';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { CONTACT_WHATSAPP_URL } from '@/contactWhatsApp';
 
-export const CONTACT_WHATSAPP_URL = 'https://api.whatsapp.com/send?phone=17869569201&text=Hello,%20I%20would%20like%20more%20information%20about%20your%20services.';
 export const CONTACT_EMAIL = 'Aduenas@watchfacts.com';
 
 export const COMMUNITY_GROUPS = [

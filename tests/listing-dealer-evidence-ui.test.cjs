@@ -12,6 +12,8 @@ test('Trading Floor, Price Research, and Luxury Research share the same dealer e
   const priceResearch = read('src/pages/PriceResearch.tsx');
   const luxury = read('src/pages/LuxuryResearch.tsx');
   assert.match(floor, /<ListingDealerEvidence/);
+  assert.doesNotMatch(floor, /seller_review_count \|\| 0\} reviews/);
+  assert.doesNotMatch(floor, /Multiple released watch brands use repeated URL filters/);
   assert.match(priceResearch, /<ListingDealerEvidence/);
   assert.match(luxury, /<ListingDealerEvidence/);
 });
@@ -22,7 +24,7 @@ test('dealer evidence never invents a numeric rating and protects private contac
   assert.match(evidence, /ratingEvidenceStatus === 'SOURCE_FEEDBACK_COUNT'/);
   assert.match(evidence, /Number\.isFinite\(rating\) && rating > 0 && hasReviews/);
   assert.match(evidence, />Not rated<\/span>/);
-  assert.match(evidence, /contactPublicationApproved \?/);
+  assert.match(evidence, /contactPublicationApproved && sellerPhone/);
   assert.match(evidence, /publishedGroupCount > 0/);
   assert.match(evidence, /Reference Check profile/);
   assert.doesNotMatch(evidence, /watchfacts\.com/i);

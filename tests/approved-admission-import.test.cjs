@@ -16,7 +16,7 @@ function source(overrides = {}) {
     source_message_id: 'message-1',
     source_posted_at: '2026-08-11T12:00:00Z',
     ingested_at: '2026-08-11T12:01:00Z',
-    raw_message: 'TAG Heuer Carrera CBS2210.FC6534 blue dial USD 6500',
+    raw_message: 'TAG Heuer Carrera CBS2210.FC6534 blue dial WTS USD 6500',
     intent: 'WTS',
     category: 'WATCH',
     asking_price_raw: 'USD 6500',
@@ -88,6 +88,96 @@ test('bundle parents and unresolved identities never produce import rows', () =>
   }), null);
 });
 
+test('multi-parent lane emits one lineage-keyed display-only row with no inherited evidence', () => {
+  const entries = [1, 2].map((number, index) => ({
+    source: source({
+      listing_id: `child-${number}`,
+      source_message_id: 'immutable-message-1',
+      raw_message: number === 1 ? 'Rolex 126500' : 'Patek 5712',
+      image_urls_source: `https://example.test/parent-${number}.jpg`,
+      seller_source_id: 'seller-1',
+      seller_name_source: 'Seller One',
+    }),
+    decision: decision({ listing_id: `child-${number}` }),
+    expectedBrand: number === 1 ? 'Rolex' : 'Patek Philippe',
+    rowNumber: index + 2,
+  }));
+  const result = intake.buildMultiParentRows({
+    entries,
+    expectedBrand: 'TAG Heuer',
+    fileName: 'input.xlsx',
+    fileSha256: 'a'.repeat(64),
+    runId: 'test',
+  });
+  assert.equal(result.parents.length, 1);
+  const parent = result.parents[0];
+  assert.match(parent.id, /^admission_multi_[0-9a-f]{64}$/);
+  assert.equal(parent.source_record_id, 'immutable-message-1');
+  assert.equal(parent.raw_message, 'Rolex 126500\nPatek 5712');
+  assert.equal(parent.listing_type, 'MULTI');
+  assert.equal(parent.verification_status, 'APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY');
+  assert.equal(parent.verification_tier, 'OWNER_MULTI_PARENT_SOURCE_LINEAGE_V1');
+  assert.equal(parent.price_evidence_status, 'MULTI_PARENT_PRICE_WITHHELD');
+  assert.equal(parent.workbook_price_usd, null);
+  assert.equal(parent.source_price_amount, null);
+  assert.equal(parent.final_image_url, null);
+  assert.equal(parent.phone_number, null);
+  assert.equal(parent.contact_publication_approved, false);
+});
+
+test('single workbook row remains held even when the ledger labels it as a bundle', () => {
+  const base = {
+    source: source({ source_message_id: 'bundle-message', raw_message: 'Several watches available' }),
+    decision: decision({ bundle_status: 'BUNDLE_PENDING' }),
+    rowNumber: 2,
+  };
+  const held = intake.buildMultiParentRows({
+    entries: [base], expectedBrand: 'TAG Heuer', fileName: 'a.xlsx',
+    fileSha256: 'b'.repeat(64), runId: 'test',
+  });
+  assert.equal(held.parents.length, 0);
+  assert.deepEqual(held.held[0].reasons, ['MULTI_PARENT_DISTINCT_CHILD_PROOF_MISSING']);
+  assert.equal(intake.buildMultiParentRows({
+    entries: [{ ...base, decision: decision({ bundle_status: 'UNKNOWN' }) }],
+    expectedBrand: 'TAG Heuer', fileName: 'a.xlsx',
+    fileSha256: 'b'.repeat(64), runId: 'test',
+  }).parents.length, 0);
+});
+
+test('same immutable source message produces the same parent id across workbook copies', () => {
+  const make = brand => intake.buildMultiParentRows({
+    entries: [1, 2].map((number, index) => ({
+      source: source({
+        listing_id: `${brand}-child-${number}`,
+        source_message_id: 'shared-source',
+        raw_message: `Mixed brand dealer list item ${number}`,
+      }),
+      decision: decision({ bundle_status: 'BUNDLE_PENDING' }),
+      rowNumber: index + 2,
+    })), expectedBrand: brand, fileName: `${brand}.xlsx`,
+    fileSha256: brand === 'Breguet' ? 'c'.repeat(64) : 'd'.repeat(64), runId: 'test',
+  }).parents[0];
+  assert.equal(make('Breguet').id, make('Franck Muller').id);
+});
+
+test('multi-parent raw brand conflicts remain held instead of routing through the workbook brand', () => {
+  const result = intake.buildMultiParentRows({
+    entries: [1, 2].map((number, index) => ({
+      source: source({
+        listing_id: `chopard-child-${number}`,
+        source_message_id: 'wrong-brand-parent',
+        raw_message: number === 1 ? 'RM016 WG USD 77500' : 'RM030TI USD 162400',
+      }),
+      decision: decision({ bundle_status: 'BUNDLE_PENDING' }),
+      rowNumber: index + 2,
+    })),
+    expectedBrand: 'Chopard', fileName: 'chopard.xlsx',
+    fileSha256: 'e'.repeat(64), runId: 'test',
+  });
+  assert.equal(result.parents.length, 0);
+  assert.deepEqual(result.held[0].reasons, ['MULTI_PARENT_RAW_BRAND_CONFLICT']);
+});
+
 test('Trading Floor admission cannot silently promote a Price Research hold', () => {
   const row = intake.rowForImport({
     source: source({ fx_source: '', fx_rate_date: '' }),
@@ -117,12 +207,60 @@ test('non-USD FX remains review evidence but is excluded from current analytics'
   assert.equal(evidence.status, 'DATED_FX_PROVENANCE_REQUIRES_EXISTING_SIDECAR');
 });
 
+test('bare-dollar evidence is never promoted to explicit USD in owner-unbundled mode', () => {
+  const evidence = intake.sourcePriceEvidence(source({
+    raw_message: 'H. Moser Streamliner 6200-1200 WTS $13,500',
+    asking_price_raw: '$13,500',
+    source_currency: 'USD',
+    normalized_price_usd: 13500,
+  }), { rawExplicitUsdOnly: true });
+  assert.equal(evidence.status, 'PRICE_NOT_SUPPLIED');
+  assert.equal(evidence.currency, null);
+  assert.equal(evidence.workbookPriceUsd, null);
+});
+
+test('exact duplicate candidates retain one deterministic canonical row', () => {
+  const base = intake.rowForImport({
+    source: source(), decision: decision(), expectedBrand: 'TAG Heuer',
+    fileName: 'input.xlsx', fileSha256: '1'.repeat(64), rowNumber: 3, runId: 'test',
+  });
+  const earlier = {
+    ...base,
+    id: 'earlier',
+    content_hash: 'earlier-hash',
+    source_row_number: 2,
+    posting_date: '2026-08-10T12:00:00Z',
+    source_payload_sha256: '2'.repeat(64),
+  };
+  const resolution = intake.canonicalizeExactDuplicates([base, earlier]);
+  assert.equal(resolution.canonical.length, 1);
+  assert.equal(resolution.canonical[0].id, 'earlier');
+  assert.equal(resolution.excluded.length, 1);
+  assert.equal(resolution.excluded[0].disposition, 'DUPLICATE/REPOST');
+  assert.equal(resolution.excluded[0].canonical_id, 'earlier');
+  assert.equal(resolution.excluded[0].excluded_id, base.id);
+});
+
+test('ledger duplicate evidence is hashed and excludes raw/contact values', () => {
+  const evidence = intake.ledgerDuplicateEvidence({
+    source: source(),
+    decision: decision({ duplicate_decision: 'REPOST' }),
+    fileSha256: '3'.repeat(64),
+    rowNumber: 9,
+  });
+  assert.equal(evidence.disposition, 'DUPLICATE/REPOST');
+  assert.match(evidence.evidence_basis, /REPOST/);
+  assert.equal(evidence.source_row_number, 9);
+  assert.equal(Object.hasOwn(evidence, 'raw_message'), false);
+  assert.equal(Object.hasOwn(evidence, 'seller_name_source'), false);
+});
+
 test('owner-reviewed unbundled children publish without inherited media and use exact child USD', () => {
   const row = intake.rowForImport({
     source: source({
       listing_id: 'moser-child-1',
       source_message_id: 'moser-message-1_item_1',
-      raw_message: 'H. Moser Streamliner 6200-1200 available $13,500',
+      raw_message: 'H. Moser Streamliner 6200-1200 available USD 13,500',
       intent: 'WTS',
       image_urls_source: 'https://example.test/parent-bundle.jpg',
       normalized_price_usd: 13,

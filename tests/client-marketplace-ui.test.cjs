@@ -99,10 +99,13 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.match(floor, /Inventory request timed out\. Please retry\./);
   assert.match(floor, /data\.records\.length > 0 \|\| !data\.hasMore \|\| !data\.nextCursor/);
   assert.match(floor, /params\.set\('cursor', data\.nextCursor\)/);
-  assert.match(floor, /filter\(listing => !isBundleListing\(listing\)\)/);
-  assert.match(floor, /listing\.multi_listing \|\| listing\.is_unbundled_child/);
+  assert.doesNotMatch(floor, /filter\(listing => !isBundleListing\(listing\)\)/);
+  assert.match(floor, /const nextListings = data\.records \|\| \[\]/);
+  assert.match(floor, /if \(listing\.multi_listing\) return true/);
+  assert.match(floor, /isBundleListing\(listing\) \|\| listing\.is_unbundled_child === true/);
   assert.match(floor, /'MULTI', 'MULTI_LISTING', 'BUNDLE'/);
-  assert.match(floor, /Number\(hasListingImage\(right\)\) - Number\(hasListingImage\(left\)\)/);
+  assert.doesNotMatch(floor, /compareListingsForDisplay/);
+  assert.match(floor, /const visibleListings = listings/);
   assert.match(floor, /paginationControls\('top'\)/);
   assert.match(floor, /paginationControls\('bottom'\)/);
   assert.match(floor, /fetch\('\/api\/live-release-summary'/);
@@ -182,7 +185,8 @@ test('customer workflows expose direct official Curated Luxury contact and commu
   assert.match(footer, /COMMUNITY_GROUPS/);
   assert.match(footer, /target="_blank"/);
   assert.match(footer, /rel="noreferrer"/);
-  assert.match(floor, /import \{ Footer \}/);
+  assert.match(floor, /import \{ Footer \} from '\.\.\/components\/Footer'/);
+  assert.match(floor, /import \{ buildContactWhatsAppUrl \} from '\.\.\/contactWhatsApp'/);
   assert.match(research, /Footer as CommunityFooter/);
 });
 

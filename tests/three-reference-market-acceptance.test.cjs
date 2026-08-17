@@ -121,7 +121,7 @@ test('missing dealer reputation stays unknown and bundle children never inherit 
   assert.deepEqual(child.image_urls, []);
 });
 
-test('Trading Floor global display order is image first, then price, then stable recency', () => {
+test('Trading Floor bounded-page presentation order is image first, then verified price and recency', () => {
   const target = CONTROLLED_REFERENCES[0];
   const records = [
     mapReviewedRecord(reviewedRow(target, {
@@ -160,15 +160,10 @@ test('Trading Floor global display order is image first, then price, then stable
   ]);
 
   const floor = read('src/pages/TradingFloor.tsx');
-  const comparator = floor.slice(
-    floor.indexOf('function compareListingsForDisplay'),
-    floor.indexOf('function locationMatches'),
-  );
-  assert.ok(
-    comparator.indexOf('const imageDifference') < comparator.indexOf('const priceDifference'),
-    'the browser comparator must enforce the same global image-first boundary as the API',
-  );
-  assert.doesNotMatch(comparator, /listingIdentityKey[\s\S]*priceDifference/);
+  assert.doesNotMatch(floor, /function compareListingsForDisplay/,
+    'the browser must preserve the bounded server page instead of claiming a global client order');
+  assert.match(floor, /const visibleListings = listings/);
+  assert.match(floor, /const nextListings = data\.records \|\| \[\]/);
 });
 
 test('Price Research admits priced WTS only, removes same-seller reposts, and applies 3.0x IQR', () => {
@@ -225,7 +220,7 @@ test('Price Research response and UI retain liquidity, demand ratio, outliers, d
   assert.match(api, /monthly, prices, forecast/);
   assert.match(api, /raw_message: r\.raw_message \|\| null/);
   assert.match(api, /seller_name: r\.seller_name \|\| null/);
-  assert.match(api, /seller_phone: r\.seller_phone \|\| null/);
+  assert.match(api, /seller_phone: consentApprovedPhone\(r\)/);
   assert.match(api, /loadAnalyticsSuppressedIds/);
 
   assert.match(ui, /WTB \/ WTS ratio/);
