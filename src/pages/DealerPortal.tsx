@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight, Globe2, MessageCircle, PlusCircle, ShieldCheck, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { COMMUNITY_GROUPS, CONTACT_WHATSAPP_URL } from '@/components/Footer';
+import { COMMUNITY_GROUPS } from '@/components/Footer';
+import { CONTACT_WHATSAPP_URL } from '@/contactWhatsApp';
 import { LUXFI_URL } from '@/components/MarketHeader';
 
 const portalLinks = [
