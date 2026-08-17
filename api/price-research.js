@@ -435,7 +435,10 @@ async function loadQnsaVerifiedTradingPrices(client, {
     ({ data, error } = await execute(baseColumns));
   }
   if (error) {
-    if (rpcMarketRows.length) return rpcMarketRows;
+    if (rpcMarketRows.length) return rpcMarketRows.map(row => ({
+      ...row,
+      canonical_qnsa_price_evidence_checked: true,
+    }));
     throw error;
   }
   const releasedRows = (data || [])
@@ -480,7 +483,15 @@ async function loadQnsaVerifiedTradingPrices(client, {
   const mergedRows = new Map(releasedRows.map(row => [String(row.id), row]));
   for (const row of exactReleasedRows) mergedRows.set(String(row.id), row);
   for (const row of rpcMarketRows) mergedRows.set(String(row.id), row);
-  return [...mergedRows.values()];
+  // This loader is the canonical bounded QNSA price boundary. A positive
+  // price has already passed its verified-USD/correction contract; a null
+  // price intentionally failed that contract. Preserve that decision so the
+  // downstream presentation endpoint cannot reinterpret a bare "$" in a Hong
+  // Kong message as USD and silently turn HKD 42,000 into USD 42,000.
+  return [...mergedRows.values()].map(row => ({
+    ...row,
+    canonical_qnsa_price_evidence_checked: true,
+  }));
 }
 
 async function loadQnsaTradingDemand(client, {
@@ -798,6 +809,39 @@ function summarizeComparableRows(rows) {
   const marketPriceFloorUsd = marketPlausibilityFloor(validPrices);
   const summary = summarizePrices(validPrices.filter(value => value >= marketPriceFloorUsd));
   return { marketPriceFloorUsd, summary };
+}
+
+function normalizeAnalyticsPriceRow(row, {
+  usingReviewedWorkbook = false,
+  usingQnsaReviewedSource = false,
+  referenceVariants = [],
+} = {}) {
+  const conditionCorrectedRow = { ...row, ...normalizeWatchConditionFields(row) };
+  const canonicalQnsaEvidence = usingQnsaReviewedSource
+    && row.canonical_qnsa_price_evidence_checked === true;
+  const canonicalPrice = Number(row.price_usd);
+  if (usingReviewedWorkbook || row.price_correction_applied === true || row.runtime_price_recovery_applied === true) {
+    return {
+      ...conditionCorrectedRow,
+      analytics_price_usd: row.price_usd,
+      price_normalization: row.price_correction_applied
+        ? 'QUALIFIED_SIDECAR_CORRECTION'
+        : row.runtime_price_recovery_applied
+          ? 'DATED_RUNTIME_SOURCE_RECOVERY'
+          : null,
+      analytics_currency_status: 'VERIFIED',
+    };
+  }
+  if (canonicalQnsaEvidence) {
+    const verifiedPrice = Number.isFinite(canonicalPrice) && canonicalPrice > 0 ? canonicalPrice : null;
+    return {
+      ...conditionCorrectedRow,
+      analytics_price_usd: verifiedPrice,
+      price_normalization: verifiedPrice ? 'CANONICAL_QNSA_VERIFIED_USD' : null,
+      analytics_currency_status: verifiedPrice ? 'VERIFIED' : 'MISSING_PRICE',
+    };
+  }
+  return normalizeMarketRow(conditionCorrectedRow, referenceVariants);
 }
 
 module.exports = async function handler(req, res) {
@@ -1249,19 +1293,11 @@ module.exports = async function handler(req, res) {
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
-        const conditionCorrectedRow = { ...row, ...normalizeWatchConditionFields(row) };
-        const normalized = usingReviewedWorkbook || row.price_correction_applied === true || row.runtime_price_recovery_applied === true
-          ? {
-              ...conditionCorrectedRow,
-              analytics_price_usd: row.price_usd,
-              price_normalization: row.price_correction_applied
-                ? 'QUALIFIED_SIDECAR_CORRECTION'
-                : row.runtime_price_recovery_applied
-                  ? 'DATED_RUNTIME_SOURCE_RECOVERY'
-                  : null,
-              analytics_currency_status: 'VERIFIED',
-            }
-          : normalizeMarketRow(conditionCorrectedRow, referenceVariants);
+        const normalized = normalizeAnalyticsPriceRow(row, {
+          usingReviewedWorkbook,
+          usingQnsaReviewedSource,
+          referenceVariants,
+        });
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {
           ...normalized,
@@ -1767,6 +1803,7 @@ module.exports.loadApprovedDirectSubmissionRows = loadApprovedDirectSubmissionRo
 module.exports.loadZenithReviewedTradingRows = loadZenithReviewedTradingRows;
 module.exports.loadQnsaExactReleasedEvidence = loadQnsaExactReleasedEvidence;
 module.exports.loadQnsaVerifiedTradingPrices = loadQnsaVerifiedTradingPrices;
+module.exports.normalizeAnalyticsPriceRow = normalizeAnalyticsPriceRow;
 module.exports.loadQnsaTradingDemand = loadQnsaTradingDemand;
 module.exports.loadRuntimePriceRecoveryRows = loadRuntimePriceRecoveryRows;
 module.exports.reviewedFamilyPrefix = reviewedFamilyPrefix;

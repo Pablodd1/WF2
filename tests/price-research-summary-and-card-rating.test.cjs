@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const batchApi = require('../api/price-research-batch-summary.js');
+const fullPriceResearchApi = require('../api/price-research.js');
 const research = fs.readFileSync(path.join(root, 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
 const floor = fs.readFileSync(path.join(root, 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
 const client = fs.readFileSync(path.join(root, 'src', 'utils', 'priceResearchBatchSummary.ts'), 'utf8');
@@ -44,6 +45,45 @@ test('Cartier summaries separate all-reference counts from selected-dial analyti
   assert.equal(selectedDial.stats.median, 24000);
   assert.equal(otherReference.source_observation_count, 2);
   assert.equal(otherReference.stats.median, 13000);
+});
+
+test('canonical QNSA evidence prevents Hong Kong bare-dollar inflation while preserving verified recovery', () => {
+  const shared = {
+    brand: 'Cartier', reference: 'WSSA0032', dial_color: 'Silver', listing_type: 'WTS',
+    owner_reviewed_identity: true, canonical_qnsa_price_evidence_checked: true,
+  };
+  const bareDollar = fullPriceResearchApi.normalizeAnalyticsPriceRow({
+    ...shared,
+    id: 'live-shape-bare-dollar',
+    raw_message: 'Used WSSA0032 2021 / card and watch / no box $42000 4-7 days arrive HK + shipping labels',
+    price_usd: null,
+  }, { usingQnsaReviewedSource: true, referenceVariants: ['WSSA0032'] });
+  assert.equal(bareDollar.analytics_price_usd, null);
+  assert.equal(bareDollar.analytics_currency_status, 'MISSING_PRICE');
+  assert.notEqual(bareDollar.price_normalization, 'USD_DEFAULTED_BY_POLICY');
+
+  const explicitVerified = fullPriceResearchApi.normalizeAnalyticsPriceRow({
+    ...shared,
+    id: 'live-shape-explicit-usd',
+    raw_message: 'Cartier WSSA0032 HKD 42000 // USD 5400',
+    price_usd: 5400,
+  }, { usingQnsaReviewedSource: true, referenceVariants: ['WSSA0032'] });
+  assert.equal(explicitVerified.analytics_price_usd, 5400);
+  assert.equal(explicitVerified.analytics_currency_status, 'VERIFIED');
+  assert.equal(explicitVerified.price_normalization, 'CANONICAL_QNSA_VERIFIED_USD');
+
+  const datedRuntimeRecovery = fullPriceResearchApi.normalizeAnalyticsPriceRow({
+    ...shared,
+    id: 'live-shape-dated-hkd',
+    raw_message: 'WSSA0032 2023y Used HKD 40000',
+    price_usd: 5128,
+    runtime_price_recovery_applied: true,
+    analytics_fx_date: '2026-08-11',
+    analytics_fx_source: 'ECB',
+  }, { usingQnsaReviewedSource: true, referenceVariants: ['WSSA0032'] });
+  assert.equal(datedRuntimeRecovery.analytics_price_usd, 5128);
+  assert.equal(datedRuntimeRecovery.analytics_currency_status, 'VERIFIED');
+  assert.equal(datedRuntimeRecovery.price_normalization, 'DATED_RUNTIME_SOURCE_RECOVERY');
 });
 
 test('batch input is deduplicated and capped, preventing page fan-out', () => {
