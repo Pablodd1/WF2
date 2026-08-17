@@ -213,3 +213,27 @@ test('full plan is one atomic transaction with count and immutable-row guards', 
   assert.match(sql, /QUARANTINE_RESIDUAL_IDENTITY_CONFLICT/);
   assert.doesNotMatch(sql, /DELETE|TRUNCATE|raw_message\s*=/i);
 });
+
+test('exact raw USD promotions are hash guarded and set only the reviewed price fields', () => {
+  const plan = control.buildPlan({ promotionRows: [{
+    listing_id: 'promotion-a', source_payload_sha256: hash,
+    action: 'PROMOTE_EXACT_RAW_USD_PRICE',
+    expected_status: 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE',
+    new_status: 'SOURCE_EXPLICIT_USD_MATCH', proposed_price_usd: '12500',
+    source_currency: 'USDT', canary_category: 'EXACT_USD', canary_priority: 1,
+  }] });
+  assert.deepEqual(plan[0].expected, {
+    verification_status: 'APPROVED_SINGLE_CANDIDATE',
+    price_evidence_status: 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE',
+  });
+  assert.deepEqual(plan[0].patch, {
+    price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH', workbook_price_usd: 12500,
+  });
+  assert.match(control.atomicFullSql(plan), /new_price numeric/);
+  assert.throws(() => control.buildPlan({ promotionRows: [{
+    listing_id: 'bad', source_payload_sha256: hash,
+    action: 'PROMOTE_EXACT_RAW_USD_PRICE', expected_status: 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE',
+    new_status: 'SOURCE_EXPLICIT_USD_MATCH', proposed_price_usd: 500, source_currency: 'USD',
+    canary_category: 'BAD', canary_priority: 1,
+  }] }), /invalid/);
+});

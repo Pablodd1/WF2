@@ -28,6 +28,7 @@ function parseArgs(argv) {
     residualIdentityManifest: values['residual-identity-manifest'],
     priceManifest: values['price-manifest'],
     driftPriceManifest: values['drift-price-manifest'],
+    promotionManifest: values['promotion-manifest'],
     outputDir: values['output-dir'],
     confirmProject: values['confirm-project'],
     runSha: text(values['run-sha']),
@@ -68,6 +69,7 @@ async function run(argv = process.argv.slice(2)) {
     residualIdentityRows: readCsv(options.residualIdentityManifest).rows,
     priceRows: readCsv(options.priceManifest).rows,
     driftPriceRows: readCsv(options.driftPriceManifest).rows,
+    promotionRows: readCsv(options.promotionManifest).rows,
   });
   const client = createClient(process.env.SUPABASE_URL, key, { auth: { persistSession: false } });
   const rows = await captureSnapshot(client, plan);

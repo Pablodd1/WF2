@@ -37,6 +37,11 @@ on:
         required: true
         default: '3'
         type: string
+      max_promotion:
+        description: Canary exact raw USD/USDT promotions (combined maximum is 10)
+        required: true
+        default: '3'
+        type: string
       prior_canary_run_id:
         description: Successful matching canary workflow run ID; required for full
         required: false
@@ -60,6 +65,7 @@ jobs:
       RESIDUAL_IDENTITY_MANIFEST: data/reviewed-workbook-integrity/residual-identity-conflicts-84.csv
       PRICE_MANIFEST: data/reviewed-workbook-integrity/three-brand-price-regressions-36.csv
       DRIFT_MANIFEST: data/reviewed-workbook-integrity/legacy-ledger-price-drift-252.csv
+      PROMOTION_MANIFEST: data/reviewed-workbook-integrity/exact-raw-usd-promotions-111.csv
       OUTPUT_DIR: audit-output/qnsa-reviewed-workbook-integrity
     steps:
       - uses: actions/checkout@v4
@@ -79,6 +85,7 @@ jobs:
           INPUT_MAX_PRICE: ${{ inputs.max_price }}
           INPUT_MAX_LEGACY: ${{ inputs.max_legacy }}
           INPUT_MAX_RESIDUAL: ${{ inputs.max_residual }}
+          INPUT_MAX_PROMOTION: ${{ inputs.max_promotion }}
           INPUT_PRIOR_CANARY_RUN_ID: ${{ inputs.prior_canary_run_id }}
         run: |
           $ErrorActionPreference = 'Stop'
@@ -94,19 +101,21 @@ jobs:
               $env:SUPABASE_PROJECT_REF -cne 'qnsafosakvonzgfcsphh') {
             throw 'Workflow is pinned to canonical QNSA and requires explicit project confirmation.'
           }
-          foreach ($manifest in @($env:IDENTITY_MANIFEST, $env:RESIDUAL_IDENTITY_MANIFEST, $env:PRICE_MANIFEST, $env:DRIFT_MANIFEST)) {
+          foreach ($manifest in @($env:IDENTITY_MANIFEST, $env:RESIDUAL_IDENTITY_MANIFEST, $env:PRICE_MANIFEST, $env:DRIFT_MANIFEST, $env:PROMOTION_MANIFEST)) {
             if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Required exact manifest is missing: $manifest" }
           }
           $maxIdentity = 0
           $maxPrice = 0
           $maxLegacy = 0
           $maxResidual = 0
+          $maxPromotion = 0
           if (-not [int]::TryParse($env:INPUT_MAX_IDENTITY, [ref]$maxIdentity) -or
               -not [int]::TryParse($env:INPUT_MAX_PRICE, [ref]$maxPrice) -or
               -not [int]::TryParse($env:INPUT_MAX_LEGACY, [ref]$maxLegacy) -or
               -not [int]::TryParse($env:INPUT_MAX_RESIDUAL, [ref]$maxResidual) -or
-              $maxIdentity -lt 0 -or $maxPrice -lt 0 -or $maxLegacy -lt 0 -or $maxResidual -lt 0) { throw 'Canary limits must be non-negative integers.' }
-          if ($mode -eq 'canary' -and (($maxIdentity + $maxPrice + $maxLegacy + $maxResidual) -lt 1 -or ($maxIdentity + $maxPrice + $maxLegacy + $maxResidual) -gt 10)) {
+              -not [int]::TryParse($env:INPUT_MAX_PROMOTION, [ref]$maxPromotion) -or
+              $maxIdentity -lt 0 -or $maxPrice -lt 0 -or $maxLegacy -lt 0 -or $maxResidual -lt 0 -or $maxPromotion -lt 0) { throw 'Canary limits must be non-negative integers.' }
+          if ($mode -eq 'canary' -and (($maxIdentity + $maxPrice + $maxLegacy + $maxResidual + $maxPromotion) -lt 1 -or ($maxIdentity + $maxPrice + $maxLegacy + $maxResidual + $maxPromotion) -gt 10)) {
             throw 'Canary must request 1..10 total exact rows.'
           }
           if ($mode -eq 'full' -and $env:INPUT_PRIOR_CANARY_RUN_ID -notmatch '^[0-9]+$') {
@@ -172,6 +181,7 @@ jobs:
               --residual-identity-manifest $env:RESIDUAL_IDENTITY_MANIFEST `
               --price-manifest $env:PRICE_MANIFEST `
               --drift-price-manifest $env:DRIFT_MANIFEST `
+              --promotion-manifest $env:PROMOTION_MANIFEST `
               --output-dir $env:OUTPUT_DIR `
               --confirm-project $env:SUPABASE_PROJECT_REF `
               --run-sha $env:GITHUB_SHA
@@ -201,6 +211,7 @@ jobs:
           INPUT_MAX_PRICE: ${{ inputs.max_price }}
           INPUT_MAX_LEGACY: ${{ inputs.max_legacy }}
           INPUT_MAX_RESIDUAL: ${{ inputs.max_residual }}
+          INPUT_MAX_PROMOTION: ${{ inputs.max_promotion }}
         run: |
           $ErrorActionPreference = 'Stop'
           $arguments = @(
@@ -210,6 +221,7 @@ jobs:
             '--residual-identity-manifest', $env:RESIDUAL_IDENTITY_MANIFEST,
             '--price-manifest', $env:PRICE_MANIFEST,
             '--drift-price-manifest', $env:DRIFT_MANIFEST,
+            '--promotion-manifest', $env:PROMOTION_MANIFEST,
             '--output-dir', $env:OUTPUT_DIR,
             '--confirm-project', $env:INPUT_CONFIRM_PROJECT,
             '--confirm', $env:INPUT_CONFIRMATION,
@@ -217,6 +229,7 @@ jobs:
             '--max-price', $env:INPUT_MAX_PRICE,
             '--max-legacy', $env:INPUT_MAX_LEGACY,
             '--max-residual', $env:INPUT_MAX_RESIDUAL,
+            '--max-promotion', $env:INPUT_MAX_PROMOTION,
             '--run-sha', $env:GITHUB_SHA
           )
           & node @arguments
@@ -237,6 +250,7 @@ jobs:
             --residual-identity-manifest $env:RESIDUAL_IDENTITY_MANIFEST `
             --price-manifest $env:PRICE_MANIFEST `
             --drift-price-manifest $env:DRIFT_MANIFEST `
+            --promotion-manifest $env:PROMOTION_MANIFEST `
             --output-dir $env:OUTPUT_DIR `
             --confirm-project $env:INPUT_CONFIRM_PROJECT `
             --confirm $env:INPUT_CONFIRMATION `
