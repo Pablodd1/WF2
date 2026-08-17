@@ -928,7 +928,7 @@ module.exports = async function handler(req, res) {
       release_status: 'PENDING_CANARY',
     });
   }
-  const preloadReferences = listEquivalentReferences(rawRef, brand);
+  const preloadReferences = [...new Set([rawRef, ...listEquivalentReferences(rawRef, brand)])];
   let preloadedReviewedWorkbookEvidenceRows = [];
   if (!configuredSourceTable) {
     try {
@@ -990,7 +990,7 @@ module.exports = async function handler(req, res) {
       // Resolve exact references case-insensitively first. Historical imports
       // contain casing variants (for example 116500LN and 116500ln); keep all
       // equivalent stored spellings so the market query aggregates them.
-      const equivalentReferences = listEquivalentReferences(rawRef, brand);
+      const equivalentReferences = [...new Set([rawRef, ...listEquivalentReferences(rawRef, brand)])];
       referenceVariants = equivalentReferences;
       if (exactReviewedWorkbookRelease) {
         // The indexed reviewed-workbook preload already proves the exact

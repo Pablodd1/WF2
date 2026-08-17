@@ -178,7 +178,10 @@ async function loadCanonicalPairRows(client, pair, overrides = {}) {
   loaders.loadReviewedWorkbookEvidenceRows = overrides.loadReviewedWorkbookEvidenceRows
     || overrides.loadReviewedWorkbookAnalyticsRows
     || loadReviewedWorkbookEvidenceRows;
-  const referenceVariants = listEquivalentReferences(pair.reference, pair.brand);
+  const referenceVariants = [...new Set([
+    pair.reference,
+    ...listEquivalentReferences(pair.reference, pair.brand),
+  ])];
   const familyPrefix = (overrides.reviewedFamilyPrefix || canonicalPriceResearch.reviewedFamilyPrefix)(pair.brand, pair.reference);
   const configuredSource = Object.hasOwn(overrides, 'configuredSource')
     ? overrides.configuredSource
