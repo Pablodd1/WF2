@@ -99,6 +99,7 @@ test('multi-parent lane emits one lineage-keyed display-only row with no inherit
       seller_name_source: 'Seller One',
     }),
     decision: decision({ listing_id: `child-${number}` }),
+    expectedBrand: number === 1 ? 'Rolex' : 'Patek Philippe',
     rowNumber: index + 2,
   }));
   const result = intake.buildMultiParentRows({
@@ -157,6 +158,24 @@ test('same immutable source message produces the same parent id across workbook 
     fileSha256: brand === 'Breguet' ? 'c'.repeat(64) : 'd'.repeat(64), runId: 'test',
   }).parents[0];
   assert.equal(make('Breguet').id, make('Franck Muller').id);
+});
+
+test('multi-parent raw brand conflicts remain held instead of routing through the workbook brand', () => {
+  const result = intake.buildMultiParentRows({
+    entries: [1, 2].map((number, index) => ({
+      source: source({
+        listing_id: `chopard-child-${number}`,
+        source_message_id: 'wrong-brand-parent',
+        raw_message: number === 1 ? 'RM016 WG USD 77500' : 'RM030TI USD 162400',
+      }),
+      decision: decision({ bundle_status: 'BUNDLE_PENDING' }),
+      rowNumber: index + 2,
+    })),
+    expectedBrand: 'Chopard', fileName: 'chopard.xlsx',
+    fileSha256: 'e'.repeat(64), runId: 'test',
+  });
+  assert.equal(result.parents.length, 0);
+  assert.deepEqual(result.held[0].reasons, ['MULTI_PARENT_RAW_BRAND_CONFLICT']);
 });
 
 test('Trading Floor admission cannot silently promote a Price Research hold', () => {

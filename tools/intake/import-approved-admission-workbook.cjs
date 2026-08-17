@@ -41,9 +41,35 @@ const PRICE_RESEARCH_ONLY_REASONS = new Set([
   'RAW_SELL_SIDE_LANGUAGE_MISSING',
   'WTB_DEMAND_EXCLUDED_FROM_WTS_ANALYTICS',
 ]);
+const EXPLICIT_BRAND_PATTERNS = [
+  ['Rolex', /\b(?:rolex|daytona|datejust|submariner|day[- ]?date|sky[- ]?dweller)\b/i],
+  ['Patek Philippe', /\b(?:patek(?:\s+philippe)?|nautilus|aquanaut)\b/i],
+  ['Audemars Piguet', /\b(?:audemars(?:\s+piguet)?|royal\s+oak)\b/i],
+  ['Richard Mille', /\b(?:richard\s+mille|RM\s?\d{2,3})\b/i],
+  ['Cartier', /\b(?:cartier|santos)\b/i],
+  ['Zenith', /\bzenith\b/i],
+  ['TAG Heuer', /\b(?:tag\s*heuer|tagheuer)\b/i],
+  ['Breguet', /\bbreguet\b/i],
+  ['Franck Muller', /\bfranck\s+muller\b/i],
+  ['Blancpain', /\bblancpain\b/i],
+  ['Bulgari', /\b(?:bulgari|bvlgari)\b/i],
+  ['Chopard', /\bchopard\b/i],
+  ['Girard-Perregaux', /\bgirard[- ]perregaux\b/i],
+  ['Glashütte Original', /\bglash.{0,2}tte(?:\s+original)?\b/i],
+  ['Grand Seiko', /\bgrand\s+seiko\b/i],
+  ['H. Moser & Cie', /\bmoser\b/i],
+  ['Jacob & Co', /\bjacob\s*(?:&|and)\s*co\b/i],
+  ['Ulysse Nardin', /\bulysse\s+nardin\b/i],
+];
 
 function text(value) {
   return value === null || value === undefined ? '' : String(value).trim();
+}
+
+function explicitBrandsInRaw(rawMessage) {
+  return EXPLICIT_BRAND_PATTERNS
+    .filter(([, pattern]) => pattern.test(String(rawMessage || '')))
+    .map(([brand]) => brand);
 }
 
 function sha256(value) {
@@ -417,6 +443,16 @@ function buildMultiParentRows({ entries, expectedBrand, fileName, fileSha256, ru
     const routingBrand = brands[0];
     const displayBrand = brands.length > 1 ? 'Multiple brands' : routingBrand;
     const rawMessage = rawSegments.join('\n');
+    const conflictingRawBrands = explicitBrandsInRaw(rawMessage)
+      .filter(brand => !brands.includes(brand));
+    if (conflictingRawBrands.length) {
+      held.push({
+        sourceMessageId,
+        childCount: distinctChildren.size,
+        reasons: ['MULTI_PARENT_RAW_BRAND_CONFLICT'],
+      });
+      continue;
+    }
     const sourcePayload = ordered.map(entry => ({
       source: entry.source,
       decision: entry.decision,
@@ -780,6 +816,7 @@ module.exports = {
   additionalImportReasons,
   canonicalizeExactDuplicates,
   buildMultiParentRows,
+  explicitBrandsInRaw,
   hasExplicitMultiParentEvidence,
   exactDuplicateKey,
   ledgerDuplicateEvidence,
