@@ -88,6 +88,71 @@ test('bundle parents and unresolved identities never produce import rows', () =>
   }), null);
 });
 
+test('multi-parent lane emits one lineage-keyed display-only row with no inherited evidence', () => {
+  const entries = [1, 2].map((number, index) => ({
+    source: source({
+      listing_id: `child-${number}`,
+      source_message_id: 'immutable-message-1',
+      raw_message: number === 1 ? 'Rolex 126500' : 'Patek 5712',
+      image_urls_source: `https://example.test/parent-${number}.jpg`,
+      seller_source_id: 'seller-1',
+      seller_name_source: 'Seller One',
+    }),
+    decision: decision({ listing_id: `child-${number}` }),
+    rowNumber: index + 2,
+  }));
+  const result = intake.buildMultiParentRows({
+    entries,
+    expectedBrand: 'TAG Heuer',
+    fileName: 'input.xlsx',
+    fileSha256: 'a'.repeat(64),
+    runId: 'test',
+  });
+  assert.equal(result.parents.length, 1);
+  const parent = result.parents[0];
+  assert.match(parent.id, /^admission_multi_[0-9a-f]{64}$/);
+  assert.equal(parent.source_record_id, 'immutable-message-1');
+  assert.equal(parent.raw_message, 'Rolex 126500\nPatek 5712');
+  assert.equal(parent.listing_type, 'MULTI');
+  assert.equal(parent.verification_status, 'APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY');
+  assert.equal(parent.verification_tier, 'OWNER_MULTI_PARENT_SOURCE_LINEAGE_V1');
+  assert.equal(parent.price_evidence_status, 'MULTI_PARENT_PRICE_WITHHELD');
+  assert.equal(parent.workbook_price_usd, null);
+  assert.equal(parent.source_price_amount, null);
+  assert.equal(parent.final_image_url, null);
+  assert.equal(parent.phone_number, null);
+  assert.equal(parent.contact_publication_approved, false);
+});
+
+test('single workbook row needs an exact bundle status to enter the multi-parent lane', () => {
+  const base = {
+    source: source({ source_message_id: 'bundle-message', raw_message: 'Several watches available' }),
+    decision: decision({ bundle_status: 'BUNDLE_PENDING' }),
+    rowNumber: 2,
+  };
+  assert.equal(intake.buildMultiParentRows({
+    entries: [base], expectedBrand: 'TAG Heuer', fileName: 'a.xlsx',
+    fileSha256: 'b'.repeat(64), runId: 'test',
+  }).parents.length, 1);
+  assert.equal(intake.buildMultiParentRows({
+    entries: [{ ...base, decision: decision({ bundle_status: 'UNKNOWN' }) }],
+    expectedBrand: 'TAG Heuer', fileName: 'a.xlsx',
+    fileSha256: 'b'.repeat(64), runId: 'test',
+  }).parents.length, 0);
+});
+
+test('same immutable source message produces the same parent id across workbook copies', () => {
+  const entry = {
+    source: source({ source_message_id: 'shared-source', raw_message: 'Mixed brand dealer list' }),
+    decision: decision({ bundle_status: 'BUNDLE_PENDING' }), rowNumber: 2,
+  };
+  const make = brand => intake.buildMultiParentRows({
+    entries: [entry], expectedBrand: brand, fileName: `${brand}.xlsx`,
+    fileSha256: brand === 'Breguet' ? 'c'.repeat(64) : 'd'.repeat(64), runId: 'test',
+  }).parents[0];
+  assert.equal(make('Breguet').id, make('Franck Muller').id);
+});
+
 test('Trading Floor admission cannot silently promote a Price Research hold', () => {
   const row = intake.rowForImport({
     source: source({ fx_source: '', fx_rate_date: '' }),

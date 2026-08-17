@@ -21,6 +21,9 @@ const {
 const INVENTORY_TABLE = 'reviewed_workbook_inventory';
 const CHECKPOINT_TABLE = 'reviewed_workbook_import_checkpoints';
 const SOURCE_SHEET = 'Trading Floor & Price Research';
+const MULTI_PARENT_LISTING_TYPE = 'MULTI';
+const MULTI_PARENT_VERIFICATION_STATUS = 'APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY';
+const MULTI_PARENT_VERIFICATION_TIER = 'OWNER_MULTI_PARENT_SOURCE_LINEAGE_V1';
 const OWNER_UNBUNDLED_BRANDS = new Set([
   'Blancpain',
   'Bulgari',
@@ -329,6 +332,147 @@ function rowForImport({ source, decision, expectedBrand, fileName, fileSha256, r
   };
 }
 
+function consistentValue(entries, selector) {
+  const values = [...new Set(entries.map(selector).map(text).filter(Boolean))];
+  return values.length === 1 ? values[0] : null;
+}
+
+function hasExplicitMultiParentEvidence(group) {
+  const distinctChildren = new Set(group.map(entry => text(entry.source?.listing_id)).filter(Boolean));
+  if (distinctChildren.size > 1) return true;
+  return group.some(entry => [
+    'BUNDLE_PARENT',
+    'BUNDLE_PENDING',
+    'MULTI',
+    'MULTI_LISTING',
+    'MULTI_PENDING',
+  ].includes(text(entry.decision?.bundle_status).toUpperCase()));
+}
+
+function buildMultiParentRows({ entries, expectedBrand, fileName, fileSha256, runId }) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const sourceMessageId = text(entry.source?.source_message_id);
+    if (!sourceMessageId) continue;
+    const group = groups.get(sourceMessageId) || [];
+    group.push(entry);
+    groups.set(sourceMessageId, group);
+  }
+
+  const parents = [];
+  const held = [];
+  for (const [sourceMessageId, group] of groups) {
+    const distinctChildren = new Set(group.map(entry => text(entry.source?.listing_id)).filter(Boolean));
+    if (!hasExplicitMultiParentEvidence(group)) continue;
+    const ordered = [...group].sort((left, right) => (
+      Number(left.itemSequence || left.rowNumber) - Number(right.itemSequence || right.rowNumber)
+      || text(left.fileName || fileName).localeCompare(text(right.fileName || fileName))
+      || text(left.source?.listing_id).localeCompare(text(right.source?.listing_id))
+      || left.rowNumber - right.rowNumber
+    ));
+    const rawSegments = [];
+    const seenRawSegments = new Set();
+    for (const entry of ordered) {
+      const raw = entry.source?.raw_message === null || entry.source?.raw_message === undefined
+        ? ''
+        : String(entry.source.raw_message);
+      if (!raw.trim() || seenRawSegments.has(raw)) continue;
+      seenRawSegments.add(raw);
+      rawSegments.push(raw);
+    }
+    const sellerId = consistentValue(ordered, entry => entry.source?.seller_source_id);
+    const sellerName = consistentValue(ordered, entry => entry.source?.seller_name_source);
+    const postingDates = ordered.map(entry => isoDate(entry.source?.source_posted_at)).filter(Boolean);
+    const reasons = [];
+    if (!rawSegments.length) reasons.push('MULTI_PARENT_RAW_SEGMENT_MISSING');
+    if (!sellerId || !sellerName) reasons.push('MULTI_PARENT_SELLER_CONFLICT_OR_MISSING');
+    if (!postingDates.length) reasons.push('SOURCE_POSTING_TIME_INVALID');
+    if (ordered.some(entry => text(entry.source?.category).toUpperCase() !== 'WATCH')) {
+      reasons.push('MULTI_PARENT_NON_WATCH_MEMBER');
+    }
+    if (reasons.length) {
+      held.push({ sourceMessageId, childCount: distinctChildren.size, reasons });
+      continue;
+    }
+
+    const brands = [...new Set(ordered.map(entry => text(entry.expectedBrand || expectedBrand)).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right));
+    if (!brands.length) reasons.push('MULTI_PARENT_BRAND_ROUTE_MISSING');
+    if (reasons.length) {
+      held.push({ sourceMessageId, childCount: distinctChildren.size, reasons });
+      continue;
+    }
+    const routingBrand = brands[0];
+    const displayBrand = brands.length > 1 ? 'Multiple brands' : routingBrand;
+    const rawMessage = rawSegments.join('\n');
+    const sourcePayload = ordered.map(entry => ({
+      source: entry.source,
+      decision: entry.decision,
+      source_row_number: entry.rowNumber,
+    }));
+    const identityHash = sha256(sourceMessageId);
+    const sourceFiles = [...new Set(ordered.map(entry => text(entry.fileName || fileName)).filter(Boolean))].sort();
+    const sourceFileHashes = [...new Set(ordered.map(entry => text(entry.fileSha256 || fileSha256)).filter(Boolean))].sort();
+    const contentHash = sha256(JSON.stringify({ sourceMessageId, brands, sourcePayload }));
+    parents.push({
+      id: `admission_multi_${identityHash}`,
+      content_hash: contentHash,
+      import_run_id: runId,
+      source_file: sourceFiles.join(' | '),
+      source_file_sha256: sourceFileHashes.length === 1
+        ? sourceFileHashes[0]
+        : sha256(sourceFileHashes.join('|')),
+      source_worksheet: SOURCE_SHEET,
+      source_row_number: ordered[0].rowNumber,
+      source_record_id: sourceMessageId,
+      source_payload_sha256: sha256(JSON.stringify(sourcePayload)),
+      posting_date: postingDates.sort()[0],
+      posted_by: sellerName,
+      phone_number: null,
+      raw_message: rawMessage,
+      listing_type: MULTI_PARENT_LISTING_TYPE,
+      brand_scope: routingBrand,
+      supplied_brand: displayBrand,
+      canonical_brand: displayBrand,
+      model: 'Multiple listings',
+      raw_reference: null,
+      normalized_reference: null,
+      catalog_reference: null,
+      catalog_model: 'Multiple listings',
+      dial_color: null,
+      catalog_dial: null,
+      condition: null,
+      workbook_price_usd: null,
+      source_price_amount: null,
+      source_price_text: null,
+      source_currency: null,
+      price_evidence_status: 'MULTI_PARENT_PRICE_WITHHELD',
+      verification_tier: MULTI_PARENT_VERIFICATION_TIER,
+      confidence: 100,
+      verification_status: MULTI_PARENT_VERIFICATION_STATUS,
+      user_image_url: null,
+      catalog_image_url: null,
+      final_image_url: null,
+      display_image_url: null,
+      image_evidence_type: null,
+      review_reasons: [
+        'MULTI_PARENT_TRADING_FLOOR_ONLY',
+        'PRICE_RESEARCH_EXCLUDED',
+        'UNASSIGNED_MEDIA_WITHHELD',
+        'CONTACT_WITHHELD',
+        `SOURCE_SEGMENT_COUNT_${ordered.length}`,
+        `SOURCE_BRAND_COUNT_${brands.length}`,
+      ],
+      contact_publication_approved: false,
+      contact_publication_basis: null,
+    });
+  }
+  parents.sort((left, right) => (
+    left.source_row_number - right.source_row_number || left.id.localeCompare(right.id)
+  ));
+  return { parents, held };
+}
+
 function exactDuplicateKey(row) {
   return sha256([
     text(row.brand_scope).toLowerCase(),
@@ -411,6 +555,7 @@ function parseArgs(argv) {
     batchSize,
     runId: text(values['run-id']) || `approved_admission_${Date.now()}`,
     ownerUnbundled: values['unbundled-no-image'] === 'true',
+    includeMultiParents: values['include-multi-parents'] === 'true',
     apply: process.env.APPLY_APPROVED_ADMISSION_IMPORT === 'true',
   };
 }
@@ -436,12 +581,23 @@ async function run(argv = process.argv.slice(2)) {
   const heldReasons = {};
   const analyticsHeldReasons = {};
   let missingDecisions = 0;
+  const sourceEntries = [];
   workbook.sourceRows.forEach((source, index) => {
     const decision = workbook.decisions.get(text(source.listing_id));
     if (!decision) {
       missingDecisions += 1;
       return;
     }
+    const itemSequenceMatch = text(source.listing_id).match(/_item_(\d+)$/i);
+    sourceEntries.push({
+      source,
+      decision,
+      rowNumber: index + 2,
+      itemSequence: itemSequenceMatch ? Number(itemSequenceMatch[1]) : index + 2,
+      expectedBrand: options.brand,
+      fileName,
+      fileSha256: workbook.fileSha256,
+    });
     const admission = options.ownerUnbundled
       ? classifyOwnerUnbundledRow(source, decision, options.brand)
       : classifyRow(source, decision, options.brand);
@@ -481,8 +637,18 @@ async function run(argv = process.argv.slice(2)) {
   const duplicateResolution = canonicalizeExactDuplicates(candidates);
   const uniqueCandidates = duplicateResolution.canonical;
   excludedDuplicateEvidence.push(...duplicateResolution.excluded);
-  const limit = options.maxRows || uniqueCandidates.length;
-  const selected = uniqueCandidates.slice(0, limit);
+  const multiParentResolution = options.includeMultiParents
+    ? buildMultiParentRows({
+      entries: sourceEntries,
+      expectedBrand: options.brand,
+      fileName,
+      fileSha256: workbook.fileSha256,
+      runId: options.runId,
+    })
+    : { parents: [], held: [] };
+  const allCandidates = [...uniqueCandidates, ...multiParentResolution.parents];
+  const limit = options.maxRows || allCandidates.length;
+  const selected = allCandidates.slice(0, limit);
   let resumeAt = 0;
   let inserted = 0;
   let duplicates = 0;
@@ -520,14 +686,14 @@ async function run(argv = process.argv.slice(2)) {
         import_run_id: options.runId,
         source_file: fileName,
         brand_scope: options.brand,
-        expected_rows: uniqueCandidates.length,
+        expected_rows: allCandidates.length,
         rows_scanned: scanned,
         rows_inserted: inserted,
         rows_duplicate_held: duplicates,
         rows_errors: 0,
-        status: scanned === uniqueCandidates.length ? 'COMPLETE' : 'RUNNING',
+        status: scanned === allCandidates.length ? 'COMPLETE' : 'RUNNING',
         started_at: new Date().toISOString(),
-        completed_at: scanned === uniqueCandidates.length ? new Date().toISOString() : null,
+        completed_at: scanned === allCandidates.length ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'source_file_sha256' });
       if (error) throw error;
@@ -545,7 +711,10 @@ async function run(argv = process.argv.slice(2)) {
     source_sha256: workbook.fileSha256,
     expected_brand: options.brand,
     source_rows: workbook.sourceRows.length,
-    strict_trading_floor_candidates: uniqueCandidates.length,
+    strict_trading_floor_candidates: allCandidates.length,
+    approved_single_candidates: uniqueCandidates.length,
+    approved_multi_parent_candidates: multiParentResolution.parents.length,
+    multi_parent_groups_held: multiParentResolution.held.length,
     selected_rows: selected.length,
     strict_price_research_candidates_supported_by_current_schema: priceReady,
     selected_price_research_candidates_supported_by_current_schema: selectedPriceReady,
@@ -558,6 +727,7 @@ async function run(argv = process.argv.slice(2)) {
     duplicate_or_repost_evidence_rows: excludedDuplicateEvidence.length,
     exact_duplicate_candidates_excluded: duplicateResolution.excluded.length,
     unbundled_no_image_policy: options.ownerUnbundled,
+    multi_parent_trading_floor_only_policy: options.includeMultiParents,
     rows_with_images: selected.filter(row => row.final_image_url).length,
     rows_with_exact_raw_usd: selected.filter(row => row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH').length,
     rows_without_exact_reference: selected.filter(row => !row.normalized_reference).length,
@@ -590,10 +760,15 @@ module.exports = {
   CHECKPOINT_TABLE,
   INVENTORY_TABLE,
   OWNER_UNBUNDLED_BRANDS,
+  MULTI_PARENT_LISTING_TYPE,
+  MULTI_PARENT_VERIFICATION_STATUS,
+  MULTI_PARENT_VERIFICATION_TIER,
   PRICE_RESEARCH_ONLY_REASONS,
   firstExactImage,
   additionalImportReasons,
   canonicalizeExactDuplicates,
+  buildMultiParentRows,
+  hasExplicitMultiParentEvidence,
   exactDuplicateKey,
   ledgerDuplicateEvidence,
   classifyOwnerUnbundledRow,

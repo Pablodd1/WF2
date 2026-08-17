@@ -15,12 +15,17 @@ const migration = fs.readFileSync(path.join(
 ), 'utf8');
 const research = fs.readFileSync(path.join(root, 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
 
-test('display comparator enforces image then price then date then stable id', () => {
+test('bounded-page comparator ranks exact image then verified explicit price then date', () => {
   const records = [
     { id: '4', has_images: false, price_usd: null, created_at: '2026-08-13T04:00:00Z' },
-    { id: '3', has_images: false, price_usd: 10_000, created_at: '2026-08-13T03:00:00Z' },
-    { id: '2', has_images: true, price_usd: null, created_at: '2026-08-13T02:00:00Z' },
-    { id: '1', has_images: true, price_usd: 10_000, created_at: '2026-08-13T01:00:00Z' },
+    { id: '3', has_images: false, price_usd: 10_000, source_price_amount: 10_000,
+      price_research_eligible: true, price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH', created_at: '2026-08-13T03:00:00Z' },
+    { id: '2', has_images: true, price_usd: null, thumbnail_url: 'https://example.com/2.jpg',
+      image_urls: ['https://example.com/2.jpg'], image_evidence_type: 'SOURCE_LISTING_IMAGE', created_at: '2026-08-13T02:00:00Z' },
+    { id: '1', has_images: true, price_usd: 10_000, source_price_amount: 10_000,
+      price_research_eligible: true, price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
+      thumbnail_url: 'https://example.com/1.jpg', image_urls: ['https://example.com/1.jpg'],
+      image_evidence_type: 'SOURCE_LISTING_IMAGE', created_at: '2026-08-13T01:00:00Z' },
   ];
   assert.deepEqual(records.sort(api.compareInventoryForDisplay).map(row => row.id), ['1', '2', '3', '4']);
 });

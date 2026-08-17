@@ -42,14 +42,18 @@ test('general QNSA market feed bounds pages and joins immutable evidence', () =>
   assert.match(source, /p_category: itemCategory/);
 });
 
-test('same-reference Trading Floor listings preserve the global image boundary before price', () => {
+test('page-local Trading Floor presentation rank keeps exact images ahead of explicit price', () => {
   const priced = {
     id: 'priced', brand: 'Patek Philippe', reference: '5712/1A-001',
     source_price_amount: 92000, has_images: false, listing_date: '2026-01-01',
+    price_research_eligible: true, price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
   };
   const unpriced = {
     id: 'unpriced', brand: 'Patek Philippe', reference: '5712/1A-001',
     source_price_amount: null, has_images: true, listing_date: '2026-08-01',
+    thumbnail_url: 'https://objects.example/exact-source.jpg',
+    image_urls: ['https://objects.example/exact-source.jpg'],
+    image_evidence_type: 'SOURCE_LISTING_IMAGE',
   };
   const records = [unpriced, priced].sort(api.compareInventoryForDisplay);
   assert.deepEqual(records.map(record => record.id), ['unpriced', 'priced']);
@@ -62,6 +66,84 @@ test('same-reference Trading Floor listings preserve the global image boundary b
     scope: 'returned_page', record_count: 2, identity_complete: 2, contact_available: 1,
     exact_source_image: 1, supplied_price: 1, price_not_supplied: 1, price_analytics_eligible: 1,
   });
+});
+
+test('bounded Trading Floor page rank is evidence-first and never fabricates sparse-card evidence', () => {
+  const records = [
+    { id: 'released-bundle', multi_listing: true, multi_listing_release_approved: true },
+    { id: 'sparse' },
+    {
+      id: 'explicit-price', source_price_amount: 10000,
+      price_research_eligible: true, price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
+    },
+    { id: 'profile', dealer_id: 'dealer-1', dealer_profile_path: '/reference-check/dealer-1' },
+    {
+      id: 'rated', seller_rating: 4.8, seller_review_count: 12,
+      seller_rating_evidence_status: 'SOURCE_SUPPLIED',
+    },
+    {
+      id: 'image', has_images: true,
+      thumbnail_url: 'https://objects.example/source.jpg',
+      image_urls: ['https://objects.example/source.jpg'],
+      image_evidence_type: 'SOURCE_LISTING_IMAGE',
+    },
+  ].sort(api.compareInventoryForDisplay);
+  assert.deepEqual(records.map(record => record.id), [
+    'image', 'rated', 'profile', 'explicit-price', 'sparse', 'released-bundle',
+  ]);
+});
+
+test('admitted workbook brands are globally ordered in Postgres before cursor range', () => {
+  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand))");
+  const branch = source.slice(branchStart, source.indexOf('if (admissionError) throw admissionError;', branchStart));
+  assert.match(branch, /\.from\('reviewed_workbook_inventory'\)/);
+  const imageOrder = branch.indexOf(".order('has_image', { ascending: false })");
+  const intentOrder = branch.indexOf(".order('listing_type', { ascending: false })");
+  const evidenceOrder = branch.indexOf(".order('price_evidence_status', { ascending: false })");
+  const priceOrder = branch.indexOf(".order('workbook_price_usd', { ascending: false, nullsFirst: false })");
+  const idOrder = branch.indexOf(".order('id', { ascending: false })");
+  assert.ok(imageOrder > 0 && imageOrder < intentOrder && intentOrder < evidenceOrder
+    && evidenceOrder < priceOrder && priceOrder < idOrder);
+  assert.ok(branch.indexOf('.range(admissionOffset, admissionOffset + pageSize)') > idOrder);
+  assert.match(source, /qnsa_database: 'Global exact-source-image lane first\. Dealer rating\/profile is enriched after the bounded RPC and is not globally ordered\.'/);
+  assert.match(source, /returned_page: 'Within the bounded server page only:/);
+});
+
+test('bundle release is fail-closed and requires the dedicated immutable-lineage lane', () => {
+  const base = {
+    item_category: 'WATCH', listing_type: 'WTS', is_bundle: true,
+    trading_floor_status: 'PUBLISHED_BUNDLE', publication_state: 'APPROVED',
+    normalization_run_complete: true, raw_lineage_verified: true,
+  };
+  assert.equal(api.isTradingFloorSourceRow(base), false);
+  assert.equal(api.isTradingFloorSourceRow({
+    ...base, publication_lane: 'QNSA_EXPLICIT_MULTI_RELEASE_V1',
+  }), true);
+});
+
+test('reviewed-workbook multi parent requires its exact status and source-lineage lane', () => {
+  const base = {
+    item_category: 'WATCH', listing_type: 'MULTI', is_bundle: true,
+    trading_floor_status: 'PUBLISHED_MULTI_LISTING', publication_state: 'APPROVED',
+    raw_lineage_verified: true,
+    verification_status: api.MULTI_PARENT_VERIFICATION_STATUS,
+    publication_lane: api.MULTI_PARENT_PUBLICATION_LANE,
+  };
+  assert.equal(api.isExplicitlyReleasedMultiListing(base), true);
+  assert.equal(api.isTradingFloorSourceRow(base), true);
+  assert.equal(api.isTradingFloorSourceRow({ ...base, raw_lineage_verified: false }), false);
+  assert.equal(api.isTradingFloorSourceRow({ ...base, verification_status: 'APPROVED' }), false);
+  assert.equal(api.isTradingFloorSourceRow({ ...base, publication_lane: 'LEGACY_BUNDLE' }), false);
+});
+
+test('admission query includes only singles and the exact multi-parent status and orders parents last', () => {
+  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand))");
+  const branch = source.slice(branchStart, source.indexOf('if (admissionError) throw admissionError;', branchStart));
+  assert.match(branch, /'APPROVED_SINGLE_CANDIDATE',[\s\S]*MULTI_PARENT_VERIFICATION_STATUS/);
+  assert.match(branch, /\.in\('listing_type', \['WTS', 'WTB', 'MULTI'\]\)/);
+  const statusOrder = branch.indexOf(".order('verification_status', { ascending: false })");
+  const typeOrder = branch.indexOf(".order('listing_type', { ascending: false })");
+  assert.ok(statusOrder > 0 && statusOrder < typeOrder);
 });
 
 test('a count-snapshot failure does not take the bounded customer feed offline', () => {
@@ -899,7 +981,7 @@ test('public brand filters preserve punctuation and use only supported exact sna
   assert.doesNotMatch(source, /const total = summaryTotal/);
 });
 
-test('endpoint is read-only and globally ranks verified source images before pagination', () => {
+test('QNSA endpoint is read-only and globally exhausts its indexed image lane before no-image rows', () => {
   assert.match(source, /rest\/v1\/\$\{activeMarketSourceView\}/);
   assert.match(source, /: 'reviewed_workbook_market_source_v2'/);
   assert.doesNotMatch(source, /\.from\(['"]watch_records['"]\)/);
@@ -917,9 +999,10 @@ test('endpoint is read-only and globally ranks verified source images before pag
   assert.match(source, /pageResult\.records\.filter\(row => \{/);
   assert.match(source, /return isTradingFloorSourceRow\(row\)/);
   assert.match(source, /usedLegacyViewContract \? isLegacyReviewedInventoryRecord\(record\) : true/);
-  assert.doesNotMatch(source, /order\('workbook_price_usd'/);
-  assert.doesNotMatch(source, /order\('source_price_amount'/);
-  assert.doesNotMatch(source, /order\('has_complete_identity'/);
+  const legacyBuilder = api.buildLegacyMarketQueryParams.toString();
+  assert.doesNotMatch(legacyBuilder, /order\('workbook_price_usd'/);
+  assert.doesNotMatch(legacyBuilder, /order\('source_price_amount'/);
+  assert.doesNotMatch(legacyBuilder, /order\('has_complete_identity'/);
   assert.doesNotMatch(source, /catalog_image_url|final_image_url|display_image_url/);
   assert.match(source, /buildLegacyMarketQueryParams/);
   assert.match(source, /legacyMarketViewContractDetected/);
@@ -1012,7 +1095,7 @@ test('service-only evidence view keeps strict identity while reusing v1 indexes'
 });
 
 test('standalone listing type is indexed while condition remains narrowly guarded', () => {
-  assert.match(source, /if \(listingType && !\['WTS', 'WTB', 'OTHER'\]\.includes\(listingType\)\)/);
+  assert.match(source, /if \(listingType && !\['WTS', 'WTB', 'OTHER', 'MULTI'\]\.includes\(listingType\)\)/);
   assert.match(source, /if \(condition && !\(requestedBrand && reference\)\)/);
   assert.doesNotMatch(source, /if \(\(listingType \|\| condition\)/);
 });

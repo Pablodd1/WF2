@@ -16,6 +16,7 @@ import { rateMarketPrice } from '../lib/marketPriceRating';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
+import { buildContactWhatsAppUrl } from '../contactWhatsApp';
 import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
 import { MarketActivityTicker } from '../components/MarketActivityTicker';
 import { DealerRatingBadge, ListingDealerEvidence, sourceBackedDealerRating } from '../components/ListingDealerEvidence';
@@ -106,6 +107,7 @@ interface ListingRecord {
   data_quality_review_required?: boolean;
   verification_label?: string | null;
   multi_listing?: boolean;
+  multi_listing_release_approved?: boolean;
   is_unbundled_child?: boolean;
   raw_message?: string | null;
   raw_line?: string | null;
@@ -206,7 +208,7 @@ function isValidListingImageUrl(value: unknown): value is string {
 }
 
 function listingImageUrl(listing: ListingRecord) {
-  if (isBundleListing(listing)) return null;
+  if (isBundleListing(listing) || listing.is_unbundled_child === true) return null;
   const candidates = [listing.thumbnail_url, ...(listing.image_urls || [])];
   const imageUrl = candidates.find(isValidListingImageUrl);
   return imageUrl ? imageUrl.trim() : null;
@@ -216,25 +218,11 @@ function hasListingImage(listing: ListingRecord) {
   return listingImageUrl(listing) !== null;
 }
 
-function hasListingPrice(listing: ListingRecord) {
-  return [listing.source_price_amount, listing.price_raw, listing.price_usd]
-    .some(value => Number.isFinite(Number(value)) && Number(value) > 0);
-}
-
-function compareListingsForDisplay(left: ListingRecord, right: ListingRecord) {
-  const imageDifference = Number(hasListingImage(right)) - Number(hasListingImage(left));
-  if (imageDifference !== 0) return imageDifference;
-  const priceDifference = Number(hasListingPrice(right)) - Number(hasListingPrice(left));
-  if (priceDifference !== 0) return priceDifference;
-  return new Date(right.listing_date || right.created_at || 0).getTime()
-    - new Date(left.listing_date || left.created_at || 0).getTime();
-}
-
 /** Detects bundle/multi-watch listings */
 function isBundleListing(listing: ListingRecord) {
   const listingType = cleanValue(listing.listing_type).toUpperCase();
   const listingStatus = cleanValue(listing.listing_status).toUpperCase();
-  if (listing.multi_listing || listing.is_unbundled_child) return true;
+  if (listing.multi_listing) return true;
   if (['MULTI', 'MULTI_LISTING', 'BUNDLE'].includes(listingType)) return true;
   if (/(?:BUNDLE_CHILD_PENDING_REVIEW|BUNDLE_PENDING_SEPARATION)/.test(listingStatus)) return true;
   if (listing.model && /multiple|multi|mixed/i.test(listing.model)) return true;
@@ -325,7 +313,10 @@ export default function TradingFloor() {
   // Every facet is applied by the reviewed inventory endpoint before its
   // cursor window is returned. Re-filtering a server page here would produce
   // sparse cards and misleading Next/Back counts.
-  const visibleListings = useMemo(() => [...listings].sort(compareListingsForDisplay), [listings]);
+  // The API owns presentation order inside each cursor page. Reordering or
+  // filtering here would sever keyset membership from what the user sees and
+  // can create apparent skips across the image/no-image boundary.
+  const visibleListings = listings;
   const unfilteredBrandTotal = brandFilter
     && categoryFilter === 'watches'
     && !intentFilter && !search && !exactReference && !imagesOnly && !pricedOnly
@@ -591,9 +582,7 @@ export default function TradingFloor() {
             ? current
             : data.publicationBrands!);
         }
-        const nextListings = (data.records || [])
-          .filter(listing => !isBundleListing(listing))
-          .sort(compareListingsForDisplay);
+        const nextListings = data.records || [];
         setListings(nextListings);
         const parsedTotal = data.total == null ? null : Number(data.total);
         setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
@@ -1033,7 +1022,6 @@ function DesktopFilters({
         {releaseBrands.map(value => (
           <FilterCheck key={value} checked={brands.includes(value)} label={value} onChange={() => toggleBrand(value)} />
         ))}
-        <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>Multiple released watch brands use repeated URL filters and independent server keysets. Multi-brand browsing supports listing type and image-only filters.</p>
       </fieldset>
 
       <fieldset>
@@ -1537,12 +1525,16 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               </div>
               <div className="mt-2 flex items-center gap-3">
                 {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="Posting user" className="h-14 w-14 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
-                <div>
-                  {(contact?.dealer_name || listing['Posted By'] || listing.seller_name) && <div className="text-base font-semibold" style={{ color: INK }}>{contact?.dealer_name || listing['Posted By'] || listing.seller_name}</div>}
-                  {listing.seller_rating != null && <div className="mt-1 text-xs" style={{ color: GOLD_BRIGHT }}>Rating {Number(listing.seller_rating).toFixed(1)}</div>}
-                  {(listing.seller_review_count != null || listing.seller_group_count != null) && <div className="mt-1 text-xs" style={{ color: MUTED }}>{listing.seller_review_count || 0} reviews · {listing.seller_group_count || 0} groups{listing.seller_credential_status ? ` · ${listing.seller_credential_status.toLowerCase()}` : ''}</div>}
-                  {listing.dealer_profile_path && <Link to={listing.dealer_profile_path} className="mt-2 inline-flex text-xs font-semibold underline underline-offset-2" style={{ color: GOLD_BRIGHT }}>Open verified dealer profile</Link>}
-                </div>
+                <ListingDealerEvidence
+                  sellerName={contact?.dealer_name || listing['Posted By'] || listing.seller_name}
+                  sellerPhone={listing.seller_phone}
+                  contactPublicationApproved={listing.contact_publication_approved === true}
+                  rating={listing.seller_rating}
+                  reviewCount={listing.seller_review_count}
+                  ratingEvidenceStatus={listing.seller_rating_evidence_status}
+                  groupCount={listing.seller_group_count}
+                  profilePath={listing.dealer_profile_path}
+                />
               </div>
               {(listing.location || listing.seller_country || listing['Location']) && (
                 <div className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: MUTED }}>
@@ -1576,6 +1568,10 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           {(() => {
             const waUrl = contact?.contact_channels?.whatsapp;
             const telegramUrl = contact?.contact_channels?.telegram;
+            const listingLabel = [listing.brand, listing.model, listing.reference].filter(Boolean).join(' ');
+            const curatedLuxuryUrl = buildContactWhatsAppUrl(
+              `Hello, I am interested in ${listingLabel || 'this listing'} on Curated Luxury (listing ${listing.id}). Please help connect me with the poster.`,
+            );
             return waUrl || telegramUrl ? (
               <>
                 <p className="mt-3 text-sm" style={{ color: MUTED }}>
@@ -1590,14 +1586,15 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
                   </a>}
                 </div>
               </>
-            ) : (contact?.dealer_name || listing['Posted By'] || listing.seller_name) ? (
-              <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-                Contact phone number not available for this poster.
-              </p>
             ) : (
-              <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-                Source contact details not available for this listing.
-              </p>
+              <>
+                <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+                  Direct poster contact is not published. Curated Luxury can help route this listing inquiry without displaying a private number.
+                </p>
+                <a href={curatedLuxuryUrl} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
+                  <MessageCircle size={18} /> Ask Curated Luxury on WhatsApp
+                </a>
+              </>
             );
           })()}
         </div>
