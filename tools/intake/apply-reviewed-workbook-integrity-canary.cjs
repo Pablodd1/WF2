@@ -144,8 +144,9 @@ function buildPlan({ identityRows = [], residualIdentityRows = [], priceRows = [
   }
   for (const row of promotionRows) {
     const proposedPrice = Number(row.proposed_price_usd);
+    const expectedStatus = text(row.expected_status);
     if (text(row.action) !== 'PROMOTE_EXACT_RAW_USD_PRICE'
-      || text(row.expected_status) !== 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE'
+      || !['PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE', 'DATED_FX_PROVENANCE_REQUIRES_EXISTING_SIDECAR'].includes(expectedStatus)
       || text(row.new_status) !== 'SOURCE_EXPLICIT_USD_MATCH'
       || !Number.isFinite(proposedPrice) || proposedPrice < 1000
       || !['USD', 'USDT'].includes(text(row.source_currency).toUpperCase())) {
@@ -155,7 +156,7 @@ function buildPlan({ identityRows = [], residualIdentityRows = [], priceRows = [
       action: 'PROMOTE_EXACT_RAW_USD_PRICE',
       id: text(row.listing_id),
       source_payload_sha256: validateHash(row.source_payload_sha256, 'source_payload_sha256'),
-      expected: { verification_status: 'APPROVED_SINGLE_CANDIDATE', price_evidence_status: 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE' },
+      expected: { verification_status: 'APPROVED_SINGLE_CANDIDATE', price_evidence_status: expectedStatus },
       patch: { price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH', workbook_price_usd: proposedPrice },
       evidence_reason: 'EXACT_RAW_USD_USDT_IDENTITY_SUPPORTED',
       ...canaryMetadata(row),
