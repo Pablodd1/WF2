@@ -102,6 +102,25 @@ test('single-row admission uses the same raw multi-item quarantine as the public
   }), null);
 });
 
+test('single-row admission holds unresolved intent before database import', () => {
+  const unresolved = source({
+    raw_message: 'Franck Muller Vanguard V45 green dial',
+    intent: 'OTHER',
+  });
+  assert.ok(intake.additionalImportReasons(unresolved).includes('LISTING_TYPE_UNRESOLVED'));
+  assert.equal(intake.rowForImport({
+    source: unresolved,
+    decision: decision({
+      final_brand: 'Franck Muller',
+      final_model: 'Vanguard',
+      final_reference: 'V45',
+      dial_normalized: 'Green',
+    }),
+    expectedBrand: 'Franck Muller', fileName: 'input.xlsx',
+    fileSha256: 'a'.repeat(64), rowNumber: 2, runId: 'test',
+  }), null);
+});
+
 test('multi-parent lane emits one lineage-keyed display-only row with no inherited evidence', () => {
   const entries = [1, 2].map((number, index) => ({
     source: source({
