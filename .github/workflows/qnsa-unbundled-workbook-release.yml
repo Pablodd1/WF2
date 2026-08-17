@@ -13,6 +13,10 @@ on:
         description: Private GitHub Release tag containing the encrypted package
         required: true
         type: string
+      asset_id:
+        description: Immutable numeric GitHub Release asset ID
+        required: true
+        type: string
       asset_name:
         description: Exact encrypted asset filename
         required: true
@@ -40,6 +44,7 @@ jobs:
     env:
       RELEASE_MODE: ${{ inputs.mode }}
       ASSET_TAG: ${{ inputs.asset_tag }}
+      ASSET_ID: ${{ inputs.asset_id }}
       ASSET_NAME: ${{ inputs.asset_name }}
       ASSET_SHA256: ${{ inputs.asset_sha256 }}
       CONFIRMATION: ${{ inputs.confirmation }}
@@ -64,6 +69,7 @@ jobs:
             const expected = {audit:"AUDIT_QNSA_UNBUNDLED",canary:"CANARY_QNSA_UNBUNDLED",full:"FULL_QNSA_UNBUNDLED"}[mode];
             if (!expected || process.env.CONFIRMATION !== expected) throw new Error("confirmation mismatch");
             if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(process.env.ASSET_TAG || "")) throw new Error("invalid asset tag");
+            if (!/^[1-9][0-9]{0,19}$/.test(process.env.ASSET_ID || "")) throw new Error("invalid asset ID");
             if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.enc$/.test(process.env.ASSET_NAME || "")) throw new Error("invalid asset name");
             if (!/^[0-9a-f]{64}$/i.test(process.env.ASSET_SHA256 || "")) throw new Error("invalid asset SHA-256");
             if (process.env.HAS_SUPABASE_TOKEN !== "true" || process.env.HAS_ASSET_KEY !== "true") throw new Error("required production secrets unavailable");
@@ -85,8 +91,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/unbundled-asset"
-          gh release download "$ASSET_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET_NAME" --dir "$RUNNER_TEMP/unbundled-asset"
           export DOWNLOADED_ASSET="$RUNNER_TEMP/unbundled-asset/$ASSET_NAME"
+          gh api \
+            -H "Accept: application/octet-stream" \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" \
+            > "$DOWNLOADED_ASSET"
           node -e '
             const fs=require("fs"),crypto=require("crypto");
             const p=process.env.DOWNLOADED_ASSET;
