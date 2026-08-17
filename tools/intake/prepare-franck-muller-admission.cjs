@@ -47,12 +47,24 @@ function admissionIntent(rawMessage, sourceIntent = '') {
   const supplied = text(sourceIntent).toUpperCase().replace(/[\s-]+/g, '_');
   const rawBuySide = /(?:\bWTB\b|\bNTQ\b|\bLTB\b|\bISO\b|\bLF\b|want\s+to\s+buy|looking\s+(?:for|to\s+buy)|\bneed(?:ed)?\b|seeking|wanted|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)/i.test(raw);
   const rawSellSide = /(?:\bWTS\b|\bLTS\b|\bLQT\b|\bLTQ\b|\bFS\b|for\s+sale|want\s+to\s+sell|selling|\bavailable\b|stock\s+clearance|\bsale\b)/i.test(raw);
+  // Intent is scoped to one already-separated child segment. The downstream
+  // price extractor must still bind a positive amount to explicit USD/USDT;
+  // this test only establishes that the same segment carries that evidence.
+  const rawExplicitUsdPrice = /(?:\b(?:USD|USDT)\b|\bUS\s*\$|\bU\$)/i.test(raw) && /\d/.test(raw);
+  const sourceBuySide = ['WTB', 'NTQ', 'LTB', 'ISO', 'LOOKING', 'NEED'].includes(supplied);
+  const nonAskingPriceContext = /(?:\bMSRP\b|\bRRP\b|retail(?:\s+price)?|list\s+price|apprais(?:al|ed)|valu(?:ation|ed)|estimated\s+value)/i.test(raw);
   // Explicit buy-side language wins over a budget or a stray sale token. A
   // WTB with a price is demand, never inventory for sale.
   if (rawBuySide) return { intent: 'WTB', raw_buy_side: true, raw_sell_side: rawSellSide, basis: 'RAW_BUY_SIDE' };
+  if (sourceBuySide) return { intent: 'WTB', raw_buy_side: false, raw_sell_side: rawSellSide, basis: 'SOURCE_BUY_INTENT' };
   if (rawSellSide) return { intent: 'WTS', raw_buy_side: false, raw_sell_side: true, basis: 'RAW_SELL_SIDE' };
-  if (['WTB', 'NTQ', 'LTB', 'ISO', 'LOOKING', 'NEED'].includes(supplied)) {
-    return { intent: 'WTB', raw_buy_side: false, raw_sell_side: false, basis: 'SOURCE_INTENT' };
+  if (rawExplicitUsdPrice && !nonAskingPriceContext) {
+    return {
+      intent: 'WTS',
+      raw_buy_side: false,
+      raw_sell_side: true,
+      basis: 'RAW_EXPLICIT_USD_PRICE',
+    };
   }
   if (['WTS', 'LTS', 'LQT', 'LTQ', 'FS', 'FOR_SALE'].includes(supplied)) {
     return { intent: 'WTS', raw_buy_side: false, raw_sell_side: false, basis: 'SOURCE_INTENT' };

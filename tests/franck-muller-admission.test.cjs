@@ -57,16 +57,19 @@ test('shared admission contract accepts another explicitly selected brand only',
   assert.match(rejected.reasons.join('|'), /BRAND_SCOPE_MISMATCH/);
 });
 
-test('admission intent recognizes sell-side dealer tokens without using price as intent', () => {
+test('admission intent recognizes sell-side dealer tokens and explicit USD policy', () => {
   for (const token of ['WTS', 'LTS', 'LQT', 'LTQ', 'FS', 'for sale', 'available']) {
     const evidence = intake.admissionIntent(`Franck Muller V45 ${token} USD 12000`, 'OTHER');
     assert.equal(evidence.intent, 'WTS', token);
     assert.equal(evidence.raw_sell_side, true, token);
   }
-  const priceOnly = intake.admissionIntent('Franck Muller V45 USD 12000', 'WTS');
-  assert.equal(priceOnly.intent, 'WTS');
-  assert.equal(priceOnly.raw_sell_side, false);
-  assert.equal(priceOnly.basis, 'SOURCE_INTENT');
+  const explicitUsd = intake.admissionIntent('Franck Muller V45 USD 12000', 'OTHER');
+  assert.equal(explicitUsd.intent, 'WTS');
+  assert.equal(explicitUsd.raw_sell_side, true);
+  assert.equal(explicitUsd.basis, 'RAW_EXPLICIT_USD_PRICE');
+  const explicitUsSymbol = intake.admissionIntent('Franck Muller V45 US$ 12000', 'OTHER');
+  assert.equal(explicitUsSymbol.intent, 'WTS');
+  assert.equal(explicitUsSymbol.basis, 'RAW_EXPLICIT_USD_PRICE');
 });
 
 test('raw buy-side language remains WTB even when a budget and stale WTS intent exist', () => {
@@ -86,13 +89,57 @@ test('raw buy-side language remains WTB even when a budget and stale WTS intent 
   }
 });
 
-test('price research requires raw sell-side language, not a workbook WTS label alone', () => {
+test('structured buy intent wins over an otherwise sell-implying explicit USD amount', () => {
+  for (const structured of ['WTB', 'NTQ', 'LTB', 'ISO', 'LOOKING', 'NEED']) {
+    const evidence = intake.admissionIntent('Franck Muller V45 USD 12000', structured);
+    assert.equal(evidence.intent, 'WTB', structured);
+    assert.equal(evidence.basis, 'SOURCE_BUY_INTENT', structured);
+    const result = intake.classifyRow(
+      source({ raw_message: 'Franck Muller V45 USD 12000', intent: structured }),
+      decision(),
+    );
+    assert.equal(result.resolved_intent, 'WTB', structured);
+    assert.equal(result.price_research_candidate, false, structured);
+  }
+});
+
+test('an explicit USD amount in the child raw segment implies WTS when buy intent is absent', () => {
   const result = intake.classifyRow(
     source({ raw_message: 'Franck Muller V45 USD 12000', intent: 'WTS' }),
     decision(),
   );
   assert.equal(result.trading_floor_candidate, true);
   assert.equal(result.resolved_intent, 'WTS');
+  assert.equal(result.intent_basis, 'RAW_EXPLICIT_USD_PRICE');
+  assert.equal(result.price_research_candidate, true);
+  assert.equal(result.reasons.includes('RAW_SELL_SIDE_LANGUAGE_MISSING'), false);
+});
+
+test('bare dollar remains ambiguous and cannot imply WTS Price Research intent', () => {
+  const evidence = intake.admissionIntent('Franck Muller V45 $12000', 'WTS');
+  assert.equal(evidence.intent, 'WTS');
+  assert.equal(evidence.raw_sell_side, false);
+  assert.equal(evidence.basis, 'SOURCE_INTENT');
+  const result = intake.classifyRow(
+    source({ raw_message: 'Franck Muller V45 $12000', intent: 'WTS' }),
+    decision(),
+  );
+  assert.equal(result.trading_floor_candidate, true);
   assert.equal(result.price_research_candidate, false);
   assert.ok(result.reasons.includes('RAW_SELL_SIDE_LANGUAGE_MISSING'));
+});
+
+test('retail, list-price, appraisal, and MSRP context cannot imply WTS', () => {
+  for (const raw of [
+    'Franck Muller V45 retail price USD 12000',
+    'Franck Muller V45 list price 12000 USD',
+    'Franck Muller V45 appraisal USD 12000',
+    'Franck Muller V45 MSRP USD 12000',
+  ]) {
+    const evidence = intake.admissionIntent(raw, 'OTHER');
+    assert.equal(evidence.intent, 'OTHER', raw);
+    assert.equal(evidence.raw_sell_side, false, raw);
+    const result = intake.classifyRow(source({ raw_message: raw, intent: 'OTHER' }), decision());
+    assert.equal(result.price_research_candidate, false, raw);
+  }
 });
