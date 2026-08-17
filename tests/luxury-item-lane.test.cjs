@@ -41,6 +41,30 @@ test('uses signature product evidence without copying a full raw message into th
   });
 });
 
+test('uses explicit full maison names and keeps long intent chatter out of the item title', () => {
+  assert.deepEqual(normalizeLuxuryIdentity({
+    raw_message: 'Need WTB / Looking / WANT TO BUY Hermes Kelly mini silver hardware chevre mysore blue brune only new',
+    raw_data: {
+      model: 'Need WTB / Looking / WANT TO BUY Hermes Kelly mini silver hardware chevre mysore blue brune only new',
+    },
+  }, 'HANDBAG'), {
+    brand: 'Hermès', model: 'Hermès Kelly', reference: null, condition: null,
+    luxury_item_name: 'Hermès Kelly', luxury_item_type: 'Kelly',
+    source_item_description: 'Need WTB / Looking / WANT TO BUY Hermes Kelly mini silver hardware chevre mysore blue brune only new',
+    maker_evidence_status: 'SOURCE_OR_SIGNATURE_EVIDENCE',
+  });
+
+  for (const [maker, raw] of [
+    ['Mikimoto', 'Mikimoto pearl necklace available USD 4,000'],
+    ['David Webb', 'David Webb diamond earrings for sale USD 12,500'],
+    ['Pasquale Bruni', 'Pasquale Bruni gold ring available USD 3,100'],
+    ['OMAS', 'OMAS fountain pen new condition USD 1,100'],
+  ]) {
+    const category = maker === 'OMAS' ? 'ACCESSORY' : 'JEWELRY';
+    assert.equal(normalizeLuxuryIdentity({ raw_message: raw, raw_data: {} }, category).brand, maker);
+  }
+});
+
 test('non-watch publication withholds watch packaging terms and category-only chatter', () => {
   assert.deepEqual(luxuryIdentityEligibility({
     raw_message: 'VC 7900v 2021year full set 20links No belt 32100usd',
@@ -125,7 +149,7 @@ test('Luxury Item Research is a separate route and watch research stays isolated
   assert.match(page, /Item name, maker, type, and market activity/);
   assert.match(page, /Raw source evidence/);
   assert.match(page, /Maker pending review/);
-  assert.match(page, /Dealer profile/);
+  assert.match(page, /ListingDealerEvidence/);
   assert.match(page, /at least two verified WTS observations/);
   assert.match(summary, /luxury_categories/);
   assert.match(summary, /total_luxury_item_count/);

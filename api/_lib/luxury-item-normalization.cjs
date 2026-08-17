@@ -9,6 +9,26 @@ const LUXURY_BRANDS = [
   ['Bottega Veneta', /\bbottega\s+veneta\b/i],
   ['Harry Winston', /\bharry\s+winston\b/i],
   ['David Yurman', /\bdavid\s+yurman\b/i],
+  ['David Webb', /\bdavid\s+webb\b/i],
+  ['Oscar Heyman', /\boscar\s+heyman\b/i],
+  ['Seaman Schepps', /\bseaman\s+schepps\b/i],
+  ['Henry Dunay', /\bhenry\s+dunay\b/i],
+  ['Elizabeth Gage', /\belizabeth\s+gage\b/i],
+  ['Judith Ripka', /\bjudith\s+ripka\b/i],
+  ['Marco Bicego', /\bmarco\s+bicego\b/i],
+  ['Roberto Coin', /\broberto\s+coin\b/i],
+  ['Pasquale Bruni', /\bpasquale\s+bruni\b/i],
+  ['Marina B', /\bmarina\s+b\b/i],
+  ['Mikimoto', /\bmikimoto\b/i],
+  ['Bucherer', /\bbucherer\b/i],
+  ['Pomellato', /\bpomellato\b/i],
+  ['Chaumet', /\bchaumet\b/i],
+  ['Messika', /\bmessika\b/i],
+  ['Damiani', /\bdamiani\b/i],
+  ['Kwiat', /\bkwiat\b/i],
+  ['Verdura', /\bverdura\b/i],
+  ['Piaget', /\bpiaget\b/i],
+  ['OMAS', /\bomas\b/i],
   ['Hermes', /\bherm[eèé]s\b/i],
   ['Chanel', /\bchanel\b/i],
   ['Goyard', /\bgoyard\b/i],
@@ -149,6 +169,8 @@ function normalizeLuxuryIdentity(source = {}, category) {
   const sourceDescription = suppliedTitle || clean(source.raw_message);
   const titleLooksLikeRawMessage = Boolean(sourceDescription)
     && (sourceDescription.length > 120
+      || (sourceDescription.length > 80
+        && /\b(?:wts|wtb|want\s+to\s+buy|looking\s+for|for\s+sale|available)\b/i.test(sourceDescription))
       || /[\r\n]|(?:^|\s)(?:price|delivery|shipping)\s*[:\-]|[$€£¥₩₹]/i.test(sourceDescription));
   const normalizedName = [brand, itemType].filter(Boolean).join(' ') || itemType || null;
   return {
