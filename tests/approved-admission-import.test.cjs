@@ -371,7 +371,7 @@ test('owner-reviewed unbundled children publish without inherited media and use 
     source: source({
       listing_id: 'moser-child-1',
       source_message_id: 'moser-message-1_item_1',
-      raw_message: 'H. Moser Streamliner 6200-1200 available USD 13,500',
+      raw_message: 'H. Moser Streamliner 6200-1200 black dial available USD 13,500',
       intent: 'WTS',
       image_urls_source: 'https://example.test/parent-bundle.jpg',
       normalized_price_usd: 13,
@@ -381,6 +381,7 @@ test('owner-reviewed unbundled children publish without inherited media and use 
       final_brand: 'H. Moser & Cie',
       final_model: 'Streamliner',
       final_reference: 'MOSER',
+      dial_normalized: 'Black',
       review_reason: 'UNBUNDLED_STANDALONE_PASSED',
     }),
     expectedBrand: 'H. Moser & Cie',
@@ -440,9 +441,139 @@ test('unbundled rows without an exact child reference remain visible but out of 
   });
   assert.ok(row);
   assert.equal(row.normalized_reference, null);
+  assert.equal(row.raw_reference, null);
   assert.equal(row.workbook_price_usd, 18000);
   assert.equal(row.price_evidence_status, 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE');
   assert.ok(row.review_reasons.includes('EXACT_REFERENCE_NOT_RECOVERED_FROM_CHILD_RAW'));
+});
+
+test('owner-reviewed unbundled references use exact brand-specific child evidence across the reviewed brand set', () => {
+  assert.equal(
+    intake.strictReferenceFromRaw(
+      'Omega Speedmaster 310.30.42.50.01.002 available USD 7,250',
+      'Omega',
+      '310.30.42.50.01.002',
+      'USD 7,250',
+    ),
+    '310.30.42.50.01.002',
+  );
+  assert.equal(
+    intake.strictReferenceFromRaw(
+      'LIKE NEW Zenith Defy Double Tourbillon 10.9000.9020/79.R918 CARBON',
+      'Zenith',
+      'LIKE',
+      null,
+    ),
+    '10.9000.9020/79.R918',
+  );
+});
+
+test('owner-reviewed unbundled references reject brand labels and accessory child segments', () => {
+  assert.equal(
+    intake.strictReferenceFromRaw('🌟H.Moser & Cie🌟', 'H. Moser & Cie', 'MOSER', null),
+    null,
+  );
+  assert.equal(
+    intake.strictReferenceFromRaw(
+      'Box & Papers + EXTRA STRAP + CARDHOLDER',
+      'Zenith',
+      'EXTRA',
+      null,
+    ),
+    null,
+  );
+});
+
+test('apply readback requires exact hashes, no inherited media or contact, and the expected price lane', () => {
+  const expected = intake.rowForImport({
+    source: source({
+      listing_id: 'omega-child-1',
+      source_message_id: 'omega-parent-1_item_1',
+      raw_message: 'Omega Speedmaster 310.30.42.50.01.002 black dial available USD 7,250',
+      intent: 'WTS',
+      image_urls_source: 'https://example.test/parent.jpg',
+    }),
+    decision: decision({
+      listing_id: 'omega-child-1',
+      final_brand: 'Omega',
+      final_model: 'Speedmaster',
+      final_reference: '310.30.42.50.01.002',
+      dial_normalized: 'Black',
+      review_reason: 'UNBUNDLED_STANDALONE_PASSED',
+    }),
+    expectedBrand: 'Omega',
+    fileName: 'Omega.xlsx',
+    fileSha256: 'a'.repeat(64),
+    rowNumber: 2,
+    runId: 'test',
+    ownerUnbundled: true,
+  });
+  assert.ok(expected);
+  const clean = intake.compareImportedRows([expected], [{ ...expected }]);
+  assert.equal(clean.ok, true);
+  assert.equal(clean.exact, 1);
+
+  const leaked = intake.compareImportedRows([expected], [{
+    ...expected,
+    content_hash: 'drifted',
+    final_image_url: 'https://example.test/parent.jpg',
+    phone_number: '13055550100',
+    contact_publication_approved: true,
+    price_evidence_status: 'PRICE_NOT_SUPPLIED',
+  }]);
+  assert.equal(leaked.ok, false);
+  assert.deepEqual(leaked.missing_ids, []);
+  assert.ok(leaked.drift[0].fields.includes('content_hash'));
+  assert.ok(leaked.drift[0].fields.includes('final_image_url'));
+  assert.ok(leaked.drift[0].fields.includes('phone_number'));
+  assert.ok(leaked.drift[0].fields.includes('contact_publication_approved'));
+  assert.ok(leaked.drift[0].fields.includes('price_research_status'));
+});
+
+test('owner-unbundled dial survives only exact raw or catalog confirmation', () => {
+  assert.equal(intake.verifiedOwnerUnbundledDial({
+    rawMessage: 'Omega Speedmaster 310.30.42.50.01.002 black dial USD 7,250',
+    brand: 'Omega',
+    reference: '310.30.42.50.01.002',
+    claimedDial: 'Black',
+  }), 'Black');
+  assert.equal(intake.verifiedOwnerUnbundledDial({
+    rawMessage: 'Omega Speedmaster 310.30.42.50.01.002 mint condition USD 7,250',
+    brand: 'Omega',
+    reference: '310.30.42.50.01.002',
+    claimedDial: 'Green',
+  }), null);
+});
+
+test('owner-unbundled reference and identity gates reject words, years, prices, and competing brands', () => {
+  for (const token of ['MASTER', 'UNIQUE', 'LEGEND', '2001YEAR', '500.00', 'GOOD']) {
+    assert.equal(intake.strictReferenceFromRaw(
+      `Jaeger-LeCoultre ${token} available USD 10,000`,
+      'Jaeger-LeCoultre',
+      token,
+      'USD 10,000',
+    ), null);
+  }
+  assert.equal(intake.ownerUnbundledIdentitySupported({
+    rawMessage: 'Jacob & Co LEGEND available USD 10,000',
+    brand: 'Audemars Piguet',
+    reference: 'LEGEND',
+  }), false);
+});
+
+test('owner-unbundled model is kept only from exact child raw or exact same-brand catalog', () => {
+  assert.deepEqual(intake.verifiedOwnerUnbundledModel({
+    rawMessage: 'Omega Speedmaster 310.30.42.50.01.002 black dial',
+    brand: 'Omega',
+    reference: '310.30.42.50.01.002',
+    claimedModel: 'Speedmaster',
+  }), { model: 'Speedmaster', catalogModel: null, evidence: 'EXACT_CHILD_RAW_MODEL' });
+  assert.deepEqual(intake.verifiedOwnerUnbundledModel({
+    rawMessage: 'Unknown watch ABC123',
+    brand: 'Omega',
+    reference: 'ABC123',
+    claimedModel: 'Speedmaster',
+  }), { model: null, catalogModel: null, evidence: null });
 });
 
 test('owner unbundle mode is fail-closed to the reviewed brand allowlist', async () => {

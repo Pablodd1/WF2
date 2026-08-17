@@ -9,16 +9,25 @@ const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 // released workbook evidence rather than from the static catalog. The catalog
 // is identity metadata; it cannot supply observed listing/reference counts.
 const REVIEWED_WORKBOOK_BROWSE_BRANDS = new Set([
+  'a. lange & söhne',
+  'bell & ross',
   'blancpain',
   'breguet',
+  'breitling',
   'bulgari',
   'chopard',
+  'f.p. journe',
   'franck muller',
   'girard-perregaux',
   'glashütte original',
   'grand seiko',
   'h. moser & cie',
+  'hublot',
+  'iwc',
   'jacob & co',
+  'jaeger-lecoultre',
+  'longines',
+  'omega',
   'tag heuer',
   'ulysse nardin',
 ]);
@@ -128,6 +137,19 @@ async function loadReviewedWorkbookBrandRows(client, brand) {
   return { rows, truncated: true };
 }
 
+async function loadReviewedWorkbookBrandCount(client, brand) {
+  if (!isReviewedWorkbookBrowseBrand(brand)) return 0;
+  const { count, error } = await client
+    .from('reviewed_workbook_inventory')
+    .select('id', { count: 'exact', head: true })
+    .eq('brand_scope', brand)
+    .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
+    .eq('confidence', 100)
+    .in('listing_type', ['WTS', 'WTB']);
+  if (error) throw error;
+  return Number(count || 0);
+}
+
 function summarizeReviewedWorkbookModels(rows) {
   const models = new Map();
   for (const row of rows) {
@@ -192,6 +214,7 @@ module.exports = {
   MARKET_SOURCE_VIEW,
   REVIEWED_WORKBOOK_BROWSE_BRANDS,
   isReviewedWorkbookBrowseBrand,
+  loadReviewedWorkbookBrandCount,
   loadReviewedWorkbookBrandRows,
   rowModel,
   rowReference,

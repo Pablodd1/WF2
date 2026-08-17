@@ -14,6 +14,13 @@ function referenceEvidenceKey(brand: string, reference: string) {
   return `${brand.trim().toLowerCase()}|${reference.trim().toUpperCase()}`;
 }
 
+function exactSourceImageUrl(record: ReviewedMarketRecord) {
+  if (record.has_images !== true || record.multi_listing === true || record.is_unbundled_child === true) return '';
+  if (!['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(String(record.image_evidence_type || '').toUpperCase())) return '';
+  const candidate = record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
+  return /^https?:\/\/[^\s]+$/i.test(candidate) ? candidate : '';
+}
+
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
   id: string;
@@ -257,7 +264,10 @@ interface ReviewedMarketRecord {
   thumbnail_url?: string | null;
   image_url?: string | null;
   image_urls?: string[] | null;
+  has_images?: boolean;
   multi_listing?: boolean;
+  is_unbundled_child?: boolean;
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   review_reasons?: string[] | null;
   seller_analytics?: {
     total_posts?: number | null;
@@ -638,8 +648,8 @@ setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs(
         const nextImages: Record<string, string> = {};
         for (const record of imagePayload?.records || []) {
           const model = String(record.model || '').trim();
-          const image = record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
-          if (model && image && !record.multi_listing && !nextImages[model]) nextImages[model] = image;
+          const image = exactSourceImageUrl(record);
+          if (model && image && !nextImages[model]) nextImages[model] = image;
         }
         setModelImages(nextImages);
       }
@@ -665,8 +675,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         const nextImages: Record<string, string> = {};
         for (const record of imagePayload?.records || []) {
           const reference = String(record.reference || '').trim().toUpperCase();
-          const image = record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
-          if (reference && image && !record.multi_listing && !nextImages[reference]) nextImages[reference] = image;
+          const image = exactSourceImageUrl(record);
+          if (reference && image && !nextImages[reference]) nextImages[reference] = image;
         }
         setReferenceImages(nextImages);
       }
@@ -1070,7 +1080,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   const displayRef = data?.resolvedRef || data?.reference || query;
   const listingEvidence = data
-    ? [...data.rows, ...(data.retained_rows || []), ...(data.outlier_rows || [])]
+    ? [...data.rows, ...(data.outlier_rows || [])]
     : [];
   const selectedWatchImage = data
     ? referenceImages[displayRef.toUpperCase()]
@@ -1084,6 +1094,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   const listings = [...new Map(listingEvidence.map(row => [row.id, row])).values()]
     .filter(row => !['WTB', 'BUY'].includes(String(row.listing_type || row.intent || '').toUpperCase()))
+    .filter(row => Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0)
     .sort((left, right) => {
       const eligibilityDifference = Number(right.price_usd != null && !right.is_outlier) - Number(left.price_usd != null && !left.is_outlier);
       if (eligibilityDifference !== 0) return eligibilityDifference;
@@ -1888,7 +1899,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               )}
               {listings.length > 0 && (
                 <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
-                  All available WTS evidence is accessible page by page, with exact source images when present. Qualified observations power the chart and statistics; unpriced, duplicate, repost, plausibility, and outlier evidence remains visible with its reason and never alters the averages. WTB requests follow in their own section.
+                  Priced WTS evidence is accessible page by page, with exact source images when present. Qualified observations power the chart and statistics; priced exclusions remain visible with their reason and never alter the averages. Unpriced WTS stays on the Trading Floor, and WTB requests follow in their own section.
                 </div>
               )}
               {listings.map(row => (

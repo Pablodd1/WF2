@@ -57,6 +57,14 @@ function summarizeDialRows(rows) {
   return summarizePrices(prices.filter(price => price >= floor));
 }
 
+function exactRepresentativeImage(row) {
+  if (row?.has_images !== true || row?.multi_listing === true || row?.is_unbundled_child === true) return null;
+  const evidence = clean(row?.image_evidence_type).toUpperCase();
+  if (evidence && !['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(evidence)) return null;
+  const url = clean(row?.thumbnail_url);
+  return /^https?:\/\/[^\s]+$/i.test(url) ? url : null;
+}
+
 function buildBatchSummaries(pairs, rows, sampleCapped = false) {
   const byReference = new Map();
   for (const row of rows) {
@@ -98,7 +106,7 @@ function buildBatchSummaries(pairs, rows, sampleCapped = false) {
     const selectedDialKey = pair.dial ? comparisonKey(normalizeDialValue(pair.dial).value) : '';
     const selectedDialRows = selectedDialKey ? dialGroups.get(selectedDialKey) || [] : [];
     const selectedSummary = selectedDialKey ? summarizeDialRows(selectedDialRows) : null;
-    const imageRow = members.find(row => row.has_images === true && /^https?:\/\/[^\s]+$/i.test(String(row.thumbnail_url || '')));
+    const representativeImage = members.map(exactRepresentativeImage).find(Boolean) || null;
     return {
       key: pair.key,
       brand: pair.brand,
@@ -112,7 +120,7 @@ function buildBatchSummaries(pairs, rows, sampleCapped = false) {
       selected_dial_qualified_count: selectedSummary?.included_count || 0,
       analytics_ready: Boolean(pair.dial && selectedSummary?.analytics_ready),
       stats: pair.dial && selectedSummary?.analytics_ready ? selectedSummary.stats : null,
-      representative_image_url: imageRow?.thumbnail_url || null,
+      representative_image_url: representativeImage,
       source_scope: members.some(row => row.batch_source_scope === 'CANONICAL_QNSA_RELEASE')
         ? 'CANONICAL_QNSA_RELEASE'
         : 'BOUNDED_ANALYTICS_SOURCE',
@@ -303,6 +311,7 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.buildBatchSummaries = buildBatchSummaries;
+module.exports.exactRepresentativeImage = exactRepresentativeImage;
 module.exports.loadSourceRows = loadSourceRows;
 module.exports.loadCanonicalPairRows = loadCanonicalPairRows;
 module.exports.mapWithConcurrency = mapWithConcurrency;

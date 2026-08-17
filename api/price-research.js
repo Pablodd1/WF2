@@ -653,6 +653,10 @@ function paginateEvidenceRows(rows, page, pageSize) {
   };
 }
 
+function isCustomerPricedSaleEvidence(row) {
+  return Number.isFinite(Number(row?.price_usd)) && Number(row.price_usd) > 0;
+}
+
 async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null, familyPrefix = null, pagination = {}) {
   // ponytail: admit all demand-side records. classifyDemandEligibility
   // handles per-row quality downstream.
@@ -1536,10 +1540,13 @@ module.exports = async function handler(req, res) {
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
     const comparableEvidencePage = paginateEvidenceRows(includedRows, evidencePage, evidencePageSize);
-    const retainedEvidencePage = paginateEvidenceRows(retainedEvidenceRows, evidencePage, evidencePageSize);
-    const outlierEvidencePage = paginateEvidenceRows(outlierRows, evidencePage, evidencePageSize);
+    // Unpriced WTS belongs on the Trading Floor only. Price Research still
+    // accounts for it in retained_evidence_count/methodology, but never emits
+    // it as a customer sale card. Priced exclusions remain reviewable without
+    // entering averages, graphs, or forecasts.
+    const customerPricedOutlierRows = outlierRows.filter(isCustomerPricedSaleEvidence);
+    const outlierEvidencePage = paginateEvidenceRows(customerPricedOutlierRows, evidencePage, evidencePageSize);
     const serializedComparables = comparableEvidencePage.rows;
-    const serializedRetainedEvidence = retainedEvidencePage.rows;
     const serializedOutliers = outlierEvidencePage.rows;
     const comparableEvidenceRows = serializedComparables.map(r => ({
       id: r.id,
@@ -1560,32 +1567,6 @@ module.exports = async function handler(req, res) {
       source_file: r.source_file || null,
       stored_price_usd: r.stored_price_usd, price_normalization: r.price_normalization,
       is_outlier: r.is_outlier, outlier_reason: r.outlier_reason,
-    }));
-    const retainedDealerEvidenceRows = serializedRetainedEvidence.map(r => ({
-      id: r.id,
-      listing_type: 'WTS',
-      raw_message: r.raw_message || null,
-      price_usd: null,
-      created_at: r.created_at,
-      listing_date: r.listing_date,
-      dial_color: r.dial_color,
-      condition: r.condition,
-      source: r.source,
-      year: r.year,
-      is_outlier: true,
-      outlier_reason: r.outlier_reason,
-      source_price_amount: r.source_price_amount || null,
-      source_currency: r.source_currency || null,
-      thumbnail_url: r.thumbnail_url || null,
-      image_urls: r.image_urls || null,
-      has_images: r.has_images || false,
-      seller_name: r.seller_name || null,
-      seller_phone: consentApprovedPhone(r),
-      verdict: r.verdict || null,
-      confidence: r.confidence || null,
-      listing_status: r.listing_status || null,
-      contact_publication_approved: r.contact_publication_approved === true,
-      source_file: r.source_file || null,
     }));
     const outlierDealerEvidenceRows = serializedOutliers.map(r => ({
       id: r.id,
@@ -1617,16 +1598,11 @@ module.exports = async function handler(req, res) {
     }));
     const combinedDealerEvidenceRows = await enrichRowsWithExactDealerEvidence(client, [
       ...comparableEvidenceRows,
-      ...retainedDealerEvidenceRows,
       ...outlierDealerEvidenceRows,
     ]);
     const comparableRowsWithDealerEvidence = combinedDealerEvidenceRows.slice(0, comparableEvidenceRows.length);
-    const retainedRowsWithDealerEvidence = combinedDealerEvidenceRows.slice(
-      comparableEvidenceRows.length,
-      comparableEvidenceRows.length + retainedDealerEvidenceRows.length,
-    );
     const outlierRowsWithDealerEvidence = combinedDealerEvidenceRows.slice(
-      comparableEvidenceRows.length + retainedDealerEvidenceRows.length,
+      comparableEvidenceRows.length,
     );
 
     const wtsEligibleAnalyticsCount = includedRows.length;
@@ -1813,26 +1789,24 @@ module.exports = async function handler(req, res) {
         comparable_page: comparableEvidencePage.page,
         comparable_page_size: comparableEvidencePage.page_size,
         comparable_pages: comparableEvidencePage.pages,
-        retained_returned: serializedRetainedEvidence.length,
+        retained_returned: 0,
         retained_total: retainedEvidenceRows.length,
-        retained_pages: retainedEvidencePage.pages,
+        retained_pages: 1,
         outliers_returned: serializedOutliers.length,
-        outliers_total: outlierRows.length,
+        outliers_total: customerPricedOutlierRows.length,
         outlier_pages: outlierEvidencePage.pages,
         sale_page: comparableEvidencePage.page,
         sale_pages: Math.max(
           1,
           Math.ceil(includedRows.length / evidencePageSize),
-          Math.ceil(retainedEvidenceRows.length / evidencePageSize),
-          Math.ceil(outlierRows.length / evidencePageSize),
+          Math.ceil(customerPricedOutlierRows.length / evidencePageSize),
         ),
         truncated: includedRows.length > evidencePageSize
-          || retainedEvidenceRows.length > evidencePageSize
-          || outlierRows.length > evidencePageSize,
+          || customerPricedOutlierRows.length > evidencePageSize,
       },
       liquidity,
       monthly, prices, forecast,
-      retained_rows: retainedRowsWithDealerEvidence,
+      retained_rows: [],
       rows: comparableRowsWithDealerEvidence,
     });
   } catch (err) {
@@ -1849,6 +1823,7 @@ module.exports.loadQnsaExactReleasedEvidence = loadQnsaExactReleasedEvidence;
 module.exports.loadQnsaVerifiedTradingPrices = loadQnsaVerifiedTradingPrices;
 module.exports.normalizeAnalyticsPriceRow = normalizeAnalyticsPriceRow;
 module.exports.paginateEvidenceRows = paginateEvidenceRows;
+module.exports.isCustomerPricedSaleEvidence = isCustomerPricedSaleEvidence;
 module.exports.loadQnsaTradingDemand = loadQnsaTradingDemand;
 module.exports.loadRuntimePriceRecoveryRows = loadRuntimePriceRecoveryRows;
 module.exports.reviewedFamilyPrefix = reviewedFamilyPrefix;

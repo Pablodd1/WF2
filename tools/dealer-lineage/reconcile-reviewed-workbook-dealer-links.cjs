@@ -10,7 +10,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createClient } = require('@supabase/supabase-js');
 const {
+  PRICE_RESEARCH_ONLY_REASONS,
+  additionalImportReasons,
+  admissionIdentityGateReasons,
   canonicalizeExactDuplicates,
+  classifyOwnerUnbundledRow,
   readAdmissionWorkbook,
   rowForImport,
 } = require('../intake/import-approved-admission-workbook.cjs');
@@ -111,6 +115,15 @@ function buildWorkbookCandidates(filePath, brand, options = {}) {
     const decision = workbook.decisions.get(listingId);
     if (!decision) return;
     sourceByRecordId.set(listingId, { source, rowNumber: index + 2 });
+    if (options.ownerUnbundled === true) {
+      const admission = classifyOwnerUnbundledRow(source, decision, brand);
+      const reasons = [
+        ...admission.reasons.filter(reason => !PRICE_RESEARCH_ONLY_REASONS.has(reason)),
+        ...additionalImportReasons(source, { allowNoImage: true, ownerUnbundled: true }),
+        ...admissionIdentityGateReasons(source, decision, brand),
+      ];
+      if (!admission.trading_floor_candidate || reasons.length) return;
+    }
     const imported = rowForImport({
       source,
       decision,
@@ -205,6 +218,28 @@ async function run(argv = process.argv.slice(2)) {
         .select('reviewed_listing_id');
       if (error) throw error;
       writes += (data || []).length;
+    }
+    const expectedById = new Map(reconciliation.matched.map(row => [row.reviewed_listing_id, row]));
+    const { data: readback, error: readbackError } = await client.from(LINK_TABLE)
+      .select('reviewed_listing_id,dealer_id,source_system,link_method,link_status,evidence')
+      .in('reviewed_listing_id', [...expectedById.keys()]);
+    if (readbackError) throw readbackError;
+    if ((readback || []).length !== expectedById.size) throw new Error('dealer link exact-ID readback count mismatch');
+    for (const actual of readback || []) {
+      const expected = expectedById.get(actual.reviewed_listing_id);
+      if (!expected
+        || actual.dealer_id !== expected.dealer_id
+        || actual.source_system !== SOURCE_SYSTEM
+        || actual.link_method !== LINK_METHOD
+        || actual.link_status !== 'APPLIED'
+        || Object.entries(expected.evidence).some(([key, value]) => actual.evidence?.[key] !== value)
+        || Object.keys(actual.evidence || {}).length !== Object.keys(expected.evidence).length) {
+        throw new Error(`dealer link exact-ID readback mismatch for ${actual.reviewed_listing_id}`);
+      }
+      if (Object.keys(actual.evidence || {}).some(key => /phone|whatsapp|source_identity$|seller_source_id|contact/i.test(key)
+        && key !== 'source_identity_hmac_sha256')) {
+        throw new Error(`dealer link evidence contains forbidden contact key for ${actual.reviewed_listing_id}`);
+      }
     }
   }
   const heldReasons = {};

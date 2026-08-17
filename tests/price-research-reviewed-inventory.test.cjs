@@ -30,11 +30,14 @@ test('qualified comparable listings are ordered from lowest to highest verified 
   assert.match(pageRender, /Number\(left\.price_usd\) - Number\(right\.price_usd\)/);
 });
 
-test('featured-sale rows preserve source evidence while excluded rows never alter averages', () => {
-  assert.match(pageRender, /\.\.\.data\.rows, \.\.\.\(data\.retained_rows \|\| \[\]\), \.\.\.\(data\.outlier_rows \|\| \[\]\)/);
+test('priced sale rows preserve source evidence while unpriced WTS stays Trading-Floor-only', () => {
+  assert.match(pageRender, /\.\.\.data\.rows, \.\.\.\(data\.outlier_rows \|\| \[\]\)/);
+  assert.doesNotMatch(pageRender, /\.\.\.\(data\.retained_rows \|\| \[\]\)/);
+  assert.match(pageRender, /Number\.isFinite\(Number\(row\.price_usd\)\)/);
   assert.match(pageRender, /eligibilityDifference/);
   assert.match(pageRender, /listings\.map\(row =>/);
-  assert.match(pageRender, /All available WTS evidence is accessible page by page/);
+  assert.match(pageRender, /Priced WTS evidence is accessible page by page/);
+  assert.match(pageRender, /Unpriced WTS stays on the Trading Floor/);
   assert.match(pageRender, /WTB requests follow in their own section/);
   assert.match(pageRender, /exclusionLabel=\{outlierReason\(row\.outlier_reason\)\}/);
   assert.doesNotMatch(source, /No image|Source listing image unavailable/);
@@ -43,7 +46,7 @@ test('featured-sale rows preserve source evidence while excluded rows never alte
   assert.match(source, /row\.raw_message \?\? row\.raw_line/);
 });
 
-test('all serialized sale evidence is explicitly typed WTS', () => {
+test('all customer serialized sale evidence is priced and explicitly typed WTS', () => {
   const api = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
   const extractSerializedBlock = (declaration, nextDeclaration) => {
     const start = api.indexOf(`const ${declaration} =`);
@@ -51,12 +54,13 @@ test('all serialized sale evidence is explicitly typed WTS', () => {
     assert.ok(start >= 0 && end > start, `${declaration} serialization block must exist`);
     return api.slice(start, end);
   };
-  const comparableBlock = extractSerializedBlock('comparableEvidenceRows', 'retainedDealerEvidenceRows');
-  const retainedBlock = extractSerializedBlock('retainedDealerEvidenceRows', 'outlierDealerEvidenceRows');
+  const comparableBlock = extractSerializedBlock('comparableEvidenceRows', 'outlierDealerEvidenceRows');
   const outlierBlock = extractSerializedBlock('outlierDealerEvidenceRows', 'combinedDealerEvidenceRows');
   assert.match(outlierBlock, /listing_type: 'WTS'/);
-  assert.match(retainedBlock, /listing_type: 'WTS'/);
   assert.match(comparableBlock, /listing_type: 'WTS'/);
+  assert.doesNotMatch(api, /const retainedDealerEvidenceRows/);
+  assert.match(api, /retained_rows: \[\]/);
+  assert.match(api, /customerPricedOutlierRows = outlierRows\.filter\(isCustomerPricedSaleEvidence\)/);
 });
 
 test('charts render whenever qualified data exists and use the selected dial color', () => {
