@@ -14,6 +14,12 @@ const identityControl = {
   canary_category: 'RAW_BRAND_CONFLICT',
   canary_priority: 2,
 };
+const residualControl = {
+  ...identityControl,
+  action: 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT',
+  canary_category: 'RESIDUAL_CATALOG_CONFLICT',
+  canary_priority: 3,
+};
 const priceControl = {
   action: 'HOLD_CURRENCY_CONFLICT_PRICE',
   expected_status: 'SOURCE_EXPLICIT_USD_MATCH',
@@ -73,6 +79,39 @@ test('dual identity conflicts quarantine identity and remove the invalid qualifi
     verification_status: 'QUARANTINED_IDENTITY_CONFLICT',
     price_evidence_status: 'PRICE_EVIDENCE_INCOMPLETE', workbook_price_usd: null,
   });
+});
+
+test('residual identity controls remain a distinct hash-guarded action', () => {
+  const plan = control.buildPlan({ residualIdentityRows: [{
+    listing_id: 'residual', source_payload_sha256: hash, ...residualControl,
+    also_hold_price: true, expected_price_status: 'SOURCE_EXPLICIT_USD_MATCH',
+    new_price_status: 'PRICE_EVIDENCE_INCOMPLETE',
+  }] });
+  assert.equal(plan[0].action, 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT');
+  assert.deepEqual(plan[0].patch, {
+    verification_status: 'QUARANTINED_IDENTITY_CONFLICT',
+    price_evidence_status: 'PRICE_EVIDENCE_INCOMPLETE', workbook_price_usd: null,
+  });
+});
+
+test('residual identity safely absorbs an exact prior price hold for the same row', () => {
+  const plan = control.buildPlan({
+    residualIdentityRows: [{
+      listing_id: 'merged', source_payload_sha256: hash, ...residualControl,
+      also_hold_price: true, expected_price_status: 'SOURCE_EXPLICIT_USD_MATCH',
+      new_price_status: 'PRICE_EVIDENCE_INCOMPLETE',
+    }],
+    priceRows: [{ listing_id: 'merged', source_payload_sha256: hash, ...priceControl }],
+  });
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].action, 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT');
+  assert.throws(() => control.buildPlan({
+    residualIdentityRows: [{
+      listing_id: 'merged', source_payload_sha256: hash, ...residualControl,
+      also_hold_price: false,
+    }],
+    priceRows: [{ listing_id: 'merged', source_payload_sha256: hash, ...priceControl }],
+  }), /not an exact controlled merge/);
 });
 
 test('legacy drift rows use the same exact guarded price hold without importing rows', () => {
@@ -151,11 +190,14 @@ test('canary selection is bounded independently by action type', () => {
     { action: 'QUARANTINE_IDENTITY_CONFLICT', id: 'b', canary_priority: 1 },
     { action: 'HOLD_CURRENCY_CONFLICT_PRICE', id: 'c', canary_priority: 1 },
     { action: 'RECONCILE_LEGACY_LEDGER_PRICE_EVIDENCE', id: 'd', canary_priority: 1 },
+    { action: 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT', id: 'e', canary_priority: 3, canary_category: 'RESIDUAL_CATALOG_CONFLICT' },
+    { action: 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT', id: 'f', canary_priority: 1, canary_category: 'RESIDUAL_TAG_RM_DUAL' },
+    { action: 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT', id: 'g', canary_priority: 2, canary_category: 'RESIDUAL_BREGUET_JLC_DUAL' },
   ];
   const selected = control.selectActions(plan, {
-    mode: 'canary', maxIdentity: 1, maxPrice: 1, maxLegacy: 1,
+    mode: 'canary', maxIdentity: 1, maxPrice: 1, maxLegacy: 1, maxResidual: 3,
   });
-  assert.deepEqual(selected.map(item => item.id), ['b', 'c', 'd']);
+  assert.deepEqual(selected.map(item => item.id), ['b', 'c', 'd', 'e', 'f', 'g']);
 });
 
 test('full plan is one atomic transaction with count and immutable-row guards', () => {
@@ -168,5 +210,6 @@ test('full plan is one atomic transaction with count and immutable-row guards', 
   assert.match(sql, /exact id\/hash match count/);
   assert.match(sql, /immutable source-row hash changed/);
   assert.match(sql, /post-update reconciliation count/);
+  assert.match(sql, /QUARANTINE_RESIDUAL_IDENTITY_CONFLICT/);
   assert.doesNotMatch(sql, /DELETE|TRUNCATE|raw_message\s*=/i);
 });

@@ -20,17 +20,22 @@ on:
       max_identity:
         description: Canary identity rows (combined canary maximum is 10)
         required: true
-        default: '4'
+        default: '0'
         type: string
       max_price:
         description: Canary three-brand price rows (combined maximum is 10)
         required: true
-        default: '1'
+        default: '0'
         type: string
       max_legacy:
         description: Canary legacy drift rows (combined maximum is 10)
         required: true
-        default: '2'
+        default: '0'
+        type: string
+      max_residual:
+        description: Canary residual-identity rows (three fixed classes; combined maximum is 10)
+        required: true
+        default: '3'
         type: string
       prior_canary_run_id:
         description: Successful matching canary workflow run ID; required for full
@@ -52,6 +57,7 @@ jobs:
     env:
       SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
       IDENTITY_MANIFEST: data/reviewed-workbook-integrity/identity-conflicts-245.csv
+      RESIDUAL_IDENTITY_MANIFEST: data/reviewed-workbook-integrity/residual-identity-conflicts-84.csv
       PRICE_MANIFEST: data/reviewed-workbook-integrity/three-brand-price-regressions-36.csv
       DRIFT_MANIFEST: data/reviewed-workbook-integrity/legacy-ledger-price-drift-252.csv
       OUTPUT_DIR: audit-output/qnsa-reviewed-workbook-integrity
@@ -72,6 +78,7 @@ jobs:
           INPUT_MAX_IDENTITY: ${{ inputs.max_identity }}
           INPUT_MAX_PRICE: ${{ inputs.max_price }}
           INPUT_MAX_LEGACY: ${{ inputs.max_legacy }}
+          INPUT_MAX_RESIDUAL: ${{ inputs.max_residual }}
           INPUT_PRIOR_CANARY_RUN_ID: ${{ inputs.prior_canary_run_id }}
         run: |
           $ErrorActionPreference = 'Stop'
@@ -87,17 +94,19 @@ jobs:
               $env:SUPABASE_PROJECT_REF -cne 'qnsafosakvonzgfcsphh') {
             throw 'Workflow is pinned to canonical QNSA and requires explicit project confirmation.'
           }
-          foreach ($manifest in @($env:IDENTITY_MANIFEST, $env:PRICE_MANIFEST, $env:DRIFT_MANIFEST)) {
+          foreach ($manifest in @($env:IDENTITY_MANIFEST, $env:RESIDUAL_IDENTITY_MANIFEST, $env:PRICE_MANIFEST, $env:DRIFT_MANIFEST)) {
             if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Required exact manifest is missing: $manifest" }
           }
           $maxIdentity = 0
           $maxPrice = 0
           $maxLegacy = 0
+          $maxResidual = 0
           if (-not [int]::TryParse($env:INPUT_MAX_IDENTITY, [ref]$maxIdentity) -or
               -not [int]::TryParse($env:INPUT_MAX_PRICE, [ref]$maxPrice) -or
               -not [int]::TryParse($env:INPUT_MAX_LEGACY, [ref]$maxLegacy) -or
-              $maxIdentity -lt 0 -or $maxPrice -lt 0 -or $maxLegacy -lt 0) { throw 'Canary limits must be non-negative integers.' }
-          if ($mode -eq 'canary' -and (($maxIdentity + $maxPrice + $maxLegacy) -lt 1 -or ($maxIdentity + $maxPrice + $maxLegacy) -gt 10)) {
+              -not [int]::TryParse($env:INPUT_MAX_RESIDUAL, [ref]$maxResidual) -or
+              $maxIdentity -lt 0 -or $maxPrice -lt 0 -or $maxLegacy -lt 0 -or $maxResidual -lt 0) { throw 'Canary limits must be non-negative integers.' }
+          if ($mode -eq 'canary' -and (($maxIdentity + $maxPrice + $maxLegacy + $maxResidual) -lt 1 -or ($maxIdentity + $maxPrice + $maxLegacy + $maxResidual) -gt 10)) {
             throw 'Canary must request 1..10 total exact rows.'
           }
           if ($mode -eq 'full' -and $env:INPUT_PRIOR_CANARY_RUN_ID -notmatch '^[0-9]+$') {
@@ -160,6 +169,7 @@ jobs:
           if ($backup.pitr_enabled -ne $true) {
             & node tools/intake/snapshot-reviewed-workbook-integrity.cjs `
               --identity-manifest $env:IDENTITY_MANIFEST `
+              --residual-identity-manifest $env:RESIDUAL_IDENTITY_MANIFEST `
               --price-manifest $env:PRICE_MANIFEST `
               --drift-price-manifest $env:DRIFT_MANIFEST `
               --output-dir $env:OUTPUT_DIR `
@@ -190,12 +200,14 @@ jobs:
           INPUT_MAX_IDENTITY: ${{ inputs.max_identity }}
           INPUT_MAX_PRICE: ${{ inputs.max_price }}
           INPUT_MAX_LEGACY: ${{ inputs.max_legacy }}
+          INPUT_MAX_RESIDUAL: ${{ inputs.max_residual }}
         run: |
           $ErrorActionPreference = 'Stop'
           $arguments = @(
             'tools/intake/apply-reviewed-workbook-integrity-canary.cjs',
             '--mode', $env:INPUT_MODE,
             '--identity-manifest', $env:IDENTITY_MANIFEST,
+            '--residual-identity-manifest', $env:RESIDUAL_IDENTITY_MANIFEST,
             '--price-manifest', $env:PRICE_MANIFEST,
             '--drift-price-manifest', $env:DRIFT_MANIFEST,
             '--output-dir', $env:OUTPUT_DIR,
@@ -204,6 +216,7 @@ jobs:
             '--max-identity', $env:INPUT_MAX_IDENTITY,
             '--max-price', $env:INPUT_MAX_PRICE,
             '--max-legacy', $env:INPUT_MAX_LEGACY,
+            '--max-residual', $env:INPUT_MAX_RESIDUAL,
             '--run-sha', $env:GITHUB_SHA
           )
           & node @arguments
@@ -221,6 +234,7 @@ jobs:
           & node tools/intake/apply-reviewed-workbook-integrity-canary.cjs `
             --mode full `
             --identity-manifest $env:IDENTITY_MANIFEST `
+            --residual-identity-manifest $env:RESIDUAL_IDENTITY_MANIFEST `
             --price-manifest $env:PRICE_MANIFEST `
             --drift-price-manifest $env:DRIFT_MANIFEST `
             --output-dir $env:OUTPUT_DIR `

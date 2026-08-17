@@ -71,16 +71,19 @@ function canaryMetadata(row) {
   return { canary_priority: priority, canary_category: category };
 }
 
-function buildPlan({ identityRows = [], priceRows = [], driftPriceRows = [] }) {
+function buildPlan({ identityRows = [], residualIdentityRows = [], priceRows = [], driftPriceRows = [] }) {
   const actions = [];
-  for (const row of identityRows) {
+  for (const [rows, actionName] of [
+    [identityRows, 'QUARANTINE_IDENTITY_CONFLICT'],
+    [residualIdentityRows, 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT'],
+  ]) for (const row of rows) {
     assertManifestControl(
-      row, 'QUARANTINE_IDENTITY_CONFLICT',
+      row, actionName,
       'APPROVED_SINGLE_CANDIDATE', 'QUARANTINED_IDENTITY_CONFLICT',
     );
     const alsoHoldPrice = strictBoolean(row.also_hold_price, 'also_hold_price');
     const action = {
-      action: 'QUARANTINE_IDENTITY_CONFLICT',
+      action: actionName,
       id: text(row.listing_id),
       source_payload_sha256: validateHash(row.source_payload_sha256, 'source_payload_sha256'),
       expected: { verification_status: 'APPROVED_SINGLE_CANDIDATE' },
@@ -103,6 +106,17 @@ function buildPlan({ identityRows = [], priceRows = [], driftPriceRows = [] }) {
       row, 'HOLD_CURRENCY_CONFLICT_PRICE',
       'SOURCE_EXPLICIT_USD_MATCH', 'PRICE_EVIDENCE_INCOMPLETE',
     );
+    const mergedResidual = actions.find(action => action.id === text(row.listing_id)
+      && action.action === 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT');
+    if (mergedResidual) {
+      if (mergedResidual.source_payload_sha256 !== validateHash(row.source_payload_sha256, 'source_payload_sha256')
+        || mergedResidual.expected.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH'
+        || mergedResidual.patch.price_evidence_status !== 'PRICE_EVIDENCE_INCOMPLETE'
+        || mergedResidual.patch.workbook_price_usd !== null) {
+        throw new Error('residual identity/price overlap is not an exact controlled merge');
+      }
+      continue;
+    }
     actions.push({
       action: 'HOLD_CURRENCY_CONFLICT_PRICE',
       id: text(row.listing_id),
@@ -169,12 +183,14 @@ function parseArgs(argv) {
   return {
     mode: values.mode || 'audit',
     identityManifest: values['identity-manifest'],
+    residualIdentityManifest: values['residual-identity-manifest'],
     priceManifest: values['price-manifest'],
     driftPriceManifest: values['drift-price-manifest'],
     outputDir: path.resolve(values['output-dir'] || path.join('audit-output', `reviewed-integrity-${Date.now()}`)),
     confirmProject: values['confirm-project'], confirm: values.confirm,
     maxIdentity: Number(values['max-identity'] || 0), maxPrice: Number(values['max-price'] || 0),
-    maxLegacy: Number(values['max-legacy'] || 0), runSha: values['run-sha'],
+    maxLegacy: Number(values['max-legacy'] || 0), maxResidual: Number(values['max-residual'] || 0),
+    runSha: values['run-sha'],
     canaryReport: values['canary-report'],
   };
 }
@@ -203,13 +219,16 @@ function selectActions(plan, options) {
   const identity = representatives(plan.filter(action => (
     action.action === 'QUARANTINE_IDENTITY_CONFLICT'
   )), options.maxIdentity);
+  const residual = representatives(plan.filter(action => (
+    action.action === 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT'
+  )), options.maxResidual);
   const price = representatives(plan.filter(action => [
     'HOLD_CURRENCY_CONFLICT_PRICE',
   ].includes(action.action)), options.maxPrice);
   const legacy = representatives(plan.filter(action => (
     action.action === 'RECONCILE_LEGACY_LEDGER_PRICE_EVIDENCE'
   )), options.maxLegacy);
-  return [...identity, ...price, ...legacy].sort((left, right) => left.id.localeCompare(right.id));
+  return [...identity, ...residual, ...price, ...legacy].sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function sqlLiteral(value) { return `'${String(value).replaceAll("'", "''")}'`; }
@@ -256,7 +275,7 @@ BEGIN
   FROM public.reviewed_workbook_inventory t
   JOIN reviewed_integrity_plan p
     ON p.id = t.id AND p.source_payload_sha256 = t.source_payload_sha256
-  WHERE (p.action = 'QUARANTINE_IDENTITY_CONFLICT'
+  WHERE (p.action IN ('QUARANTINE_IDENTITY_CONFLICT', 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT')
       AND t.verification_status IN (p.expected_verification_status, p.new_verification_status)
       AND (p.expected_price_status IS NULL
         OR t.price_evidence_status IN (p.expected_price_status, p.new_price_status)))
@@ -274,7 +293,7 @@ BEGIN
     ON p.id = t.id AND p.source_payload_sha256 = t.source_payload_sha256;
 
   UPDATE public.reviewed_workbook_inventory t
-  SET verification_status = CASE WHEN p.action = 'QUARANTINE_IDENTITY_CONFLICT'
+  SET verification_status = CASE WHEN p.action IN ('QUARANTINE_IDENTITY_CONFLICT', 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT')
         THEN p.new_verification_status ELSE t.verification_status END,
       price_evidence_status = CASE WHEN p.new_price_status IS NOT NULL
         THEN p.new_price_status ELSE t.price_evidence_status END,
@@ -301,7 +320,7 @@ BEGIN
   FROM public.reviewed_workbook_inventory t
   JOIN reviewed_integrity_plan p
     ON p.id = t.id AND p.source_payload_sha256 = t.source_payload_sha256
-  WHERE (p.action = 'QUARANTINE_IDENTITY_CONFLICT'
+  WHERE (p.action IN ('QUARANTINE_IDENTITY_CONFLICT', 'QUARANTINE_RESIDUAL_IDENTITY_CONFLICT')
       AND t.verification_status = p.new_verification_status
       AND (p.new_price_status IS NULL OR (t.price_evidence_status = p.new_price_status
         AND (NOT p.null_price OR t.workbook_price_usd IS NULL))))
@@ -354,10 +373,12 @@ async function executeAction(client, action) {
 async function run(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   const identity = readCsv(options.identityManifest);
+  const residualIdentity = readCsv(options.residualIdentityManifest);
   const price = readCsv(options.priceManifest);
   const driftPrice = readCsv(options.driftPriceManifest);
   const plan = buildPlan({
-    identityRows: identity.rows || [], priceRows: price.rows || [],
+    identityRows: identity.rows || [], residualIdentityRows: residualIdentity.rows || [],
+    priceRows: price.rows || [],
     driftPriceRows: driftPrice.rows || [],
   });
   const actions = selectActions(plan, options);
@@ -369,6 +390,7 @@ async function run(argv = process.argv.slice(2)) {
     run_sha: options.runSha || null,
     source_manifests: [
       identity.file && { role: 'identity_conflicts', file: identity.file, sha256: identity.sha256, rows: identity.rows.length },
+      residualIdentity.file && { role: 'residual_identity_conflicts', file: residualIdentity.file, sha256: residualIdentity.sha256, rows: residualIdentity.rows.length },
       price.file && { role: 'three_brand_currency_regressions', file: price.file, sha256: price.sha256, rows: price.rows.length },
       driftPrice.file && { role: 'legacy_ledger_price_drift', file: driftPrice.file, sha256: driftPrice.sha256, rows: driftPrice.rows.length },
     ].filter(Boolean),
