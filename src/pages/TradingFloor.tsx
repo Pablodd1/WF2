@@ -151,6 +151,59 @@ interface TradingFloorResponse {
   publicationBrands?: string[];
 }
 
+interface ExactMarketSummary {
+  success?: boolean;
+  brand?: string;
+  reference?: string;
+  resolvedRef?: string | null;
+  analytics_ready?: boolean;
+  count?: number;
+  stats?: { avg: number; median?: number; min: number; max: number } | null;
+}
+
+const exactMarketSummaryCache = new Map<string, Promise<ExactMarketSummary | null>>();
+const exactMarketSummaryQueue: Array<() => void> = [];
+let activeExactMarketSummaryRequests = 0;
+const MAX_EXACT_MARKET_SUMMARY_REQUESTS = 3;
+
+function scheduleExactMarketSummary<T>(task: () => Promise<T>) {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      activeExactMarketSummaryRequests += 1;
+      void task().then(resolve, reject).finally(() => {
+        activeExactMarketSummaryRequests -= 1;
+        exactMarketSummaryQueue.shift()?.();
+      });
+    };
+    if (activeExactMarketSummaryRequests < MAX_EXACT_MARKET_SUMMARY_REQUESTS) run();
+    else exactMarketSummaryQueue.push(run);
+  });
+}
+
+function comparableReferenceKey(value: unknown) {
+  return String(value || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+}
+
+function loadExactMarketSummary(brand: string, reference: string, dial: string | null) {
+  const key = [brand.trim().toLowerCase(), comparableReferenceKey(reference), String(dial || '').trim().toLowerCase()].join('|');
+  const cached = exactMarketSummaryCache.get(key);
+  if (cached) return cached;
+  const request = scheduleExactMarketSummary(async () => {
+    const params = new URLSearchParams({ brand, reference, summaryOnly: 'true' });
+    if (dial) params.set('dial', dial);
+    const response = await fetch(`/api/price-research?${params.toString()}`);
+    if (!response.ok) return null;
+    const payload = await response.json() as ExactMarketSummary;
+    const returnedReference = payload.resolvedRef || payload.reference;
+    if (!payload.success
+      || String(payload.brand || '').trim().toLowerCase() !== brand.trim().toLowerCase()
+      || comparableReferenceKey(returnedReference) !== comparableReferenceKey(reference)) return null;
+    return payload;
+  }).catch(() => null);
+  exactMarketSummaryCache.set(key, request);
+  return request;
+}
+
 interface CatalogSuggestion {
   brand: string;
   model: string | null;
@@ -1239,6 +1292,45 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
     ratingEvidenceStatus: listing.seller_rating_evidence_status,
   });
   const isRatedDealer = dealerRating !== null;
+  const listingIntent = String(listing.intent || listing.listing_type || '').trim().toUpperCase();
+  const canRatePrice = listing.item_category === 'WATCH'
+    && listingIntent === 'WTS'
+    && listing.price_research_eligible === true
+    && Boolean(listing.brand && listing.reference)
+    && Number.isFinite(Number(listing.price_usd))
+    && Number(listing.price_usd) > 0;
+  const cardPriceRatingKey = [listing.brand, listing.reference, listing.dial_color || '', listing.price_usd || ''].join('|');
+  const [cardPriceRating, setCardPriceRating] = useState(() => ({
+    key: cardPriceRatingKey,
+    loading: canRatePrice,
+    count: 0,
+    rating: rateMarketPrice(listing.price_usd, null, 0),
+  }));
+
+  useEffect(() => {
+    let active = true;
+    if (!canRatePrice || !listing.reference) return () => { active = false; };
+    void loadExactMarketSummary(listing.brand, listing.reference, listing.dial_color).then(summary => {
+      if (!active) return;
+      const count = summary?.analytics_ready === true ? Number(summary.count || 0) : 0;
+      const stats = summary?.analytics_ready === true && summary.stats ? summary.stats : null;
+      setCardPriceRating({
+        key: cardPriceRatingKey,
+        loading: false,
+        count,
+        rating: rateMarketPrice(listing.price_usd, stats, count),
+      });
+    });
+    return () => { active = false; };
+  }, [canRatePrice, cardPriceRatingKey, listing.brand, listing.dial_color, listing.price_usd, listing.reference]);
+  const displayedCardPriceRating = cardPriceRating.key === cardPriceRatingKey
+    ? cardPriceRating
+    : { key: cardPriceRatingKey, loading: canRatePrice, count: 0, rating: rateMarketPrice(listing.price_usd, null, 0) };
+  const cardPriceRatingLabel = displayedCardPriceRating.loading
+    ? 'Calculating…'
+    : displayedCardPriceRating.rating.code === 'NOT_RATED'
+      ? 'Not rated'
+      : displayedCardPriceRating.rating.label;
 
   return (
     <article
@@ -1276,11 +1368,24 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-y py-3" style={{ borderColor: BORDER }}>
         <div className="font-mono text-[18px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
-        <DealerRatingBadge
-          rating={listing.seller_rating}
-          reviewCount={listing.seller_review_count}
-          ratingEvidenceStatus={listing.seller_rating_evidence_status}
-        />
+        <span
+          className="text-right text-xs font-semibold"
+          style={{ color: displayedCardPriceRating.rating.color }}
+          aria-label={displayedCardPriceRating.loading
+            ? 'Price rating is loading'
+            : `Price rating ${cardPriceRatingLabel}; ${displayedCardPriceRating.count} qualified comparable offers; ${displayedCardPriceRating.rating.reason}`}
+          title={displayedCardPriceRating.loading ? 'Loading exact-reference market evidence' : displayedCardPriceRating.rating.reason}
+        >
+          Price rating: {cardPriceRatingLabel}
+        </span>
+        <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: MUTED }}>
+          Dealer:
+          <DealerRatingBadge
+            rating={listing.seller_rating}
+            reviewCount={listing.seller_review_count}
+            ratingEvidenceStatus={listing.seller_rating_evidence_status}
+          />
+        </span>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>

@@ -29,14 +29,21 @@ test('Trading Floor filter rail stays visible and rating badges match the filter
   assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_SUPPLIED'/);
   assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_FEEDBACK_COUNT'/);
   assert.match(dealerEvidence, />Not rated<\/span>/);
-  assert.match(dealerEvidence, /contactPublicationApproved \?/);
+  assert.match(dealerEvidence, /contactPublicationApproved && sellerPhone/);
 });
 
-test('Reference Check searches by name or consented phone and uses the canonical profile route', () => {
+test('Reference Check defaults to All Dealers, filters source-backed rating evidence, and searches only published contacts', () => {
   const directory = read('src/pages/DealerDirectory.tsx');
   const app = read('src/App.tsx');
   const api = read('api/dealers.js');
-  assert.match(directory, /Search by dealer name or phone number/);
+  assert.match(directory, /useState<DirectoryView>\('all'\)/);
+  assert.match(directory, /> All Dealers<\/button>/);
+  assert.match(directory, /> Rated Dealers<\/button>/);
+  assert.match(directory, /> Top Rated Dealers<\/button>/);
+  assert.doesNotMatch(directory, /> Legacy Profiles<\/button>/);
+  assert.match(directory, /Search by name or published number/);
+  assert.match(directory, /Number search uses only verified contact details approved for public display/);
+  assert.match(directory, /Rated · \$\{Number\(dealer\.review_count\)\.toLocaleString\(\)\} reviews/);
   assert.match(directory, /setSearch\(searchInput\.trim\(\)\)/);
   assert.doesNotMatch(directory, /setTimeout\(\(\) => \{ setLoading\(true\)/);
   assert.match(directory, /const controller = new AbortController\(\);\s*setLoading\(true\);/);
@@ -44,6 +51,7 @@ test('Reference Check searches by name or consented phone and uses the canonical
   assert.match(app, /path="\/reference-check\/:dealerId"/);
   assert.match(app, /path="\/dealer\/profile\/:dealerId" element=\{<LegacyDealerProfileRedirect \/>\}/);
   assert.match(api, /phoneMatchedDealerIds/);
+  assert.match(api, /\.eq\('contact_consent', true\)/);
   assert.match(api, /display_name\.ilike/);
 });
 

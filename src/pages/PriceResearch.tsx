@@ -574,7 +574,7 @@ export default function PriceResearch() {
   const [referenceQuery, setReferenceQuery] = useState('');
   const [modelImages, setModelImages] = useState<Record<string, string>>({});
   const [referenceImages, setReferenceImages] = useState<Record<string, string>>({});
-  const [referenceEvidence, setReferenceEvidence] = useState<Record<string, { count: number; hasMore: boolean; image?: string }>>({});
+  const [referenceEvidence, setReferenceEvidence] = useState<Record<string, { count: number; hasMore: boolean; image?: string; analyticsReady?: boolean; qualifiedCount?: number }>>({});
   const [referencePage, setReferencePage] = useState(1);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
   const [pickerError, setPickerError] = useState('');
@@ -944,13 +944,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     };
   }, [closeListing, selectedRow]);
 
-  // Load the URL/default reference once. Typing must not start a request: the
-  // former query dependency replaced this page with the loading spinner after
-  // every character, which unmounted the input and dropped keyboard focus.
-  useEffect(() => {
-    if (initialReference) void fetchData(initialReference, '', initialBrand);
-  }, [fetchData, initialBrand, initialReference]);
-
   // ── Derived stats ─────────────────────────────────────────
   const stats = data?.stats
     ? {
@@ -1083,29 +1076,27 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     if (!pending.length) return;
     const controller = new AbortController();
     void Promise.allSettled(pending.map(async item => {
-      const params = new URLSearchParams({
-        brand: pBrand,
-        reference: item.reference,
-        item: 'watches',
-        pageSize: '50',
-        pagination: 'cursor',
-      });
-      const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal: controller.signal });
+      const params = new URLSearchParams({ brand: pBrand, reference: item.reference, summaryOnly: 'true' });
+      const response = await fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal });
       if (!response.ok) throw new Error('Reference evidence unavailable');
-      const payload = await response.json() as ReviewedMarketResponse & { hasMore?: boolean };
-      const exactRows = (payload.records || []).filter(record =>
-        String(record.reference || '').trim().toUpperCase() === item.reference.trim().toUpperCase()
-        && !record.multi_listing,
-      );
-      if (!exactRows.length) {
-        return payload.hasMore
-          ? null
-          : { reference: item.reference.toUpperCase(), count: 0, hasMore: false, image: '' };
+      const payload = await response.json() as {
+        success?: boolean; brand?: string; reference?: string; resolvedRef?: string | null;
+        total_tracked_listings?: number; wts_eligible_analytics_count?: number;
+        analytics_ready?: boolean; representative_image_url?: string | null; sample_capped?: boolean;
+      };
+      const requestedKey = item.reference.replace(/[^a-z0-9]/gi, '').toUpperCase();
+      const returnedKey = String(payload.resolvedRef || payload.reference || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+      if (!payload.success || String(payload.brand || '').toLowerCase() !== pBrand.toLowerCase() || returnedKey !== requestedKey) {
+        throw new Error('Exact reference evidence mismatch');
       }
-      const image = exactRows
-        .map(record => record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '')
-        .find(Boolean) || '';
-      return { reference: item.reference.toUpperCase(), count: exactRows.length, hasMore: Boolean(payload.hasMore), image };
+      return {
+        reference: item.reference.toUpperCase(),
+        count: Number(payload.total_tracked_listings || 0),
+        qualifiedCount: Number(payload.wts_eligible_analytics_count || 0),
+        analyticsReady: payload.analytics_ready === true,
+        hasMore: payload.sample_capped === true,
+        image: payload.representative_image_url || '',
+      };
     })).then(results => {
       if (controller.signal.aborted) return;
       setReferenceEvidence(current => {
@@ -1457,7 +1448,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</span>
                     <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>
                       {referenceEvidence[r.reference.toUpperCase()]
-                        ? <>{referenceEvidence[r.reference.toUpperCase()].count.toLocaleString()}{referenceEvidence[r.reference.toUpperCase()].hasMore ? '+' : ''} released {referenceEvidence[r.reference.toUpperCase()].count === 1 ? 'observation' : 'observations'} · open full data</>
+                        ? <>{referenceEvidence[r.reference.toUpperCase()].count.toLocaleString()}{referenceEvidence[r.reference.toUpperCase()].hasMore ? '+' : ''} released {referenceEvidence[r.reference.toUpperCase()].count === 1 ? 'observation' : 'observations'} · exact cohort · {referenceEvidence[r.reference.toUpperCase()].analyticsReady ? `${referenceEvidence[r.reference.toUpperCase()].qualifiedCount?.toLocaleString() || 0} qualified for analytics` : 'analytics withheld (minimum 2 qualified)'}</>
                         : r.evidence_resolution === 'EXACT_REFERENCE_ON_SELECTION' || r.listing_count <= 0
                         ? 'Open to load exact market data'
                         : <>{r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} source {r.listing_count === 1 ? 'listing' : 'listings'} · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}</>}

@@ -65,13 +65,14 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(footer, /Curated Luxury marketplace intelligence for exceptional objects/);
 });
 
-test('Trading Floor watch view does not render internal listing labels or identifiers', () => {
+test('Trading Floor watch view hides internal identifiers and labels market price evidence clearly', () => {
   const floor = read('src/pages/TradingFloor.tsx');
 
   assert.doesNotMatch(floor, />\s*Listing Details\s*</i);
   assert.doesNotMatch(floor, /Listing\s*\{\s*listing\.id\s*\}/);
   assert.doesNotMatch(floor, /Close listing details/i);
-  assert.doesNotMatch(floor, /Price rating/);
+  assert.match(floor, /Price rating:/);
+  assert.match(floor, /Dealer:/);
   assert.doesNotMatch(floor, /Price when posted/);
   assert.match(floor, /aria-label="Close selected watch"/);
 });

@@ -67,10 +67,14 @@ test('every rated dealer card resolves to an internal profile payload', () => {
 
 test('source phones remain private reconciliation evidence and are not publicly searchable', async () => {
   assert.equal(sourcePhone({ whatsapp_url: 'https://wa.me/17147340511' }), '+17147340511');
-  const directory = await invoke(dealersHandler, { mode: 'top-rated', pageSize: '25', q: '7147340511' });
-  assert.equal(directory.statusCode, 200);
-  assert.equal(directory.payload.total, 0);
-  assert.deepEqual(directory.payload.dealers, []);
+  for (const mode of ['top-rated', 'rated']) {
+    const directory = await invoke(dealersHandler, { mode, pageSize: '100', q: '7147340511' });
+    assert.equal(directory.statusCode, 200);
+    assert.equal(directory.payload.total, 0);
+    assert.deepEqual(directory.payload.dealers, []);
+  }
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealers.js'), 'utf8');
+  assert.doesNotMatch(source, /digits\(profile\.verified_phone\)/);
 });
 
 test('Top Rated and source profile API handlers return the complete source-backed workflow', async () => {
@@ -154,12 +158,14 @@ test('public dealer API payloads never expose private provenance URLs', async ()
   }
 });
 
-test('Reference Check opens on the live canonical directory while evidence views remain available', () => {
+test('Reference Check opens on All Dealers while rated evidence views remain available', () => {
   const directory = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
-  assert.match(directory, /useState<DirectoryView>\('reference'\)/);
+  assert.match(directory, /useState<DirectoryView>\('all'\)/);
   assert.match(directory, /Reference Check/);
+  assert.match(directory, /> All Dealers<\/button>/);
   assert.match(directory, /> Rated Dealers</);
   assert.match(directory, /Top Rated Dealers/);
+  assert.doesNotMatch(directory, /> Legacy Profiles<\/button>/);
 });
 
 test('Workspace removes the redundant public market-access block and preserves the remaining tools', () => {
