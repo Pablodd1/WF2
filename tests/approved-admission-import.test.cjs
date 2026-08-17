@@ -88,6 +88,20 @@ test('bundle parents and unresolved identities never produce import rows', () =>
   }), null);
 });
 
+test('single-row admission uses the same raw multi-item quarantine as the public API', () => {
+  const risky = source({
+    raw_message: 'Rolex 126500 and Patek 5712 available',
+    listing_id: 'cross-brand-single',
+  });
+  assert.ok(intake.additionalImportReasons(risky).includes('RAW_MULTI_ITEM_RISK'));
+  assert.equal(intake.rowForImport({
+    source: risky,
+    decision: decision({ listing_id: 'cross-brand-single' }),
+    expectedBrand: 'TAG Heuer', fileName: 'input.xlsx',
+    fileSha256: 'a'.repeat(64), rowNumber: 2, runId: 'test',
+  }), null);
+});
+
 test('multi-parent lane emits one lineage-keyed display-only row with no inherited evidence', () => {
   const entries = [1, 2].map((number, index) => ({
     source: source({

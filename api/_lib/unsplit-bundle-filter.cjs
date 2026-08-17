@@ -35,7 +35,9 @@ function distinctReferences(rawMessage) {
     const key = String(value || '').replace(/[\s.-]/g, '').toUpperCase();
     const rmBaseAlreadyCaptured = /^RM\d{2,3}$/.test(key)
       && [...keys].some(existing => existing.startsWith(key));
-    if (key && !keys.has(key) && !rmBaseAlreadyCaptured) {
+    const overlappingFragmentAlreadyCaptured = key.length >= 5
+      && [...keys].some(existing => existing.includes(key) || key.includes(existing));
+    if (key && !keys.has(key) && !rmBaseAlreadyCaptured && !overlappingFragmentAlreadyCaptured) {
       keys.add(key);
       references.push(value);
     }

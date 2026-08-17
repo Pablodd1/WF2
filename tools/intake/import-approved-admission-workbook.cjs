@@ -10,6 +10,7 @@ const path = require('node:path');
 const XLSX = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
 const { extractPriceObservations } = require('../../api/_lib/normalization-v4.cjs');
+const { multiItemRisk } = require('../../api/_lib/unsplit-bundle-filter.cjs');
 const {
   SOURCE_HEADERS,
   DECISION_HEADERS,
@@ -226,6 +227,7 @@ function additionalImportReasons(source, options = {}) {
   const reasons = [];
   if (!isoDate(source.source_posted_at)) reasons.push('SOURCE_POSTING_TIME_INVALID');
   if (!options.allowNoImage && !firstExactImage(source.image_urls_source)) reasons.push('EXACT_SOURCE_IMAGE_URL_MISSING');
+  if (multiItemRisk(source.raw_message).is_multi) reasons.push('RAW_MULTI_ITEM_RISK');
   return reasons;
 }
 

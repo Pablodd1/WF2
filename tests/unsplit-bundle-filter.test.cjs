@@ -38,6 +38,12 @@ test('quarantines same-line cross-brand and quantity bundles without numeric fal
   assert.equal(multiItemRisk('Patek 5712/1A HKD 900k / USD 115k').is_multi, false);
 });
 
+test('one Zenith reference is not duplicated by an overlapping extracted fragment', () => {
+  const result = multiItemRisk('Looking for Zenith 03.3100.3600/69.M3100 budget $12,000');
+  assert.equal(result.is_multi, false);
+  assert.deepEqual(result.references, ['03.3100.3600/69.M3100']);
+});
+
 test('shadow evidence overrides a parser miss', () => {
   assert.equal(bundleCandidateCount({ id: 'parent', raw_message: 'Dealer stock list' }, new Set(['parent'])), 2);
 });
