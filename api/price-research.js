@@ -303,6 +303,7 @@ function directSubmissionToMarketRow(row) {
 
 async function loadApprovedDirectSubmissionRows(client, { brand, referenceVariants, intent, limit = 1000 }) {
   try {
+    const boundedLimit = Math.min(1000, Math.max(1, Number(limit) || 1000));
     const { data, error } = await client.from('dealer_listing_submissions')
       .select('id,dealer_id,intent,category,raw_message,claimed_fields,image_urls,review_status,publication_status,created_at')
       .eq('review_status', 'APPROVED')
@@ -310,15 +311,17 @@ async function loadApprovedDirectSubmissionRows(client, { brand, referenceVarian
       .eq('category', 'WATCH')
       .eq('intent', intent)
       .order('created_at', { ascending: false })
-      .limit(Math.min(1000, Math.max(1, Number(limit) || 1000)));
+      .limit(boundedLimit);
     if (error) throw error;
     const brandKey = String(brand || '').trim().toLowerCase();
     const referenceKeys = new Set((referenceVariants || []).map(normRef));
-    return (data || [])
+    const rows = (data || [])
       .map(directSubmissionToMarketRow)
       .filter(Boolean)
       .filter(row => String(row.brand || '').trim().toLowerCase() === brandKey
         && referenceKeys.has(normRef(row.reference)));
+    rows.sampleCapped = (data || []).length >= boundedLimit;
+    return rows;
   } catch (error) {
     console.warn('[price-research] approved direct submissions unavailable:', error?.message || error);
     return [];
@@ -1553,8 +1556,7 @@ module.exports = async function handler(req, res) {
       contact_publication_approved: r.contact_publication_approved === true,
       source_file: r.source_file || null,
     }));
-    const summaryOnlyRequested = String(req.query.summaryOnly || '').toLowerCase() === 'true';
-    const combinedDealerEvidenceRows = summaryOnlyRequested ? [] : await enrichRowsWithExactDealerEvidence(client, [
+    const combinedDealerEvidenceRows = await enrichRowsWithExactDealerEvidence(client, [
       ...comparableEvidenceRows,
       ...retainedDealerEvidenceRows,
       ...outlierDealerEvidenceRows,
@@ -1611,52 +1613,6 @@ module.exports = async function handler(req, res) {
       demand_non_watch_excluded_count: demand?.demand_non_watch_excluded_count || 0,
       demand_non_watch_excluded_breakdown: demand?.demand_non_watch_excluded_breakdown || {},
     };
-
-    // A compact response for reference tiles and Trading Floor price badges.
-    // The exact identity, currency, repost and 3.0x-IQR gates above still run;
-    // only the evidence-heavy response body is omitted.
-    if (summaryOnlyRequested) {
-      const representative = [
-        ...includedRows,
-        ...retainedEvidenceRows,
-        ...outlierRows,
-        ...(demand?.demand_rows || []),
-      ].find(row => row.thumbnail_url || row.image_url || (Array.isArray(row.image_urls) && row.image_urls.find(Boolean)));
-      const representativeImage = representative
-        ? representative.thumbnail_url
-          || representative.image_url
-          || (Array.isArray(representative.image_urls) ? representative.image_urls.find(Boolean) : null)
-          || null
-        : null;
-      return res.status(200).json({
-        success: true,
-        summary_only: true,
-        brand,
-        reference: rawRef,
-        resolvedRef: targetRef !== rawRef ? targetRef : null,
-        model,
-        total_tracked_listings: totalTrackedListings,
-        wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
-        wtb_demand_count: wtbDemandCount,
-        excluded_count: excludedTotalCount,
-        analytics_ready: summary.analytics_ready,
-        count: prices.length,
-        stats: summary.analytics_ready ? summary.stats : null,
-        selected_cohort: {
-          condition: selectedCohort.condition,
-          dial_color: selectedCohort.dial_color,
-          count: selectedCohort.count,
-        },
-        representative_image_url: representativeImage,
-        sample_capped: sourceSampleCapped,
-        methodology: {
-          method: 'PLAUSIBILITY_FLOOR_THEN_IQR_3_0',
-          iqr_multiplier: 3.0,
-          minimum_sample: 2,
-          analytics_dimensions: ['brand', 'reference', 'dial_color'],
-        },
-      });
-    }
 
     res.status(200).json({
       success: true, brand, reference: rawRef,
@@ -1810,5 +1766,10 @@ module.exports.qnsaReferenceRowToMarketRow = qnsaReferenceRowToMarketRow;
 module.exports.loadApprovedDirectSubmissionRows = loadApprovedDirectSubmissionRows;
 module.exports.loadZenithReviewedTradingRows = loadZenithReviewedTradingRows;
 module.exports.loadQnsaExactReleasedEvidence = loadQnsaExactReleasedEvidence;
+module.exports.loadQnsaVerifiedTradingPrices = loadQnsaVerifiedTradingPrices;
+module.exports.loadQnsaTradingDemand = loadQnsaTradingDemand;
+module.exports.loadRuntimePriceRecoveryRows = loadRuntimePriceRecoveryRows;
+module.exports.reviewedFamilyPrefix = reviewedFamilyPrefix;
+module.exports.configuredReviewedPriceSource = configuredReviewedPriceSource;
 module.exports.isPendingQnsaBrandRelease = isPendingQnsaBrandRelease;
 module.exports.consentApprovedPhone = consentApprovedPhone;

@@ -8,6 +8,11 @@ import { Footer as CommunityFooter } from '../components/Footer';
 import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
 import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
 import { DealerRatingBadge, ListingDealerEvidence, type DealerRatingEvidenceStatus } from '../components/ListingDealerEvidence';
+import { loadPriceResearchBatchSummaries } from '../utils/priceResearchBatchSummary';
+
+function referenceEvidenceKey(brand: string, reference: string) {
+  return `${brand.trim().toLowerCase()}|${reference.trim().toUpperCase()}`;
+}
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
@@ -1072,42 +1077,26 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   useEffect(() => {
     if (!pBrand || !visibleRefs.length) return;
-    const pending = visibleRefs.filter(item => !referenceEvidence[item.reference.toUpperCase()]);
+    const pending = visibleRefs.filter(item => !referenceEvidence[referenceEvidenceKey(pBrand, item.reference)]);
     if (!pending.length) return;
-    const controller = new AbortController();
-    void Promise.allSettled(pending.map(async item => {
-      const params = new URLSearchParams({ brand: pBrand, reference: item.reference, summaryOnly: 'true' });
-      const response = await fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal });
-      if (!response.ok) throw new Error('Reference evidence unavailable');
-      const payload = await response.json() as {
-        success?: boolean; brand?: string; reference?: string; resolvedRef?: string | null;
-        total_tracked_listings?: number; wts_eligible_analytics_count?: number;
-        analytics_ready?: boolean; representative_image_url?: string | null; sample_capped?: boolean;
-      };
-      const requestedKey = item.reference.replace(/[^a-z0-9]/gi, '').toUpperCase();
-      const returnedKey = String(payload.resolvedRef || payload.reference || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
-      if (!payload.success || String(payload.brand || '').toLowerCase() !== pBrand.toLowerCase() || returnedKey !== requestedKey) {
-        throw new Error('Exact reference evidence mismatch');
-      }
-      return {
-        reference: item.reference.toUpperCase(),
-        count: Number(payload.total_tracked_listings || 0),
-        qualifiedCount: Number(payload.wts_eligible_analytics_count || 0),
-        analyticsReady: payload.analytics_ready === true,
-        hasMore: payload.sample_capped === true,
-        image: payload.representative_image_url || '',
-      };
-    })).then(results => {
-      if (controller.signal.aborted) return;
+    let active = true;
+    void loadPriceResearchBatchSummaries(pending.map(item => ({ brand: pBrand, reference: item.reference }))).then(summaries => {
+      if (!active) return;
       setReferenceEvidence(current => {
         const next = { ...current };
-        for (const result of results) {
-          if (result.status === 'fulfilled' && result.value) next[result.value.reference] = result.value;
+        for (const summary of summaries) {
+          next[referenceEvidenceKey(summary.brand, summary.reference)] = {
+            count: Number(summary.source_observation_count || 0),
+            qualifiedCount: Number(summary.reference_qualified_wts_count || 0),
+            analyticsReady: summary.reference_analytics_ready === true,
+            hasMore: summary.sample_capped === true,
+            image: summary.representative_image_url || '',
+          };
         }
         return next;
       });
-    });
-    return () => controller.abort();
+    }).catch(() => undefined);
+    return () => { active = false; };
   // The serialized page key keeps this bounded effect stable across evidence updates.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pBrand, visibleReferenceKey]);
@@ -1442,13 +1431,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,
                   }}>
-                  {(referenceEvidence[r.reference.toUpperCase()]?.image || referenceImages[r.reference.toUpperCase()]) && <img src={referenceEvidence[r.reference.toUpperCase()]?.image || referenceImages[r.reference.toUpperCase()]} alt={`${pBrand} ${pModel} ${r.reference} source listing`} loading="lazy" style={{ width: 52, height: 52, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
+                  {(referenceEvidence[referenceEvidenceKey(pBrand, r.reference)]?.image || referenceImages[r.reference.toUpperCase()]) && <img src={referenceEvidence[referenceEvidenceKey(pBrand, r.reference)]?.image || referenceImages[r.reference.toUpperCase()]} alt={`${pBrand} ${pModel} ${r.reference} source listing`} loading="lazy" style={{ width: 52, height: 52, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 10, color: MUTED, marginBottom: 2 }}>{displayCatalogModel(pModel)}</span>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</span>
                     <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>
-                      {referenceEvidence[r.reference.toUpperCase()]
-                        ? <>{referenceEvidence[r.reference.toUpperCase()].count.toLocaleString()}{referenceEvidence[r.reference.toUpperCase()].hasMore ? '+' : ''} released {referenceEvidence[r.reference.toUpperCase()].count === 1 ? 'observation' : 'observations'} · exact cohort · {referenceEvidence[r.reference.toUpperCase()].analyticsReady ? `${referenceEvidence[r.reference.toUpperCase()].qualifiedCount?.toLocaleString() || 0} qualified for analytics` : 'analytics withheld (minimum 2 qualified)'}</>
+                      {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)]
+                        ? <>{referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].count.toLocaleString()}{referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].hasMore ? '+' : ''} bounded source observations · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].qualifiedCount?.toLocaleString() || 0} qualified WTS · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].analyticsReady ? 'graphics available after dial selection' : 'graphics withheld (no dial has 2 qualified)'}</>
                         : r.evidence_resolution === 'EXACT_REFERENCE_ON_SELECTION' || r.listing_count <= 0
                         ? 'Open to load exact market data'
                         : <>{r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} source {r.listing_count === 1 ? 'listing' : 'listings'} · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}</>}

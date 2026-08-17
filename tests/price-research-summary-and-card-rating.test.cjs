@@ -6,37 +6,226 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const api = fs.readFileSync(path.join(root, 'api', 'price-research.js'), 'utf8');
+const batchApi = require('../api/price-research-batch-summary.js');
 const research = fs.readFileSync(path.join(root, 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
 const floor = fs.readFileSync(path.join(root, 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
+const client = fs.readFileSync(path.join(root, 'src', 'utils', 'priceResearchBatchSummary.ts'), 'utf8');
 
-test('compact Price Research summaries retain exact-cohort gates and truthful readiness', () => {
-  assert.match(api, /req\.query\.summaryOnly/);
-  assert.match(api, /summary_only: true/);
-  assert.match(api, /total_tracked_listings: totalTrackedListings/);
-  assert.match(api, /wts_eligible_analytics_count: wtsEligibleAnalyticsCount/);
-  assert.match(api, /analytics_ready: summary\.analytics_ready/);
-  assert.match(api, /stats: summary\.analytics_ready \? summary\.stats : null/);
-  assert.match(api, /representative_image_url: representativeImage/);
-  assert.match(api, /analytics_dimensions: \['brand', 'reference', 'dial_color'\]/);
+function row(id, reference, dial, price, type = 'WTS', image = null) {
+  return {
+    id, brand: 'Cartier', reference, dial_color: dial, condition: 'New', listing_type: type,
+    price_usd: price, price_raw: price, analytics_currency_status: price ? 'VERIFIED' : 'CURRENCY_UNVERIFIED',
+    owner_reviewed_identity: true, raw_message: `${id} ${reference} ${price || ''}`, created_at: `2026-08-${String(Number(id.replace(/\D/g, '')) || 1).padStart(2, '0')}`,
+    has_images: Boolean(image), thumbnail_url: image,
+  };
+}
+
+test('Cartier summaries separate all-reference counts from selected-dial analytics and exact images', () => {
+  const pairs = batchApi.normalizePairs([
+    { brand: 'Cartier', reference: 'WSSA0032' },
+    { brand: 'Cartier', reference: 'WSSA0032', dial: 'Silver' },
+    { brand: 'Cartier', reference: 'WSSA0048', dial: 'Blue' },
+  ]);
+  const rows = [
+    row('a1', 'WSSA0032', 'Silver', 22000, 'WTS', 'https://images.example/wssa0032.jpg'),
+    row('a2', 'WSSA0032', 'Silver', 24000), row('a3', 'WSSA0032', 'Silver', 26000),
+    row('a4', 'WSSA0032', 'Silver', null, 'WTB'), row('b1', 'WSSA0048', 'Blue', 12000), row('b2', 'WSSA0048', 'Blue', 14000),
+  ];
+  const [allReference, selectedDial, otherReference] = batchApi.buildBatchSummaries(pairs, rows);
+  assert.equal(allReference.source_observation_count, 4);
+  assert.equal(allReference.reference_qualified_wts_count, 3);
+  assert.equal(allReference.selected_dial_qualified_count, 0);
+  assert.equal(allReference.analytics_ready, false);
+  assert.equal(allReference.stats, null);
+  assert.equal(allReference.reference_analytics_ready, true);
+  assert.equal(allReference.representative_image_url, 'https://images.example/wssa0032.jpg');
+  assert.equal(selectedDial.selected_dial_qualified_count, 3);
+  assert.equal(selectedDial.analytics_ready, true);
+  assert.equal(selectedDial.stats.median, 24000);
+  assert.equal(otherReference.source_observation_count, 2);
+  assert.equal(otherReference.stats.median, 13000);
 });
 
-test('reference tiles use exact Price Research counts and reject cross-reference responses', () => {
-  assert.match(research, /summaryOnly: 'true'/);
-  assert.match(research, /returnedKey !== requestedKey/);
-  assert.match(research, /Exact reference evidence mismatch/);
-  assert.match(research, /total_tracked_listings/);
-  assert.match(research, /representative_image_url/);
-  assert.match(research, /analytics withheld \(minimum 2 qualified\)/);
-  assert.match(research, /exact cohort/);
+test('batch input is deduplicated and capped, preventing page fan-out', () => {
+  const many = Array.from({ length: 40 }, (_, index) => ({ brand: 'Cartier', reference: `WSSA${String(index).padStart(4, '0')}` }));
+  assert.equal(batchApi.normalizePairs(many).length, 24);
+  assert.equal(batchApi.normalizePairs([many[0], many[0]]).length, 1);
+  assert.equal(batchApi.normalizePairs([{ brand: 'Cartier', reference: 'bad ref with spaces' }]).length, 0);
 });
 
-test('Trading Floor cards always label price rating separately from dealer rating', () => {
+test('per-pair loading is cap-fair and server work never exceeds two concurrent pairs', async () => {
+  const pairs = batchApi.normalizePairs(Array.from({ length: 6 }, (_, index) => ({ brand: 'Cartier', reference: `WSSA00${index + 30}` })));
+  let active = 0;
+  let maximumActive = 0;
+  const source = await batchApi.loadSourceRows({}, pairs, {
+    loadPair: async pair => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      active -= 1;
+      return { pair, rows: [row(pair.reference, pair.reference, 'Silver', 20000)], capped: true };
+    },
+  });
+  assert.equal(maximumActive, 2);
+  assert.equal(source.rows.length, pairs.length);
+  assert.equal(source.capped.size, pairs.length);
+  assert.deepEqual(new Set(source.rows.map(item => item.reference)), new Set(pairs.map(pair => pair.reference)));
+});
+
+test('nested canonical database loaders themselves never exceed two active operations', async () => {
+  const pairs = batchApi.normalizePairs([
+    { brand: 'Cartier', reference: 'WSSA0032' },
+    { brand: 'Zenith', reference: '10.9001.9004/99.R941' },
+  ]);
+  let active = 0;
+  let maximumActive = 0;
+  let calls = 0;
+  const boundedLoader = async () => {
+    calls += 1;
+    active += 1;
+    maximumActive = Math.max(maximumActive, active);
+    await new Promise(resolve => setTimeout(resolve, 3));
+    active -= 1;
+    return [];
+  };
+  await batchApi.loadSourceRows({}, pairs, {
+    pairOverrides: {
+      configuredSource: 'qnsa_rolex_patek_price_research_source',
+      loadQnsaVerifiedTradingPrices: boundedLoader,
+      loadQnsaTradingDemand: boundedLoader,
+      loadRuntimePriceRecoveryRows: boundedLoader,
+      loadApprovedDirectSubmissionRows: boundedLoader,
+    },
+  });
+  assert.equal(calls, 10);
+  assert.equal(maximumActive, 2);
+});
+
+test('canonical family loading retains 5712 child variants under the requested base family', async () => {
+  const [pair] = batchApi.normalizePairs([{ brand: 'Patek Philippe', reference: '5712' }]);
+  let receivedVariants;
+  let receivedFamily;
+  const result = await batchApi.loadCanonicalPairRows({}, pair, {
+    configuredSource: 'qnsa_rolex_patek_price_research_source',
+    loadQnsaVerifiedTradingPrices: async (_client, args) => {
+      receivedVariants = args.referenceVariants;
+      receivedFamily = args.familyPrefix;
+      return [{ ...row('family-1', '5712/1A', 'Blue', 90000), brand: 'Patek Philippe' }];
+    },
+    loadQnsaTradingDemand: async () => [],
+    loadRuntimePriceRecoveryRows: async () => [],
+    loadApprovedDirectSubmissionRows: async () => [],
+  });
+  assert.ok(receivedVariants.some(reference => reference === '5712'));
+  assert.equal(receivedFamily, '5712');
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].batch_pair_identity, 'patek philippe|5712');
+  const [summary] = batchApi.buildBatchSummaries([pair], result.rows);
+  assert.equal(summary.source_observation_count, 1);
+});
+
+test('canonical exact loader receives catalog-equivalent alias spellings', async () => {
+  const [pair] = batchApi.normalizePairs([{ brand: 'Rolex', reference: '116500ln' }]);
+  let receivedVariants = [];
+  const result = await batchApi.loadCanonicalPairRows({}, pair, {
+    configuredSource: 'qnsa_rolex_patek_price_research_source',
+    loadQnsaVerifiedTradingPrices: async (_client, args) => {
+      receivedVariants = args.referenceVariants;
+      return [{ ...row('alias', '116500LN', 'Black', 28000), brand: 'Rolex' }];
+    },
+    loadQnsaTradingDemand: async () => [],
+    loadRuntimePriceRecoveryRows: async () => [],
+    loadApprovedDirectSubmissionRows: async () => [],
+  });
+  assert.ok(receivedVariants.some(reference => reference.toUpperCase() === '116500LN'));
+  assert.equal(result.rows.length, 1);
+});
+
+test('canonical pair loader includes approved direct WTS and WTB submissions', async () => {
+  const [pair] = batchApi.normalizePairs([{ brand: 'Cartier', reference: 'WSSA0032' }]);
+  const result = await batchApi.loadCanonicalPairRows({}, pair, {
+    configuredSource: null,
+    loadReviewedWorkbookAnalyticsRows: async () => [row('workbook', 'WSSA0032', 'Silver', 22000)],
+    loadApprovedDirectSubmissionRows: async (_client, args) => args.intent === 'WTS'
+      ? [row('direct-sale', 'WSSA0032', 'Silver', 23000)]
+      : [row('direct-demand', 'WSSA0032', 'Silver', null, 'WTB')],
+  });
+  assert.deepEqual(new Set(result.rows.map(item => item.id)), new Set(['workbook', 'direct-sale', 'direct-demand']));
+});
+
+test('direct submission truncation marks only that reference cohort as capped', async () => {
+  const [pair] = batchApi.normalizePairs([{ brand: 'Cartier', reference: 'WSSA0032' }]);
+  const directRows = [row('direct-capped', 'WSSA0032', 'Silver', 23000)];
+  directRows.sampleCapped = true;
+  const result = await batchApi.loadCanonicalPairRows({}, pair, {
+    configuredSource: null,
+    loadReviewedWorkbookAnalyticsRows: async () => [row('workbook-cap', 'WSSA0032', 'Silver', 22000)],
+    loadApprovedDirectSubmissionRows: async (_client, args) => args.intent === 'WTS' ? directRows : [],
+  });
+  assert.equal(result.capped, true);
+});
+
+test('Zenith uses the canonical QNSA exact loader and not the workbook shortcut', async () => {
+  const [pair] = batchApi.normalizePairs([{ brand: 'Zenith', reference: '10.9001.9004/99.R941' }]);
+  let qnsaCalls = 0;
+  let workbookCalls = 0;
+  const result = await batchApi.loadCanonicalPairRows({}, pair, {
+    configuredSource: 'qnsa_rolex_patek_price_research_source',
+    loadQnsaVerifiedTradingPrices: async () => {
+      qnsaCalls += 1;
+      return [{ ...row('zenith', '10.9001.9004/99.R941', 'Skeleton', 10063), brand: 'Zenith' }];
+    },
+    loadQnsaTradingDemand: async () => [],
+    loadRuntimePriceRecoveryRows: async () => [],
+    loadApprovedDirectSubmissionRows: async () => [],
+    loadReviewedWorkbookAnalyticsRows: async () => { workbookCalls += 1; return []; },
+  });
+  assert.equal(qnsaCalls, 1);
+  assert.equal(workbookCalls, 0);
+  assert.equal(result.rows.length, 1);
+});
+
+test('server and client use the same canonical selected-dial key', () => {
+  const [pair] = batchApi.normalizePairs([{ brand: 'Cartier', reference: 'WSSA0032', dial: 'Silver Dial' }]);
+  assert.equal(pair.key, 'cartier|WSSA0032|SILVER DIAL');
+  assert.match(client, /function compactDial/);
+  assert.match(client, /toUpperCase\(\)\.replace\(\/\[\^A-Z0-9\]\+\/g, ' '\)\.trim\(\)/);
+  assert.match(client, /compactDial\(pair\.dial\)/);
+});
+
+test('server cache reuses within TTL, refreshes after TTL, and evicts failures for retry', async () => {
+  batchApi._cache.clear();
+  let calls = 0;
+  const first = batchApi.getOrCreateCachedValue('cartier', async () => ++calls, 1000);
+  const second = batchApi.getOrCreateCachedValue('cartier', async () => ++calls, 1001);
+  assert.equal(await first.value, 1);
+  assert.equal(await second.value, 1);
+  assert.equal(second.cached, true);
+  const expired = batchApi.getOrCreateCachedValue('cartier', async () => ++calls, 1000 + batchApi.CACHE_TTL_MS + 1);
+  assert.equal(await expired.value, 2);
+  const failure = batchApi.getOrCreateCachedValue('retry', async () => { throw new Error('temporary'); }, 2000);
+  await assert.rejects(failure.value, /temporary/);
+  await new Promise(resolve => setImmediate(resolve));
+  const retry = batchApi.getOrCreateCachedValue('retry', async () => 'recovered', 2001);
+  assert.equal(await retry.value, 'recovered');
+  assert.equal(retry.cached, false);
+});
+
+test('pages make one batch request and client rejects cross-reference summaries', () => {
+  assert.doesNotMatch(research, /summaryOnly: 'true'/);
+  assert.doesNotMatch(floor, /loadExactMarketSummary/);
+  assert.match(research, /loadPriceResearchBatchSummaries\(pending\.map/);
+  assert.match(floor, /loadPriceResearchBatchSummaries\(visiblePricePairs\)/);
+  assert.match(client, /requested\.has\(summary\.key\)/);
+  assert.match(research, /bounded source observations/);
+  assert.match(research, /qualified WTS/);
+});
+
+test('Trading Floor always renders price rating but withholds without selected-dial evidence', () => {
   assert.match(floor, /Price rating: \{cardPriceRatingLabel\}/);
+  assert.match(floor, /Boolean\(listing\.brand && listing\.reference && listing\.dial_color\)/);
+  assert.match(floor, /selected_dial_qualified_count/);
+  assert.match(floor, /comparableCount >= 2 \? priceSummary\?\.stats \|\| null : null/);
   assert.match(floor, /displayedCardPriceRating\.rating\.code === 'NOT_RATED'/);
-  assert.match(floor, /listing\.price_research_eligible === true/);
-  assert.match(floor, /summaryOnly: 'true'/);
-  assert.match(floor, /comparableReferenceKey\(returnedReference\) !== comparableReferenceKey\(reference\)/);
-  assert.match(floor, /rateMarketPrice\(listing\.price_usd, stats, count\)/);
   assert.match(floor, /<ListingDealerEvidence/);
 });

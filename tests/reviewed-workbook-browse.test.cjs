@@ -140,10 +140,12 @@ test('Price Research presents uncategorized catalog identities as individually b
   assert.match(research, /visibleRefs\.map\(r =>/);
   assert.match(research, /REFERENCE_PICKER_PAGE_SIZE = 6/);
   assert.match(research, /aria-label="Reference pages"/);
-  assert.match(research, /released \{referenceEvidence\[r\.reference\.toUpperCase\(\)\]\.count === 1 \? 'observation' : 'observations'\}/);
-  assert.match(research, /total_tracked_listings/);
+  assert.match(research, /bounded source observations/);
+  assert.match(research, /qualified WTS/);
+  assert.match(research, /source_observation_count/);
+  assert.match(research, /reference_qualified_wts_count/);
   assert.match(research, /representative_image_url/);
-  assert.match(research, /Exact reference evidence mismatch/);
+  assert.match(research, /loadPriceResearchBatchSummaries/);
   assert.match(research, /source listing/);
   assert.match(research, /EXACT_REFERENCE_ON_SELECTION/);
   assert.match(research, /Open to load exact market data/);

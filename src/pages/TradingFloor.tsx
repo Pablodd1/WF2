@@ -20,6 +20,7 @@ import { buildContactWhatsAppUrl } from '../contactWhatsApp';
 import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
 import { MarketActivityTicker } from '../components/MarketActivityTicker';
 import { DealerRatingBadge, ListingDealerEvidence, sourceBackedDealerRating } from '../components/ListingDealerEvidence';
+import { loadPriceResearchBatchSummaries, priceResearchSummaryKey, type PriceResearchBatchSummary } from '../utils/priceResearchBatchSummary';
 
 const GOLD = '#9A7127';
 const GOLD_BRIGHT = '#7B5719';
@@ -149,59 +150,6 @@ interface TradingFloorResponse {
   nextCursor?: string | null;
   hasMore?: boolean;
   publicationBrands?: string[];
-}
-
-interface ExactMarketSummary {
-  success?: boolean;
-  brand?: string;
-  reference?: string;
-  resolvedRef?: string | null;
-  analytics_ready?: boolean;
-  count?: number;
-  stats?: { avg: number; median?: number; min: number; max: number } | null;
-}
-
-const exactMarketSummaryCache = new Map<string, Promise<ExactMarketSummary | null>>();
-const exactMarketSummaryQueue: Array<() => void> = [];
-let activeExactMarketSummaryRequests = 0;
-const MAX_EXACT_MARKET_SUMMARY_REQUESTS = 3;
-
-function scheduleExactMarketSummary<T>(task: () => Promise<T>) {
-  return new Promise<T>((resolve, reject) => {
-    const run = () => {
-      activeExactMarketSummaryRequests += 1;
-      void task().then(resolve, reject).finally(() => {
-        activeExactMarketSummaryRequests -= 1;
-        exactMarketSummaryQueue.shift()?.();
-      });
-    };
-    if (activeExactMarketSummaryRequests < MAX_EXACT_MARKET_SUMMARY_REQUESTS) run();
-    else exactMarketSummaryQueue.push(run);
-  });
-}
-
-function comparableReferenceKey(value: unknown) {
-  return String(value || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
-}
-
-function loadExactMarketSummary(brand: string, reference: string, dial: string | null) {
-  const key = [brand.trim().toLowerCase(), comparableReferenceKey(reference), String(dial || '').trim().toLowerCase()].join('|');
-  const cached = exactMarketSummaryCache.get(key);
-  if (cached) return cached;
-  const request = scheduleExactMarketSummary(async () => {
-    const params = new URLSearchParams({ brand, reference, summaryOnly: 'true' });
-    if (dial) params.set('dial', dial);
-    const response = await fetch(`/api/price-research?${params.toString()}`);
-    if (!response.ok) return null;
-    const payload = await response.json() as ExactMarketSummary;
-    const returnedReference = payload.resolvedRef || payload.reference;
-    if (!payload.success
-      || String(payload.brand || '').trim().toLowerCase() !== brand.trim().toLowerCase()
-      || comparableReferenceKey(returnedReference) !== comparableReferenceKey(reference)) return null;
-    return payload;
-  }).catch(() => null);
-  exactMarketSummaryCache.set(key, request);
-  return request;
 }
 
 interface CatalogSuggestion {
@@ -344,6 +292,7 @@ export default function TradingFloor() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(24);
+  const [priceSummaries, setPriceSummaries] = useState<Record<string, PriceResearchBatchSummary>>({});
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
@@ -370,6 +319,32 @@ export default function TradingFloor() {
   // filtering here would sever keyset membership from what the user sees and
   // can create apparent skips across the image/no-image boundary.
   const visibleListings = listings;
+  const visiblePricePairs = useMemo(() => {
+    const seen = new Set<string>();
+    return visibleListings.flatMap(listing => {
+      if (listing.item_category !== 'WATCH' || !listing.brand || !listing.reference || !listing.dial_color) return [];
+      const pair = { brand: listing.brand, reference: listing.reference, dial: listing.dial_color };
+      const key = priceResearchSummaryKey(pair);
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [pair];
+    });
+  }, [visibleListings]);
+  const visiblePricePairKey = useMemo(() => visiblePricePairs.map(priceResearchSummaryKey).sort().join('\u001e'), [visiblePricePairs]);
+
+  useEffect(() => {
+    if (!visiblePricePairs.length) return;
+    let active = true;
+    void loadPriceResearchBatchSummaries(visiblePricePairs).then(summaries => {
+      if (!active) return;
+      setPriceSummaries(Object.fromEntries(summaries.map(summary => [summary.key, summary])));
+    }).catch(() => {
+      if (active) setPriceSummaries({});
+    });
+    return () => { active = false; };
+  // Serialized exact identity is stable while the visible page is unchanged.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visiblePricePairKey]);
   const unfilteredBrandTotal = brandFilter
     && categoryFilter === 'watches'
     && !intentFilter && !search && !exactReference && !imagesOnly && !pricedOnly
@@ -969,6 +944,7 @@ export default function TradingFloor() {
                   <ListingCard
                     key={listing.id}
                     listing={listing}
+                    priceSummary={priceSummaries[priceResearchSummaryKey({ brand: listing.brand, reference: listing.reference || '', dial: listing.dial_color })]}
                     selected={false}
                     onSelect={() => openListing(listing)}
                   />
@@ -1282,7 +1258,7 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
   );
 }
 
-function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
+function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: ListingRecord; priceSummary?: PriceResearchBatchSummary; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const [imageAvailable, setImageAvailable] = useState(() => hasListingImage(listing));
   const cardHasImage = imageAvailable && hasListingImage(listing);
@@ -1296,36 +1272,17 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
   const canRatePrice = listing.item_category === 'WATCH'
     && listingIntent === 'WTS'
     && listing.price_research_eligible === true
-    && Boolean(listing.brand && listing.reference)
+    && Boolean(listing.brand && listing.reference && listing.dial_color)
     && Number.isFinite(Number(listing.price_usd))
     && Number(listing.price_usd) > 0;
-  const cardPriceRatingKey = [listing.brand, listing.reference, listing.dial_color || '', listing.price_usd || ''].join('|');
-  const [cardPriceRating, setCardPriceRating] = useState(() => ({
-    key: cardPriceRatingKey,
-    loading: canRatePrice,
-    count: 0,
-    rating: rateMarketPrice(listing.price_usd, null, 0),
-  }));
-
-  useEffect(() => {
-    let active = true;
-    if (!canRatePrice || !listing.reference) return () => { active = false; };
-    void loadExactMarketSummary(listing.brand, listing.reference, listing.dial_color).then(summary => {
-      if (!active) return;
-      const count = summary?.analytics_ready === true ? Number(summary.count || 0) : 0;
-      const stats = summary?.analytics_ready === true && summary.stats ? summary.stats : null;
-      setCardPriceRating({
-        key: cardPriceRatingKey,
-        loading: false,
-        count,
-        rating: rateMarketPrice(listing.price_usd, stats, count),
-      });
-    });
-    return () => { active = false; };
-  }, [canRatePrice, cardPriceRatingKey, listing.brand, listing.dial_color, listing.price_usd, listing.reference]);
-  const displayedCardPriceRating = cardPriceRating.key === cardPriceRatingKey
-    ? cardPriceRating
-    : { key: cardPriceRatingKey, loading: canRatePrice, count: 0, rating: rateMarketPrice(listing.price_usd, null, 0) };
+  const comparableCount = canRatePrice && priceSummary?.analytics_ready === true
+    ? Number(priceSummary.selected_dial_qualified_count || 0)
+    : 0;
+  const displayedCardPriceRating = {
+    loading: canRatePrice && priceSummary === undefined,
+    count: comparableCount,
+    rating: rateMarketPrice(listing.price_usd, comparableCount >= 2 ? priceSummary?.stats || null : null, comparableCount),
+  };
   const cardPriceRatingLabel = displayedCardPriceRating.loading
     ? 'Calculating…'
     : displayedCardPriceRating.rating.code === 'NOT_RATED'
