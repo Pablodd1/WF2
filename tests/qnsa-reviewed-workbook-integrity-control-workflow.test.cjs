@@ -18,6 +18,8 @@ test('integrity control workflow is serialized, QNSA pinned, and explicitly auth
   assert.match(workflow, /APPLY_QNSA_REVIEWED_WORKBOOK_FULL_AFTER_CANARY/);
   assert.match(workflow, /Canary must request 1\.\.10 total exact rows/);
   assert.match(workflow, /max_legacy/);
+  assert.match(workflow, /max_residual/);
+  assert.match(workflow, /--residual-identity-manifest/);
   assert.match(workflow, /--run-sha/);
 });
 
@@ -74,6 +76,7 @@ test('checked three-brand control manifests are PII-free and exact sized', () =>
     ['identity-conflicts-245.csv', 245],
     ['three-brand-price-regressions-36.csv', 36],
     ['legacy-ledger-price-drift-252.csv', 252],
+    ['residual-identity-conflicts-84.csv', 84],
   ];
   for (const [file, expectedRows] of fixtures) {
     const content = fs.readFileSync(path.join(root, 'data/reviewed-workbook-integrity', file), 'utf8');
@@ -101,6 +104,7 @@ test('fixed canary metadata covers every required correction class including dua
   const directory = path.join(root, 'data/reviewed-workbook-integrity');
   const combined = [
     'identity-conflicts-245.csv',
+    'residual-identity-conflicts-84.csv',
     'three-brand-price-regressions-36.csv',
     'legacy-ledger-price-drift-252.csv',
   ].map(file => fs.readFileSync(path.join(directory, file), 'utf8')).join('\n');
@@ -108,7 +112,11 @@ test('fixed canary metadata covers every required correction class including dua
     'RAW_BRAND_CONFLICT', 'CATALOG_BRAND_CONFLICT', 'YEAR_TOKEN_REFERENCE',
     'DUAL_IDENTITY_PRICE', 'THREE_BRAND_CURRENCY_REGRESSION',
     'LEGACY_PRICE_NULL', 'LEGACY_PRICE_RETAIN',
+    'RESIDUAL_TAG_RM_DUAL', 'RESIDUAL_BREGUET_JLC_DUAL', 'RESIDUAL_CATALOG_CONFLICT',
   ]) assert.match(combined, new RegExp(category));
   const identity = fs.readFileSync(path.join(directory, 'identity-conflicts-245.csv'), 'utf8');
   assert.equal((identity.match(/,"true",/g) || []).length, 2);
+  const residual = fs.readFileSync(path.join(directory, 'residual-identity-conflicts-84.csv'), 'utf8');
+  assert.equal((residual.match(/,LIVE_QUALIFIED,/g) || []).length, 3);
+  assert.equal((residual.match(/,PRIOR_CONTROL,/g) || []).length, 19);
 });

@@ -25,6 +25,7 @@ function parseArgs(argv) {
   }
   return {
     identityManifest: values['identity-manifest'],
+    residualIdentityManifest: values['residual-identity-manifest'],
     priceManifest: values['price-manifest'],
     driftPriceManifest: values['drift-price-manifest'],
     outputDir: values['output-dir'],
@@ -64,6 +65,7 @@ async function run(argv = process.argv.slice(2)) {
   if (!key) throw new Error('service-role credential is required');
   const plan = buildPlan({
     identityRows: readCsv(options.identityManifest).rows,
+    residualIdentityRows: readCsv(options.residualIdentityManifest).rows,
     priceRows: readCsv(options.priceManifest).rows,
     driftPriceRows: readCsv(options.driftPriceManifest).rows,
   });
