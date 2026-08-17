@@ -28,6 +28,14 @@ test('write modes retrieve a masked service credential through management author
   assert.match(workflow, /if: inputs\.mode != 'audit'/);
 });
 
+test('full mode proves QNSA point-in-time recovery before the atomic correction', () => {
+  assert.match(workflow, /Verify QNSA point-in-time recovery/);
+  assert.match(workflow, /\/database\/backups/);
+  assert.match(workflow, /pitr_enabled -ne \$true/);
+  assert.match(workflow, /atomic full correction is blocked/);
+  assert.match(workflow, /recovery-proof\.json/);
+});
+
 test('untrusted dispatch inputs are passed through step env and management token is narrowly scoped', () => {
   const lines = workflow.split(/\r?\n/);
   const scripts = [];
@@ -40,7 +48,7 @@ test('untrusted dispatch inputs are passed through step env and management token
   assert.doesNotMatch(scripts.flat().join('\n'), /\$\{\{\s*inputs\./);
   const jobEnv = workflow.slice(workflow.indexOf('    env:'), workflow.indexOf('    steps:'));
   assert.doesNotMatch(jobEnv, /SUPABASE_ACCESS_TOKEN/);
-  assert.equal((workflow.match(/SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/g) || []).length, 2);
+  assert.equal((workflow.match(/SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/g) || []).length, 3);
 });
 
 test('full mode downloads and binds a successful prior workflow receipt', () => {

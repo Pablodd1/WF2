@@ -128,6 +128,30 @@ jobs:
           if ($reports.Count -ne 1) { throw 'Prior run artifact must contain exactly one execution-report.json.' }
           "CANARY_REPORT=$($reports[0].FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Verify QNSA point-in-time recovery
+        if: inputs.mode == 'full'
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $backup = Invoke-RestMethod `
+            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/backups" `
+            -Headers $headers
+          if ($backup.pitr_enabled -ne $true) {
+            throw 'QNSA point-in-time recovery is not enabled; atomic full correction is blocked.'
+          }
+          New-Item -ItemType Directory -Force -Path $env:OUTPUT_DIR | Out-Null
+          [ordered]@{
+            checked_at = (Get-Date).ToUniversalTime().ToString('o')
+            project_ref = $env:SUPABASE_PROJECT_REF
+            pitr_enabled = [bool]$backup.pitr_enabled
+            walg_enabled = [bool]$backup.walg_enabled
+            completed_backup_count = @($backup.backups | Where-Object { $_.status -eq 'COMPLETED' }).Count
+          } | ConvertTo-Json | Set-Content -LiteralPath "$env:OUTPUT_DIR/recovery-proof.json" -Encoding utf8
+
       - name: Retrieve QNSA service credential without logging it
         if: inputs.mode != 'audit'
         shell: pwsh
@@ -203,5 +227,6 @@ jobs:
             audit-output/qnsa-reviewed-workbook-integrity/control-plan.json
             audit-output/qnsa-reviewed-workbook-integrity/execution-checkpoint.json
             audit-output/qnsa-reviewed-workbook-integrity/execution-report.json
+            audit-output/qnsa-reviewed-workbook-integrity/recovery-proof.json
           if-no-files-found: warn
           retention-days: 30
