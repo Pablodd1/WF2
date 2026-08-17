@@ -180,7 +180,7 @@ test('reviewed workbook evidence loads approved WTS and WTB without promoting un
 
 test('Price Research passes exact catalog reference variants to the indexed workbook loader', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
-  assert.match(source, /const preloadReferences = listEquivalentReferences\(rawRef, brand\)/);
+  assert.match(source, /const preloadReferences = \[\.\.\.new Set\(\[rawRef, \.\.\.listEquivalentReferences\(rawRef, brand\)\]\)\]/);
   assert.match(source, /loadReviewedWorkbookEvidenceRows\(client, \{\s*brand,\s*references: preloadReferences/);
   assert.match(source, /loadReviewedWorkbookEvidenceRows\(client, \{\s*brand, references: referenceVariants/);
   assert.doesNotMatch(source, /referenceKeys:/);

@@ -198,6 +198,21 @@ test('canonical exact loader receives catalog-equivalent alias spellings', async
   assert.equal(result.rows.length, 1);
 });
 
+test('workbook exact loader preserves the displayed dotted reference alongside catalog aliases', async () => {
+  const [pair] = batchApi.normalizePairs([{ brand: 'Jacob & Co', reference: 'AT900.10.AC.MT.AAAAA' }]);
+  let receivedVariants = [];
+  await batchApi.loadCanonicalPairRows({}, pair, {
+    configuredSource: null,
+    loadReviewedWorkbookEvidenceRows: async (_client, args) => {
+      receivedVariants = args.references;
+      return [];
+    },
+    loadApprovedDirectSubmissionRows: async () => [],
+  });
+  assert.ok(receivedVariants.includes('AT900.10.AC.MT.AAAAA'));
+  assert.ok(receivedVariants.includes('AT90010ACMTAAAAA'));
+});
+
 test('canonical pair loader includes approved direct WTS and WTB submissions', async () => {
   const [pair] = batchApi.normalizePairs([{ brand: 'Cartier', reference: 'WSSA0032' }]);
   const result = await batchApi.loadCanonicalPairRows({}, pair, {
