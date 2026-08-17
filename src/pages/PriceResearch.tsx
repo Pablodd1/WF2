@@ -327,6 +327,14 @@ interface LiquidityData {
   demand_count?: number;
   demand_cohorts?: { dial_color: string; count: number }[];
   demand_rows?: WtbListingData[];
+  demand_evidence?: {
+    returned: number;
+    total: number;
+    page: number;
+    page_size: number;
+    pages: number;
+    sample_capped: boolean;
+  };
   demand_sample_capped?: boolean;
 }
 
@@ -358,6 +366,14 @@ interface PriceData {
   wts_eligible_analytics_count?: number;
   wtb_demand_count?: number;
   demand_rows?: WtbListingData[];
+  demand_evidence?: {
+    returned: number;
+    total: number;
+    page: number;
+    page_size: number;
+    pages: number;
+    sample_capped: boolean;
+  };
   excluded_count?: number;
   excluded_breakdown?: {
     unpriced: number;
@@ -369,6 +385,7 @@ interface PriceData {
     wts_eligible_analytics_count: number;
     wtb_demand_count: number;
     excluded_count: number;
+    wts_loaded_count?: number;
     excluded_breakdown: {
       unpriced: number;
       outliers: number;
@@ -376,6 +393,7 @@ interface PriceData {
     };
   };
   totalListings: number;
+  reference_listing_count?: number;
   eligible_observation_count?: number;
   unique_offer_count?: number;
   repost_count?: number;
@@ -409,8 +427,14 @@ interface PriceData {
     comparable_page?: number;
     comparable_page_size?: number;
     comparable_pages?: number;
+    retained_returned?: number;
+    retained_total?: number;
+    retained_pages?: number;
     outliers_returned: number;
     outliers_total: number;
+    outlier_pages?: number;
+    sale_page?: number;
+    sale_pages?: number;
     truncated: boolean;
   };
   methodology: {
@@ -451,7 +475,7 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
-const COMPARABLE_LISTING_PREVIEW_LIMIT = 12;
+const WTB_LISTING_PAGE_SIZE = 24;
 const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
 const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
@@ -548,6 +572,8 @@ export default function PriceResearch() {
   const [listingSeller, setListingSeller] = useState<ListingSellerData | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [saleEvidencePage, setSaleEvidencePage] = useState(1);
+  const [demandEvidencePage, setDemandEvidencePage] = useState(1);
   const listingRequestRef = useRef<{ sequence: number; controller: AbortController | null }>({
     sequence: 0,
     controller: null,
@@ -654,7 +680,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     finally { setPLoading(''); }
   }, []);
 
-  const fetchData = useCallback(async (ref: string, dial = '', brand = '', evidencePage = 1) => {
+  const fetchData = useCallback(async (ref: string, dial = '', brand = '', evidencePage = 1, demandPage = 1) => {
     const normalizedReference = ref.trim();
     if (!normalizedReference) {
       setError('Enter a reference to search');
@@ -667,11 +693,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     setSelectedRow(null);
     setListingDetail(null);
     setListingSeller(null);
+    setSaleEvidencePage(evidencePage);
+    setDemandEvidencePage(demandPage);
     try {
       const params = new URLSearchParams({ reference: normalizedReference });
       if (brand) params.set('brand', brand);
       if (dial) params.set('dial', dial);
       params.set('evidencePage', String(evidencePage));
+      params.set('evidencePageSize', '100');
+      params.set('demandPage', String(demandPage));
+      params.set('demandPageSize', String(WTB_LISTING_PAGE_SIZE));
       const r = await fetch(`/api/price-research?${params.toString()}`, { credentials: 'include' });
       const d = await r.json();
       if (d.success) {
@@ -679,6 +710,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         const resolvedReference = d.resolvedRef || d.reference || normalizedReference;
         setQuery(resolvedReference);
         if (d.brand) setQueryBrand(d.brand);
+        setSaleEvidencePage(d.evidence?.sale_page || evidencePage);
+        setDemandEvidencePage(d.demand_evidence?.page || demandPage);
       }
       else if (d.requires_resolution) {
         const candidates = Array.isArray(d.candidates)
@@ -1058,8 +1091,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       if (Number.isFinite(priceDifference) && priceDifference !== 0) return priceDifference;
       return String(left.listing_date || left.created_at || '').localeCompare(String(right.listing_date || right.created_at || ''))
         || left.id.localeCompare(right.id);
-    })
-    .slice(0, COMPARABLE_LISTING_PREVIEW_LIMIT);
+    });
+  const saleEvidencePages = Math.max(1, data?.evidence?.sale_pages || data?.evidence?.comparable_pages || 1);
   const visibleModels = pModels.filter(item => displayCatalogModel(item.model).toLowerCase().includes(modelQuery.trim().toLowerCase()));
   const normalizedReferenceQuery = referenceQuery.trim().toUpperCase();
   const filteredRefs = pRefs.filter(item => !normalizedReferenceQuery || item.reference.toUpperCase().includes(normalizedReferenceQuery));
@@ -1549,11 +1582,11 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
             {/* ── Demand and pricing summary ───────────────────── */}
             <div className="grid grid-cols-1 gap-6 mb-8">
-              <div data-testid="wtb-demand-summary" style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 20 }}>
-                <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>WTB Demand</div>
-                <div style={{ color: BLUE, fontSize: 28, fontWeight: 800, marginTop: 5 }}>{wtbDemandCount.toLocaleString()}</div>
+              <div data-testid="wts-supply-summary" style={{ backgroundColor: '#f7f3e8', border: '1px solid #dfca91', borderRadius: 8, padding: 20 }}>
+                <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>WTS listings for sale</div>
+                <div style={{ color: NAVY, fontSize: 28, fontWeight: 800, marginTop: 5 }}>{(data.reconciliation?.wts_loaded_count ?? data.reference_listing_count ?? data.totalListings).toLocaleString()}</div>
                 <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
-                  Source-backed buyer signals for this reference. WTB activity remains strictly separate from WTS asking-price averages and graphics.
+                  All source-backed sale offers for this reference remain available below. Only qualified priced WTS observations enter averages, graphics, and predictions.
                 </div>
               </div>
               {/* Pricing Summary */}
@@ -1595,7 +1628,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 <div style={{ color: NAVY, fontSize: 26, fontWeight: 800, marginTop: 5 }}>{qualifiedWtsCount.toLocaleString()}</div>
                 <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>Qualified priced WTS offers used in the market analysis.</div>
               </div>
-              <div style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 18 }}>
+              <div data-testid="wtb-demand-summary" style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 18 }}>
                 <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>WTB / WTS ratio</div>
                 <div style={{ color: BLUE, fontSize: 26, fontWeight: 800, marginTop: 5 }}>
                   {displayedWtbWtsRatio == null ? 'Not available' : displayedWtbWtsRatio.toFixed(2)}
@@ -1818,7 +1851,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   </div>
                   {data.evidence?.truncated && (
                     <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
-                      Showing the newest {data.evidence.outliers_returned.toLocaleString()} excluded observations for responsive review. This evidence includes required-field failures, reposts, plausibility failures, and IQR outliers. Aggregate statistics use all {data.evidence.outliers_total.toLocaleString()} exclusions in the sampled cohort.
+                      Excluded evidence is paginated with the WTS listings below. It includes required-field failures, reposts, plausibility failures, and IQR outliers. Aggregate statistics use all {data.evidence.outliers_total.toLocaleString()} exclusions in the loaded cohort.
                     </div>
                   )}
                 </div>
@@ -1844,7 +1877,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
               <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
-                Featured listings for sale ({listings.length} shown)
+                WTS listings for sale · page {saleEvidencePage.toLocaleString()} of {saleEvidencePages.toLocaleString()}
               </div>
               {listings.length === 0 && (
                 <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: 14 }}>
@@ -1853,7 +1886,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               )}
               {listings.length > 0 && (
                 <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
-                  Compact, full-width WTS source evidence only. Qualified observations power the chart and statistics; excluded sale evidence remains visible with its reason and never alters the averages. WTB requests remain counted separately in the WTB / WTS ratio above.
+                  All available WTS evidence is accessible page by page, with exact source images when present. Qualified observations power the chart and statistics; unpriced, duplicate, repost, plausibility, and outlier evidence remains visible with its reason and never alters the averages. WTB requests follow in their own section.
                 </div>
               )}
               {listings.map(row => (
@@ -1865,12 +1898,37 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   onOpen={() => void openListing(row)}
                 />
               ))}
-              {listingEvidence.length > COMPARABLE_LISTING_PREVIEW_LIMIT && (
-                <div style={{ padding: '12px 24px', borderTop: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
-                  Showing a compact source-evidence sample for speed. Complete qualification and exclusion counts remain available in Analysis outcome and methodology.
+              {saleEvidencePages > 1 && (
+                <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${BORDER}` }}>
+                  <button
+                    type="button"
+                    disabled={loading || saleEvidencePage <= 1}
+                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage - 1, demandEvidencePage)}
+                    className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft size={15} /> Previous WTS
+                  </button>
+                  <div style={{ color: MUTED, fontSize: 12 }}>
+                    Page {saleEvidencePage.toLocaleString()} of {saleEvidencePages.toLocaleString()} · up to {(data.evidence?.comparable_page_size || 100).toLocaleString()} rows in each evidence category per page
+                  </div>
+                  <button
+                    type="button"
+                    disabled={loading || saleEvidencePage >= saleEvidencePages}
+                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage + 1, demandEvidencePage)}
+                    className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next WTS <ChevronLeft size={15} style={{ transform: 'rotate(180deg)' }} />
+                  </button>
                 </div>
               )}
             </div>
+
+            <DemandSignalsSection
+              data={data}
+              page={demandEvidencePage}
+              onPageChange={nextPage => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage, nextPage)}
+              onOpenListing={row => void openListing(row)}
+            />
           </>
         )}
 
@@ -2620,13 +2678,19 @@ function forecastReason(reason?: string) {
   return messages[reason || ''] || 'the forecast release gate was not satisfied';
 }
 
-function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpenListing: (row: RowData) => void }) {
+function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
+  data: PriceData;
+  page: number;
+  onPageChange: (page: number) => void;
+  onOpenListing: (row: RowData) => void;
+}) {
   const displayRef = data.resolvedRef || data.reference || '';
   const demandCount = data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? data.liquidity?.demand_count ?? 0;
   const qualifiedWtsCount = data.reconciliation?.wts_eligible_analytics_count ?? data.wts_eligible_analytics_count ?? data.count ?? 0;
   const demandSupplyRatio = data.liquidity?.wtb_fs_ratio ?? (qualifiedWtsCount > 0 ? demandCount / qualifiedWtsCount : null);
   const demandCohorts = data.liquidity?.demand_cohorts || [];
   const demandRows = data.demand_rows || data.liquidity?.demand_rows || [];
+  const demandPages = Math.max(1, data.demand_evidence?.pages || 1);
 
   return (
     <div style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 24, marginBottom: 24 }}>
@@ -2684,10 +2748,10 @@ function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpen
         <div>
           <div className="flex items-center justify-between mb-3">
             <h4 style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: 0 }}>
-              WTB Demand Listings ({demandRows.length})
+              WTB demand listings · page {page.toLocaleString()} of {demandPages.toLocaleString()}
             </h4>
             <span style={{ fontSize: 11, color: MUTED }}>
-              Seller/Buyer contacts, WhatsApp links, unredacted raw source messages, and image flow-through
+              Exact images and consent-approved contact links are shown when source evidence permits.
             </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2695,6 +2759,29 @@ function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpen
               <WtbDemandCard key={row.id} row={row} onOpen={() => onOpenListing(mapWtbToRowData(row))} />
             ))}
           </div>
+          {demandPages > 1 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => onPageChange(page - 1)}
+                className="inline-flex items-center gap-1 rounded-md border bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft size={15} /> Previous WTB
+              </button>
+              <div style={{ color: MUTED, fontSize: 12 }}>
+                {data.demand_evidence?.total.toLocaleString() || demandCount.toLocaleString()} total buyer signals · {demandRows.length.toLocaleString()} shown on this page
+              </div>
+              <button
+                type="button"
+                disabled={page >= demandPages}
+                onClick={() => onPageChange(page + 1)}
+                className="inline-flex items-center gap-1 rounded-md border bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next WTB <ChevronLeft size={15} style={{ transform: 'rotate(180deg)' }} />
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ backgroundColor: WHITE, borderRadius: 8, border: `1px dashed #bfdbfe`, padding: 20, textAlign: 'center', fontSize: 12, color: MUTED }}>
@@ -2757,10 +2844,17 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
 
         {/* Seller / Buyer Contact Box */}
         <div style={{ backgroundColor: LIGHT_GRAY, padding: 10, borderRadius: 6, marginBottom: 10, fontSize: 12, border: `1px solid ${BORDER}` }}>
-          <div className="flex items-center justify-between flex-wrap gap-1">
-            <span style={{ color: MUTED }}>Posted by / Contact:</span>
-            <span style={{ fontWeight: 700, color: TEXT }}>{sellerName}</span>
-          </div>
+          <div style={{ color: MUTED, marginBottom: 4 }}>Posted by / Contact:</div>
+          <ListingDealerEvidence
+            sellerName={sellerName}
+            sellerPhone={phone}
+            contactPublicationApproved={row.contact_publication_approved === true}
+            rating={row.seller_rating}
+            reviewCount={row.seller_review_count}
+            ratingEvidenceStatus={row.seller_rating_evidence_status}
+            groupCount={row.seller_group_count}
+            profilePath={row.dealer_profile_path}
+          />
           {phone && (
             <div className="flex items-center justify-between flex-wrap gap-1 mt-1">
               <span style={{ color: MUTED }}>Phone:</span>
@@ -2782,15 +2876,9 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
           )}
         </div>
 
-        {/* Unredacted Raw Source Message */}
         {row.raw_message && (
-          <div style={{ marginTop: 6 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: MUTED, marginBottom: 4 }}>
-              Unredacted Raw Source Message
-            </div>
-            <pre style={{ margin: 0, padding: 10, background: '#111827', color: '#e5e7eb', borderRadius: 6, fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 130, overflowY: 'auto' }}>
-              {row.raw_message}
-            </pre>
+          <div className="line-clamp-3" style={{ marginTop: 6, color: MUTED, fontSize: 11, lineHeight: 1.5 }}>
+            Source listing details are available in the full listing view. Public contact remains consent-gated.
           </div>
         )}
       </div>
@@ -2834,5 +2922,11 @@ function mapWtbToRowData(row: WtbListingData): RowData {
     has_images: Boolean(row.has_images || row.image_url),
     whatsapp_url: row.contact_publication_approved === true ? row.whatsapp_url || null : null,
     contact_publication_approved: row.contact_publication_approved === true,
+    dealer_id: row.dealer_id || null,
+    dealer_profile_path: row.dealer_profile_path || null,
+    seller_rating: row.seller_rating ?? null,
+    seller_review_count: row.seller_review_count ?? null,
+    seller_rating_evidence_status: row.seller_rating_evidence_status || null,
+    seller_group_count: row.seller_group_count ?? null,
   };
 }

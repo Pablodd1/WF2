@@ -38,12 +38,13 @@ test('qualified WTS range and dial-colored charts remain explicit', () => {
   assert.doesNotMatch(source, /Catalog-valid dial cohorts/);
 });
 
-test('compact demand summary keeps WTB separate while pricing graphics remain WTS-only', () => {
+test('complete paginated WTS inventory appears before separate WTB demand while graphics remain WTS-only', () => {
   assert.doesNotMatch(source, />Reference activity</);
   assert.match(source, /data-testid="wtb-demand-summary"/);
-  assert.match(source, /WTB activity remains strictly separate from WTS asking-price averages and graphics/);
-  assert.match(source, /Qualified observations power the chart and statistics/);
-  assert.match(source, /excluded sale evidence remains visible with its reason and never alters the averages/);
+  assert.match(source, /WTS listings for sale/);
+  assert.match(source, /All available WTS evidence is accessible page by page/);
+  assert.match(source, /WTB requests follow in their own section/);
+  assert.doesNotMatch(source, /Showing a compact source-evidence sample for speed/);
 });
 
 test('listing evidence preserves raw message and seller facts while suppressing invalid images', () => {

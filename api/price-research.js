@@ -637,7 +637,21 @@ function isPriceResearchAdmissionCandidate(row) {
   return isReleaseListingEligible(row) || isHumanReviewAnalyticsCandidate(row);
 }
 
-async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null, familyPrefix = null) {
+function paginateEvidenceRows(rows, page, pageSize) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const safePage = Math.max(1, Number.parseInt(String(page || '1'), 10) || 1);
+  const safePageSize = Math.min(100, Math.max(1, Number.parseInt(String(pageSize || '1'), 10) || 1));
+  const offset = (safePage - 1) * safePageSize;
+  return {
+    rows: safeRows.slice(offset, offset + safePageSize),
+    page: safePage,
+    page_size: safePageSize,
+    pages: Math.max(1, Math.ceil(safeRows.length / safePageSize)),
+    total: safeRows.length,
+  };
+}
+
+async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null, familyPrefix = null, pagination = {}) {
   // ponytail: admit all demand-side records. classifyDemandEligibility
   // handles per-row quality downstream.
   let data;
@@ -736,7 +750,12 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     .filter(cohort => cohort.count >= 1)
     .sort((a, b) => b.count - a.count);
 
-  const demandRowsSerialized = eligible.map(row => {
+  const demandPage = Math.max(1, Number.parseInt(String(pagination.page || '1'), 10) || 1);
+  const demandPageSize = Math.min(100, Math.max(12, Number.parseInt(String(pagination.pageSize || '24'), 10) || 24));
+  const demandEvidencePage = paginateEvidenceRows(eligible, demandPage, demandPageSize);
+  const demandRowsWithDealerEvidence = await enrichRowsWithExactDealerEvidence(client, demandEvidencePage.rows);
+  const demandRowsSerialized = demandRowsWithDealerEvidence
+    .map(row => {
     const contactApproved = row.contact_publication_approved === true;
     const phone = consentApprovedPhone(row);
     const phoneDigits = phone ? String(phone).replace(/[^0-9]/g, '') : '';
@@ -763,13 +782,23 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
       price_usd: row.price_usd || null,
       price_raw: row.price_raw || row.source_price_amount || null,
       currency: row.currency || row.source_currency || null,
+      dealer_id: row.dealer_id || null,
+      dealer_profile_path: row.dealer_profile_path || null,
+      seller_rating: row.seller_rating ?? null,
+      seller_review_count: row.seller_review_count ?? null,
+      seller_rating_evidence_status: row.seller_rating_evidence_status || null,
+      seller_group_count: row.seller_group_count ?? null,
     };
-  });
+    });
 
   return {
     demand_count: eligible.length,
     demand_cohorts: demandCohorts,
     demand_rows: demandRowsSerialized,
+    demand_page: demandEvidencePage.page,
+    demand_page_size: demandEvidencePage.page_size,
+    demand_pages: demandEvidencePage.pages,
+    demand_returned: demandRowsSerialized.length,
     demand_sample_capped: demandSampleCapped,
     demand_repost_count: repostRows.length,
     demand_suppressed_duplicate_count: suppressedIds.size,
@@ -863,6 +892,8 @@ module.exports = async function handler(req, res) {
   let brand = (req.query.brand || '').trim();
   const evidencePage = Math.max(1, Number.parseInt(String(req.query.evidencePage || '1'), 10) || 1);
   const evidencePageSize = Math.min(100, Math.max(25, Number.parseInt(String(req.query.evidencePageSize || '100'), 10) || 100));
+  const demandPage = Math.max(1, Number.parseInt(String(req.query.demandPage || '1'), 10) || 1);
+  const demandPageSize = Math.min(100, Math.max(12, Number.parseInt(String(req.query.demandPageSize || '24'), 10) || 24));
 
   if (!rawRef) return res.status(400).json({ error: 'reference required' });
 
@@ -1506,18 +1537,16 @@ module.exports = async function handler(req, res) {
       selection,
       null,
       familyPrefix,
+      { page: demandPage, pageSize: demandPageSize },
     );
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
-    const outlierEvidenceLimit = 100;
-    const serializedOutliers = outlierRows.slice(0, outlierEvidenceLimit);
-    const comparableOffset = (evidencePage - 1) * evidencePageSize;
-    const serializedComparables = includedRows.slice(comparableOffset, comparableOffset + evidencePageSize);
-    const retainedOffset = (evidencePage - 1) * evidencePageSize;
-    const serializedRetainedEvidence = retainedEvidenceRows.slice(
-      retainedOffset,
-      retainedOffset + evidencePageSize,
-    );
+    const comparableEvidencePage = paginateEvidenceRows(includedRows, evidencePage, evidencePageSize);
+    const retainedEvidencePage = paginateEvidenceRows(retainedEvidenceRows, evidencePage, evidencePageSize);
+    const outlierEvidencePage = paginateEvidenceRows(outlierRows, evidencePage, evidencePageSize);
+    const serializedComparables = comparableEvidencePage.rows;
+    const serializedRetainedEvidence = retainedEvidencePage.rows;
+    const serializedOutliers = outlierEvidencePage.rows;
     const comparableEvidenceRows = serializedComparables.map(r => ({
       id: r.id,
       listing_type: 'WTS',
@@ -1661,6 +1690,14 @@ module.exports = async function handler(req, res) {
       wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
       wtb_demand_count: wtbDemandCount,
       demand_rows: demand?.demand_rows || [],
+      demand_evidence: {
+        returned: demand?.demand_returned || 0,
+        total: wtbDemandCount,
+        page: demand?.demand_page || demandPage,
+        page_size: demand?.demand_page_size || demandPageSize,
+        pages: demand?.demand_pages || Math.max(1, Math.ceil(wtbDemandCount / demandPageSize)),
+        sample_capped: demand?.demand_sample_capped === true,
+      },
       excluded_count: excludedTotalCount,
       excluded_breakdown: reconciliation.excluded_breakdown,
       reconciliation,
@@ -1779,12 +1816,25 @@ module.exports = async function handler(req, res) {
       evidence: {
         comparable_returned: serializedComparables.length,
         comparable_total: includedRows.length,
-        comparable_page: evidencePage,
-        comparable_page_size: evidencePageSize,
-        comparable_pages: Math.max(1, Math.ceil(includedRows.length / evidencePageSize)),
+        comparable_page: comparableEvidencePage.page,
+        comparable_page_size: comparableEvidencePage.page_size,
+        comparable_pages: comparableEvidencePage.pages,
+        retained_returned: serializedRetainedEvidence.length,
+        retained_total: retainedEvidenceRows.length,
+        retained_pages: retainedEvidencePage.pages,
         outliers_returned: serializedOutliers.length,
         outliers_total: outlierRows.length,
-        truncated: includedRows.length > evidencePageSize || outlierRows.length > outlierEvidenceLimit,
+        outlier_pages: outlierEvidencePage.pages,
+        sale_page: comparableEvidencePage.page,
+        sale_pages: Math.max(
+          1,
+          Math.ceil(includedRows.length / evidencePageSize),
+          Math.ceil(retainedEvidenceRows.length / evidencePageSize),
+          Math.ceil(outlierRows.length / evidencePageSize),
+        ),
+        truncated: includedRows.length > evidencePageSize
+          || retainedEvidenceRows.length > evidencePageSize
+          || outlierRows.length > evidencePageSize,
       },
       liquidity,
       monthly, prices, forecast,
@@ -1804,6 +1854,7 @@ module.exports.loadZenithReviewedTradingRows = loadZenithReviewedTradingRows;
 module.exports.loadQnsaExactReleasedEvidence = loadQnsaExactReleasedEvidence;
 module.exports.loadQnsaVerifiedTradingPrices = loadQnsaVerifiedTradingPrices;
 module.exports.normalizeAnalyticsPriceRow = normalizeAnalyticsPriceRow;
+module.exports.paginateEvidenceRows = paginateEvidenceRows;
 module.exports.loadQnsaTradingDemand = loadQnsaTradingDemand;
 module.exports.loadRuntimePriceRecoveryRows = loadRuntimePriceRecoveryRows;
 module.exports.reviewedFamilyPrefix = reviewedFamilyPrefix;

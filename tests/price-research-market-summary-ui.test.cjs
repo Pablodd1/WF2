@@ -17,11 +17,13 @@ test('Price Research visibly preserves qualified WTS and WTB demand without the 
   assert.match(source, /Exclusions remain preserved for authorized audit and analysis/);
 });
 
-test('Reference activity is replaced by one compact WTB Demand summary', () => {
+test('Reference activity is replaced by WTS-first inventory and separate WTB demand', () => {
   assert.doesNotMatch(source, />Reference activity</);
   assert.match(source, /data-testid="wtb-demand-summary"/);
-  assert.match(source, />WTB Demand</);
-  assert.match(source, /WTB activity remains strictly separate from WTS asking-price averages and graphics/);
+  assert.match(source, /Demand Signals \(WTB\)/);
+  assert.match(source, /WTS listings for sale/);
+  assert.match(source, /Previous WTS/);
+  assert.match(source, /Next WTB/);
 });
 
 test('WTB demand section derives a live ratio when legacy indicators are unavailable', () => {

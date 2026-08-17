@@ -16,11 +16,13 @@ test('featured research renders only the controlled Rolex and Patek samples', ()
   assert.match(cohorts, /Patek Philippe Nautilus 5712/);
 });
 
-test('Price Research shows compact full-width WTS evidence and keeps WTB aggregate-only', () => {
+test('Price Research shows full-width paginated WTS evidence followed by pageable WTB cards', () => {
   const page = read('src/pages/PriceResearch.tsx');
-  assert.doesNotMatch(page, /<DemandSignalsSection data=\{data\}/);
+  assert.match(page, /<DemandSignalsSection/);
   assert.match(page, /filter\(row => !\['WTB', 'BUY'\]\.includes/);
-  assert.match(page, /Compact, full-width WTS source evidence only/);
+  assert.match(page, /All available WTS evidence is accessible page by page/);
+  assert.match(page, /Previous WTS/);
+  assert.match(page, /Next WTB/);
   assert.match(page, /width: '100%'/);
   assert.match(page, /grid-cols-\[60px_minmax\(0,1fr\)\] sm:!flex/);
   assert.match(page, /line-clamp-1 sm:line-clamp-2/);
