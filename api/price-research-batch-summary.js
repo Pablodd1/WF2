@@ -6,7 +6,8 @@ const { comparisonKey, normalizeDialValue } = require('./_lib/dial-normalization
 const { classifyDemandEligibility, classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { marketPlausibilityFloor, summarizePrices } = require('./_lib/market-stats.cjs');
-const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
+const { loadReviewedWorkbookEvidenceRows } = require('./_lib/reviewed-workbook-analytics.cjs');
+const { isReviewedWorkbookBrowseBrand } = require('./_lib/reviewed-workbook-browse.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
 const canonicalPriceResearch = require('./price-research.js');
@@ -103,6 +104,8 @@ function buildBatchSummaries(pairs, rows, sampleCapped = false) {
       brand: pair.brand,
       reference: pair.reference,
       source_observation_count: wtsMembers.length + uniqueDemandRows.length,
+      wts_observation_count: wtsMembers.length,
+      wtb_observation_count: uniqueDemandRows.length,
       reference_qualified_wts_count: referenceQualifiedCount,
       reference_analytics_ready: referenceAnalyticsReady,
       selected_dial: pair.dial,
@@ -118,6 +121,8 @@ function buildBatchSummaries(pairs, rows, sampleCapped = false) {
         : sampleCapped,
       count_semantics: {
         source_observation_count: 'Rows returned by the canonical bounded source for this exact brand and reference; this is not an uncapped inventory total.',
+        wts_observation_count: 'Published WTS rows returned for this exact brand and reference, including rows withheld from price analytics.',
+        wtb_observation_count: 'Deduplicated published WTB demand rows returned for this exact brand and reference.',
         reference_qualified_wts_count: 'Outlier-clean, deduplicated WTS rows passing identity, price, currency and dial gates across all dials.',
         selected_dial_qualified_count: 'Outlier-clean qualified WTS rows for the explicitly requested dial only.',
       },
@@ -163,13 +168,16 @@ async function mapWithConcurrency(values, concurrency, task) {
 
 async function loadCanonicalPairRows(client, pair, overrides = {}) {
   const loaders = {
-    loadReviewedWorkbookAnalyticsRows,
+    loadReviewedWorkbookEvidenceRows,
     loadApprovedDirectSubmissionRows: canonicalPriceResearch.loadApprovedDirectSubmissionRows,
     loadQnsaVerifiedTradingPrices: canonicalPriceResearch.loadQnsaVerifiedTradingPrices,
     loadQnsaTradingDemand: canonicalPriceResearch.loadQnsaTradingDemand,
     loadRuntimePriceRecoveryRows: canonicalPriceResearch.loadRuntimePriceRecoveryRows,
     ...overrides,
   };
+  loaders.loadReviewedWorkbookEvidenceRows = overrides.loadReviewedWorkbookEvidenceRows
+    || overrides.loadReviewedWorkbookAnalyticsRows
+    || loadReviewedWorkbookEvidenceRows;
   const referenceVariants = listEquivalentReferences(pair.reference, pair.brand);
   const familyPrefix = (overrides.reviewedFamilyPrefix || canonicalPriceResearch.reviewedFamilyPrefix)(pair.brand, pair.reference);
   const configuredSource = Object.hasOwn(overrides, 'configuredSource')
@@ -178,7 +186,7 @@ async function loadCanonicalPairRows(client, pair, overrides = {}) {
   const catalog = lookupCatalog(pair.reference, pair.brand);
   const exactKnownReference = Boolean(catalog?.found && catalog.matchType !== 'partial' && catalog.reference);
   const publicationAllowed = isPublicationReferenceAllowed(pair.brand, pair.reference);
-  if (!configuredSource && !exactKnownReference && !publicationAllowed) {
+  if (!configuredSource && !isReviewedWorkbookBrowseBrand(pair.brand) && !exactKnownReference && !publicationAllowed) {
     return { pair, rows: [], capped: false, withheld: 'REFERENCE_NOT_RELEASED' };
   }
 
@@ -194,9 +202,14 @@ async function loadCanonicalPairRows(client, pair, overrides = {}) {
     });
     recovery = await loaders.loadRuntimePriceRecoveryRows(client, { brand: pair.brand, referenceVariants });
   } else {
-    wts = await loaders.loadReviewedWorkbookAnalyticsRows(client, {
+    const workbookEvidence = await loaders.loadReviewedWorkbookEvidenceRows(client, {
       brand: pair.brand, references: referenceVariants, limit: PER_PAIR_LIMIT,
     });
+    wts = workbookEvidence.filter(row => clean(row.listing_type).toUpperCase() === 'WTS');
+    wtb = workbookEvidence.filter(row => ['WTB', 'NTQ'].includes(clean(row.listing_type).toUpperCase()));
+    if (!workbookEvidence.length && !exactKnownReference && !publicationAllowed) {
+      return { pair, rows: [], capped: false, withheld: 'REFERENCE_NOT_RELEASED' };
+    }
   }
   const directWts = await loaders.loadApprovedDirectSubmissionRows(client, {
     brand: pair.brand, referenceVariants, intent: 'WTS', limit: PER_PAIR_LIMIT,
@@ -241,7 +254,14 @@ function getOrCreateCachedValue(key, factory, now = Date.now()) {
 async function loadSourceRows(client, pairs, options = {}) {
   const identityPairs = [...new Map(pairs.map(pair => [exactPairKey(pair.brand, pair.reference), pair])).values()];
   const loadPair = options.loadPair || ((pair) => loadCanonicalPairRows(client, pair, options.pairOverrides));
-  const results = await mapWithConcurrency(identityPairs, 2, loadPair);
+  const results = await mapWithConcurrency(identityPairs, 2, async pair => {
+    try {
+      return await loadPair(pair);
+    } catch (error) {
+      console.warn('[price-research-batch-summary] pair unavailable:', pair.brand, pair.reference, error?.message || error);
+      return { pair, rows: [], capped: false, withheld: 'SOURCE_UNAVAILABLE' };
+    }
+  });
   return {
     rows: results.flatMap(result => result.rows),
     capped: new Set(results.filter(result => result.capped).map(result => exactPairKey(result.pair.brand, result.pair.reference))),

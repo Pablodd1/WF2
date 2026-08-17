@@ -9,6 +9,8 @@ export interface PriceResearchBatchSummary {
   brand: string;
   reference: string;
   source_observation_count: number;
+  wts_observation_count: number;
+  wtb_observation_count: number;
   reference_qualified_wts_count: number;
   reference_analytics_ready: boolean;
   selected_dial: string | null;

@@ -8,6 +8,7 @@ const test = require('node:test');
 const {
   LEGACY_WORKBOOK_COLUMNS,
   isMissingColumnError,
+  loadReviewedWorkbookEvidenceRows,
   loadReviewedWorkbookAnalyticsRows,
   mapWorkbookAnalyticsRow,
 } = require('../api/_lib/reviewed-workbook-analytics.cjs');
@@ -97,12 +98,12 @@ test('qualified sidecar price becomes the effective WTS analytics price with aud
 
 test('Price Research prefers verified reviewed-workbook cohorts and keeps legacy fallback', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
-  assert.match(source, /loadReviewedWorkbookAnalyticsRows/);
-  assert.match(source, /const usingReviewedWorkbook = reviewedWorkbookRows\.length > 0/);
-  assert.match(source, /const exactReviewedWorkbookRelease = preloadedReviewedWorkbookRows\.length > 0/);
+  assert.match(source, /loadReviewedWorkbookEvidenceRows/);
+  assert.match(source, /const usingReviewedWorkbook = preloadedReviewedWorkbookEvidenceRows\.length > 0/);
+  assert.match(source, /const exactReviewedWorkbookRelease = preloadedReviewedWorkbookEvidenceRows\.length > 0/);
   assert.match(source, /!exactReviewedWorkbookRelease && !isPublicationBrandAllowed\(brand\)/);
   assert.match(source, /!exactReviewedWorkbookRelease && !isPublicationReferenceAllowed\(brand, rawRef\)/);
-  assert.match(source, /else if \(usingReviewedWorkbook\) \{\s*rows = reviewedWorkbookRows/);
+  assert.match(source, /if \(usingReviewedWorkbook\) \{\s*rows = reviewedWorkbookRows/);
   assert.match(source, /reviewed workbook analytics unavailable; using legacy cohort/);
   assert.match(source, /analytics_source: usingReviewedWorkbook/);
 });
@@ -153,11 +154,35 @@ test('reviewed workbook analytics uses the indexed exact reference column', asyn
   assert.deepEqual(calls.find(call => call[0] === 'limit'), ['limit', 250]);
 });
 
+test('reviewed workbook evidence loads approved WTS and WTB without promoting unverified prices', async () => {
+  const calls = [];
+  const query = {
+    select(value) { calls.push(['select', value]); return this; },
+    eq(column, value) { calls.push(['eq', column, value]); return this; },
+    in(column, value) { calls.push(['in', column, value]); return this; },
+    order(column, options) { calls.push(['order', column, options]); return this; },
+    async limit(value) {
+      calls.push(['limit', value]);
+      return { data: [
+        { id: 'sale', brand_scope: 'Breguet', normalized_reference: '7097BB', listing_type: 'WTS', verification_status: 'APPROVED_SINGLE_CANDIDATE', confidence: 100, raw_message: 'Breguet 7097BB available', source_price_amount: 50000 },
+        { id: 'demand', brand_scope: 'Breguet', normalized_reference: '7097BB', listing_type: 'WTB', verification_status: 'APPROVED_SINGLE_CANDIDATE', confidence: 100, raw_message: 'WTB Breguet 7097BB' },
+      ], error: null };
+    },
+  };
+  const rows = await loadReviewedWorkbookEvidenceRows({ from(view) { calls.push(['from', view]); return query; } }, {
+    brand: 'Breguet', references: ['7097BB'], limit: 100,
+  });
+  assert.deepEqual(rows.map(row => row.listing_type), ['WTS', 'WTB']);
+  assert.equal(rows[0].price_usd, null);
+  assert.deepEqual(calls.find(call => call[0] === 'in' && call[1] === 'listing_type'), ['in', 'listing_type', ['WTS', 'WTB']]);
+  assert.equal(calls.some(call => call[1] === 'price_evidence_status'), false);
+});
+
 test('Price Research passes exact catalog reference variants to the indexed workbook loader', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
   assert.match(source, /const preloadReferences = listEquivalentReferences\(rawRef, brand\)/);
-  assert.match(source, /loadReviewedWorkbookAnalyticsRows\(client, \{\s*brand,\s*references: preloadReferences/);
-  assert.match(source, /loadReviewedWorkbookAnalyticsRows\(client, \{\s*brand,\s*references: referenceVariants/);
+  assert.match(source, /loadReviewedWorkbookEvidenceRows\(client, \{\s*brand,\s*references: preloadReferences/);
+  assert.match(source, /loadReviewedWorkbookEvidenceRows\(client, \{\s*brand, references: referenceVariants/);
   assert.doesNotMatch(source, /referenceKeys:/);
 });
 
@@ -194,4 +219,8 @@ test('Price Research listing detail supports the same reviewed workbook evidence
   assert.match(source, /loadReviewedWorkbookListing/);
   assert.match(source, /price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH'/);
   assert.match(source, /image_provenance: workbookListing\.has_images \? 'source_supplied' : 'none'/);
+  const loader = fs.readFileSync(path.join(__dirname, '..', 'api', '_lib', 'reviewed-workbook-analytics.cjs'), 'utf8');
+  const detailBranch = loader.slice(loader.indexOf("startsWith('admission_')"), loader.indexOf('const executeListingQuery'));
+  assert.match(detailBranch, /in\('listing_type', \['WTS', 'WTB'\]\)/);
+  assert.doesNotMatch(detailBranch, /price_evidence_status|workbook_price_usd/);
 });
