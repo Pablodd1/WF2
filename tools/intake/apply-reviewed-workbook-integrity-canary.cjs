@@ -71,7 +71,7 @@ function canaryMetadata(row) {
   return { canary_priority: priority, canary_category: category };
 }
 
-function buildPlan({ identityRows = [], residualIdentityRows = [], priceRows = [], driftPriceRows = [] }) {
+function buildPlan({ identityRows = [], residualIdentityRows = [], priceRows = [], driftPriceRows = [], promotionRows = [] }) {
   const actions = [];
   for (const [rows, actionName] of [
     [identityRows, 'QUARANTINE_IDENTITY_CONFLICT'],
@@ -142,6 +142,25 @@ function buildPlan({ identityRows = [], residualIdentityRows = [], priceRows = [
       ...canaryMetadata(row),
     });
   }
+  for (const row of promotionRows) {
+    const proposedPrice = Number(row.proposed_price_usd);
+    if (text(row.action) !== 'PROMOTE_EXACT_RAW_USD_PRICE'
+      || text(row.expected_status) !== 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE'
+      || text(row.new_status) !== 'SOURCE_EXPLICIT_USD_MATCH'
+      || !Number.isFinite(proposedPrice) || proposedPrice < 1000
+      || !['USD', 'USDT'].includes(text(row.source_currency).toUpperCase())) {
+      throw new Error('promotion manifest control fields are invalid');
+    }
+    actions.push({
+      action: 'PROMOTE_EXACT_RAW_USD_PRICE',
+      id: text(row.listing_id),
+      source_payload_sha256: validateHash(row.source_payload_sha256, 'source_payload_sha256'),
+      expected: { verification_status: 'APPROVED_SINGLE_CANDIDATE', price_evidence_status: 'PRICE_RESEARCH_ADMISSION_NOT_ELIGIBLE' },
+      patch: { price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH', workbook_price_usd: proposedPrice },
+      evidence_reason: 'EXACT_RAW_USD_USDT_IDENTITY_SUPPORTED',
+      ...canaryMetadata(row),
+    });
+  }
   if (actions.some(action => !action.id)) throw new Error('listing_id is required');
   const duplicates = actions.filter((action, index) => actions.findIndex(other => other.id === action.id) !== index);
   if (duplicates.length) throw new Error('manifests contain overlapping or duplicate listing ids');
@@ -185,11 +204,12 @@ function parseArgs(argv) {
     identityManifest: values['identity-manifest'],
     residualIdentityManifest: values['residual-identity-manifest'],
     priceManifest: values['price-manifest'],
-    driftPriceManifest: values['drift-price-manifest'],
+    driftPriceManifest: values['drift-price-manifest'], promotionManifest: values['promotion-manifest'],
     outputDir: path.resolve(values['output-dir'] || path.join('audit-output', `reviewed-integrity-${Date.now()}`)),
     confirmProject: values['confirm-project'], confirm: values.confirm,
     maxIdentity: Number(values['max-identity'] || 0), maxPrice: Number(values['max-price'] || 0),
     maxLegacy: Number(values['max-legacy'] || 0), maxResidual: Number(values['max-residual'] || 0),
+    maxPromotion: Number(values['max-promotion'] || 0),
     runSha: values['run-sha'],
     canaryReport: values['canary-report'],
   };
@@ -228,7 +248,10 @@ function selectActions(plan, options) {
   const legacy = representatives(plan.filter(action => (
     action.action === 'RECONCILE_LEGACY_LEDGER_PRICE_EVIDENCE'
   )), options.maxLegacy);
-  return [...identity, ...residual, ...price, ...legacy].sort((left, right) => left.id.localeCompare(right.id));
+  const promotion = representatives(plan.filter(action => (
+    action.action === 'PROMOTE_EXACT_RAW_USD_PRICE'
+  )), Number(options.maxPromotion || 0));
+  return [...identity, ...residual, ...price, ...legacy, ...promotion].sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function sqlLiteral(value) { return `'${String(value).replaceAll("'", "''")}'`; }
@@ -242,7 +265,8 @@ function atomicFullSql(actions) {
     new_verification_status: action.patch.verification_status || null,
     expected_price_status: action.expected.price_evidence_status || null,
     new_price_status: action.patch.price_evidence_status || null,
-    null_price: Object.hasOwn(action.patch, 'workbook_price_usd'),
+    set_price: Object.hasOwn(action.patch, 'workbook_price_usd'),
+    new_price: Object.hasOwn(action.patch, 'workbook_price_usd') ? action.patch.workbook_price_usd : null,
   }));
   const json = sqlLiteral(JSON.stringify(payload));
   return `BEGIN;
@@ -252,7 +276,7 @@ CREATE TEMP TABLE reviewed_integrity_plan ON COMMIT DROP AS
 SELECT * FROM jsonb_to_recordset(${json}::jsonb) AS p(
   id text, source_payload_sha256 text, action text,
   expected_verification_status text, new_verification_status text,
-  expected_price_status text, new_price_status text, null_price boolean
+  expected_price_status text, new_price_status text, set_price boolean, new_price numeric
 );
 DO $control$
 DECLARE
@@ -279,7 +303,8 @@ BEGIN
       AND t.verification_status IN (p.expected_verification_status, p.new_verification_status)
       AND (p.expected_price_status IS NULL
         OR t.price_evidence_status IN (p.expected_price_status, p.new_price_status)))
-     OR (p.action IN ('HOLD_CURRENCY_CONFLICT_PRICE', 'RECONCILE_LEGACY_LEDGER_PRICE_EVIDENCE')
+     OR (p.action IN ('HOLD_CURRENCY_CONFLICT_PRICE', 'RECONCILE_LEGACY_LEDGER_PRICE_EVIDENCE', 'PROMOTE_EXACT_RAW_USD_PRICE')
+      AND (p.expected_verification_status IS NULL OR t.verification_status = p.expected_verification_status)
       AND t.price_evidence_status IN (p.expected_price_status, p.new_price_status));
   IF eligible_count <> expected_count THEN
     RAISE EXCEPTION 'eligible state count % differs from plan %', eligible_count, expected_count;
@@ -297,7 +322,7 @@ BEGIN
         THEN p.new_verification_status ELSE t.verification_status END,
       price_evidence_status = CASE WHEN p.new_price_status IS NOT NULL
         THEN p.new_price_status ELSE t.price_evidence_status END,
-      workbook_price_usd = CASE WHEN p.null_price THEN NULL ELSE t.workbook_price_usd END,
+      workbook_price_usd = CASE WHEN p.set_price THEN p.new_price ELSE t.workbook_price_usd END,
       updated_at = now()
   FROM reviewed_integrity_plan p
   WHERE p.id = t.id AND p.source_payload_sha256 = t.source_payload_sha256;
@@ -324,9 +349,10 @@ BEGIN
       AND t.verification_status = p.new_verification_status
       AND (p.new_price_status IS NULL OR (t.price_evidence_status = p.new_price_status
         AND (NOT p.null_price OR t.workbook_price_usd IS NULL))))
-     OR (p.action IN ('HOLD_CURRENCY_CONFLICT_PRICE', 'RECONCILE_LEGACY_LEDGER_PRICE_EVIDENCE')
+     OR (p.action IN ('HOLD_CURRENCY_CONFLICT_PRICE', 'RECONCILE_LEGACY_LEDGER_PRICE_EVIDENCE', 'PROMOTE_EXACT_RAW_USD_PRICE')
+      AND (p.new_verification_status IS NULL OR t.verification_status = p.new_verification_status)
       AND t.price_evidence_status = p.new_price_status
-      AND (NOT p.null_price OR t.workbook_price_usd IS NULL));
+      AND (NOT p.set_price OR t.workbook_price_usd IS NOT DISTINCT FROM p.new_price));
   IF matched_count <> expected_count THEN
     RAISE EXCEPTION 'post-update reconciliation count % differs from plan %', matched_count, expected_count;
   END IF;
@@ -376,10 +402,11 @@ async function run(argv = process.argv.slice(2)) {
   const residualIdentity = readCsv(options.residualIdentityManifest);
   const price = readCsv(options.priceManifest);
   const driftPrice = readCsv(options.driftPriceManifest);
+  const promotion = readCsv(options.promotionManifest);
   const plan = buildPlan({
     identityRows: identity.rows || [], residualIdentityRows: residualIdentity.rows || [],
     priceRows: price.rows || [],
-    driftPriceRows: driftPrice.rows || [],
+    driftPriceRows: driftPrice.rows || [], promotionRows: promotion.rows || [],
   });
   const actions = selectActions(plan, options);
   const fullPlanSha256 = sha256(JSON.stringify(plan));
@@ -393,6 +420,7 @@ async function run(argv = process.argv.slice(2)) {
       residualIdentity.file && { role: 'residual_identity_conflicts', file: residualIdentity.file, sha256: residualIdentity.sha256, rows: residualIdentity.rows.length },
       price.file && { role: 'three_brand_currency_regressions', file: price.file, sha256: price.sha256, rows: price.rows.length },
       driftPrice.file && { role: 'legacy_ledger_price_drift', file: driftPrice.file, sha256: driftPrice.sha256, rows: driftPrice.rows.length },
+      promotion.file && { role: 'exact_raw_usd_promotions', file: promotion.file, sha256: promotion.sha256, rows: promotion.rows.length },
     ].filter(Boolean),
     planned_rows: plan.length, requested_rows: actions.length,
     full_plan_sha256: fullPlanSha256,
