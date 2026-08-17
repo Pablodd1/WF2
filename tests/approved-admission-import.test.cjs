@@ -16,7 +16,7 @@ function source(overrides = {}) {
     source_message_id: 'message-1',
     source_posted_at: '2026-08-11T12:00:00Z',
     ingested_at: '2026-08-11T12:01:00Z',
-    raw_message: 'TAG Heuer Carrera CBS2210.FC6534 blue dial USD 6500',
+    raw_message: 'TAG Heuer Carrera CBS2210.FC6534 blue dial WTS USD 6500',
     intent: 'WTS',
     category: 'WATCH',
     asking_price_raw: 'USD 6500',
@@ -117,12 +117,60 @@ test('non-USD FX remains review evidence but is excluded from current analytics'
   assert.equal(evidence.status, 'DATED_FX_PROVENANCE_REQUIRES_EXISTING_SIDECAR');
 });
 
+test('bare-dollar evidence is never promoted to explicit USD in owner-unbundled mode', () => {
+  const evidence = intake.sourcePriceEvidence(source({
+    raw_message: 'H. Moser Streamliner 6200-1200 WTS $13,500',
+    asking_price_raw: '$13,500',
+    source_currency: 'USD',
+    normalized_price_usd: 13500,
+  }), { rawExplicitUsdOnly: true });
+  assert.equal(evidence.status, 'PRICE_NOT_SUPPLIED');
+  assert.equal(evidence.currency, null);
+  assert.equal(evidence.workbookPriceUsd, null);
+});
+
+test('exact duplicate candidates retain one deterministic canonical row', () => {
+  const base = intake.rowForImport({
+    source: source(), decision: decision(), expectedBrand: 'TAG Heuer',
+    fileName: 'input.xlsx', fileSha256: '1'.repeat(64), rowNumber: 3, runId: 'test',
+  });
+  const earlier = {
+    ...base,
+    id: 'earlier',
+    content_hash: 'earlier-hash',
+    source_row_number: 2,
+    posting_date: '2026-08-10T12:00:00Z',
+    source_payload_sha256: '2'.repeat(64),
+  };
+  const resolution = intake.canonicalizeExactDuplicates([base, earlier]);
+  assert.equal(resolution.canonical.length, 1);
+  assert.equal(resolution.canonical[0].id, 'earlier');
+  assert.equal(resolution.excluded.length, 1);
+  assert.equal(resolution.excluded[0].disposition, 'DUPLICATE/REPOST');
+  assert.equal(resolution.excluded[0].canonical_id, 'earlier');
+  assert.equal(resolution.excluded[0].excluded_id, base.id);
+});
+
+test('ledger duplicate evidence is hashed and excludes raw/contact values', () => {
+  const evidence = intake.ledgerDuplicateEvidence({
+    source: source(),
+    decision: decision({ duplicate_decision: 'REPOST' }),
+    fileSha256: '3'.repeat(64),
+    rowNumber: 9,
+  });
+  assert.equal(evidence.disposition, 'DUPLICATE/REPOST');
+  assert.match(evidence.evidence_basis, /REPOST/);
+  assert.equal(evidence.source_row_number, 9);
+  assert.equal(Object.hasOwn(evidence, 'raw_message'), false);
+  assert.equal(Object.hasOwn(evidence, 'seller_name_source'), false);
+});
+
 test('owner-reviewed unbundled children publish without inherited media and use exact child USD', () => {
   const row = intake.rowForImport({
     source: source({
       listing_id: 'moser-child-1',
       source_message_id: 'moser-message-1_item_1',
-      raw_message: 'H. Moser Streamliner 6200-1200 available $13,500',
+      raw_message: 'H. Moser Streamliner 6200-1200 available USD 13,500',
       intent: 'WTS',
       image_urls_source: 'https://example.test/parent-bundle.jpg',
       normalized_price_usd: 13,

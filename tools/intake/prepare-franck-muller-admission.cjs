@@ -42,6 +42,24 @@ function invalidReference(value) {
   return !reference || /^UNSPECIFIED$/i.test(reference) || CURRENCY_SUFFIX.test(reference);
 }
 
+function admissionIntent(rawMessage, sourceIntent = '') {
+  const raw = text(rawMessage);
+  const supplied = text(sourceIntent).toUpperCase().replace(/[\s-]+/g, '_');
+  const rawBuySide = /(?:\bWTB\b|\bNTQ\b|\bLTB\b|\bISO\b|\bLF\b|want\s+to\s+buy|looking\s+(?:for|to\s+buy)|\bneed(?:ed)?\b|seeking|wanted|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)/i.test(raw);
+  const rawSellSide = /(?:\bWTS\b|\bLTS\b|\bLQT\b|\bLTQ\b|\bFS\b|for\s+sale|want\s+to\s+sell|selling|\bavailable\b|stock\s+clearance|\bsale\b)/i.test(raw);
+  // Explicit buy-side language wins over a budget or a stray sale token. A
+  // WTB with a price is demand, never inventory for sale.
+  if (rawBuySide) return { intent: 'WTB', raw_buy_side: true, raw_sell_side: rawSellSide, basis: 'RAW_BUY_SIDE' };
+  if (rawSellSide) return { intent: 'WTS', raw_buy_side: false, raw_sell_side: true, basis: 'RAW_SELL_SIDE' };
+  if (['WTB', 'NTQ', 'LTB', 'ISO', 'LOOKING', 'NEED'].includes(supplied)) {
+    return { intent: 'WTB', raw_buy_side: false, raw_sell_side: false, basis: 'SOURCE_INTENT' };
+  }
+  if (['WTS', 'LTS', 'LQT', 'LTQ', 'FS', 'FOR_SALE'].includes(supplied)) {
+    return { intent: 'WTS', raw_buy_side: false, raw_sell_side: false, basis: 'SOURCE_INTENT' };
+  }
+  return { intent: 'OTHER', raw_buy_side: false, raw_sell_side: false, basis: 'UNRESOLVED' };
+}
+
 function requireHeaders(rows, headers, name) {
   const present = Object.keys(rows[0] || {});
   const missing = headers.filter(header => !present.includes(header));
@@ -77,7 +95,7 @@ function classifyRow(source, decision, expectedBrand = 'Franck Muller') {
   const reasons = [];
   const finalBrand = text(decision.final_brand);
   const category = text(source.category).toUpperCase();
-  const intent = text(source.intent).toUpperCase();
+  const intentEvidence = admissionIntent(source.raw_message, source.intent);
   const reference = normalizeReference(decision.final_reference);
   const requestedPublish = text(decision.trading_floor_status).toUpperCase() === 'PUBLISH';
 
@@ -96,7 +114,8 @@ function classifyRow(source, decision, expectedBrand = 'Franck Muller') {
 
   const tradingFloorCandidate = reasons.length === 0;
   const priceResearchCandidate = Boolean(tradingFloorCandidate
-    && intent === 'WTS'
+    && intentEvidence.intent === 'WTS'
+    && intentEvidence.raw_sell_side
     && text(decision.price_research_status).toUpperCase() === 'ELIGIBLE'
     && Number.isFinite(Number(source.normalized_price_usd))
     && Number(source.normalized_price_usd) > 0
@@ -105,13 +124,17 @@ function classifyRow(source, decision, expectedBrand = 'Franck Muller') {
     && text(source.fx_rate_date));
 
   if (tradingFloorCandidate && !priceResearchCandidate && text(decision.price_research_status).toUpperCase() === 'ELIGIBLE') {
-    reasons.push('PRICE_RESEARCH_EVIDENCE_INCOMPLETE');
+    if (intentEvidence.intent === 'WTB') reasons.push('WTB_DEMAND_EXCLUDED_FROM_WTS_ANALYTICS');
+    else if (intentEvidence.intent === 'WTS' && !intentEvidence.raw_sell_side) reasons.push('RAW_SELL_SIDE_LANGUAGE_MISSING');
+    else reasons.push('PRICE_RESEARCH_EVIDENCE_INCOMPLETE');
   }
   return {
     final_brand: tradingFloorCandidate ? finalBrand : null,
     final_reference: tradingFloorCandidate ? reference : null,
     trading_floor_candidate: tradingFloorCandidate,
     price_research_candidate: priceResearchCandidate,
+    resolved_intent: intentEvidence.intent,
+    intent_basis: intentEvidence.basis,
     disposition: tradingFloorCandidate ? 'REVIEW_REQUIRED' : 'HOLD_FOR_REVIEW',
     reasons,
   };
@@ -129,6 +152,8 @@ function decisionRow(source, decision, rowNumber, expectedBrand = 'Franck Muller
     dial_normalized: text(decision?.dial_normalized) || null,
     final_reference: admission.final_reference,
     source_intent: text(source.intent) || null,
+    resolved_intent: admission.resolved_intent,
+    intent_basis: admission.intent_basis,
     source_category: text(source.category) || null,
     requested_trading_floor_status: text(decision?.trading_floor_status) || null,
     identity_status: text(decision?.identity_status) || null,
@@ -203,4 +228,12 @@ if (require.main === module) {
   try { run(); } catch (error) { process.stderr.write(`${JSON.stringify({ status: 'error', error: error.message })}\n`); process.exitCode = 1; }
 }
 
-module.exports = { SOURCE_HEADERS, DECISION_HEADERS, classifyRow, decisionRow, invalidReference, normalizeReference };
+module.exports = {
+  SOURCE_HEADERS,
+  DECISION_HEADERS,
+  admissionIntent,
+  classifyRow,
+  decisionRow,
+  invalidReference,
+  normalizeReference,
+};

@@ -9,10 +9,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const XLSX = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
-const { explicitIntent, extractPriceObservations } = require('../../api/_lib/normalization-v4.cjs');
+const { extractPriceObservations } = require('../../api/_lib/normalization-v4.cjs');
 const {
   SOURCE_HEADERS,
   DECISION_HEADERS,
+  admissionIntent,
   classifyRow,
   normalizeReference,
 } = require('./prepare-franck-muller-admission.cjs');
@@ -31,6 +32,11 @@ const OWNER_UNBUNDLED_BRANDS = new Set([
   'Jacob & Co',
   'Ulysse Nardin',
   'Zenith',
+]);
+const PRICE_RESEARCH_ONLY_REASONS = new Set([
+  'PRICE_RESEARCH_EVIDENCE_INCOMPLETE',
+  'RAW_SELL_SIDE_LANGUAGE_MISSING',
+  'WTB_DEMAND_EXCLUDED_FROM_WTS_ANALYTICS',
 ]);
 
 function text(value) {
@@ -110,10 +116,6 @@ function sourcePriceEvidence(source, options = {}) {
       ['USD', 'USDT'].includes(String(item.currency_original || '').toUpperCase())
       && Number(item.amount_original) > 0
       && item.currency_evidence === 'explicit_line_currency'
-    )) || observations.find(item => (
-      String(item.currency_original || '').toUpperCase() === 'USD'
-      && Number(item.amount_original) > 0
-      && item.currency_evidence === 'usd_defaulted_by_policy'
     ));
     if (explicitUsd) {
       return {
@@ -225,12 +227,9 @@ function classifyOwnerUnbundledRow(source, decision, expectedBrand) {
 }
 
 function resolvedListingType(source, ownerUnbundled) {
-  if (ownerUnbundled) {
-    const rawIntent = explicitIntent(text(source.raw_message));
-    if (rawIntent === 'WTS' || rawIntent === 'WTB') return rawIntent;
-    if (/\b(?:ISO|LTB|looking\s+for|want(?:ed)?|need)\b/i.test(text(source.raw_message))) return 'WTB';
-  }
-  return listingType(source.intent);
+  const evidence = admissionIntent(source.raw_message, source.intent);
+  if (evidence.intent === 'WTS' || evidence.intent === 'WTB') return evidence.intent;
+  return ownerUnbundled ? 'OTHER' : listingType(source.intent);
 }
 
 function rowForImport({ source, decision, expectedBrand, fileName, fileSha256, rowNumber, runId, ownerUnbundled = false }) {
@@ -248,8 +247,12 @@ function rowForImport({ source, decision, expectedBrand, fileName, fileSha256, r
   const image = ownerUnbundled ? null : firstExactImage(source.image_urls_source);
   const resolvedType = resolvedListingType(source, ownerUnbundled);
   const extractedPrice = sourcePriceEvidence(source, { rawExplicitUsdOnly: ownerUnbundled });
+  const intentEvidence = admissionIntent(rawMessage, source.intent);
   const priceResearchCandidate = ownerUnbundled
-    ? resolvedType === 'WTS' && extractedPrice.status === 'SOURCE_EXPLICIT_USD_MATCH' && Boolean(reference)
+    ? resolvedType === 'WTS'
+      && intentEvidence.raw_sell_side
+      && extractedPrice.status === 'SOURCE_EXPLICIT_USD_MATCH'
+      && Boolean(reference)
     : admission.price_research_candidate;
   const price = priceResearchCandidate
     ? extractedPrice
@@ -326,6 +329,65 @@ function rowForImport({ source, decision, expectedBrand, fileName, fileSha256, r
   };
 }
 
+function exactDuplicateKey(row) {
+  return sha256([
+    text(row.brand_scope).toLowerCase(),
+    text(row.posted_by).toLowerCase(),
+    text(row.raw_message).toLowerCase().replace(/\s+/g, ' '),
+    text(row.model).toLowerCase(),
+    text(row.normalized_reference).toUpperCase(),
+    text(row.dial_color).toLowerCase(),
+    text(row.listing_type).toUpperCase(),
+  ].join('|'));
+}
+
+function canonicalizeExactDuplicates(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const key = exactDuplicateKey(row);
+    const group = groups.get(key) || [];
+    group.push(row);
+    groups.set(key, group);
+  }
+  const canonical = [];
+  const excluded = [];
+  for (const [duplicateKey, group] of groups) {
+    group.sort((left, right) => (
+      Date.parse(left.posting_date || '') - Date.parse(right.posting_date || '')
+      || Number(left.source_row_number) - Number(right.source_row_number)
+      || String(left.id).localeCompare(String(right.id))
+    ));
+    canonical.push(group[0]);
+    for (const duplicate of group.slice(1)) {
+      excluded.push({
+        disposition: 'DUPLICATE/REPOST',
+        evidence_basis: 'EXACT_NORMALIZED_SOURCE_SIGNATURE',
+        duplicate_key_sha256: duplicateKey,
+        canonical_id: group[0].id,
+        excluded_id: duplicate.id,
+        source_file_sha256: duplicate.source_file_sha256,
+        source_row_number: duplicate.source_row_number,
+        source_payload_sha256: duplicate.source_payload_sha256,
+      });
+    }
+  }
+  canonical.sort((left, right) => left.source_row_number - right.source_row_number);
+  return { canonical, excluded };
+}
+
+function ledgerDuplicateEvidence({ source, decision, fileSha256, rowNumber }) {
+  return {
+    disposition: 'DUPLICATE/REPOST',
+    evidence_basis: `ADMISSION_LEDGER_${text(decision.duplicate_decision).toUpperCase() || 'EXCLUDED'}`,
+    canonical_id: null,
+    source_file_sha256: fileSha256,
+    source_row_number: rowNumber,
+    source_record_id_sha256: sha256(text(source.listing_id)),
+    source_message_id_sha256: sha256(text(source.source_message_id)),
+    source_payload_sha256: sha256(JSON.stringify({ source, decision })),
+  };
+}
+
 function parseArgs(argv) {
   const values = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -370,6 +432,7 @@ async function run(argv = process.argv.slice(2)) {
   const workbook = readAdmissionWorkbook(options.input);
   const fileName = path.basename(options.input);
   const candidates = [];
+  const excludedDuplicateEvidence = [];
   const heldReasons = {};
   const analyticsHeldReasons = {};
   let missingDecisions = 0;
@@ -383,17 +446,25 @@ async function run(argv = process.argv.slice(2)) {
       ? classifyOwnerUnbundledRow(source, decision, options.brand)
       : classifyRow(source, decision, options.brand);
     const priceOnlyReasons = admission.reasons.filter(
-      reason => reason === 'PRICE_RESEARCH_EVIDENCE_INCOMPLETE',
+      reason => PRICE_RESEARCH_ONLY_REASONS.has(reason),
     );
     for (const reason of priceOnlyReasons) {
       analyticsHeldReasons[reason] = (analyticsHeldReasons[reason] || 0) + 1;
     }
     const importReasons = [
-      ...admission.reasons.filter(reason => reason !== 'PRICE_RESEARCH_EVIDENCE_INCOMPLETE'),
+      ...admission.reasons.filter(reason => !PRICE_RESEARCH_ONLY_REASONS.has(reason)),
       ...additionalImportReasons(source, { allowNoImage: options.ownerUnbundled }),
     ];
     if (!admission.trading_floor_candidate || importReasons.length) {
       for (const reason of importReasons) heldReasons[reason] = (heldReasons[reason] || 0) + 1;
+      if (importReasons.includes('REPOST_OR_DUPLICATE_EXCLUDED')) {
+        excludedDuplicateEvidence.push(ledgerDuplicateEvidence({
+          source,
+          decision,
+          fileSha256: workbook.fileSha256,
+          rowNumber: index + 2,
+        }));
+      }
       return;
     }
     candidates.push(rowForImport({
@@ -407,10 +478,9 @@ async function run(argv = process.argv.slice(2)) {
       ownerUnbundled: options.ownerUnbundled,
     }));
   });
-  const uniqueCandidates = [...new Map(candidates.map(row => [row.id, row])).values()];
-  if (uniqueCandidates.length !== candidates.length) {
-    throw new Error('strict candidate IDs are not unique');
-  }
+  const duplicateResolution = canonicalizeExactDuplicates(candidates);
+  const uniqueCandidates = duplicateResolution.canonical;
+  excludedDuplicateEvidence.push(...duplicateResolution.excluded);
   const limit = options.maxRows || uniqueCandidates.length;
   const selected = uniqueCandidates.slice(0, limit);
   let resumeAt = 0;
@@ -485,6 +555,8 @@ async function run(argv = process.argv.slice(2)) {
     missing_decisions: missingDecisions,
     contact_publication_approved_rows: selected.filter(row => row.contact_publication_approved).length,
     bundle_rows_selected: selected.filter(row => /BUNDLE|MULTI/i.test(row.listing_type)).length,
+    duplicate_or_repost_evidence_rows: excludedDuplicateEvidence.length,
+    exact_duplicate_candidates_excluded: duplicateResolution.excluded.length,
     unbundled_no_image_policy: options.ownerUnbundled,
     rows_with_images: selected.filter(row => row.final_image_url).length,
     rows_with_exact_raw_usd: selected.filter(row => row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH').length,
@@ -499,6 +571,10 @@ async function run(argv = process.argv.slice(2)) {
   };
   fs.mkdirSync(options.outputDir, { recursive: true });
   fs.writeFileSync(path.join(options.outputDir, 'canary-manifest.json'), `${JSON.stringify(report, null, 2)}\n`);
+  fs.writeFileSync(
+    path.join(options.outputDir, 'excluded-duplicate-evidence.json'),
+    `${JSON.stringify(excludedDuplicateEvidence, null, 2)}\n`,
+  );
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   return report;
 }
@@ -514,8 +590,12 @@ module.exports = {
   CHECKPOINT_TABLE,
   INVENTORY_TABLE,
   OWNER_UNBUNDLED_BRANDS,
+  PRICE_RESEARCH_ONLY_REASONS,
   firstExactImage,
   additionalImportReasons,
+  canonicalizeExactDuplicates,
+  exactDuplicateKey,
+  ledgerDuplicateEvidence,
   classifyOwnerUnbundledRow,
   listingType,
   readAdmissionWorkbook,

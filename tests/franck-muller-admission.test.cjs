@@ -56,3 +56,43 @@ test('shared admission contract accepts another explicitly selected brand only',
   assert.equal(rejected.trading_floor_candidate, false);
   assert.match(rejected.reasons.join('|'), /BRAND_SCOPE_MISMATCH/);
 });
+
+test('admission intent recognizes sell-side dealer tokens without using price as intent', () => {
+  for (const token of ['WTS', 'LTS', 'LQT', 'LTQ', 'FS', 'for sale', 'available']) {
+    const evidence = intake.admissionIntent(`Franck Muller V45 ${token} USD 12000`, 'OTHER');
+    assert.equal(evidence.intent, 'WTS', token);
+    assert.equal(evidence.raw_sell_side, true, token);
+  }
+  const priceOnly = intake.admissionIntent('Franck Muller V45 USD 12000', 'WTS');
+  assert.equal(priceOnly.intent, 'WTS');
+  assert.equal(priceOnly.raw_sell_side, false);
+  assert.equal(priceOnly.basis, 'SOURCE_INTENT');
+});
+
+test('raw buy-side language remains WTB even when a budget and stale WTS intent exist', () => {
+  for (const raw of [
+    'WTB Franck Muller V45 budget USD 12000',
+    'Need Franck Muller V45 budget USD 12000',
+    'Looking for Franck Muller V45, can pay USD 12000',
+  ]) {
+    const evidence = intake.admissionIntent(raw, 'WTS');
+    assert.equal(evidence.intent, 'WTB', raw);
+    assert.equal(evidence.raw_buy_side, true, raw);
+    const result = intake.classifyRow(source({ raw_message: raw, intent: 'WTS' }), decision());
+    assert.equal(result.trading_floor_candidate, true);
+    assert.equal(result.resolved_intent, 'WTB');
+    assert.equal(result.price_research_candidate, false);
+    assert.ok(result.reasons.includes('WTB_DEMAND_EXCLUDED_FROM_WTS_ANALYTICS'));
+  }
+});
+
+test('price research requires raw sell-side language, not a workbook WTS label alone', () => {
+  const result = intake.classifyRow(
+    source({ raw_message: 'Franck Muller V45 USD 12000', intent: 'WTS' }),
+    decision(),
+  );
+  assert.equal(result.trading_floor_candidate, true);
+  assert.equal(result.resolved_intent, 'WTS');
+  assert.equal(result.price_research_candidate, false);
+  assert.ok(result.reasons.includes('RAW_SELL_SIDE_LANGUAGE_MISSING'));
+});
