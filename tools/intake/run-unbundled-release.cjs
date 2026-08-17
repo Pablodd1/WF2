@@ -128,6 +128,7 @@ async function applyGlobalCanary(client, plans) {
 
 async function applyFull(packageInfo) {
   process.env.APPLY_APPROVED_ADMISSION_IMPORT = 'true';
+  process.env.REPLACE_APPROVED_ADMISSION_EXISTING = 'true';
   process.env.REVIEWED_WORKBOOK_INVENTORY_TABLE = intake.INVENTORY_TABLE;
   const privateOutput = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-unbundled-import-'));
   for (const file of packageInfo.files) {
@@ -136,6 +137,7 @@ async function applyFull(packageInfo) {
       '--input', file.filePath,
       '--brand', file.brand,
       '--unbundled-no-image', 'true',
+      '--replace-existing-exact', 'true',
       '--batch-size', '100',
       '--run-id', `encrypted_release_${file.sha256.slice(0, 16)}`,
       '--output-dir', path.join(privateOutput, file.sha256.slice(0, 16)),
