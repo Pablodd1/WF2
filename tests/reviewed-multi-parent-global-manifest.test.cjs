@@ -72,9 +72,27 @@ test('global publisher is opt-in, table-allowlisted, bounded, and avoids full-ta
   assert.match(sourceText, /APPLY_REVIEWED_MULTI_PARENT_IMPORT === 'true'/);
   assert.match(sourceText, /REVIEWED_WORKBOOK_INVENTORY_TABLE !== INVENTORY_TABLE/);
   assert.match(sourceText, /--batch-size must be 1 through 100/);
+  assert.match(sourceText, /--max-rows must be a positive integer/);
+  assert.match(sourceText, /manifest\.rows\.slice\(0, options\.maxRows\)/);
   assert.match(sourceText, /\.in\('id', ids\)/);
   assert.doesNotMatch(sourceText, /count:\s*'exact'|select\('\*',\s*\{\s*count/);
   assert.match(sourceText, /database_writes: 0/);
+});
+
+test('global publisher parses a bounded production canary without changing the full manifest', () => {
+  const parsed = globalManifest.parseArgs([
+    '--input', 'TAG Heuer=C:\\tmp\\tag.xlsx',
+    '--output-dir', 'C:\\tmp\\multi-output',
+    '--max-rows', '100',
+    '--batch-size', '25',
+  ]);
+  assert.equal(parsed.maxRows, 100);
+  assert.equal(parsed.batchSize, 25);
+  assert.throws(() => globalManifest.parseArgs([
+    '--input', 'TAG Heuer=C:\\tmp\\tag.xlsx',
+    '--output-dir', 'C:\\tmp\\multi-output',
+    '--max-rows', '0',
+  ]), /--max-rows must be a positive integer/);
 });
 
 test('publisher validates all rows before writing and reconciles exact ids in bounded batches', async () => {

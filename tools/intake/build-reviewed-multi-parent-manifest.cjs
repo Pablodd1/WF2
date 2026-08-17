@@ -36,12 +36,14 @@ function parseArgs(argv) {
   let outputDir = null;
   let runId = null;
   let batchSize = 100;
+  let maxRows = null;
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (flag === '--input') inputs.push(parseInputSpec(argv[++index]));
     else if (flag === '--output-dir') outputDir = path.resolve(argv[++index]);
     else if (flag === '--run-id') runId = text(argv[++index]);
     else if (flag === '--batch-size') batchSize = Number.parseInt(argv[++index], 10);
+    else if (flag === '--max-rows') maxRows = Number.parseInt(argv[++index], 10);
     else throw new Error(`unsupported argument ${flag}`);
   }
   if (!inputs.length) throw new Error('at least one --input Brand=path is required');
@@ -49,8 +51,11 @@ function parseArgs(argv) {
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100) {
     throw new Error('--batch-size must be 1 through 100');
   }
+  if (maxRows !== null && (!Number.isInteger(maxRows) || maxRows < 1)) {
+    throw new Error('--max-rows must be a positive integer');
+  }
   return {
-    inputs, outputDir, batchSize,
+    inputs, outputDir, batchSize, maxRows,
     runId: runId || `multi_parent_census_${Date.now()}`,
     apply: process.env.APPLY_REVIEWED_MULTI_PARENT_IMPORT === 'true',
   };
@@ -247,10 +252,16 @@ async function run(argv = process.argv.slice(2)) {
     const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
     if (!process.env.SUPABASE_URL || !secret) throw new Error('Supabase server credentials are required');
     const client = createClient(process.env.SUPABASE_URL, secret, { auth: { persistSession: false } });
-    const result = await publishRows(client, manifest.rows, options.batchSize);
+    const rowsForApply = options.maxRows === null
+      ? manifest.rows
+      : manifest.rows.slice(0, options.maxRows);
+    const result = await publishRows(client, rowsForApply, options.batchSize);
     manifest.report.mode = 'SERVICE_ONLY_GLOBAL_APPLY';
     manifest.report.database_writes = result.inserted;
     manifest.report.reconciled_exact_ids = result.reconciled;
+    manifest.report.apply_rows_selected = rowsForApply.length;
+    manifest.report.apply_rows_available = manifest.rows.length;
+    manifest.report.apply_scope = options.maxRows === null ? 'FULL' : 'BOUNDED_CANARY';
   }
   fs.writeFileSync(
     path.join(options.outputDir, 'multi-parent-census.json'),
