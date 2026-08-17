@@ -124,16 +124,18 @@ test('multi-parent lane emits one lineage-keyed display-only row with no inherit
   assert.equal(parent.contact_publication_approved, false);
 });
 
-test('single workbook row needs an exact bundle status to enter the multi-parent lane', () => {
+test('single workbook row remains held even when the ledger labels it as a bundle', () => {
   const base = {
     source: source({ source_message_id: 'bundle-message', raw_message: 'Several watches available' }),
     decision: decision({ bundle_status: 'BUNDLE_PENDING' }),
     rowNumber: 2,
   };
-  assert.equal(intake.buildMultiParentRows({
+  const held = intake.buildMultiParentRows({
     entries: [base], expectedBrand: 'TAG Heuer', fileName: 'a.xlsx',
     fileSha256: 'b'.repeat(64), runId: 'test',
-  }).parents.length, 1);
+  });
+  assert.equal(held.parents.length, 0);
+  assert.deepEqual(held.held[0].reasons, ['MULTI_PARENT_DISTINCT_CHILD_PROOF_MISSING']);
   assert.equal(intake.buildMultiParentRows({
     entries: [{ ...base, decision: decision({ bundle_status: 'UNKNOWN' }) }],
     expectedBrand: 'TAG Heuer', fileName: 'a.xlsx',
@@ -142,12 +144,16 @@ test('single workbook row needs an exact bundle status to enter the multi-parent
 });
 
 test('same immutable source message produces the same parent id across workbook copies', () => {
-  const entry = {
-    source: source({ source_message_id: 'shared-source', raw_message: 'Mixed brand dealer list' }),
-    decision: decision({ bundle_status: 'BUNDLE_PENDING' }), rowNumber: 2,
-  };
   const make = brand => intake.buildMultiParentRows({
-    entries: [entry], expectedBrand: brand, fileName: `${brand}.xlsx`,
+    entries: [1, 2].map((number, index) => ({
+      source: source({
+        listing_id: `${brand}-child-${number}`,
+        source_message_id: 'shared-source',
+        raw_message: `Mixed brand dealer list item ${number}`,
+      }),
+      decision: decision({ bundle_status: 'BUNDLE_PENDING' }),
+      rowNumber: index + 2,
+    })), expectedBrand: brand, fileName: `${brand}.xlsx`,
     fileSha256: brand === 'Breguet' ? 'c'.repeat(64) : 'd'.repeat(64), runId: 'test',
   }).parents[0];
   assert.equal(make('Breguet').id, make('Franck Muller').id);

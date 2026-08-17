@@ -142,6 +142,8 @@ function buildGlobalManifest(loaded, runId) {
     source_rows: file.sourceRows,
     missing_decisions: file.missingDecisions,
     parent_candidates_in_file: parentIdsByBrand.get(file.brand).size,
+    globally_admitted_parent_copies_in_file: [...parentIdsByBrand.get(file.brand)]
+      .filter(id => admittedSourceIds.has(id)).length,
     globally_admitted_parents_with_brand: [...admittedSourceIds].filter(
       id => participatingBrandsBySource.get(id)?.has(file.brand),
     ).length,
@@ -163,7 +165,7 @@ function buildGlobalManifest(loaded, runId) {
       per_file_parent_candidates: perBrand.reduce((sum, item) => sum + item.parent_candidates_in_file, 0),
       global_unique_multi_parents: resolution.parents.length,
       duplicate_parent_copies_eliminated: perBrand.reduce(
-        (sum, item) => sum + item.parent_candidates_in_file, 0,
+        (sum, item) => sum + item.globally_admitted_parent_copies_in_file, 0,
       ) - resolution.parents.length,
       cross_brand_parents: resolution.parents.filter(row => row.supplied_brand === 'Multiple brands').length,
       held_parent_groups: resolution.held.length,

@@ -97,10 +97,14 @@ test('global publisher parses a bounded production canary without changing the f
 
 test('publisher validates all rows before writing and reconciles exact ids in bounded batches', async () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'multi-parent-publish-'));
-  const file = path.join(temp, 'tag.xlsx');
-  workbook(file, 'TAG Heuer', 'tag-item', 'One source bundle');
-  const loaded = globalManifest.loadWorkbookEntries({ brand: 'TAG Heuer', input: file });
-  const manifest = globalManifest.buildGlobalManifest([loaded], 'fixed-run');
+  const tag = path.join(temp, 'tag.xlsx');
+  const breguet = path.join(temp, 'breguet.xlsx');
+  workbook(tag, 'TAG Heuer', 'tag-item', 'One source bundle');
+  workbook(breguet, 'Breguet', 'breguet-item', 'One source bundle');
+  const manifest = globalManifest.buildGlobalManifest([
+    globalManifest.loadWorkbookEntries({ brand: 'TAG Heuer', input: tag }),
+    globalManifest.loadWorkbookEntries({ brand: 'Breguet', input: breguet }),
+  ], 'fixed-run');
   const calls = [];
   const client = {
     from(table) {

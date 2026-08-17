@@ -339,7 +339,10 @@ function consistentValue(entries, selector) {
 
 function hasExplicitMultiParentEvidence(group) {
   const distinctChildren = new Set(group.map(entry => text(entry.source?.listing_id)).filter(Boolean));
-  if (distinctChildren.size > 1) return true;
+  return distinctChildren.size > 1;
+}
+
+function hasLedgerMultiParentStatus(group) {
   return group.some(entry => [
     'BUNDLE_PARENT',
     'BUNDLE_PENDING',
@@ -363,7 +366,16 @@ function buildMultiParentRows({ entries, expectedBrand, fileName, fileSha256, ru
   const held = [];
   for (const [sourceMessageId, group] of groups) {
     const distinctChildren = new Set(group.map(entry => text(entry.source?.listing_id)).filter(Boolean));
-    if (!hasExplicitMultiParentEvidence(group)) continue;
+    if (!hasExplicitMultiParentEvidence(group)) {
+      if (hasLedgerMultiParentStatus(group)) {
+        held.push({
+          sourceMessageId,
+          childCount: distinctChildren.size,
+          reasons: ['MULTI_PARENT_DISTINCT_CHILD_PROOF_MISSING'],
+        });
+      }
+      continue;
+    }
     const ordered = [...group].sort((left, right) => (
       Number(left.itemSequence || left.rowNumber) - Number(right.itemSequence || right.rowNumber)
       || text(left.fileName || fileName).localeCompare(text(right.fileName || fileName))
