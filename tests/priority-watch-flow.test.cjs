@@ -44,10 +44,12 @@ test('Trading Floor and Price Research preserve the complete priority-watch dril
   assert.match(floor, /Open full price research/);
   assert.match(floor, /brand=\$\{encodeURIComponent\(listing\.brand\)\}&reference=\$\{encodeURIComponent\(listing\.reference\)\}/);
   assert.match(research, /Featured listings for sale/);
-  assert.match(research, /Additional real source listings remain visible here/);
-  assert.match(research, /data\.retained_rows/);
+  assert.match(research, /Priced WTS evidence is accessible page by page/);
+  assert.doesNotMatch(research, /\.\.\.\(data\.retained_rows \|\| \[\]\)/);
   assert.match(research, /data\.outlier_rows/);
   assert.match(api, /\.eq\('listing_type', 'WTS'\)/);
   assert.match(api, /lookupDemand/);
-  assert.match(api, /retained_rows:[\s\S]*raw_message:[\s\S]*thumbnail_url:[\s\S]*seller_name:/);
+  assert.match(api, /retained_evidence_count: retainedEvidenceRows\.length/);
+  assert.match(api, /retained_rows: \[\]/);
+  assert.match(api, /outlierDealerEvidenceRows[\s\S]*raw_message:[\s\S]*thumbnail_url:[\s\S]*seller_name:/);
 });

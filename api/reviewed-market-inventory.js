@@ -45,9 +45,11 @@ const SIX_REVIEWED_BRAND_CURSOR_CODES = Object.freeze({
   Zenith: 'z',
 });
 const REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set([
-  'Blancpain', 'Breguet', 'Bulgari', 'Chopard', 'Franck Muller',
+  'A. Lange & Söhne', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling',
+  'Bulgari', 'Chopard', 'F.P. Journe', 'Franck Muller',
   'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
-  'Jacob & Co', 'TAG Heuer', 'Ulysse Nardin',
+  'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines', 'Omega',
+  'TAG Heuer', 'Ulysse Nardin',
 ]);
 
 async function loadQnsaReviewedReleaseSummary(client) {
@@ -482,6 +484,13 @@ function inventoryIdentityKey(record) {
   return `${brand}\u001f${reference || model}`;
 }
 
+function inventoryIntentRank(record) {
+  const intent = cleanExactText(record?.listing_type || record?.intent, 30).toUpperCase();
+  if (['WTS', 'SELL', 'FOR SALE', 'AVAILABLE', 'FS'].includes(intent)) return 2;
+  if (['WTB', 'BUY', 'WANT', 'WANTED', 'LOOKING TO BUY'].includes(intent)) return 1;
+  return 0;
+}
+
 function compareInventoryForDisplay(left, right) {
   // This is deliberately a page-local presentation rank inside the already-bounded
   // server page. Cursor/keyset membership and advancement remain controlled
@@ -493,6 +502,11 @@ function compareInventoryForDisplay(left, right) {
   if (releasedMultiDifference !== 0) return releasedMultiDifference;
   const imageDifference = Number(hasExactSourceImage(right)) - Number(hasExactSourceImage(left));
   if (imageDifference !== 0) return imageDifference;
+  // Keep buyer demand visibly separate from sell inventory inside both the
+  // image-backed and no-image lanes. This remains page-local and cannot alter
+  // cursor membership or suppress a valid listing.
+  const intentDifference = inventoryIntentRank(right) - inventoryIntentRank(left);
+  if (intentDifference !== 0) return intentDifference;
   const dealerDifference = dealerEvidenceRank(right) - dealerEvidenceRank(left);
   if (dealerDifference !== 0) return dealerDifference;
   const priceDifference = Number(hasVerifiedExplicitPrice(right))
@@ -926,7 +940,9 @@ function mapReviewedRecord(row) {
   const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
   const normalizedSummary = isNormalizedWorkbookSummary(row);
   const multiListing = isMultiListing(row);
-  const isUnbundledChild = evidenceValuePresent(row.parent_id);
+  const isUnbundledChild = evidenceValuePresent(row.parent_id)
+    || evidenceValuePresent(row.parent_source_message_id)
+    || String(row.verification_tier || '').toUpperCase() === 'OWNER_UNBUNDLED_ADMISSION_LEDGER';
   const publicImageUrl = multiListing || isUnbundledChild ? null : exactImageUrl;
   const storedConfidence = Number(row.confidence);
   const confidencePercent = storedConfidence >= 0 && storedConfidence <= 1
@@ -1665,11 +1681,11 @@ module.exports = async function handler(req, res) {
     if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)) {
       const admissionSearch = safeSearchTerm(search);
       const admissionColumns = [
-        'id,source_file,source_row_number,source_record_id,posting_date,posted_by,phone_number',
+        'id,source_file,source_row_number,source_record_id,source_message_id,parent_source_message_id,posting_date,posted_by,phone_number',
         'contact_publication_approved,raw_message,listing_type,brand_scope,supplied_brand,canonical_brand',
         'model,catalog_model,raw_reference,normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
         'workbook_price_usd,source_price_amount,source_price_text,source_currency,price_evidence_status',
-        'confidence,verification_status,user_image_url,has_image,imported_at,review_reasons,source_payload_sha256',
+        'confidence,verification_status,verification_tier,user_image_url,has_image,imported_at,review_reasons,source_payload_sha256',
       ].join(',');
       let admissionQuery = client
         .from('reviewed_workbook_inventory')
@@ -2501,6 +2517,7 @@ module.exports.listingCompletenessScore = listingCompletenessScore;
 module.exports.isExplicitlyReleasedMultiListing = isExplicitlyReleasedMultiListing;
 module.exports.inventoryIdentityKey = inventoryIdentityKey;
 module.exports.compareInventoryForDisplay = compareInventoryForDisplay;
+module.exports.inventoryIntentRank = inventoryIntentRank;
 module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;
 module.exports.isTradingFloorSourceRow = isTradingFloorSourceRow;
 module.exports.normalizeItemCategory = normalizeItemCategory;

@@ -15,12 +15,26 @@ const {
 } = require('./_lib/publication-references.cjs');
 const { repostSignature } = require('./_lib/repost-deduplication.cjs');
 const { buildLuxuryResearchCoverage } = require('./_lib/luxury-research-coverage.cjs');
-const { loadReviewedWorkbookBrandRows } = require('./_lib/reviewed-workbook-browse.cjs');
+const { loadReviewedWorkbookBrandCount } = require('./_lib/reviewed-workbook-browse.cjs');
 
 const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'];
 const QNSA_MARKET_SOURCE = 'qnsa_rolex_patek_trading_floor_source';
 const CACHE_TTL_MS = 60 * 1000;
 let cached = null;
+
+async function mapWithConcurrency(values, limit, mapper) {
+  const results = new Array(values.length);
+  let next = 0;
+  async function worker() {
+    while (next < values.length) {
+      const index = next;
+      next += 1;
+      results[index] = await mapper(values[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker));
+  return results;
+}
 
 async function loadQnsaSummary(client) {
   const { data, error } = await client.rpc('qnsa_market_feed_counts');
@@ -33,23 +47,27 @@ async function loadQnsaSummary(client) {
       .filter(row => String(row.brand || '').toLowerCase() === brand.toLowerCase())
       .reduce((sum, row) => sum + Number(row.row_count || 0), 0),
   }));
-  const admittedWorkbookBrands = await Promise.all(
-    [
-      'Blancpain', 'Breguet', 'Bulgari', 'Chopard', 'Franck Muller',
+  const admittedWorkbookBrandNames = [
+      'A. Lange & Söhne', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling',
+      'Bulgari', 'Chopard', 'F.P. Journe', 'Franck Muller',
       'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
-      'Jacob & Co', 'TAG Heuer', 'Ulysse Nardin',
-    ].map(async brand => {
+      'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines', 'Omega',
+      'TAG Heuer', 'Ulysse Nardin',
+  ];
+  const admittedWorkbookBrands = await mapWithConcurrency(
+    admittedWorkbookBrandNames,
+    3,
+    async brand => {
       try {
-        const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
         return {
           brand,
-          listing_count: rows.length,
-          count_status: truncated ? 'bounded_lower_bound' : 'exact',
+          listing_count: await loadReviewedWorkbookBrandCount(client, brand),
+          count_status: 'exact',
         };
       } catch {
         return { brand, listing_count: 0, count_status: 'unavailable' };
       }
-    }),
+    },
   );
   brands.push(...admittedWorkbookBrands.filter(item => item.listing_count > 0));
   return {
