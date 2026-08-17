@@ -423,6 +423,6 @@ async function run(argv = process.argv.slice(2)) {
 if (require.main === module) run().catch(error => { process.stderr.write(`${error.stack || error.message}\n`); process.exitCode = 1; });
 
 module.exports = {
-  PROJECT_REF, assertQnsa, atomicFullSql, buildPlan, legacyDriftPatch, selectActions,
+  PROJECT_REF, assertQnsa, atomicFullSql, buildPlan, legacyDriftPatch, readCsv, selectActions,
   strictBoolean, validateMode,
 };

@@ -128,30 +128,6 @@ jobs:
           if ($reports.Count -ne 1) { throw 'Prior run artifact must contain exactly one execution-report.json.' }
           "CANARY_REPORT=$($reports[0].FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Verify QNSA point-in-time recovery
-        if: inputs.mode == 'full'
-        shell: pwsh
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
-          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $backup = Invoke-RestMethod `
-            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/backups" `
-            -Headers $headers
-          if ($backup.pitr_enabled -ne $true) {
-            throw 'QNSA point-in-time recovery is not enabled; atomic full correction is blocked.'
-          }
-          New-Item -ItemType Directory -Force -Path $env:OUTPUT_DIR | Out-Null
-          [ordered]@{
-            checked_at = (Get-Date).ToUniversalTime().ToString('o')
-            project_ref = $env:SUPABASE_PROJECT_REF
-            pitr_enabled = [bool]$backup.pitr_enabled
-            walg_enabled = [bool]$backup.walg_enabled
-            completed_backup_count = @($backup.backups | Where-Object { $_.status -eq 'COMPLETED' }).Count
-          } | ConvertTo-Json | Set-Content -LiteralPath "$env:OUTPUT_DIR/recovery-proof.json" -Encoding utf8
-
       - name: Retrieve QNSA service credential without logging it
         if: inputs.mode != 'audit'
         shell: pwsh
@@ -167,6 +143,42 @@ jobs:
           Write-Output "::add-mask::$($server.api_key)"
           "SUPABASE_SERVICE_ROLE_KEY=$($server.api_key)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           "SUPABASE_URL=https://$env:SUPABASE_PROJECT_REF.supabase.co" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify QNSA recovery or capture exact pre-change snapshot
+        if: inputs.mode == 'full'
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $backup = Invoke-RestMethod `
+            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/backups" `
+            -Headers $headers
+          New-Item -ItemType Directory -Force -Path $env:OUTPUT_DIR | Out-Null
+          if ($backup.pitr_enabled -ne $true) {
+            & node tools/intake/snapshot-reviewed-workbook-integrity.cjs `
+              --identity-manifest $env:IDENTITY_MANIFEST `
+              --price-manifest $env:PRICE_MANIFEST `
+              --drift-price-manifest $env:DRIFT_MANIFEST `
+              --output-dir $env:OUTPUT_DIR `
+              --confirm-project $env:SUPABASE_PROJECT_REF `
+              --run-sha $env:GITHUB_SHA
+            if ($LASTEXITCODE -ne 0) { throw 'Exact pre-change recovery snapshot failed.' }
+          }
+          $snapshot = "$env:OUTPUT_DIR/recovery-snapshot.json"
+          [ordered]@{
+            checked_at = (Get-Date).ToUniversalTime().ToString('o')
+            project_ref = $env:SUPABASE_PROJECT_REF
+            pitr_enabled = [bool]$backup.pitr_enabled
+            walg_enabled = [bool]$backup.walg_enabled
+            completed_backup_count = @($backup.backups | Where-Object { $_.status -eq 'COMPLETED' }).Count
+            exact_snapshot_captured = Test-Path -LiteralPath $snapshot -PathType Leaf
+            exact_snapshot_sha256 = if (Test-Path -LiteralPath $snapshot -PathType Leaf) {
+              (Get-FileHash -Algorithm SHA256 -LiteralPath $snapshot).Hash.ToLowerInvariant()
+            } else { $null }
+          } | ConvertTo-Json | Set-Content -LiteralPath "$env:OUTPUT_DIR/recovery-proof.json" -Encoding utf8
 
       - name: Execute exact guarded audit or canary
         if: inputs.mode != 'full'
@@ -228,5 +240,6 @@ jobs:
             audit-output/qnsa-reviewed-workbook-integrity/execution-checkpoint.json
             audit-output/qnsa-reviewed-workbook-integrity/execution-report.json
             audit-output/qnsa-reviewed-workbook-integrity/recovery-proof.json
+            audit-output/qnsa-reviewed-workbook-integrity/recovery-snapshot.json
           if-no-files-found: warn
           retention-days: 30

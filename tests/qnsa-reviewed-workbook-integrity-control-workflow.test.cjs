@@ -28,12 +28,14 @@ test('write modes retrieve a masked service credential through management author
   assert.match(workflow, /if: inputs\.mode != 'audit'/);
 });
 
-test('full mode proves QNSA point-in-time recovery before the atomic correction', () => {
-  assert.match(workflow, /Verify QNSA point-in-time recovery/);
+test('full mode proves PITR or captures an exact recovery snapshot before correction', () => {
+  assert.match(workflow, /Verify QNSA recovery or capture exact pre-change snapshot/);
   assert.match(workflow, /\/database\/backups/);
   assert.match(workflow, /pitr_enabled -ne \$true/);
-  assert.match(workflow, /atomic full correction is blocked/);
+  assert.match(workflow, /snapshot-reviewed-workbook-integrity\.cjs/);
+  assert.match(workflow, /Exact pre-change recovery snapshot failed/);
   assert.match(workflow, /recovery-proof\.json/);
+  assert.match(workflow, /recovery-snapshot\.json/);
 });
 
 test('untrusted dispatch inputs are passed through step env and management token is narrowly scoped', () => {
