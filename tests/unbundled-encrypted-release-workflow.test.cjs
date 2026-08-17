@@ -47,6 +47,9 @@ test('lineage migration is forward-only and workflow is bounded', () => {
   assert.match(workflow, /environment: production/);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.match(workflow, /UNBUNDLED_IMPORT_AES_KEY_B64/);
+  assert.match(workflow, /HAS_DOWNLOAD_TOKEN: \$\{\{ secrets\.UNBUNDLED_RELEASE_DOWNLOAD_TOKEN != '' \}\}/);
+  assert.match(workflow, /GH_TOKEN: \$\{\{ secrets\.UNBUNDLED_RELEASE_DOWNLOAD_TOKEN \}\}/);
+  assert.doesNotMatch(workflow, /^      UNBUNDLED_RELEASE_DOWNLOAD_TOKEN:/m);
   assert.match(workflow, /asset_id:/);
   assert.match(workflow, /ASSET_ID: \$\{\{ inputs\.asset_id \}\}/);
   assert.match(workflow, /invalid asset ID/);
