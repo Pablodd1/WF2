@@ -530,6 +530,33 @@ test('apply readback requires exact hashes, no inherited media or contact, and t
   assert.ok(leaked.drift[0].fields.includes('price_research_status'));
 });
 
+test('exact owner-unbundled replacement updates existing IDs only when explicitly requested', async () => {
+  const calls = [];
+  const client = {
+    from(table) {
+      assert.equal(table, intake.INVENTORY_TABLE);
+      return {
+        upsert(rows, options) {
+          calls.push({ rows, options });
+          return { select: async () => ({ data: rows.map(row => ({ id: row.id })), error: null }) };
+        },
+      };
+    },
+  };
+  const rows = [{ id: 'admission_exact_1' }];
+  assert.equal(await intake.upsertBatch(client, rows), 1);
+  assert.equal(calls[0].options.ignoreDuplicates, true);
+  assert.equal(await intake.upsertBatch(client, rows, { replaceExisting: true }), 1);
+  assert.equal(calls[1].options.ignoreDuplicates, false);
+  assert.equal(calls[1].options.onConflict, 'id');
+  const source = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'tools/intake/import-approved-admission-workbook.cjs'),
+    'utf8',
+  );
+  assert.match(source, /inserted = options\.replaceExisting \? 0 : Number\(checkpoint\?\.rows_inserted/);
+  assert.match(source, /duplicates = options\.replaceExisting \? 0 : Number\(checkpoint\?\.rows_duplicate_held/);
+});
+
 test('owner-unbundled dial survives only exact raw or catalog confirmation', () => {
   assert.equal(intake.verifiedOwnerUnbundledDial({
     rawMessage: 'Omega Speedmaster 310.30.42.50.01.002 black dial USD 7,250',

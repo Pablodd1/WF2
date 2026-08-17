@@ -68,6 +68,9 @@ test('lineage migration is forward-only and workflow is bounded', () => {
   assert.match(builder, /validateReleasePackage/);
   assert.match(builder, /fs\.rmSync\(stage, \{ recursive: true, force: true \}\)/);
   assert.doesNotMatch(builder, /(?:stdout|stderr)\.write\([^;\n]*keyBase64/i);
+  const runner = fs.readFileSync(path.join(root, 'tools/intake/run-unbundled-release.cjs'), 'utf8');
+  assert.match(runner, /REPLACE_APPROVED_ADMISSION_EXISTING = 'true'/);
+  assert.match(runner, /'--replace-existing-exact', 'true'/);
 });
 
 test('legacy audit reconciliation is read-only and explicitly leaves lineage unverified', () => {

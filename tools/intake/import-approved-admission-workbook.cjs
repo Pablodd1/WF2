@@ -864,14 +864,15 @@ function parseArgs(argv) {
     runId: text(values['run-id']) || `approved_admission_${Date.now()}`,
     ownerUnbundled: values['unbundled-no-image'] === 'true',
     includeMultiParents: values['include-multi-parents'] === 'true',
+    replaceExisting: values['replace-existing-exact'] === 'true',
     apply: process.env.APPLY_APPROVED_ADMISSION_IMPORT === 'true',
   };
 }
 
-async function upsertBatch(client, rows) {
+async function upsertBatch(client, rows, options = {}) {
   const { data, error } = await client
     .from(INVENTORY_TABLE)
-    .upsert(rows, { onConflict: 'id', ignoreDuplicates: true })
+    .upsert(rows, { onConflict: 'id', ignoreDuplicates: options.replaceExisting !== true })
     .select('id');
   if (error) throw error;
   return (data || []).length;
@@ -973,6 +974,13 @@ async function verifyImportedRows(client, expectedRows, options = {}) {
 
 async function run(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
+  if (options.replaceExisting && (
+    !options.ownerUnbundled
+    || options.includeMultiParents
+    || process.env.REPLACE_APPROVED_ADMISSION_EXISTING !== 'true'
+  )) {
+    throw new Error('exact replacement is restricted to explicitly authorized owner-unbundled rows');
+  }
   if (options.ownerUnbundled && !OWNER_UNBUNDLED_BRANDS.has(options.brand)) {
     throw new Error(`--unbundled-no-image is not allowlisted for ${options.brand}`);
   }
@@ -1077,14 +1085,18 @@ async function run(argv = process.argv.slice(2)) {
       .eq('source_file_sha256', workbook.fileSha256)
       .maybeSingle();
     if (error) throw error;
-    resumeAt = Math.min(Number(checkpoint?.rows_scanned || 0), selected.length);
-    inserted = Number(checkpoint?.rows_inserted || 0);
-    duplicates = Number(checkpoint?.rows_duplicate_held || 0);
+    resumeAt = options.replaceExisting
+      ? 0
+      : Math.min(Number(checkpoint?.rows_scanned || 0), selected.length);
+    inserted = options.replaceExisting ? 0 : Number(checkpoint?.rows_inserted || 0);
+    duplicates = options.replaceExisting ? 0 : Number(checkpoint?.rows_duplicate_held || 0);
   }
   for (let start = resumeAt; start < selected.length; start += options.batchSize) {
     const batch = selected.slice(start, start + options.batchSize);
     if (options.apply) {
-      const batchInserted = await upsertBatch(client, batch);
+      const batchInserted = await upsertBatch(client, batch, {
+        replaceExisting: options.replaceExisting,
+      });
       const batchReadback = await verifyImportedRows(client, batch);
       if (!batchReadback.ok) {
         throw new Error(`approved admission readback failed: ${JSON.stringify(batchReadback)}`);
