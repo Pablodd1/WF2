@@ -34,6 +34,8 @@ test('Cartier summaries separate all-reference counts from selected-dial analyti
   ];
   const [allReference, selectedDial, otherReference] = batchApi.buildBatchSummaries(pairs, rows);
   assert.equal(allReference.source_observation_count, 4);
+  assert.equal(allReference.wts_observation_count, 3);
+  assert.equal(allReference.wtb_observation_count, 1);
   assert.equal(allReference.reference_qualified_wts_count, 3);
   assert.equal(allReference.selected_dial_qualified_count, 0);
   assert.equal(allReference.analytics_ready, false);
@@ -110,6 +112,21 @@ test('per-pair loading is cap-fair and server work never exceeds two concurrent 
   assert.equal(source.rows.length, pairs.length);
   assert.equal(source.capped.size, pairs.length);
   assert.deepEqual(new Set(source.rows.map(item => item.reference)), new Set(pairs.map(pair => pair.reference)));
+});
+
+test('one failed pair is withheld without blanking successful reference summaries', async () => {
+  const pairs = batchApi.normalizePairs([
+    { brand: 'Cartier', reference: 'WSSA0032' },
+    { brand: 'Cartier', reference: 'WSSA0048' },
+  ]);
+  const source = await batchApi.loadSourceRows({}, pairs, {
+    loadPair: async pair => {
+      if (pair.reference === 'WSSA0048') throw new Error('temporary timeout');
+      return { pair, rows: [row('ok', pair.reference, 'Silver', 5000)], capped: false };
+    },
+  });
+  assert.equal(source.rows.length, 1);
+  assert.deepEqual(source.withheld, [{ key: pairs[1].key, reason: 'SOURCE_UNAVAILABLE' }]);
 });
 
 test('nested canonical database loaders themselves never exceed two active operations', async () => {
@@ -257,7 +274,7 @@ test('pages make one batch request and client rejects cross-reference summaries'
   assert.match(research, /loadPriceResearchBatchSummaries\(pending\.map/);
   assert.match(floor, /loadPriceResearchBatchSummaries\(visiblePricePairs\)/);
   assert.match(client, /requested\.has\(summary\.key\)/);
-  assert.match(research, /bounded source observations/);
+  assert.match(research, /bounded source observations|observed/);
   assert.match(research, /qualified WTS/);
 });
 

@@ -189,7 +189,7 @@ test('exact catalog references bypass legacy discovery without admitting prefixe
 test('legacy fallback remains bounded and WTB demand avoids the unindexed workbook lane', () => {
   assert.match(source, /sourceTable = 'watch_records';\s*result = await buildRowsQuery\(sourceTable\)/);
   assert.match(source, /lookupDemand\(\s*client,\s*sourceTable/);
-  assert.match(source, /selection,\s*null,\s*familyPrefix/);
+  assert.match(source, /selection,\s*preloadedReviewedWorkbookEvidenceRows,\s*familyPrefix/);
   assert.match(source, /usingQnsaReviewedSource && familyPrefix[\s\S]*startsWith\(normRef\(familyPrefix\)\)/);
   assert.match(source, /loadQnsaVerifiedTradingPrices/);
   assert.match(source, /row\.has_verified_usd_price === true && Number\(row\.verified_price_usd\) > 0/);

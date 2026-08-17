@@ -166,6 +166,25 @@ async function loadReviewedWorkbookAnalyticsRows(client, { brand, references, li
   return (data || []).map(mapWorkbookAnalyticsRow);
 }
 
+async function loadReviewedWorkbookEvidenceRows(client, { brand, references, limit = 10000 }) {
+  const indexedReferences = [...new Set((references || []).map(clean).filter(Boolean))];
+  if (!clean(brand) || !indexedReferences.length || !isReviewedWorkbookBrowseBrand(brand)) return [];
+
+  const { data, error } = await client
+    .from('reviewed_workbook_inventory')
+    .select(ADMISSION_WORKBOOK_COLUMNS)
+    .eq('brand_scope', clean(brand))
+    .in('normalized_reference', indexedReferences)
+    .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
+    .eq('confidence', 100)
+    .in('listing_type', ['WTS', 'WTB'])
+    .order('posting_date', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: true })
+    .limit(Math.min(10000, Math.max(1, Number(limit) || 10000)));
+  if (error) throw error;
+  return (data || []).map(mapWorkbookAnalyticsRow);
+}
+
 async function loadReviewedWorkbookListing(client, id) {
   if (String(id || '').startsWith('admission_')) {
     const { data, error } = await client
@@ -174,9 +193,7 @@ async function loadReviewedWorkbookListing(client, id) {
       .eq('id', id)
       .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
       .eq('confidence', 100)
-      .eq('price_evidence_status', 'SOURCE_EXPLICIT_USD_MATCH')
-      .eq('listing_type', 'WTS')
-      .gt('workbook_price_usd', 0)
+      .in('listing_type', ['WTS', 'WTB'])
       .maybeSingle();
     if (error) throw error;
     return data ? mapWorkbookAnalyticsRow(data) : null;
@@ -203,6 +220,7 @@ module.exports = {
   LEGACY_WORKBOOK_COLUMNS,
   ADMISSION_WORKBOOK_COLUMNS,
   isMissingColumnError,
+  loadReviewedWorkbookEvidenceRows,
   loadReviewedWorkbookAnalyticsRows,
   loadReviewedWorkbookListing,
   mapWorkbookAnalyticsRow,

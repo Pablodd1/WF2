@@ -31,7 +31,9 @@ const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsp
 const { buildIndicativeForecast, buildMarketForecast } = require('./_lib/market-forecast.cjs');
 const { selectDialGroup } = require('./_lib/dial-cohort-selection.cjs');
 const { buildWtsReconciliation } = require('./_lib/price-research-reconciliation.cjs');
-const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
+const {
+  loadReviewedWorkbookEvidenceRows,
+} = require('./_lib/reviewed-workbook-analytics.cjs');
 const { loadVerifiedDemandIdentityRows } = require('./_lib/verified-demand-identity.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
@@ -706,7 +708,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     .filter(row => qnsaReviewedSource || isOwnerReviewedWorkbookRow(row));
   const equivalentKeys = new Set(referenceVariants.map(normRef));
   demandRows = demandRows.filter(row =>
-    (qnsaReviewedSource || isReleaseListingEligible(row))
+    (qnsaReviewedSource || isOwnerReviewedWorkbookRow(row) || isReleaseListingEligible(row))
     &&
     String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
     && (familyPrefix
@@ -915,9 +917,9 @@ module.exports = async function handler(req, res) {
     }
   }
   const familyPrefix = reviewedFamilyPrefix(brand, rawRef);
-  // A reviewed workbook cohort is already constrained to complete identity and
-  // source-explicit USD evidence. It may authorize its exact brand/reference
-  // even when an older deployment allowlist has not yet been expanded.
+  // Approved single-item workbook evidence may authorize its exact
+  // brand/reference even when an older deployment allowlist has not yet been
+  // expanded. Price qualification remains a separate downstream gate.
   const client = getClient();
   const configuredSourceTable = configuredReviewedPriceSource(brand);
   if (isPendingQnsaBrandRelease(brand)) {
@@ -927,10 +929,10 @@ module.exports = async function handler(req, res) {
     });
   }
   const preloadReferences = listEquivalentReferences(rawRef, brand);
-  let preloadedReviewedWorkbookRows = [];
+  let preloadedReviewedWorkbookEvidenceRows = [];
   if (!configuredSourceTable) {
     try {
-      preloadedReviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
+      preloadedReviewedWorkbookEvidenceRows = await loadReviewedWorkbookEvidenceRows(client, {
         brand,
         references: preloadReferences,
         limit: 10000,
@@ -940,7 +942,9 @@ module.exports = async function handler(req, res) {
       // is temporarily unavailable.
     }
   }
-  const exactReviewedWorkbookRelease = preloadedReviewedWorkbookRows.length > 0;
+  const preloadedReviewedWorkbookRows = preloadedReviewedWorkbookEvidenceRows
+    .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS');
+  const exactReviewedWorkbookRelease = preloadedReviewedWorkbookEvidenceRows.length > 0;
   if (!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationBrandAllowed(brand)) {
     return res.status(404).json({ error: 'Brand is not included in this release' });
   }
@@ -994,7 +998,7 @@ module.exports = async function handler(req, res) {
         // every successful request pay for an unrelated multi-million-row
         // lookup before returning the workbook evidence.
         const equivalentKeys = new Set(equivalentReferences.map(normRef));
-        const exactVariants = [...new Set(preloadedReviewedWorkbookRows
+        const exactVariants = [...new Set(preloadedReviewedWorkbookEvidenceRows
           .map(row => row.reference)
           .filter(reference => equivalentKeys.has(normRef(reference))))];
         const exact = exactVariants[0] || rawRef;
@@ -1159,37 +1163,27 @@ module.exports = async function handler(req, res) {
       for (const row of recoveredRows) rowsById.set(String(row.id), row);
       rows = [...rowsById.values()];
     }
-    // Reviewed workbooks are the customer-visible canonical inventory. When an
-    // exact reference has source-explicit USD evidence there, use that same
-    // evidence for analytics. Legacy watch_records remains a fallback only.
+    // Reviewed workbooks are the customer-visible canonical inventory. Load
+    // every approved WTS/WTB row first; downstream gates independently decide
+    // which WTS prices may enter analytics.
     let reviewedWorkbookRows = preloadedReviewedWorkbookRows;
     try {
       if (!configuredSourceTable && !reviewedWorkbookRows.length) {
-        reviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
-          brand,
-          references: referenceVariants,
-          limit: sampleLimit,
+        const reviewedWorkbookEvidenceRows = await loadReviewedWorkbookEvidenceRows(client, {
+          brand, references: referenceVariants, limit: sampleLimit,
         });
+        preloadedReviewedWorkbookEvidenceRows = reviewedWorkbookEvidenceRows;
+        reviewedWorkbookRows = reviewedWorkbookEvidenceRows
+          .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS');
       }
     } catch (workbookError) {
       console.warn('[price-research] reviewed workbook analytics unavailable; using legacy cohort:', workbookError.message);
     }
-    const usingReviewedWorkbook = reviewedWorkbookRows.length > 0;
+    const usingReviewedWorkbook = preloadedReviewedWorkbookEvidenceRows.length > 0;
     const usingQnsaReviewedSource = sourceTable === QNSA_PRICE_RESEARCH_SOURCE;
-    // ponytail: reviewed workbooks may have identity metadata (brand/model/ref/dial)
-    // but no verified USD price yet. When ALL view rows are price-ineligible,
-    // fall back to the direct watch_records query which may have parser-extracted
-    // prices from raw_line text (e.g., "WTS Omega 310.30.42.50.04.001 white 7300.00").
-    // This prevents Price Research from showing 0 rows when the workbook staging
-    // pipeline hasn't completed its price verification pass yet.
-    const catalogForEligibilityCheck = lookupCatalog(targetRef, brand || null);
-    const workbookHasAnyEligible = usingReviewedWorkbook
-      && reviewedWorkbookRows.some(r => !classifyResearchEligibility(r, catalogForEligibilityCheck));
-    if (usingReviewedWorkbook && !workbookHasAnyEligible && rows && rows.length > 0) {
-      // Fall back to direct query rows — they have price_usd from parser extraction
-      console.log(`[price-research] reviewed workbook rows exist but none are price-eligible; using direct query rows (${rows.length})`);
-      // Keep usingReviewedWorkbook false so downstream doesn't expect workbook-only fields
-    } else if (usingReviewedWorkbook) {
+    // Never replace approved workbook evidence with parser-derived fallback
+    // prices merely because the exact cohort has no qualified USD observation.
+    if (usingReviewedWorkbook) {
       rows = reviewedWorkbookRows;
     }
     const directWtsRows = await loadApprovedDirectSubmissionRows(client, {
@@ -1207,7 +1201,7 @@ module.exports = async function handler(req, res) {
       ? baseSampleCount >= sampleLimit
       : baseSampleCount >= pageSize);
 
-    if (!rows || rows.length === 0) {
+    if ((!rows || rows.length === 0) && preloadedReviewedWorkbookEvidenceRows.length === 0) {
       const emptyReconciliation = {
         total_tracked_listings: 0,
         wts_eligible_analytics_count: 0,
@@ -1535,7 +1529,7 @@ module.exports = async function handler(req, res) {
       referenceVariants,
       catalogHit,
       selection,
-      null,
+      preloadedReviewedWorkbookEvidenceRows,
       familyPrefix,
       { page: demandPage, pageSize: demandPageSize },
     );

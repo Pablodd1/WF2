@@ -140,7 +140,7 @@ test('Price Research presents uncategorized catalog identities as individually b
   assert.match(research, /visibleRefs\.map\(r =>/);
   assert.match(research, /REFERENCE_PICKER_PAGE_SIZE = 6/);
   assert.match(research, /aria-label="Reference pages"/);
-  assert.match(research, /bounded source observations/);
+  assert.match(research, /bounded source observations|observed/);
   assert.match(research, /qualified WTS/);
   assert.match(research, /source_observation_count/);
   assert.match(research, /reference_qualified_wts_count/);

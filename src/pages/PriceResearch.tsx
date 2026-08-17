@@ -605,7 +605,7 @@ export default function PriceResearch() {
   const [referenceQuery, setReferenceQuery] = useState('');
   const [modelImages, setModelImages] = useState<Record<string, string>>({});
   const [referenceImages, setReferenceImages] = useState<Record<string, string>>({});
-  const [referenceEvidence, setReferenceEvidence] = useState<Record<string, { count: number; hasMore: boolean; image?: string; analyticsReady?: boolean; qualifiedCount?: number }>>({});
+  const [referenceEvidence, setReferenceEvidence] = useState<Record<string, { count: number; wtsCount?: number; wtbCount?: number; hasMore: boolean; image?: string; analyticsReady?: boolean; qualifiedCount?: number }>>({});
   const [referencePage, setReferencePage] = useState(1);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
   const [pickerError, setPickerError] = useState('');
@@ -1120,6 +1120,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         for (const summary of summaries) {
           next[referenceEvidenceKey(summary.brand, summary.reference)] = {
             count: Number(summary.source_observation_count || 0),
+            wtsCount: Number(summary.wts_observation_count || 0),
+            wtbCount: Number(summary.wtb_observation_count || 0),
             qualifiedCount: Number(summary.reference_qualified_wts_count || 0),
             analyticsReady: summary.reference_analytics_ready === true,
             hasMore: summary.sample_capped === true,
@@ -1470,7 +1472,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</span>
                     <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>
                       {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)]
-                        ? <>{referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].count.toLocaleString()}{referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].hasMore ? '+' : ''} bounded source observations · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].qualifiedCount?.toLocaleString() || 0} qualified WTS · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].analyticsReady ? 'graphics available after dial selection' : 'graphics withheld (no dial has 2 qualified)'}</>
+                        ? <>{referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].count.toLocaleString()}{referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].hasMore ? '+' : ''} observed · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].wtsCount?.toLocaleString() || 0} WTS · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].wtbCount?.toLocaleString() || 0} WTB · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].qualifiedCount?.toLocaleString() || 0} qualified WTS · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].analyticsReady ? 'graphics available after dial selection' : 'listings available; graphics require 2 qualified WTS in one dial cohort'}</>
                         : r.evidence_resolution === 'EXACT_REFERENCE_ON_SELECTION' || r.listing_count <= 0
                         ? 'Open to load exact market data'
                         : <>{r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} source {r.listing_count === 1 ? 'listing' : 'listings'} · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}</>}
