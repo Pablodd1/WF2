@@ -12,6 +12,10 @@ const { createClient } = require('@supabase/supabase-js');
 const { extractPriceObservations } = require('../../api/_lib/normalization-v4.cjs');
 const { multiItemRisk } = require('../../api/_lib/unsplit-bundle-filter.cjs');
 const {
+  confirmCatalogCandidate,
+  rawSupportsReferenceToken,
+} = require('../../api/_lib/catalog-confirmation.cjs');
+const {
   SOURCE_HEADERS,
   DECISION_HEADERS,
   admissionIntent,
@@ -37,6 +41,7 @@ const OWNER_UNBUNDLED_BRANDS = new Set([
   'Ulysse Nardin',
   'Zenith',
 ]);
+const POSITIVE_IDENTITY_REQUIRED_BRANDS = new Set(['TAG Heuer', 'Breguet', 'Franck Muller']);
 const PRICE_RESEARCH_ONLY_REASONS = new Set([
   'PRICE_RESEARCH_EVIDENCE_INCOMPLETE',
   'RAW_SELL_SIDE_LANGUAGE_MISSING',
@@ -76,6 +81,43 @@ const EXPLICIT_BRAND_PATTERNS = [
   ['Bell & Ross', /\bbell\s*(?:&|and)\s*ross\b/i],
   ['MB&F', /\bMB\s*(?:&|and)\s*F\b/i],
 ];
+// Admission quarantine uses brand names only. Collection names such as
+// "Overseas" and "Santos" are intentionally excluded because they also occur
+// in shipping/location/person text and are unsafe production hold evidence.
+const STRICT_EXPLICIT_BRAND_PATTERNS = [
+  ['Rolex', /\brolex\b/i],
+  ['Patek Philippe', /\bpatek(?:\s+philippe)?\b/i],
+  ['Audemars Piguet', /\b(?:audemars\s+piguet|audemars)\b/i],
+  ['Richard Mille', /\brichard\s+mille\b/i],
+  ['Cartier', /\bcartier\b/i],
+  ['Zenith', /\bzenith\b/i],
+  ['TAG Heuer', /\b(?:tag\s*heuer|tagheuer)\b/i],
+  ['Breguet', /\bbreguet\b/i],
+  ['Franck Muller', /\bfranck\s+muller\b/i],
+  ['Blancpain', /\bblancpain\b/i],
+  ['Bulgari', /\b(?:bulgari|bvlgari)\b/i],
+  ['Chopard', /\bchopard\b/i],
+  ['Girard-Perregaux', /\bgirard[- ]perregaux\b/i],
+  ['Glashütte Original', /\bglash.{0,2}tte(?:\s+original)?\b/i],
+  ['Grand Seiko', /\bgrand\s+seiko\b/i],
+  ['H. Moser & Cie', /\bmoser\b/i],
+  ['Jacob & Co', /\bjacob\s*(?:&|and)\s*co\b/i],
+  ['Ulysse Nardin', /\bulysse\s+nardin\b/i],
+  ['Omega', /\bomega\b/i],
+  ['Panerai', /\bpanerai\b/i],
+  ['Hublot', /\bhublot\b/i],
+  ['IWC', /\bIWC\b/i],
+  ['Breitling', /\bbreitling\b/i],
+  ['Vacheron Constantin', /\b(?:vacheron\s+constantin|vacheron)\b/i],
+  ['Tudor', /\btudor\b/i],
+  ['A. Lange & Söhne', /\b(?:a\.?\s*lange|lange\s*(?:&|und)\s*s[oö]hne)\b/i],
+  ['F.P. Journe', /\b(?:f\.?\s*p\.?\s*journe|fpj)\b/i],
+  ['Piaget', /\bpiaget\b/i],
+  ['Montblanc', /\bmontblanc\b/i],
+  ['Jaeger-LeCoultre', /\bjaeger[- ]lecoultre\b/i],
+  ['Bell & Ross', /\bbell\s*(?:&|and)\s*ross\b/i],
+  ['MB&F', /\bMB\s*(?:&|and)\s*F\b/i],
+];
 
 function text(value) {
   return value === null || value === undefined ? '' : String(value).trim();
@@ -83,6 +125,12 @@ function text(value) {
 
 function explicitBrandsInRaw(rawMessage) {
   return EXPLICIT_BRAND_PATTERNS
+    .filter(([, pattern]) => pattern.test(String(rawMessage || '')))
+    .map(([brand]) => brand);
+}
+
+function strictExplicitBrandsInRaw(rawMessage) {
+  return STRICT_EXPLICIT_BRAND_PATTERNS
     .filter(([, pattern]) => pattern.test(String(rawMessage || '')))
     .map(([brand]) => brand);
 }
@@ -182,6 +230,7 @@ function sourcePriceEvidence(source, options = {}) {
   }
   if (
     ['USD', 'USDT'].includes(currency)
+    && currency === text(primary?.currency_original).toUpperCase()
     && sourceAmount !== null
     && Number.isFinite(normalizedUsd)
     && normalizedUsd > 0
@@ -198,6 +247,7 @@ function sourcePriceEvidence(source, options = {}) {
   }
   if (
     currency
+    && currency === text(primary?.currency_original).toUpperCase()
     && sourceAmount !== null
     && Number.isFinite(normalizedUsd)
     && normalizedUsd > 0
@@ -232,6 +282,41 @@ function additionalImportReasons(source, options = {}) {
     reasons.push('LISTING_TYPE_UNRESOLVED');
   }
   return reasons;
+}
+
+function admissionIdentityConflictReasons(source, decision, expectedBrand) {
+  const reasons = [];
+  const rawMessage = text(source.raw_message);
+  const reference = normalizeReference(decision.final_reference);
+  const explicitBrands = strictExplicitBrandsInRaw(rawMessage);
+  const conflictingBrands = explicitBrands.filter(brand => brand !== expectedBrand);
+  if (conflictingBrands.length) reasons.push('RAW_BRAND_SCOPE_CONFLICT');
+  if (/^(?:19|20)\d{2}$/.test(reference || '')) reasons.push('REFERENCE_IS_YEAR_TOKEN');
+
+  const expectedBrandExplicit = explicitBrands.includes(expectedBrand);
+  const catalog = confirmCatalogCandidate({ brand: expectedBrand, reference });
+  if (
+    !expectedBrandExplicit
+    && catalog.reason === 'CATALOG_BRAND_CONFLICT'
+    && rawSupportsReferenceToken(rawMessage, reference)
+  ) {
+    reasons.push('CATALOG_BRAND_SCOPE_CONFLICT');
+  }
+  return reasons;
+}
+
+function admissionIdentityGateReasons(source, decision, expectedBrand) {
+  const conflicts = admissionIdentityConflictReasons(source, decision, expectedBrand);
+  if (conflicts.length || !POSITIVE_IDENTITY_REQUIRED_BRANDS.has(expectedBrand)) return conflicts;
+  const rawMessage = text(source.raw_message);
+  const reference = normalizeReference(decision.final_reference);
+  const exactReferenceInRaw = rawSupportsReferenceToken(rawMessage, reference);
+  const explicitExpectedBrand = strictExplicitBrandsInRaw(rawMessage).includes(expectedBrand);
+  const catalog = confirmCatalogCandidate({ brand: expectedBrand, reference });
+  const exactCatalogMatch = catalog.confirmed && catalog.match?.brand === expectedBrand;
+  return exactReferenceInRaw && (explicitExpectedBrand || exactCatalogMatch)
+    ? []
+    : ['POSITIVE_BRAND_IDENTITY_EVIDENCE_MISSING'];
 }
 
 function listingType(value) {
@@ -280,14 +365,20 @@ function resolvedListingType(source, ownerUnbundled) {
   return ownerUnbundled ? 'OTHER' : listingType(source.intent);
 }
 
-function rowForImport({ source, decision, expectedBrand, fileName, fileSha256, rowNumber, runId, ownerUnbundled = false }) {
+function rowForImport({
+  source, decision, expectedBrand, fileName, fileSha256, rowNumber, runId,
+  ownerUnbundled = false, retainIdentityConflictsForAudit = false,
+}) {
   const admission = ownerUnbundled
     ? classifyOwnerUnbundledRow(source, decision, expectedBrand)
     : classifyRow(source, decision, expectedBrand);
   if (!admission.trading_floor_candidate || additionalImportReasons(source, {
     allowNoImage: ownerUnbundled,
     ownerUnbundled,
-  }).length) return null;
+  }).length || (
+    !retainIdentityConflictsForAudit
+    && admissionIdentityGateReasons(source, decision, expectedBrand).length
+  )) return null;
   const rawMessage = text(source.raw_message);
   const listingId = text(source.listing_id);
   const sourceMessageId = text(source.source_message_id);
@@ -682,6 +773,7 @@ async function run(argv = process.argv.slice(2)) {
         allowNoImage: options.ownerUnbundled,
         ownerUnbundled: options.ownerUnbundled,
       }),
+      ...admissionIdentityGateReasons(source, decision, options.brand),
     ];
     if (!admission.trading_floor_candidate || importReasons.length) {
       for (const reason of importReasons) heldReasons[reason] = (heldReasons[reason] || 0) + 1;
@@ -838,9 +930,12 @@ module.exports = {
   PRICE_RESEARCH_ONLY_REASONS,
   firstExactImage,
   additionalImportReasons,
+  admissionIdentityConflictReasons,
+  admissionIdentityGateReasons,
   canonicalizeExactDuplicates,
   buildMultiParentRows,
   explicitBrandsInRaw,
+  strictExplicitBrandsInRaw,
   hasExplicitMultiParentEvidence,
   exactDuplicateKey,
   ledgerDuplicateEvidence,

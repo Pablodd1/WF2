@@ -102,6 +102,75 @@ test('single-row admission uses the same raw multi-item quarantine as the public
   }), null);
 });
 
+test('reviewed workbook admission rejects explicit and catalog-backed cross-brand identity', () => {
+  const catalogConflict = source({
+    raw_message: 'New 126618LB June 24 $39k + ship',
+    listing_id: 'wrong-tag-reference',
+  });
+  const catalogDecision = decision({
+    listing_id: 'wrong-tag-reference',
+    final_reference: '126618LB',
+    final_model: 'TAG Heuer Collection',
+  });
+  assert.deepEqual(
+    intake.admissionIdentityConflictReasons(catalogConflict, catalogDecision, 'TAG Heuer'),
+    ['CATALOG_BRAND_SCOPE_CONFLICT'],
+  );
+  assert.equal(intake.rowForImport({
+    source: catalogConflict, decision: catalogDecision, expectedBrand: 'TAG Heuer',
+    fileName: 'input.xlsx', fileSha256: 'a'.repeat(64), rowNumber: 2, runId: 'test',
+  }), null);
+
+  const explicitConflict = source({
+    raw_message: 'Patek Philippe 5712/1A WTS USD 90000',
+    listing_id: 'wrong-breguet-brand',
+  });
+  const explicitDecision = decision({
+    listing_id: 'wrong-breguet-brand', final_brand: 'Breguet',
+    final_reference: '5712/1A', final_model: 'Classique',
+  });
+  assert.ok(intake.admissionIdentityConflictReasons(
+    explicitConflict, explicitDecision, 'Breguet',
+  ).includes('RAW_BRAND_SCOPE_CONFLICT'));
+});
+
+test('generic collection words are not explicit competing-brand quarantine proof', () => {
+  assert.deepEqual(intake.strictExplicitBrandsInRaw(
+    'Ships overseas; seller Santos confirmed availability',
+  ), []);
+  assert.deepEqual(intake.strictExplicitBrandsInRaw(
+    'Vacheron Constantin Overseas 4500V available',
+  ), ['Vacheron Constantin']);
+});
+
+test('tainted reviewed workbooks require positive expected-brand identity evidence', () => {
+  const unsupported = source({
+    raw_message: '214270 full set USD 8,000', listing_id: 'unsupported-tag',
+  });
+  const unsupportedDecision = decision({
+    listing_id: 'unsupported-tag', final_reference: '214270', final_model: 'TAG Heuer Collection',
+  });
+  assert.ok(intake.admissionIdentityGateReasons(
+    unsupported, unsupportedDecision, 'TAG Heuer',
+  ).length > 0);
+
+  const supported = source({
+    raw_message: 'TAG Heuer Carrera CBS2210.FC6534 USD 6,500', listing_id: 'supported-tag',
+  });
+  const supportedDecision = decision({ listing_id: 'supported-tag' });
+  assert.deepEqual(intake.admissionIdentityGateReasons(
+    supported, supportedDecision, 'TAG Heuer',
+  ), []);
+});
+
+test('reviewed workbook admission rejects a year mistaken for a reference', () => {
+  assert.deepEqual(intake.admissionIdentityConflictReasons(
+    source({ raw_message: 'Breguet ladies oval circa 1970', listing_id: 'year-ref' }),
+    decision({ listing_id: 'year-ref', final_brand: 'Breguet', final_reference: '1970' }),
+    'Breguet',
+  ), ['REFERENCE_IS_YEAR_TOKEN']);
+});
+
 test('single-row admission holds unresolved intent before database import', () => {
   const unresolved = source({
     raw_message: 'Franck Muller Vanguard V45 green dial',
@@ -238,6 +307,15 @@ test('non-USD FX remains review evidence but is excluded from current analytics'
   assert.equal(evidence.sourceAmount, 50000);
   assert.equal(evidence.workbookPriceUsd, 6410);
   assert.equal(evidence.status, 'DATED_FX_PROVENANCE_REQUIRES_EXISTING_SIDECAR');
+});
+
+test('workbook currency cannot contradict the exact raw currency evidence', () => {
+  const evidence = intake.sourcePriceEvidence(source({
+    raw_message: 'TAG Heuer Carrera HKD 50,000', asking_price_raw: 'HKD 50000',
+    source_currency: 'USD', normalized_price_usd: 6410,
+    fx_source: 'SOURCE_STATED', fx_rate_date: '2026-08-11',
+  }));
+  assert.equal(evidence.status, 'PRICE_EVIDENCE_INCOMPLETE');
 });
 
 test('bare-dollar evidence is never promoted to explicit USD in owner-unbundled mode', () => {

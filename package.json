@@ -68,6 +68,8 @@
     "validate:external-audit": "node tools/external-audit/validate-external-audit.cjs",
     "normalize:watches-only-report": "node tools/intake/normalize-watches-only-report.cjs",
     "audit:three-brand-workbooks": "node tools/intake/audit-three-brand-workbooks.cjs",
+    "audit:reviewed-workbook-prices": "node tools/intake/audit-reviewed-workbook-price-evidence.cjs",
+    "control:reviewed-workbook-integrity": "node tools/intake/apply-reviewed-workbook-integrity-canary.cjs",
     "canary:three-brand-workbooks": "node tools/intake/build-three-brand-shadow-canary.cjs",
     "import:reviewed-workbook-inventory": "node tools/intake/import-reviewed-workbook-inventory.cjs",
     "import:approved-admission-workbook": "node tools/intake/import-approved-admission-workbook.cjs",
