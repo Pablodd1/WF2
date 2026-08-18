@@ -135,7 +135,7 @@ export default function DealerLogin() {
       <MarketNav />
       <div className="px-5 py-8">
         <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-5xl flex-col">
-        <Link to="/" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> Curated Luxury</Link>
+        <Link to="/trading" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> Trading Floor</Link>
         <div className="flex flex-1 items-center justify-center py-10">
           <section className={`w-full ${entryMode === 'apply' && !adminEntry ? 'max-w-[720px]' : 'max-w-[420px]'} border border-white/12 bg-[#111118] p-6 sm:p-8`}>
             <div className="mb-6 flex items-center gap-3"><LockKeyhole size={20} className="text-[#c9a96e]" /><h2 className="text-lg font-semibold">{adminEntry ? 'CL Login' : entryMode === 'login' ? 'Workspace Login' : 'Dealer access application'}</h2></div>

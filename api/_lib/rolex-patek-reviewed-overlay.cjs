@@ -1,6 +1,9 @@
 'use strict';
 
 const ROLEX_PATEK_DELTA_TIER = 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1';
+const ROLEX_PATEK_MULTI_PARENT_ID = 'rpdelta_1ac10392cca161ba85a042a2f3efd4ef79cda691ccca2422f8b3280eebbf5972';
+const ROLEX_PATEK_MULTI_PARENT_STATUS = 'APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY';
+const MULTI_PARENT_PUBLICATION_LANE = 'OWNER_MULTI_PARENT_SOURCE_LINEAGE_V1';
 const ROLEX_PATEK_DELTA_BRANDS = new Set(['rolex', 'patek philippe']);
 const OWNER_APPROVED_USD_STATUSES = new Set([
   'SOURCE_EXPLICIT_USD_MATCH',
@@ -65,14 +68,27 @@ function mergeByExactLineage(baseRows = [], overlayRows = []) {
   };
 }
 
+function isExactRolexPatekMultiParent(row) {
+  return clean(row?.id) === ROLEX_PATEK_MULTI_PARENT_ID
+    && clean(row?.verification_tier) === ROLEX_PATEK_DELTA_TIER
+    && clean(row?.verification_status) === ROLEX_PATEK_MULTI_PARENT_STATUS
+    && clean(row?.listing_type).toUpperCase() === 'MULTI'
+    && Boolean(clean(row?.source_message_id))
+    && /^[0-9a-f]{64}$/i.test(clean(row?.source_payload_sha256))
+    && Number(row?.workbook_price_usd || 0) === 0
+    && !clean(row?.normalized_reference || row?.raw_reference)
+    && !clean(row?.user_image_url || row?.final_image_url || row?.display_image_url);
+}
+
 function prepareOverlayRow(row) {
+  const exactMultiParent = isExactRolexPatekMultiParent(row);
   const exactImage = row?.image_evidence_type === 'SELLER_LISTING_IMAGE'
     && /^https?:\/\/[^\s]+$/i.test(clean(row?.user_image_url || row?.final_image_url || row?.display_image_url));
   const imageUrl = exactImage
     ? clean(row.user_image_url || row.final_image_url || row.display_image_url)
     : null;
   const priceEvidenceStatus = clean(row?.price_evidence_status).toUpperCase();
-  const approvedUsd = OWNER_APPROVED_USD_STATUSES.has(priceEvidenceStatus)
+  const approvedUsd = !exactMultiParent && OWNER_APPROVED_USD_STATUSES.has(priceEvidenceStatus)
     && clean(row?.listing_type).toUpperCase() === 'WTS'
     && Number(row?.workbook_price_usd) > 0;
   return {
@@ -83,11 +99,11 @@ function prepareOverlayRow(row) {
     has_verified_usd_price: approvedUsd,
     has_complete_identity: Boolean(clean(row?.canonical_brand || row?.supplied_brand || row?.brand_scope)
       && clean(row?.normalized_reference || row?.raw_reference)),
-    verdict: 'APPROVED',
-    trading_floor_status: 'APPROVED',
+    verdict: exactMultiParent ? ROLEX_PATEK_MULTI_PARENT_STATUS : 'APPROVED',
+    trading_floor_status: exactMultiParent ? 'PUBLISHED_MULTI_LISTING' : 'APPROVED',
     item_category: 'WATCH',
     publication_state: 'APPROVED',
-    publication_lane: ROLEX_PATEK_DELTA_TIER,
+    publication_lane: exactMultiParent ? MULTI_PARENT_PUBLICATION_LANE : ROLEX_PATEK_DELTA_TIER,
     normalization_run_complete: true,
     raw_lineage_verified: Boolean(clean(row?.source_message_id))
       && /^[0-9a-f]{64}$/i.test(clean(row?.source_payload_sha256)),
@@ -101,11 +117,14 @@ async function loadRolexPatekOverlayRows(client, {
   limit = 1000,
   offset = 0,
   count = false,
+  includeMultiParents = false,
 } = {}) {
   if (!isRolexPatekOverlayBrand(brand)) return { rows: [], count: 0 };
   let query = client
     .from('reviewed_workbook_inventory')
-    .select(OVERLAY_COLUMNS, count ? { count: 'exact' } : undefined)
+    // The exact single count is also needed to place the one multi parent at
+    // the end of its deterministic brand stream when fetching a later page.
+    .select(OVERLAY_COLUMNS, { count: 'exact' })
     .eq('brand_scope', clean(brand))
     .eq('verification_tier', ROLEX_PATEK_DELTA_TIER)
     .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
@@ -123,14 +142,44 @@ async function loadRolexPatekOverlayRows(client, {
     .range(boundedOffset, boundedOffset + boundedLimit - 1);
   if (error) throw error;
   const rows = (data || []).map(prepareOverlayRow).filter(row => row.raw_lineage_verified === true);
-  return { rows, count: count ? Number(exactCount || 0) : null };
+  let parent = null;
+  const parentEligible = includeMultiParents
+    && clean(brand).toLowerCase() === 'rolex'
+    && !exactReferences.length
+    && (listingTypes || []).map(value => clean(value).toUpperCase()).includes('MULTI');
+  if (parentEligible) {
+    const { data: parentData, error: parentError } = await client
+      .from('reviewed_workbook_inventory')
+      .select(OVERLAY_COLUMNS)
+      .eq('id', ROLEX_PATEK_MULTI_PARENT_ID)
+      .eq('brand_scope', 'Rolex')
+      .eq('verification_tier', ROLEX_PATEK_DELTA_TIER)
+      .eq('verification_status', ROLEX_PATEK_MULTI_PARENT_STATUS)
+      .eq('listing_type', 'MULTI')
+      .eq('confidence', 100)
+      .maybeSingle();
+    if (parentError) throw parentError;
+    if (isExactRolexPatekMultiParent(parentData)) parent = prepareOverlayRow(parentData);
+  }
+  const singleCount = Number(exactCount || 0);
+  if (parent && offset <= singleCount && singleCount < offset + boundedLimit) rows.push(parent);
+  return {
+    rows,
+    count: count ? singleCount + (parent ? 1 : 0) : null,
+    singleCount: count ? singleCount : null,
+    multiParentCount: count ? (parent ? 1 : 0) : null,
+  };
 }
 
 module.exports = {
   OVERLAY_COLUMNS,
   OWNER_APPROVED_USD_STATUSES,
+  MULTI_PARENT_PUBLICATION_LANE,
   ROLEX_PATEK_DELTA_BRANDS,
   ROLEX_PATEK_DELTA_TIER,
+  ROLEX_PATEK_MULTI_PARENT_ID,
+  ROLEX_PATEK_MULTI_PARENT_STATUS,
+  isExactRolexPatekMultiParent,
   isRolexPatekOverlayBrand,
   loadRolexPatekOverlayRows,
   mergeByExactLineage,

@@ -7,6 +7,10 @@ const test = require('node:test');
 
 const {
   ROLEX_PATEK_DELTA_TIER,
+  ROLEX_PATEK_MULTI_PARENT_ID,
+  ROLEX_PATEK_MULTI_PARENT_STATUS,
+  MULTI_PARENT_PUBLICATION_LANE,
+  isExactRolexPatekMultiParent,
   mergeByExactLineage,
   overlayExactKeys,
   prepareOverlayRow,
@@ -26,6 +30,39 @@ test('public raw evidence redacts contact PII and labeled handles without erasin
   assert.match(redacted, /\[contact link redacted\]/);
   assert.doesNotMatch(redacted, /@daytona_dealer/);
   assert.match(redacted, /Telegram \[handle redacted\]/);
+});
+
+test('exact structured multi-offer parent is Trading-Floor-only and excluded from analytics', () => {
+  const parent = prepareOverlayRow({
+    id: ROLEX_PATEK_MULTI_PARENT_ID,
+    verification_tier: ROLEX_PATEK_DELTA_TIER,
+    verification_status: ROLEX_PATEK_MULTI_PARENT_STATUS,
+    source_message_id: 'source-message',
+    source_payload_sha256: 'e'.repeat(64),
+    canonical_brand: 'Rolex',
+    listing_type: 'MULTI',
+    raw_message: 'Rolex 134300 $11,100 USD\nRolex 134300 $10,600 USD',
+    price_evidence_status: 'MULTI_PARENT_PRICE_WITHHELD',
+    workbook_price_usd: null,
+    normalized_reference: null,
+    raw_reference: null,
+    image_evidence_type: null,
+    user_image_url: null,
+  });
+  assert.equal(isExactRolexPatekMultiParent(parent), true);
+  assert.equal(parent.publication_lane, MULTI_PARENT_PUBLICATION_LANE);
+  assert.equal(parent.trading_floor_status, 'PUBLISHED_MULTI_LISTING');
+  assert.equal(parent.has_verified_usd_price, false);
+  assert.equal(parent.verified_price_usd, null);
+  assert.equal(parent.has_exact_source_image, false);
+  const publicParent = tradingFloorApi.mapReviewedRecord(parent);
+  assert.equal(publicParent.multi_listing, true);
+  assert.equal(publicParent.multi_listing_release_approved, true);
+  assert.equal(mapWorkbookAnalyticsRow(parent).price_usd, null);
+
+  assert.equal(isExactRolexPatekMultiParent({ ...parent, id: `rpdelta_${'f'.repeat(64)}` }), false);
+  assert.equal(isExactRolexPatekMultiParent({ ...parent, normalized_reference: '134300' }), false);
+  assert.equal(isExactRolexPatekMultiParent({ ...parent, user_image_url: 'https://example.test/ambiguous.jpg' }), false);
 });
 
 test('overlay admits an exact image only and prices only qualified WTS USD evidence', () => {
@@ -108,10 +145,31 @@ test('Trading Floor and Price Research keep the reviewed delta additive', () => 
   const tradingUi = fs.readFileSync(path.join(repo, 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
   const priceApi = fs.readFileSync(path.join(repo, 'api', 'price-research.js'), 'utf8');
   assert.match(tradingApi, /reviewedOverlayRecords/);
+  assert.match(tradingApi, /includeMultiParents: true/);
+  assert.match(tradingApi, /listingTypes: listingType\s*\? \[listingType\]\s*: \['WTS', 'WTB', 'MULTI'\]/);
+  assert.match(tradingApi, /!listingType \|\| String\(record\.listing_type \|\| ''\)\.toUpperCase\(\) === listingType/);
+  assert.match(tradingApi, /boundReviewedOverlayPage/);
   assert.match(tradingApi, /mergeByExactLineage\(records, filteredOverlay\)/);
   assert.match(tradingUi, /\.\.\.\(data\.records \|\| \[\]\), \.\.\.\(data\.reviewedOverlayRecords \|\| \[\]\)/);
   assert.match(priceApi, /mergeByExactLineage\(rows \|\| \[\], overlayWtsRows\)/);
   assert.match(priceApi, /SOURCE_EXPLICIT_USD_MATCH|loadRolexPatekOverlayEvidenceRows/);
+  const analyticsLib = fs.readFileSync(path.join(repo, 'api', '_lib', 'reviewed-workbook-analytics.cjs'), 'utf8');
+  assert.doesNotMatch(analyticsLib, /includeMultiParents:\s*true/);
+});
+
+test('combined Trading Floor pages are bounded and totals label singles versus parent', () => {
+  const base = Array.from({ length: 20 }, (_, index) => ({ id: `base-${index}` }));
+  const overlay = Array.from({ length: 10 }, (_, index) => ({ id: `overlay-${index}` }));
+  const bounded = tradingFloorApi.boundReviewedOverlayPage(base, overlay, 24);
+  assert.equal(bounded.length, 4);
+  assert.equal(base.length + bounded.length, 24);
+  assert.equal(tradingFloorApi.combineInventoryTotal(562092, 813, false), 562905);
+  assert.equal(tradingFloorApi.combineInventoryTotal(null, 813, false), null);
+  const tradingUi = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
+  assert.match(tradingUi, /data\.records\.length > 0 \|\| \(data\.reviewedOverlayRecords \|\| \[\]\)\.length > 0/);
+  const tradingApiSource = fs.readFileSync(path.join(__dirname, '..', 'api', 'reviewed-market-inventory.js'), 'utf8');
+  assert.match(tradingApiSource, /reviewed_single_total/);
+  assert.match(tradingApiSource, /structured_multi_parent_total/);
 });
 
 test('runtime handlers load and public mapping never emits private source message ids', async () => {

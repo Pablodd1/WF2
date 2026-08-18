@@ -14,7 +14,6 @@ type HeaderLink = {
 };
 
 const HEADER_LINKS: HeaderLink[] = [
-  { label: 'LANDING PAGE', to: '/' },
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
   { label: 'POST IT', to: '/dealer/post' },
@@ -49,7 +48,7 @@ export function MarketHeader({ compact = false, className = '', landing = false,
     <header className={`relative z-40 border-b border-[#3f3324]/15 bg-[#f3ecdf]/95 text-[#211b15] backdrop-blur-md ${className}`}>
       <div className={`mx-auto flex w-full max-w-[1600px] flex-col items-stretch gap-2 px-4 ${compact ? 'py-2.5' : 'py-3.5'} sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6 lg:px-8 xl:px-10`}>
         {showLogo ? (
-          <Link to="/" aria-label="Curated Luxury home" className="flex min-w-0 shrink-0 items-center">
+          <Link to="/trading" aria-label="Curated Luxury Trading Floor" className="flex min-w-0 shrink-0 items-center">
             <img src="/images/curated-luxury-logo.png" alt="Curated Luxury" className="h-9 w-auto max-w-[225px] object-contain object-left" />
           </Link>
         ) : (
@@ -58,9 +57,7 @@ export function MarketHeader({ compact = false, className = '', landing = false,
 
         <nav className="flex min-w-0 items-center gap-1 overflow-x-auto pb-1 sm:flex-1 sm:justify-end sm:pb-0" aria-label="Primary navigation">
           {links.map(link => {
-            const active = link.to === '/'
-              ? location.pathname === '/'
-              : link.to === '/trading'
+            const active = link.to === '/trading'
                 ? location.pathname === '/trading' && !wantsToBuy
                 : link.to === '/trading?type=WTB'
                   ? wantsToBuy
@@ -88,7 +85,7 @@ export function MarketHeader({ compact = false, className = '', landing = false,
             }
 
             return (
-              <Link key={link.label} to={link.to || '/'} aria-current={active ? 'page' : undefined} className={linkBtnClass}>
+              <Link key={link.label} to={link.to || '/trading'} aria-current={active ? 'page' : undefined} className={linkBtnClass}>
                 {t(link.label)}
               </Link>
             );

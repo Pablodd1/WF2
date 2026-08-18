@@ -16,6 +16,12 @@ const canaryRollback = fs.readFileSync(path.join(root, '.github/workflows/qnsa-r
 test('delta importer is fail-closed and preserves owner USD evidence labels', () => {
   assert.match(source, /QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1/);
   assert.match(source, /APPROVED_SINGLE_CANDIDATE/);
+  assert.match(source, /APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY/);
+  assert.match(source, /cf859a8b-d17f-42a7-9d6e-5eb2b81d76e2/);
+  assert.match(source, /rpdelta_1ac10392cca161ba85a042a2f3efd4ef79cda691ccca2422f8b3280eebbf5972/);
+  assert.match(source, /EXPECTED_TRADING_FLOOR_COHORT = 813/);
+  assert.match(source, /EXPECTED_REVIEWED_SINGLES = 812/);
+  assert.match(source, /EXPECTED_PRICE_RESEARCH_MAX = 614/);
   assert.match(source, /OWNER_DOLLAR_USD_POLICY/);
   assert.match(source, /OWNER_K_USD_POLICY/);
   assert.match(source, /EXACT_LISTING_IMAGE/);
@@ -28,6 +34,34 @@ test('delta importer is fail-closed and preserves owner USD evidence labels', ()
   assert.match(source, /reviewed_workbook_delta_release_runs/);
   assert.match(source, /qnsa_rolex_patek_delta_overlap/);
   assert.match(source, /--rollback-output/);
+});
+
+test('known two-offer source becomes one Trading-Floor-only parent', () => {
+  const code = String.raw`
+import importlib.util, pathlib, json
+p=pathlib.Path(r'${path.join(root, 'tools/intake/rolex_patek_delta_release.py').replace(/\\/g, '\\\\')}')
+s=importlib.util.spec_from_file_location('rp',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+r={'id':m.MULTI_OFFER_DELTA_ID,'listing_id':m.MULTI_OFFER_SOURCE_LISTING_ID,'raw_message':'Rolex 134300 Blue $11,100 USD\\nRolex 134300 Blue $10,600 USD','model':'Oyster Perpetual','reference':'134300','dial':'Blue','condition':'Pre-Owned','price_usd':11100.0,'source_currency':'USD','source_price_amount':'11100','price_status':'SOURCE_EXPLICIT_USD_MATCH','source_image_url':'https://example.test/parent.jpg','image_status':'EXACT_SOURCE_MESSAGE_IMAGE','listing_type':'WTS'}
+m.classify_structured_multi_offer_parent([r])
+r.update({'source_payload_sha256':'b'*64,'source_record_id':'rec','source_message_id':'msg','brand':'Rolex','posting_date':'2026-08-17 12:00:00','source_row_number':2,'source_platform':'WhatsApp','source_group_id':'private','lineage_status':'RAW_LINEAGE_VERIFIED'})
+pkg={'path':pathlib.Path('Rolex_Codex_Reconciliation_Master_2026-08-17.xlsx'),'sha256':'c'*64}
+row=m.inventory_row(r,pkg,'rpdelta_canary_test')
+canary=m.select_canary([r,dict(r,id='rpdelta_'+'d'*64,listing_id='other',record_kind='SINGLE')])
+print(json.dumps({'source':r,'row':row,'canary_ids':[x['id'] for x in canary]}))`;
+  const result = spawnSync('python', ['-c', code], { cwd: root, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const data = JSON.parse(result.stdout);
+  assert.equal(data.source.offer_count, 2);
+  assert.equal(data.row.verification_status, 'APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY');
+  assert.equal(data.row.listing_type, 'MULTI');
+  assert.equal(data.row.workbook_price_usd, null);
+  assert.equal(data.row.source_price_text, null);
+  assert.equal(data.row.normalized_reference, null);
+  assert.equal(data.row.final_image_url, null);
+  assert.equal(data.row.image_evidence_type, null);
+  assert.match(data.row.raw_message, /11,100 USD[\s\S]*10,600 USD/);
+  assert.ok(data.row.review_reasons.includes('MULTI_PARENT_TRADING_FLOOR_ONLY'));
+  assert.ok(data.canary_ids.includes('rpdelta_1ac10392cca161ba85a042a2f3efd4ef79cda691ccca2422f8b3280eebbf5972'));
 });
 
 test('schema-valid payload keeps contact private and exact image evidence', () => {
