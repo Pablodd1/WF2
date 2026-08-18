@@ -37,7 +37,7 @@ export default function DealerPortal() {
     <main className="min-h-screen bg-[#08080c] px-5 py-7 text-white sm:px-8 lg:px-12">
       <div className="mx-auto max-w-6xl">
         <header className="flex items-center justify-between border-b border-white/10 pb-5">
-          <Link to="/" className="flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white">
+          <Link to="/trading" className="flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white">
             <ArrowLeft size={16} /> Curated Luxury
           </Link>
           <nav aria-label="Workspace navigation" className="flex items-center gap-2">

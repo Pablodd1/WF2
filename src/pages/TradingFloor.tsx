@@ -600,7 +600,8 @@ export default function TradingFloor() {
             data = { status: 'error' };
           }
           if (!response.ok || data.status === 'error' || !Array.isArray(data.records)
-            || data.records.length > 0 || !data.hasMore || !data.nextCursor
+            || data.records.length > 0 || (data.reviewedOverlayRecords || []).length > 0
+            || !data.hasMore || !data.nextCursor
             || emptyCursorHops >= MAX_EMPTY_CURSOR_HOPS - 1) break;
           params.set('cursor', data.nextCursor);
           emptyCursorHops += 1;
@@ -717,7 +718,7 @@ export default function TradingFloor() {
                 {unfilteredBrandTotal !== null
                   ? `${unfilteredBrandTotal.toLocaleString()} ${brandFilter} listings globally`
                   : releaseWatchTotal !== null && ['all', 'watches'].includes(categoryFilter)
-                  ? `${releaseWatchTotal.toLocaleString()} watches in the Trading Floor · live database total`
+                  ? `${releaseWatchTotal.toLocaleString()} released single-watch listings · approved multi-item posts counted separately`
                   : total === null
                   ? `${((cursorHistory.length * pageSize) + visibleListings.length).toLocaleString()} viewed so far${hasMore ? ' · more listings available' : ''}`
                   : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings globally`}

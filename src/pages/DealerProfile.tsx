@@ -62,7 +62,6 @@ export default function DealerProfile() {
           <Breadcrumb
             dark
             items={[
-              { label: 'Home', to: '/' },
               { label: 'Trading Floor', to: '/trading' },
               { label: 'Reference Check', to: '/reference-check' },
               { label: name },

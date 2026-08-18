@@ -1168,6 +1168,25 @@ test('reconciled Zenith singles are not re-quarantined by the generic bundle spl
   })), true);
 });
 
+test('audited Rolex/Patek delta singles bypass only the legacy prose splitter', () => {
+  const auditedSingle = record({
+    id: `rpdelta_${'a'.repeat(64)}`,
+    verification_tier: 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1',
+    verification_status: 'APPROVED_SINGLE_CANDIDATE',
+    confidence: 100,
+    raw_lineage_verified: true,
+    raw_message: 'Rolex 126500LN white USD 30,000; dealer signature also mentions Patek 5711',
+  });
+  assert.equal(api.isAuditedRolexPatekDeltaSingle(auditedSingle), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, verification_tier: null }), true);
+  assert.equal(api.isMultiListing(auditedSingle), false);
+
+  assert.equal(api.isMultiListing({ ...auditedSingle, is_bundle: true }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, listing_type: 'MULTI' }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, model: 'Multiple' }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, raw_lineage_verified: false }), true);
+});
+
 test('Zenith exact Trading Floor lookups use the reconciled punctuation-preserving lane', () => {
   const migration = fs.readFileSync(
     path.join(__dirname, '../supabase/migrations/20260815121500_qnsa_zenith_exact_reference_rows.sql'),

@@ -16,6 +16,7 @@ const {
   isRolexPatekOverlayBrand,
   loadRolexPatekOverlayRows,
   mergeByExactLineage,
+  ROLEX_PATEK_DELTA_TIER,
 } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
 const {
   cleanExactText,
@@ -231,6 +232,29 @@ function isNormalizedWorkbookSummary(row) {
   return candidates.has(raw);
 }
 
+function combineInventoryTotal(baseTotal, overlayTotal, overlayCountWithheld = false) {
+  if (baseTotal === null || baseTotal === undefined || overlayCountWithheld) return baseTotal ?? null;
+  return Number(baseTotal) + Math.max(0, Number(overlayTotal) || 0);
+}
+
+function boundReviewedOverlayPage(baseRecords, overlayRecords, pageSize) {
+  const available = Math.max(0, Number(pageSize) - (Array.isArray(baseRecords) ? baseRecords.length : 0));
+  return (Array.isArray(overlayRecords) ? overlayRecords : []).slice(0, available);
+}
+
+function isAuditedRolexPatekDeltaSingle(row) {
+  const id = cleanExactText(row?.id, 90);
+  const listingType = cleanExactText(row?.listing_type, 30).toUpperCase();
+  const brand = row?.supplied_brand || row?.canonical_brand || row?.brand_scope || row?.brand;
+  return /^rpdelta_[0-9a-f]{64}$/.test(id)
+    && row?.verification_tier === ROLEX_PATEK_DELTA_TIER
+    && row?.verification_status === 'APPROVED_SINGLE_CANDIDATE'
+    && Number(row?.confidence) === 100
+    && row?.raw_lineage_verified === true
+    && ['WTS', 'WTB'].includes(listingType)
+    && isRolexPatekOverlayBrand(brand);
+}
+
 function isMultiListing(row) {
   const listingType = cleanExactText(row.listing_type, 30).toUpperCase();
   if (row.is_bundle === true || ['MULTI', 'MULTI_LISTING', 'BUNDLE'].includes(listingType)) return true;
@@ -238,6 +262,13 @@ function isMultiListing(row) {
     .some(value => MULTIPLE_LISTING_IDENTITY_VALUES.includes(cleanExactText(value, 40).toLowerCase()))) {
     return true;
   }
+
+  // This marker is assigned only after the reviewed Rolex/Patek delta importer
+  // has verified one deterministic offer and immutable raw lineage. Let that
+  // narrower audit outrank the legacy prose splitter, which can mistake noisy
+  // dealer signatures or accessory text for a second watch. Explicit bundle
+  // flags, multi intents, and multi identity sentinels above still fail closed.
+  if (isAuditedRolexPatekDeltaSingle(row)) return false;
 
   // The QNSA Zenith lane is reconciled against immutable raw text before its
   // release control is enabled. Its exact classifier understands dotted Zenith
@@ -2467,6 +2498,8 @@ module.exports = async function handler(req, res) {
     }
     let reviewedOverlayRecords = [];
     let reviewedOverlayTotal = 0;
+    let reviewedOverlaySingleTotal = 0;
+    let reviewedOverlayMultiParentTotal = 0;
     let reviewedOverlayDuplicateCount = 0;
     let reviewedOverlayConsumed = 0;
     let reviewedOverlayHasMore = false;
@@ -2479,25 +2512,51 @@ module.exports = async function handler(req, res) {
       : [];
     if (reviewedOverlayBrands.length) {
       try {
-        const overlayResults = await Promise.all(reviewedOverlayBrands.map(overlayBrand =>
+        const overlayRequest = (overlayBrand, limit, offset, count) =>
           loadRolexPatekOverlayRows(client, {
             brand: overlayBrand,
             references: requestedReference ? listEquivalentReferences(requestedReference, overlayBrand) : [],
-            listingTypes: listingType && ['WTS', 'WTB'].includes(listingType)
+            listingTypes: listingType
               ? [listingType]
-              : ['WTS', 'WTB'],
-            limit: pageSize,
-            offset: requestedDeltaOffset,
-            count: true,
-          })));
-        reviewedOverlayTotal = overlayResults.reduce((sum, result) => sum + result.count, 0);
-        reviewedOverlayConsumed = overlayResults.reduce((max, result) => Math.max(max, result.rows.length), 0);
+              : ['WTS', 'WTB', 'MULTI'],
+            includeMultiParents: true,
+            limit, offset, count,
+          });
+        // Count each independent brand stream first, then translate the one
+        // public delta offset into a deterministic concatenated-brand offset.
+        // This prevents a sparse Patek stream from being skipped while a large
+        // Rolex page is returned and keeps database reads page-bounded.
+        const overlayCounts = await Promise.all(reviewedOverlayBrands.map(overlayBrand =>
+          overlayRequest(overlayBrand, 1, 0, true)));
+        reviewedOverlayTotal = overlayCounts.reduce((sum, result) => sum + Number(result.count || 0), 0);
+        reviewedOverlaySingleTotal = overlayCounts.reduce((sum, result) => sum + Number(result.singleCount || 0), 0);
+        reviewedOverlayMultiParentTotal = overlayCounts.reduce((sum, result) => sum + Number(result.multiParentCount || 0), 0);
+        const overlayCapacity = Math.max(0, pageSize - records.length);
+        let remainingGlobalOffset = requestedDeltaOffset;
+        let remainingCapacity = overlayCapacity;
+        const overlayPlans = [];
+        for (let index = 0; index < reviewedOverlayBrands.length && remainingCapacity > 0; index += 1) {
+          const brandCount = Number(overlayCounts[index].count || 0);
+          if (remainingGlobalOffset >= brandCount) {
+            remainingGlobalOffset -= brandCount;
+            continue;
+          }
+          const available = brandCount - remainingGlobalOffset;
+          const take = Math.min(remainingCapacity, available);
+          overlayPlans.push({ brand: reviewedOverlayBrands[index], offset: remainingGlobalOffset, limit: take });
+          remainingCapacity -= take;
+          remainingGlobalOffset = 0;
+        }
+        const overlayResults = await Promise.all(overlayPlans.map(plan =>
+          overlayRequest(plan.brand, plan.limit, plan.offset, false)));
         const overlaySourceRows = overlayResults.flatMap(result => result.rows);
+        reviewedOverlayConsumed = overlaySourceRows.length;
         const mappedOverlay = await enrichRecordsWithDealerDirectory(
           client,
           overlaySourceRows.map(mapReviewedRecord),
         );
         const filteredOverlay = mappedOverlay
+          .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
           .filter(record => !imagesOnly || record.has_images === true)
           .filter(record => !pricedOnly || hasUsableSourcePrice(record))
           .filter(record => !requestedDial || cleanExactText(record.dial_color, 40).toLowerCase() === requestedDial.toLowerCase())
@@ -2510,9 +2569,12 @@ module.exports = async function handler(req, res) {
         const overlayMerge = mergeByExactLineage(records, filteredOverlay);
         reviewedOverlayDuplicateCount = overlayMerge.overlay_duplicate_count;
         const baseIds = new Set(records.map(record => String(record.id)));
-        reviewedOverlayRecords = overlayMerge.rows.filter(record => !baseIds.has(String(record.id)));
-        reviewedOverlayHasMore = overlayResults.some(result =>
-          requestedDeltaOffset + result.rows.length < result.count);
+        reviewedOverlayRecords = boundReviewedOverlayPage(
+          records,
+          overlayMerge.rows.filter(record => !baseIds.has(String(record.id))),
+          pageSize,
+        );
+        reviewedOverlayHasMore = requestedDeltaOffset + reviewedOverlayConsumed < reviewedOverlayTotal;
       } catch (overlayError) {
         // Overlay failure must never take the established QNSA feed offline.
         console.warn('[reviewed-market-inventory] Rolex/Patek reviewed overlay unavailable:', overlayError.message);
@@ -2535,15 +2597,21 @@ module.exports = async function handler(req, res) {
         })
       : null;
     const publicationBrands = publicationBrandsFromSummary(summary);
+    const combinedInventoryTotal = combineInventoryTotal(
+      publicInventoryTotal,
+      reviewedOverlayTotal,
+      reviewedOverlayCountHasUnsupportedFilter,
+    );
+    const combinedPageRecords = [...records, ...reviewedOverlayRecords];
 
     return res.status(200).json({
       status: 'ok',
       count: records.length + reviewedOverlayRecords.length,
-      total: publicInventoryTotal,
+      total: combinedInventoryTotal,
       page,
       pageSize,
       totalIsEstimate: false,
-      totalStatus: publicInventoryTotal === null ? 'withheld_for_unsupported_filter' : 'available_from_market_feed_counts',
+      totalStatus: combinedInventoryTotal === null ? 'withheld_for_unsupported_filter' : 'available_from_market_feed_plus_reviewed_overlay_counts',
       hasMore,
       nextCursor,
       records,
@@ -2556,12 +2624,14 @@ module.exports = async function handler(req, res) {
           ? 'withheld_for_client_filtered_overlay'
           : 'exact_approved_overlay_count',
         returned: reviewedOverlayRecords.length,
+        reviewed_single_total: reviewedOverlayCountHasUnsupportedFilter ? null : reviewedOverlaySingleTotal,
+        structured_multi_parent_total: reviewedOverlayCountHasUnsupportedFilter ? null : reviewedOverlayMultiParentTotal,
         exact_lineage_duplicates_held: reviewedOverlayDuplicateCount,
       },
       summary,
       publicationBrands,
       evidenceContract: EVIDENCE_CONTRACT,
-      coverage: summarizeCoverage(records),
+      coverage: summarizeCoverage(combinedPageRecords),
       displayPolicy: {
         unpriced_listings_visible: true,
         unpriced_listings_count_toward_activity: true,
@@ -2583,6 +2653,8 @@ module.exports = async function handler(req, res) {
 module.exports.EXPLICIT_USD_STATUS = EXPLICIT_USD_STATUS;
 module.exports.MULTI_PARENT_VERIFICATION_STATUS = MULTI_PARENT_VERIFICATION_STATUS;
 module.exports.MULTI_PARENT_PUBLICATION_LANE = MULTI_PARENT_PUBLICATION_LANE;
+module.exports.combineInventoryTotal = combineInventoryTotal;
+module.exports.boundReviewedOverlayPage = boundReviewedOverlayPage;
 module.exports.MARKET_SOURCE_VIEW = MARKET_SOURCE_VIEW;
 module.exports.MULTIPLE_LISTING_IDENTITY_VALUES = MULTIPLE_LISTING_IDENTITY_VALUES;
 module.exports.EVIDENCE_CONTRACT = EVIDENCE_CONTRACT;
@@ -2615,6 +2687,7 @@ module.exports.isLegacyReviewedInventoryRecord = isLegacyReviewedInventoryRecord
 module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;
 module.exports.isMultiListing = isMultiListing;
+module.exports.isAuditedRolexPatekDeltaSingle = isAuditedRolexPatekDeltaSingle;
 module.exports.safeSearchTerm = safeSearchTerm;
 module.exports.locationSearchPattern = locationSearchPattern;
 module.exports.locationMatches = locationMatches;

@@ -129,7 +129,7 @@ export default function InsightDetails() {
             <Breadcrumb
               dark
               items={[
-                { label: 'Home', to: '/' },
+                { label: 'Trading Floor', to: '/trading' },
                 { label: 'Price Research', to: '/price-research' },
                 { label: `Insight: ${displayRef}` },
               ]}

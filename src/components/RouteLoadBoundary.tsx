@@ -48,8 +48,8 @@ export class RouteLoadBoundary extends Component<Props, State> {
             >
               Refresh page
             </button>
-            <a href="/#/" className="flex min-h-11 items-center justify-center border border-white/20 px-5 text-sm font-semibold text-white">
-              Return to landing page
+            <a href="/#/trading" className="flex min-h-11 items-center justify-center border border-white/20 px-5 text-sm font-semibold text-white">
+              Return to Trading Floor
             </a>
           </div>
         </section>

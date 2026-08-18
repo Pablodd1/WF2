@@ -18,7 +18,6 @@ function recoverableRoute<T extends LazyRouteModule>(routeKey: string, importer:
 }
 
 const OperationsDashboard = recoverableRoute('operations-dashboard', () => import('@/pages/OperationsDashboard'));
-const LandingPage = recoverableRoute('landing-page', () => import('@/pages/LandingPage'));
 const TradingFloor = recoverableRoute('trading-floor', () => import('@/pages/TradingFloor'));
 const SourceAnalytics = recoverableRoute('source-analytics', () => import('@/pages/SourceAnalytics'));
 const ReviewQueue = recoverableRoute('review-queue', () => import('@/pages/ReviewQueue'));
@@ -62,7 +61,7 @@ export default function App() {
       <RouteLoadBoundary resetKey={`${location.pathname}${location.search}`}>
         <Suspense fallback={<div className="min-h-screen bg-white" />}>
           <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<Navigate to="/trading" replace />} />
         <Route path="/dealer" element={<DealerLogin />} />
         <Route path="/dealer-login" element={<Navigate to="/dealer" replace />} />
         <Route path="/cl-login" element={<DealerLogin />} />
@@ -103,7 +102,7 @@ export default function App() {
         <Route path="/flash-sales/:id" element={<FlashSaleDetail />} />
         <Route path="/blog" element={<Blog />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/trading" replace />} />
           </Routes>
         </Suspense>
       </RouteLoadBoundary>

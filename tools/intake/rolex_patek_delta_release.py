@@ -27,6 +27,13 @@ CELL_REF = re.compile(r"([A-Z]+)")
 PROJECT_REF = "qnsafosakvonzgfcsphh"
 TIER = "QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1"
 STATUS = "APPROVED_SINGLE_CANDIDATE"
+MULTI_OFFER_STATUS = "APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY"
+MULTI_OFFER_SOURCE_LISTING_ID = "cf859a8b-d17f-42a7-9d6e-5eb2b81d76e2"
+MULTI_OFFER_DELTA_ID = "rpdelta_1ac10392cca161ba85a042a2f3efd4ef79cda691ccca2422f8b3280eebbf5972"
+EXPECTED_TRADING_FLOOR_COHORT = 813
+EXPECTED_REVIEWED_SINGLES = 812
+EXPECTED_STRUCTURED_MULTI_OFFER_PARENTS = 1
+EXPECTED_PRICE_RESEARCH_MAX = 614
 BASELINE = "2026-08-10 10:27:49"
 EMPTY_SHA = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 BRANDS = {"Rolex", "Patek Philippe"}
@@ -339,6 +346,56 @@ def exact_live_reconciliation(rows: list[dict], env: dict) -> dict:
     }
 
 
+def classify_structured_multi_offer_parent(rows: list[dict]) -> list[dict]:
+    """Fail closed around the one reviewed source that contains two offers.
+
+    The source remains one immutable parent. We do not invent child/image
+    associations and do not select either asking price as the parent's price.
+    """
+    matches = [row for row in rows if row["listing_id"] == MULTI_OFFER_SOURCE_LISTING_ID]
+    if len(matches) != 1:
+        raise RuntimeError(f"expected exactly one structured multi-offer parent, found {len(matches)}")
+    row = matches[0]
+    if row["id"] != MULTI_OFFER_DELTA_ID:
+        raise RuntimeError("structured multi-offer parent deterministic id drifted")
+    offers = re.findall(r"(?i)\$\s*[0-9][0-9,]*(?:\.[0-9]+)?\s*(?:USD|USDT)\b", row["raw_message"])
+    if len(offers) != 2:
+        raise RuntimeError(f"structured multi-offer parent must retain exactly two raw offers, found {len(offers)}")
+    row.update({
+        "record_kind": "STRUCTURED_MULTI_OFFER_PARENT",
+        "offer_count": 2,
+        "listing_type": "MULTI",
+        "model": "", "reference": "", "dial": "", "condition": "",
+        "price_usd": None, "source_currency": None, "source_price_amount": "",
+        "price_status": "MULTI_PARENT_PRICE_WITHHELD",
+        "source_image_url": "", "image_status": "MULTI_OFFER_PARENT_IMAGE_WITHHELD",
+    })
+    return rows
+
+
+def validate_expected_cohort(rows: list[dict]) -> dict:
+    counts = {
+        "trading_floor": len(rows),
+        "reviewed_singles": sum(r.get("record_kind") != "STRUCTURED_MULTI_OFFER_PARENT" for r in rows),
+        "structured_multi_offer_parents": sum(r.get("record_kind") == "STRUCTURED_MULTI_OFFER_PARENT" for r in rows),
+        "price_research_max": sum(
+            r.get("record_kind") != "STRUCTURED_MULTI_OFFER_PARENT"
+            and r["listing_type"] == "WTS"
+            and r["price_status"] in {"SOURCE_EXPLICIT_USD_MATCH", "OWNER_DOLLAR_USD_POLICY", "OWNER_K_USD_POLICY"}
+            for r in rows
+        ),
+    }
+    expected = {
+        "trading_floor": EXPECTED_TRADING_FLOOR_COHORT,
+        "reviewed_singles": EXPECTED_REVIEWED_SINGLES,
+        "structured_multi_offer_parents": EXPECTED_STRUCTURED_MULTI_OFFER_PARENTS,
+        "price_research_max": EXPECTED_PRICE_RESEARCH_MAX,
+    }
+    if counts != expected:
+        raise RuntimeError(f"reviewed cohort count drift: expected {expected}, found {counts}")
+    return counts
+
+
 def source_supported(value: str, raw: str) -> bool:
     target = re.sub(r"[^A-Z0-9]", "", (value or "").upper())
     return bool(target) and target in re.sub(r"[^A-Z0-9]", "", raw.upper())
@@ -354,6 +411,9 @@ def inventory_row(row: dict, package: dict, run_key: str) -> dict:
     if not condition: reasons.append("CONDITION_UNVERIFIED")
     content = sha256((row["id"] + "|" + row["source_payload_sha256"]).encode()).hexdigest()
     image = row["source_image_url"] or None
+    is_multi_offer_parent = row.get("record_kind") == "STRUCTURED_MULTI_OFFER_PARENT"
+    if is_multi_offer_parent:
+        reasons.extend(["STRUCTURED_MULTI_OFFER_PARENT", "TWO_RAW_OFFERS_RETAINED", "MULTI_PARENT_TRADING_FLOOR_ONLY", "PRICE_RESEARCH_EXCLUDED", "UNASSIGNED_MEDIA_WITHHELD"])
     return {
         "id": row["id"], "content_hash": content, "import_run_id": run_key,
         "source_file": package["path"].name, "source_file_sha256": package["sha256"],
@@ -363,13 +423,13 @@ def inventory_row(row: dict, package: dict, run_key: str) -> dict:
         "source_message_id": row["source_message_id"], "posting_date": row["posting_date"].replace(" ", "T") + "Z",
         "posted_by": None, "phone_number": None, "raw_message": row["raw_message"],
         "listing_type": row["listing_type"], "brand_scope": row["brand"], "supplied_brand": row["brand"],
-        "canonical_brand": row["brand"], "model": model, "raw_reference": row["reference"],
-        "normalized_reference": row["reference"], "catalog_reference": None, "catalog_model": None,
+        "canonical_brand": row["brand"], "model": model, "raw_reference": row["reference"] or None,
+        "normalized_reference": row["reference"] or None, "catalog_reference": None, "catalog_model": None,
         "dial_color": dial, "catalog_dial": None, "condition": condition,
         "workbook_price_usd": row["price_usd"], "source_price_amount": row["price_usd"],
         "source_price_text": row["source_price_amount"] or None, "source_currency": row["source_currency"],
         "price_evidence_status": row["price_status"], "verification_tier": TIER,
-        "confidence": 100, "verification_status": STATUS,
+        "confidence": 100, "verification_status": MULTI_OFFER_STATUS if is_multi_offer_parent else STATUS,
         "user_image_url": image, "catalog_image_url": None, "final_image_url": image,
         "display_image_url": image, "image_evidence_type": "SELLER_LISTING_IMAGE" if image else None,
         "review_reasons": sorted(set(reasons)), "contact_publication_approved": False,
@@ -386,10 +446,16 @@ def select_canary(rows: list[dict]) -> list[dict]:
             "MODEL:VERIFIED" if source_supported(row.get("model", ""), row["raw_message"]) else "MODEL:NULL",
             "DIAL:VERIFIED" if source_supported(row.get("dial", ""), row["raw_message"]) else "DIAL:NULL",
             "CONDITION:VERIFIED" if source_supported(row.get("condition", ""), row["raw_message"]) else "CONDITION:NULL",
+            "STRUCTURE:MULTI_OFFER_PARENT" if row.get("record_kind") == "STRUCTURED_MULTI_OFFER_PARENT" else "STRUCTURE:SINGLE",
         }
     available = set().union(*(labels(row) for row in ordered)) if ordered else set()
-    required = {label for label in available if label.startswith(("BRAND:", "INTENT:", "PRICE:", "IMAGE:", "MODEL:", "DIAL:", "CONDITION:"))}
-    selected, covered = [], set()
+    required = {label for label in available if label.startswith(("BRAND:", "INTENT:", "PRICE:", "IMAGE:", "MODEL:", "DIAL:", "CONDITION:", "STRUCTURE:"))}
+    # The canary must exercise the exceptional parent contract, not only the
+    # dominant single-listing path.
+    selected = [row for row in ordered if row.get("record_kind") == "STRUCTURED_MULTI_OFFER_PARENT"]
+    if len(selected) > 1:
+        raise RuntimeError("canary found multiple structured multi-offer parents")
+    covered = set().union(*(labels(row) for row in selected)) if selected else set()
     while len(selected) < 10 and required - covered:
         remaining = [row for row in ordered if row not in selected]
         found = max(remaining, key=lambda row: (len(labels(row) & (required - covered)), -ordered.index(row)))
@@ -442,6 +508,8 @@ def main(argv):
         raise RuntimeError("two --input values, --env-file, and --output are required")
     packages = [extract(path) for path in inputs]
     rows = [row for package in packages for row in package["rows"]]
+    classify_structured_multi_offer_parent(rows)
+    cohort = validate_expected_cohort(rows)
     live = exact_live_reconciliation(rows, load_env(env_file))
     safe = live.pop("safe_missing")
     env = load_env(env_file); base, key = env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"]
@@ -498,10 +566,16 @@ def main(argv):
     report = {
         "mode": {"audit":"READ_ONLY_QNSA_EXACT_DELTA_AUDIT","canary":"BOUNDED_10_ROW_CANARY","full":"RESUMABLE_FULL"}[mode], "project_ref": PROJECT_REF,
         "tier": TIER, "status": STATUS, "source_rows": len(rows),
+        "cohort_trading_floor_total": cohort["trading_floor"],
+        "cohort_reviewed_singles": cohort["reviewed_singles"],
+        "cohort_structured_multi_offer_parents": cohort["structured_multi_offer_parents"],
+        "cohort_price_research_max": cohort["price_research_max"],
+        "cohort_exact_image_associations": sum(r["image_status"] == "EXACT_SOURCE_MESSAGE_IMAGE" and bool(r["source_image_url"]) for r in rows),
+        "image_reachability_semantics": "EXACT_ASSOCIATION_ONLY_NOT_NETWORK_PROBED",
         "safe_missing": len(safe),
         "safe_by_brand_intent": dict(Counter(f"{r['brand']}|{r['listing_type']}" for r in safe)),
         "safe_with_exact_image": sum(bool(r["source_image_url"]) for r in safe),
-        "safe_price_research": sum(r["listing_type"] == "WTS" and r["price_status"] in {"SOURCE_EXPLICIT_USD_MATCH","OWNER_DOLLAR_USD_POLICY","OWNER_K_USD_POLICY"} for r in safe),
+        "safe_price_research": sum(r.get("record_kind") != "STRUCTURED_MULTI_OFFER_PARENT" and r["listing_type"] == "WTS" and r["price_status"] in {"SOURCE_EXPLICIT_USD_MATCH","OWNER_DOLLAR_USD_POLICY","OWNER_K_USD_POLICY"} for r in safe),
         "reconciliation": live,
         "workbooks": [{"file": p["path"].name, "sha256": p["sha256"], "candidates": len(p["rows"]), "holds": dict(p["holds"])} for p in packages],
         "canary_ids_sha256": [sha256(r["id"].encode()).hexdigest() for r in planned_canary],
@@ -514,7 +588,7 @@ def main(argv):
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({key: report[key] for key in ("mode", "source_rows", "safe_missing", "safe_with_exact_image", "safe_price_research", "database_writes")}))
+    print(json.dumps({key: report[key] for key in ("mode", "source_rows", "cohort_trading_floor_total", "cohort_reviewed_singles", "cohort_structured_multi_offer_parents", "cohort_price_research_max", "safe_missing", "safe_with_exact_image", "safe_price_research", "database_writes")}))
 
 
 if __name__ == "__main__":
