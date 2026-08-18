@@ -27,19 +27,20 @@ function credentialedLocation(dealer) {
 }
 
 async function loadCredentialedPoster(client, user) {
-  const { data: dealer, error } = await client.from('dealers')
-    .select('id,display_name,company_name,country_code,city,avatar_url,status,contact_consent,rating,review_count,whatsapp_group_count,metadata')
-    .eq('auth_user_id', user.id).maybeSingle();
-  if (error) throw error;
-  if (!dealer) return null;
+  try {
+    const { data: dealer, error } = await client.from('dealers')
+      .select('id,display_name,company_name,country_code,city,avatar_url,status,contact_consent,rating,review_count,whatsapp_group_count,metadata')
+      .eq('auth_user_id', user.id).maybeSingle();
+    if (error || !dealer) return null;
 
-  const { data: identities, error: identityError } = await client.from('dealer_source_identities')
-    .select('source_identity,identity_type,verification_status')
-    .eq('dealer_id', dealer.id)
-    .eq('verification_status', 'VERIFIED')
-    .in('identity_type', ['PHONE', 'WHATSAPP', 'phone', 'whatsapp']);
-  if (identityError) throw identityError;
-  const phoneIdentity = (identities || []).find(item => /^(?:phone|whatsapp)$/i.test(item.identity_type));
+    const { data: identities, error: identityError } = await client.from('dealer_source_identities')
+      .select('source_identity,identity_type,verification_status')
+      .eq('dealer_id', dealer.id)
+      .eq('verification_status', 'VERIFIED')
+      .in('identity_type', ['PHONE', 'WHATSAPP', 'phone', 'whatsapp']);
+    
+    // Ignore identity errors if the table is missing; just proceed without phone
+    const phoneIdentity = (identityError ? [] : (identities || [])).find(item => /^(?:phone|whatsapp)$/i.test(item.identity_type));
 
   return {
     dealer_id: dealer.id,
@@ -59,6 +60,10 @@ async function loadCredentialedPoster(client, user) {
     preferred_language: clean(dealer.metadata?.preferred_language, 20),
     telegram_username: clean(dealer.metadata?.telegram_username, 100),
   };
+  } catch (err) {
+    console.error('[dealer-submissions-credential] Database missing or error:', err.message);
+    return null;
+  }
 }
 
 function credentialError(poster) {

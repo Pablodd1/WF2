@@ -74,6 +74,7 @@ function publicDealer(dealer, stats, verifiedPhone, sourceRank) {
 }
 
 module.exports = async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=300');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
