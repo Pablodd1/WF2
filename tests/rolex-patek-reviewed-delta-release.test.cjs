@@ -132,7 +132,9 @@ test('workflow authenticates package and enforces audit before bounded DML', () 
   assert.match(overlapRepair, /p\.payload_checksum = w\.payload_checksum/);
   assert.match(overlapRepair, /p\.source_platform = w\.source_platform/);
   assert.match(canaryRollback, /qnsafosakvonzgfcsphh/);
-  assert.match(canaryRollback, /rpdelta_canary_32093306372_1/);
+  assert.match(canaryRollback, /CANARY_RUN_ID.*inputs\.canary_run_id/);
+  assert.match(canaryRollback, /\^\\d\{8,20\}\$/);
+  assert.match(canaryRollback, /rpdelta_canary_\$\(\$env:CANARY_RUN_ID\)_1/);
   assert.match(canaryRollback, /jsonb_array_elements_text\(inserted_ids\)/);
   assert.match(canaryRollback, /release_tier = 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1'/);
   assert.match(canaryRollback, /status = 'APPLIED'/);
