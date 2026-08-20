@@ -43,13 +43,13 @@ const OWNER_ASSUMED_USD_STATUSES = new Set([
 const MULTI_PARENT_VERIFICATION_STATUS = 'APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY';
 const MULTI_PARENT_PUBLICATION_LANE = 'OWNER_MULTI_PARENT_SOURCE_LINEAGE_V1';
 const ALLOWED_MARKET_SOURCE_VIEWS = new Set([
-  'reviewed_workbook_market_source_v2',
+  'reviewed_workbook_market_source_v3',
   'qnsa_rolex_patek_trading_floor_source',
 ]);
 const requestedMarketSourceView = String(process.env.TRADING_FLOOR_SOURCE_VIEW || '').trim();
 const MARKET_SOURCE_VIEW = ALLOWED_MARKET_SOURCE_VIEWS.has(requestedMarketSourceView)
   ? requestedMarketSourceView
-  : 'reviewed_workbook_market_source_v2';
+  : 'reviewed_workbook_market_source_v3';
 const MULTIPLE_LISTING_IDENTITY_VALUES = ['multiple', 'multi', 'mixed'];
 const MIN_PUBLIC_WORKBOOK_PRICE_USD = 1_000;
 const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
@@ -1818,7 +1818,7 @@ module.exports = async function handler(req, res) {
     // while making the approved cohort visible after import.
     const activeMarketSourceView = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       && requestedBrand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(requestedBrand)
-      ? 'reviewed_workbook_market_source_v2'
+      ? 'reviewed_workbook_market_source_v3'
       : MARKET_SOURCE_VIEW;
     // Summary and authenticated direct-post reads are independent of the
     // reviewed market REST request. Start them without serializing three

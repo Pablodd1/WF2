@@ -20,3 +20,11 @@ ALTER TABLE staging.listings
   ADD COLUMN IF NOT EXISTS transport_checksum       text,
   ADD COLUMN IF NOT EXISTS seller_item_signature    text,
   ADD COLUMN IF NOT EXISTS listing_event_signature  text;
+
+
+-- Preemptively drop views that later migrations re-create with changed column types
+-- (CREATE OR REPLACE VIEW cannot change a column's type; a clean drop lets the
+--  later migration define it fresh. Runs before the first dependent migration.)
+DROP VIEW IF EXISTS public.reviewed_workbook_market_source_v2 CASCADE;
+DROP VIEW IF EXISTS public.qnsa_three_brand_trading_floor_fx_contract CASCADE;
+DROP VIEW IF EXISTS public.qnsa_three_brand_price_research_fx_contract CASCADE;

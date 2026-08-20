@@ -1,6 +1,6 @@
 'use strict';
 
-const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
+const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v3';
 const PAGE_SIZE = 1000;
 const MAX_ROWS_PER_BRAND = 10000;
 const MINIMUM_ANALYTICS_SAMPLE = 5;

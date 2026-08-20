@@ -6,7 +6,7 @@ const {
   loadRolexPatekOverlayRows,
 } = require('./rolex-patek-reviewed-overlay.cjs');
 
-const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
+const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v3';
 const OWNER_ASSUMED_USD_STATUSES = new Set([
   'OWNER_ASSUMED_USD',
   'OWNER_DOLLAR_USD_POLICY',

@@ -1703,7 +1703,7 @@ module.exports = async function handler(req, res) {
       resolvedRef: targetRef !== rawRef ? targetRef : null,
       model, dialColors,
       analytics_source: usingReviewedWorkbook
-        ? 'reviewed_workbook_market_source_v2'
+        ? 'reviewed_workbook_market_source_v3'
         : sourceTable,
       reviewed_overlay: {
         source: 'reviewed_workbook_inventory',

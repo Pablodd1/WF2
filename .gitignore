@@ -48,3 +48,4 @@ audit-output/
 .env.wf2
 .env.*.prod
 .env.*.local
+.vercel
