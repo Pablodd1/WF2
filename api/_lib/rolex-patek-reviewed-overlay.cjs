@@ -146,8 +146,8 @@ async function loadRolexPatekOverlayRows(client, {
     .select(OVERLAY_COLUMNS, { count: 'exact' })
     .eq('brand_scope', clean(brand))
     .eq('verification_tier', ROLEX_PATEK_DELTA_TIER)
-    .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
-    .eq('confidence', 100)
+    .in('verification_status', ['APPROVED_SINGLE_CANDIDATE', 'Human Review', 'Catalog Confirmed'])
+    .in('confidence', [30, 100])
     .not('source_message_id', 'is', null);
   const normalizedListingTypes = [...new Set((listingTypes || [])
     .map(value => clean(value).toUpperCase())
@@ -182,7 +182,7 @@ async function loadRolexPatekOverlayRows(client, {
       .eq('verification_tier', ROLEX_PATEK_DELTA_TIER)
       .eq('verification_status', ROLEX_PATEK_MULTI_PARENT_STATUS)
       .eq('listing_type', 'MULTI')
-      .eq('confidence', 100)
+      .in('confidence', [30, 100])
       .maybeSingle();
     if (parentError) throw parentError;
     if (isExactRolexPatekMultiParent(parentData)) parent = prepareOverlayRow(parentData);
@@ -213,8 +213,8 @@ async function loadRolexPatekOverlayExactKeys(client, {
     .select(OVERLAY_LINEAGE_COLUMNS)
     .eq('brand_scope', clean(brand))
     .eq('verification_tier', ROLEX_PATEK_DELTA_TIER)
-    .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
-    .eq('confidence', 100)
+    .in('verification_status', ['APPROVED_SINGLE_CANDIDATE', 'Human Review', 'Catalog Confirmed'])
+    .in('confidence', [30, 100])
     .not('source_message_id', 'is', null);
   if (includeMissingIntent) {
     query = query.or(`listing_type.in.(${normalizedListingTypes.join(',')}),listing_type.is.null`);
@@ -240,7 +240,7 @@ async function loadRolexPatekOverlayExactKeys(client, {
       .eq('verification_tier', ROLEX_PATEK_DELTA_TIER)
       .eq('verification_status', ROLEX_PATEK_MULTI_PARENT_STATUS)
       .eq('listing_type', 'MULTI')
-      .eq('confidence', 100)
+      .in('confidence', [30, 100])
       .maybeSingle();
     if (parentError) throw parentError;
     if (parentData) rows.push(parentData);

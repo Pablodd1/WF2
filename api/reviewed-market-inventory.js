@@ -1890,7 +1890,7 @@ module.exports = async function handler(req, res) {
           'APPROVED_SINGLE_CANDIDATE',
           MULTI_PARENT_VERIFICATION_STATUS,
         ])
-        .eq('confidence', 100);
+        .in('confidence', [30, 100]);
       if (databaseListingType) {
         admissionQuery = admissionQuery.eq('listing_type', databaseListingType);
       } else {

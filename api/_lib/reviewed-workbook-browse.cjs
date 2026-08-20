@@ -2,7 +2,7 @@
 
 const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v3';
 const PAGE_SIZE = 1000;
-const MAX_ROWS_PER_BRAND = 10000;
+const MAX_ROWS_PER_BRAND = 100000;
 const MINIMUM_ANALYTICS_SAMPLE = 5;
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 // These owner-reviewed admissions are intentionally browsed from their
@@ -28,6 +28,7 @@ const REVIEWED_WORKBOOK_BROWSE_BRANDS = new Set([
   'jaeger-lecoultre',
   'longines',
   'omega',
+  'tudor',
   'tag heuer',
   'ulysse nardin',
 ]);
@@ -116,7 +117,7 @@ async function loadReviewedWorkbookBrandRows(client, brand) {
       ].filter(column => !admissionSource || !['public_reference', 'has_verified_usd_price', 'verified_price_usd'].includes(column)).join(','))
       .eq('brand_scope', brand);
     query = admissionSource
-      ? query.eq('verification_status', 'APPROVED_SINGLE_CANDIDATE').eq('confidence', 100).in('listing_type', ['WTS', 'WTB'])
+      ? query.in('verification_status', ['APPROVED_SINGLE_CANDIDATE', 'Human Review', 'Catalog Confirmed']).in('confidence', [30, 100]).in('listing_type', ['WTS', 'WTB'])
       : query.eq('has_complete_identity', true);
     const { data, error } = await query
       .order('id', { ascending: true })
@@ -143,8 +144,8 @@ async function loadReviewedWorkbookBrandCount(client, brand) {
     .from('reviewed_workbook_inventory')
     .select('id', { count: 'exact', head: true })
     .eq('brand_scope', brand)
-    .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
-    .eq('confidence', 100)
+    .in('verification_status', ['APPROVED_SINGLE_CANDIDATE', 'Human Review', 'Catalog Confirmed'])
+    .in('confidence', [30, 100])
     .in('listing_type', ['WTS', 'WTB']);
   if (error) throw error;
   return Number(count || 0);
