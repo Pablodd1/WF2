@@ -3,7 +3,7 @@
 -- boundary and materialized into staging.listings for immediate publication.
 
 ALTER TABLE public.dealer_listing_submissions
-  ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS image_urls JSONB DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS poster_image_url TEXT,
   ADD COLUMN IF NOT EXISTS bulk_submission_id UUID,
   ADD COLUMN IF NOT EXISTS submission_checksum TEXT,
@@ -12,7 +12,7 @@ ALTER TABLE public.dealer_listing_submissions
   ADD COLUMN IF NOT EXISTS normalized_at TIMESTAMPTZ;
 
 ALTER TABLE staging.listings
-  ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS image_urls JSONB DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS user_image_url TEXT,
   ADD COLUMN IF NOT EXISTS source_submission_id UUID REFERENCES public.dealer_listing_submissions(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS dealer_id UUID REFERENCES public.dealers(id) ON DELETE SET NULL;
