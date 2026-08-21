@@ -9,28 +9,8 @@ const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 // released workbook evidence rather than from the static catalog. The catalog
 // is identity metadata; it cannot supply observed listing/reference counts.
 const REVIEWED_WORKBOOK_BROWSE_BRANDS = new Set([
-  'a. lange & söhne',
-  'bell & ross',
-  'blancpain',
-  'breguet',
-  'breitling',
-  'bulgari',
-  'chopard',
-  'f.p. journe',
-  'franck muller',
-  'girard-perregaux',
-  'glashütte original',
-  'grand seiko',
-  'h. moser & cie',
-  'hublot',
-  'iwc',
-  'jacob & co',
-  'jaeger-lecoultre',
-  'longines',
-  'omega',
+  'cartier',
   'tudor',
-  'tag heuer',
-  'ulysse nardin',
 ]);
 const KNOWN_WATCH_BRANDS = [
   'A. Lange & Söhne',
