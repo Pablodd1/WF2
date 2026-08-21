@@ -1896,10 +1896,12 @@ module.exports = async function handler(req, res) {
       ].join(',');
       let admissionQuery = client
         .from('reviewed_workbook_inventory')
-        .select(admissionColumns, { count: 'exact' })
+        .select(admissionColumns, { count: 'estimated' })
         .eq('brand_scope', brand)
         .in('verification_status', [
           'APPROVED_SINGLE_CANDIDATE',
+          'Human Review',
+          'Catalog Confirmed',
           MULTI_PARENT_VERIFICATION_STATUS,
         ])
         .in('confidence', [30, 100]);
