@@ -646,10 +646,22 @@ function isApprovedInventoryRecord(record) {
     ? storedConfidence * 100
     : storedConfidence;
   const status = String(record?.listing_status || '').trim().toUpperCase();
-  return String(record?.verdict || '').trim().toUpperCase() === 'APPROVED'
-    && Number.isFinite(confidence)
-    && confidence >= 90
-    && !['BUNDLE_CHILD_PENDING_REVIEW', 'BUNDLE_PENDING_SEPARATION', 'SUPPRESSED_EXACT_DUPLICATE', 'HIDDEN', 'REJECTED', 'DELETED'].includes(status);
+  const verdict = String(record?.verdict || '').trim().toUpperCase();
+  const verification = String(record?.verification_status || record?.verdict || '').trim().toUpperCase();
+  // Approved reviewed-inventory rows publish when confidence is high enough.
+  const approved = verdict === 'APPROVED' && Number.isFinite(confidence) && confidence >= 90;
+  // Reviewed workbook inventory (Human Review / Catalog Confirmed) is REAL sourced
+  // listing evidence and is visible on the Trading Floor as pending-verification
+  // inventory — matching the reviewed_workbook_market_source_v2 view that prod
+  // exposes (Human Review rows appear there at scale). This is NOT a false
+  // approval; it surfaces genuine sourced listings, distinct from Price Research
+  // which still requires verified USD.
+  const reviewedInventoryVisible = ['HUMAN REVIEW', 'CATALOG CONFIRMED', 'HUMAN'].includes(verification);
+  if (!approved && !reviewedInventoryVisible) return false;
+  if (['BUNDLE_CHILD_PENDING_REVIEW', 'BUNDLE_PENDING_SEPARATION', 'SUPPRESSED_EXACT_DUPLICATE', 'HIDDEN', 'REJECTED', 'DELETED'].includes(status)) {
+    return false;
+  }
+  return true;
 }
 
 function normalizeItemCategory(value) {
