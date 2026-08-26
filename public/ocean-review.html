@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ocean Digital Live — Trading Floor Review</title>
+<style>
+  body { background:#0d1117; color:#e6edf3; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; margin:0; padding:24px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:#8b949e; font-size:13px; margin-bottom:16px; }
+  .meta { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px; font-size:13px; color:#8b949e; }
+  .meta b { color:#e6edf3; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+  .card { background:#161b22; border:1px solid #30363d; border-radius:10px; overflow:hidden; display:flex; flex-direction:column; }
+  .card img { width:100%; height:180px; object-fit:cover; background:#0d1117; }
+  .card .body { padding:12px; }
+  .brand { font-weight:600; font-size:14px; }
+  .ref { color:#8b949e; font-size:12px; }
+  .row { display:flex; justify-content:space-between; margin-top:6px; font-size:13px; }
+  .price { color:#2ea043; font-weight:700; }
+  .tag { display:inline-block; background:#1f6feb; color:#fff; border-radius:4px; padding:1px 6px; font-size:11px; }
+  .tag.wtb { background:#a371f7; }
+  .raw { color:#8b949e; font-size:11px; margin-top:8px; border-top:1px solid #30363d; padding-top:8px; line-height:1.4; max-height:64px; overflow:hidden; }
+  .seller { color:#7ee787; font-size:12px; margin-top:4px; }
+  .loc { color:#8b949e; font-size:12px; }
+  .pill { background:#21262d; border:1px solid #30363d; border-radius:999px; padding:2px 10px; font-size:12px; }
+  .nav { display:flex; gap:10px; align-items:center; margin-top:16px; }
+  .btn { background:#21262d; border:1px solid #30363d; color:#e6edf3; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px; }
+  .btn:hover { background:#30363d; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  #status { margin-left:auto; color:#8b949e; font-size:12px; }
+  .err { background:#f85149; color:#fff; padding:10px 14px; border-radius:8px; margin:16px 0; }
+</style>
+</head>
+<body>
+  <h1>Ocean Digital — Trading Floor</h1>
+  <div class="sub">Read-only review of parsed/normalized listings served live from Ocean Digital PostgreSQL (source of truth).</div>
+  <div class="meta" id="meta">Loading…</div>
+  <div class="grid" id="grid">Loading cards…</div>
+  <div class="nav">
+    <button class="btn" id="prev">‹ Prev</button>
+    <span id="pageinfo" class="pill">Page 1</span>
+    <button class="btn" id="next">Next ›</button>
+    <span id="status"></span>
+  </div>
+
+<script>
+let page = 1, total = 0, pageSize = 24;
+const grid = document.getElementById('grid');
+const meta = document.getElementById('meta');
+const pageinfo = document.getElementById('pageinfo');
+const statusEl = document.getElementById('status');
+
+async function load(p) {
+  statusEl.textContent = 'Loading…';
+  const res = await fetch('/api/ocean-trading-floor?page=' + p + '&page_size=' + pageSize);
+  if (!res.ok) {
+    const e = await res.json().catch(()=>({}));
+    grid.innerHTML = '<div class="err">Error ' + res.status + ': ' + (e.detail || e.error || res.statusText) + '</div>';
+    statusEl.textContent = '';
+    return;
+  }
+  const d = await res.json();
+  total = d.total;
+  page = d.page;
+  meta.innerHTML = '<span><b>' + total.toLocaleString() + '</b> total cards</span>' +
+                   '<span><b>' + d.cards.filter(c=>c.listing_type==='WTS').length + '</b> on page WTS</span>' +
+                   '<span>source: <b>Ocean Digital PG</b></span>';
+  pageinfo.textContent = 'Page ' + page;
+  grid.innerHTML = d.cards.map(c => {
+    const img = c.image_url ? '<img src="'+c.image_url+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '<img src="data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="260" height="180"><rect width="260" height="180" fill="#161b22"/></svg>')+'">';
+    const tagCls = c.listing_type==='WTB' ? 'tag wtb' : 'tag';
+    return '<div class="card">'+img+'<div class="body">'+
+      '<div><span class="brand">'+(c.brand||'')+'</span> <span class="ref">'+(c.reference||'')+'</span></div>'+
+      '<div style="margin-top:2px;font-size:12px;color:#8b949e">'+(c.model||'')+(c.dial_color?' • '+c.dial_color:'')+(c.condition?' • '+c.condition:'')+'</div>'+
+      '<div class="row"><span class="price">$'+(c.price?Number(c.price).toLocaleString():'—')+'</span><span class="'+tagCls+'">'+(c.listing_type||'')+'</span></div>'+
+      '<div class="seller">'+(c.seller_name||'Unknown')+' <span class="loc">'+(c.location||'')+'</span>'+
+        (c.dealer_rating?' <span style="color:#9e6a03">★'+(c.dealer_rating)+'</span>':'')+'</div>'+
+      '<div class="raw">'+(c.raw_message_text||'')+'</div>'+
+    '</div></div>';
+  }).join('');
+  statusEl.textContent = d.has_more ? 'page ' + page + ' of ~' + Math.ceil(total/pageSize) : 'end';
+  document.getElementById('prev').disabled = page <= 1;
+  document.getElementById('next').disabled = !d.has_more;
+}
+
+document.getElementById('prev').onclick = () => { if (page>1) load(page-1); };
+document.getElementById('next').onclick = () => load(page+1);
+load(1);
+</script>
+</body>
+</html>

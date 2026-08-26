@@ -28,6 +28,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/ocean-review", "destination": "/ocean-review.html" },
     { "source": "/extract", "destination": "/extract.html" },
     { "source": "/extract.html", "destination": "/extract.html" },
     { "source": "/marketplace/(.*)", "destination": "/marketplace/$1" },
